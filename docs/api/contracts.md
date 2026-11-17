@@ -1,6 +1,6 @@
 # IPC and MCP contract
 
-Status: v2 (M4). Versioned alongside the app; breaking changes require a migration note.
+Status: v3 (M5). Versioned alongside the app; breaking changes require a migration note.
 
 ## Error envelope
 
@@ -169,6 +169,94 @@ interface RegionBlocks {
 ```
 
 Used by copy/paste. Air is implied, so an all-air region returns an empty block list.
+
+## Project commands (v3, M5)
+
+The desktop shell owns a `ProjectStore` rooted at the app-data `projects/` directory and a
+single open project session. All project commands return the same structured `AppError`
+envelope; filesystem paths are never accepted from the UI (only validated folder names).
+
+### `project_list`
+
+Returns `{ projects: ProjectSummary[], warnings: string[] }`, newest first. Corrupt
+folders become warnings instead of breaking the list.
+
+```ts
+interface ProjectSummary {
+  folder: string;                 // validated single path component, ends in .furybuilder
+  projectId: string;
+  name: string;
+  creationMode: "empty" | "flat" | "vanilla" | "import";
+  targetMinecraftVersion: string;
+  targetDataVersion: number;
+  worldRevision: number;
+  updatedAtMs: number;
+  lastSavedAtMs: number;
+  lastSaveKind: "manual" | "autosave" | "checkpoint";
+  bytes: number;
+  schemaVersion: number;
+  recoverable: boolean;           // session marker or a newer verified autosave
+}
+```
+
+### `project_status`
+
+Returns the current `SessionStatus` (`folder`, `name`, `savedRevision`,
+`autosavedRevision`, `revision`, `dirty`, `editorState`, `availableCheckpoints`) or null
+fields when nothing is open.
+
+### `project_create`
+
+Request `{ name, mode, editorState }`. Available modes are `empty` and `flat`; `vanilla`
+and `import` are rejected until their milestones. Creates the folder, an initial verified
+snapshot (revision 1) and `project.json`, starts a session and replaces the authoritative
+world service.
+
+### `project_open`
+
+Request `{ folder }`. Verifies the manifest and SHA-256, decodes and re-encodes the
+snapshot, adopts a newer verified autosave if a crash marker exists, starts a session and
+replaces the world service. Returns `{ detail, info, recovery, session }`; `recovery` is
+`null` or `{ reason, recoveredRevision, recoveredAtMs, fromBackup }`.
+
+### `project_save`
+
+Request `{ editorState }`. Runs the atomic temp → verify → publish pipeline described in
+`docs/design/projects.md` and returns:
+
+```ts
+interface SaveOutcome {
+  project: ProjectDetail;
+  checksum: string;
+  snapshotFile: string;
+  bytesWritten: number;
+  backupCreated: boolean;
+  prunedSnapshots: number;
+}
+```
+
+### `project_autosave`
+
+Request `{ editorState, reason?: string }`. Writes `data/autosave.fwl` + checksum metadata
+without changing the manifest revision; a non-empty reason also writes a rolling
+checkpoint. Returns the autosaved revision.
+
+### `project_checkpoint` / `project_checkpoints` / `project_open_checkpoint`
+
+`project_checkpoint` takes `{ reason }` and returns the bounded checkpoint list;
+`project_checkpoints` takes `{ folder?: string }`; `project_open_checkpoint` takes
+`{ folder?: string, revision }` and replaces the world service with the verified checkpoint
+(leaving it unsaved).
+
+### `project_close`
+
+Request `{ save: boolean, editorState }`. With `save: true` it saves first; with `false` it
+also removes autosave artifacts so discarded work cannot reappear. Removes the session
+marker, clears only `cache/`, and resets the world service.
+
+### `project_rename`
+
+Request `{ folder, name }`. Changes the display name only; the folder never moves.
 
 ## Conventions
 

@@ -74,3 +74,18 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Cancellable preview/read jobs and stale job completion | `editor/commands.test.ts`, `state/tool-store.test.ts` |
 | Hotkey protection in inputs and contenteditable | `editor/use-editor-hotkeys.test.tsx`, `editor/session.test.ts` |
 | Click → preview → apply → chunk refresh IPC path | `features/viewport/Viewport.test.tsx` |
+
+## Implemented coverage (M5)
+
+| Requirement | Automated evidence |
+|---|---|
+| Versioned manifest and validated fields | `project-store` `create_list_open_round_trips_world_and_manifest`, `unsupported_newer_schema_is_refused` |
+| Snapshot save/load incl. chunks, sections, metadata and editor state | `create_list_open_round_trips_world_and_manifest`, `snapshot_round_trip_preserves_states_across_dimensions` |
+| Immutable source layer with hashes and path safety | `source_files_are_immutable_copies_with_hashes` |
+| Atomic temp + verification + publish | `save_is_atomic_and_keeps_previous_snapshot`, `corrupt_snapshot_is_rejected_by_checksum` |
+| Autosave, checkpoints and crash recovery | `crash_recovery_uses_newer_verified_autosave`, `checkpoints_are_bounded_and_readable`, `state/project-store.test.ts` |
+| Undo limits and recreatable-cache cleanup | `world-application` history-limit test, `end_session_clears_only_recreatable_cache` |
+| Project list/create/rename/open and unsaved warning | `features/project/ProjectManager.test.tsx` |
+| Schema migrations with backup and refusal of newer versions | `unsupported_newer_schema_is_refused` |
+| Crash recovery, reopen, checksum and semantic equality | `crash_recovery_uses_newer_verified_autosave`, `save_is_atomic_and_keeps_previous_snapshot`, `snapshot_round_trip_preserves_states_across_dimensions` |
+| IPC project contract | `lib/project-api.test.ts` |
