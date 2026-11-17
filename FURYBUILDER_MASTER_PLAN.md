@@ -867,7 +867,7 @@ furybuilder/
 
 **Цель:** корректный мир существует **без Three.js**.
 
-- [ ] Реализовать `BlockState` с ID и properties; registry/catalog для выбранной версии.
+- [x] Реализовать `BlockState` с ID и properties; registry/catalog для выбранной версии.
 - [ ] Реализовать координаты, chunk/section/region indexes, отрицательные значения и Y-range.
 - [ ] Реализовать `World`, `Dimension`, `Chunk`, `Section`, палитры и sparse storage.
 - [ ] Реализовать чтение/запись отдельного блока, batch changes, `fill_cuboid`, `replace`.
