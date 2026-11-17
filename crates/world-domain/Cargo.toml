@@ -1,0 +1,15 @@
+[package]
+name = "furybuilder-world-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Versioned Minecraft Java world domain: block states, coordinates, chunks, sections"
+[lib]
+name = "world_domain"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

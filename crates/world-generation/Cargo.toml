@@ -1,0 +1,8 @@
+[package]
+name = "furybuilder-world-generation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Deterministic local generators and Build DSL compiler for FuryBuilder"
+[lib]
+name = "world_generation"
