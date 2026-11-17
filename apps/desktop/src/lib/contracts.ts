@@ -23,4 +23,25 @@ export interface AppErrorShape {
   details?: unknown;
 }
 
+export interface DimensionInfo {
+  id: string;
+  kind: "overworld" | "nether" | "end" | "custom";
+  minY: number;
+  maxY: number;
+  height: number;
+  chunkCount: number;
+  sectionCount: number;
+  blockCount: number;
+}
+
+export interface WorldInfo {
+  targetMinecraftVersion: string;
+  targetDataVersion: number;
+  revision: number;
+  dimensions: DimensionInfo[];
+  chunkCount: number;
+  sectionCount: number;
+  blockCount: number;
+}
+
 export type BackendStatus = "connecting" | "online" | "offline";
