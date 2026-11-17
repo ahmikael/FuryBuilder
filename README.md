@@ -36,13 +36,17 @@ fixtures/              Small self-authored test structures (no Mojang assets)
 
 ```powershell
 pnpm install
-pnpm --filter @furybuilder/desktop dev        # Vite dev server (browser UI)
-pnpm tauri dev                                # Full desktop app (requires Rust)
+pnpm dev                                      # Vite dev server (browser UI, preview mode)
+pnpm tauri:dev                                # Full desktop app (requires Rust + MSVC)
 pnpm test                                     # TypeScript unit tests
 pnpm typecheck                                # TypeScript strict check
+pnpm lint
 cargo test --workspace                        # Rust core tests
 cargo clippy --workspace --all-targets -- -D warnings
 ```
+
+A browser tab intentionally shows preview mode and never fakes backend data. Run the
+desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 

@@ -859,7 +859,7 @@ furybuilder/
 - [x] Сделать базовый layout: toolbar, viewport placeholder, world tree, inspector, status bar.
 - [x] Добавить тёмную/светлую тему, базовые дизайн-токены, масштабирование интерфейса.
 - [x] Настроить CI: проверки TS/Rust и сборка на Windows.
-- [ ] Описать запуск, dev workflow и известные ограничения в README.
+- [x] Описать запуск, dev workflow и известные ограничения в README.
 
 **Готово, когда:** свежий `git clone` по README запускает приложение; UI вызывает Rust через typed IPC; CI зелёный.
 
