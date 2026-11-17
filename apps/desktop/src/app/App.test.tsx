@@ -16,7 +16,7 @@ describe("App", () => {
     expect(screen.getByRole("heading", { name: "3D viewport" })).toBeInTheDocument();
     expect(await screen.findByText("Preview mode")).toBeInTheDocument();
     expect(screen.getByText("Overworld")).toBeInTheDocument();
-    expect(screen.getByText("target 1.21.4 · DV 4189")).toBeInTheDocument();
+    expect(screen.getByText(/1\.21\.4 · DV 4189/)).toBeInTheDocument();
   });
 
   it("opens settings and persists a theme change", async () => {

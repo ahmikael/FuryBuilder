@@ -4,7 +4,7 @@ import { BottomPanel } from "@/features/workspace/BottomPanel";
 import { Inspector } from "@/features/workspace/Inspector";
 import { StatusBar } from "@/features/workspace/StatusBar";
 import { Toolbar } from "@/features/workspace/Toolbar";
-import { ViewportPlaceholder } from "@/features/workspace/ViewportPlaceholder";
+import { Viewport } from "@/features/viewport/Viewport";
 import { WorldTree } from "@/features/workspace/WorldTree";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { useBackendInfo } from "@/hooks/use-backend";
@@ -39,7 +39,7 @@ export function App() {
         />
         <div className="flex min-h-0 flex-1">
           <WorldTree />
-          <ViewportPlaceholder />
+          <Viewport />
           <Inspector />
         </div>
         <BottomPanel backend={backend} />

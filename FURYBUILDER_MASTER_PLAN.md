@@ -885,7 +885,7 @@ furybuilder/
 
 **Цель:** пользователь видит и изучает мир с приемлемой производительностью.
 
-- [ ] Подключить Three.js как отдельный renderer/scene module.
+- [x] Подключить Three.js как отдельный renderer/scene module.
 - [ ] Создать тестовый мир и отобразить чанковые меши без `Mesh` на каждый блок.
 - [ ] Реализовать hidden-face culling; затем оценить greedy meshing на профиле.
 - [ ] Сделать базовые block materials/texture atlas, корректное отображение выбранного набора block states.
