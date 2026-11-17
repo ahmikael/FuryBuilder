@@ -31,9 +31,11 @@ import { buildChunkMesh } from "@/renderer/mesher";
 import { raycastBlocks, type RayHit } from "@/renderer/raycast";
 import type {
   BlockPosition,
+  Bounds3,
   CameraPose,
   ChunkPos,
   ChunkSnapshotBatch,
+  GhostStyle,
   RenderMetrics,
   RenderSnapshot,
 } from "@/renderer/types";
@@ -47,11 +49,23 @@ export interface ViewportCallbacks {
   onMetrics?: (metrics: RenderMetrics) => void;
   onCameraPose?: (pose: CameraPose) => void;
   onPick?: (hit: RayHit | null) => void;
+  onHover?: (hit: RayHit | null) => void;
   onContextLost?: () => void;
 }
 
 const CHUNK_COLOR = 0x687385;
 const SELECTION_COLOR = 0xffb454;
+const EDIT_SELECTION_COLOR = 0x7dd3fc;
+
+const GHOST_COLORS: Record<GhostStyle, number> = {
+  place: 0x4ade80,
+  remove: 0xf87171,
+  brush: 0xfacc15,
+  box: 0x38bdf8,
+  line: 0x22d3ee,
+  fill: 0xfbbf24,
+  replace: 0xc084fc,
+};
 
 export class ViewportRenderer {
   readonly world = new RenderWorld();
@@ -67,6 +81,10 @@ export class ViewportRenderer {
   private readonly borderGroup = new Group();
   private readonly grid: GridHelper;
   private readonly selection: LineSegments;
+  private readonly selectionBox: LineSegments;
+  private readonly ghostFill: Mesh;
+  private readonly ghostEdges: LineSegments;
+  private readonly ghostMaterial: MeshBasicMaterial;
   private readonly raycaster = new Raycaster();
   private readonly chunkMeshes = new Map<string, Mesh[]>();
   private readonly requestedChunks: ChunkPos[] = [];
@@ -185,6 +203,44 @@ export class ViewportRenderer {
     this.selection.visible = false;
     this.scene.add(this.selection);
 
+    this.selectionBox = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(1.002, 1.002, 1.002)),
+      new LineBasicMaterial({
+        color: EDIT_SELECTION_COLOR,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.95,
+      }),
+    );
+    this.selectionBox.renderOrder = 21;
+    this.selectionBox.visible = false;
+    this.scene.add(this.selectionBox);
+
+    this.ghostMaterial = new MeshBasicMaterial({
+      color: GHOST_COLORS.place,
+      transparent: true,
+      opacity: 0.16,
+      depthWrite: false,
+      side: DoubleSide,
+    });
+    this.ghostFill = new Mesh(new BoxGeometry(1, 1, 1), this.ghostMaterial);
+    this.ghostFill.renderOrder = 19;
+    this.ghostFill.visible = false;
+    this.scene.add(this.ghostFill);
+
+    this.ghostEdges = new LineSegments(
+      new EdgesGeometry(new BoxGeometry(1.002, 1.002, 1.002)),
+      new LineBasicMaterial({
+        color: GHOST_COLORS.place,
+        depthTest: false,
+        transparent: true,
+        opacity: 0.95,
+      }),
+    );
+    this.ghostEdges.renderOrder = 22;
+    this.ghostEdges.visible = false;
+    this.scene.add(this.ghostEdges);
+
     this.renderer.domElement.addEventListener("webglcontextlost", this.onContextLost);
     this.animationId = requestAnimationFrame(this.animate);
   }
@@ -262,6 +318,21 @@ export class ViewportRenderer {
   }
 
   pickAt(clientX: number, clientY: number): RayHit | null {
+    const hit = this.castAt(clientX, clientY);
+    this.setSelection(hit?.pos ?? null);
+    this.callbacks.onPick?.(hit);
+    return hit;
+  }
+
+  /** Hover picking never changes the inspector selection or emits `onPick`. */
+  hoverAt(clientX: number, clientY: number): RayHit | null {
+    const hit = this.castAt(clientX, clientY);
+    this.setSelection(hit?.pos ?? null);
+    this.callbacks.onHover?.(hit);
+    return hit;
+  }
+
+  private castAt(clientX: number, clientY: number): RayHit | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
     if (rect.width === 0 || rect.height === 0) return null;
     const ndc = new Vector2(
@@ -271,15 +342,58 @@ export class ViewportRenderer {
     this.raycaster.setFromCamera(ndc, this.camera);
     const origin = this.raycaster.ray.origin;
     const direction = this.raycaster.ray.direction;
-    const hit = raycastBlocks(
+    return raycastBlocks(
       this.world,
       [origin.x, origin.y, origin.z],
       [direction.x, direction.y, direction.z],
       480,
     );
-    this.setSelection(hit?.pos ?? null);
-    this.callbacks.onPick?.(hit);
-    return hit;
+  }
+
+  /** Blue outline for the editable box selection. */
+  setSelectionBox(bounds: Bounds3 | null): void {
+    if (!bounds) {
+      this.selectionBox.visible = false;
+      return;
+    }
+    this.applyBoundsToBox(this.selectionBox, bounds);
+    this.selectionBox.visible = true;
+  }
+
+  /** Coloured ghost of the operation that a click would apply. */
+  setGhostBox(bounds: Bounds3 | null, kind: GhostStyle = "place"): void {
+    if (!bounds) {
+      this.ghostFill.visible = false;
+      this.ghostEdges.visible = false;
+      return;
+    }
+    const color = GHOST_COLORS[kind] ?? GHOST_COLORS.place;
+    this.ghostMaterial.color.setHex(color);
+    (this.ghostEdges.material as LineBasicMaterial).color.setHex(color);
+    this.applyBoundsToBox(this.ghostFill, bounds);
+    this.applyBoundsToBox(this.ghostEdges, bounds);
+    this.ghostFill.visible = true;
+    this.ghostEdges.visible = true;
+  }
+
+  clearEditOverlays(): void {
+    this.selectionBox.visible = false;
+    this.ghostFill.visible = false;
+    this.ghostEdges.visible = false;
+    this.selection.visible = false;
+  }
+
+  private applyBoundsToBox(object: Mesh | LineSegments, bounds: Bounds3): void {
+    const width = bounds.max.x - bounds.min.x + 1;
+    const height = bounds.max.y - bounds.min.y + 1;
+    const depth = bounds.max.z - bounds.min.z + 1;
+    object.scale.set(width, height, depth);
+    object.position.set(
+      bounds.min.x + width / 2,
+      bounds.min.y + height / 2,
+      bounds.min.z + depth / 2,
+    );
+    object.updateMatrixWorld();
   }
 
   setSelection(pos: BlockPosition | null): void {
@@ -385,6 +499,12 @@ export class ViewportRenderer {
     (this.grid.material as LineBasicMaterial).dispose();
     this.selection.geometry.dispose();
     (this.selection.material as LineBasicMaterial).dispose();
+    this.selectionBox.geometry.dispose();
+    (this.selectionBox.material as LineBasicMaterial).dispose();
+    this.ghostFill.geometry.dispose();
+    this.ghostMaterial.dispose();
+    this.ghostEdges.geometry.dispose();
+    (this.ghostEdges.material as LineBasicMaterial).dispose();
     for (const material of Object.values(this.materials)) material.dispose();
     this.atlas.dispose();
     this.renderer.dispose();

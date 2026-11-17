@@ -37,6 +37,13 @@ export interface BlockPosition {
   z: number;
 }
 
+export interface Bounds3 {
+  min: BlockPosition;
+  max: BlockPosition;
+}
+
+export type GhostStyle = "place" | "remove" | "brush" | "box" | "line" | "fill" | "replace";
+
 export interface BlockSelection {
   dimension: string;
   pos: BlockPosition;

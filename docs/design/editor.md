@@ -1,0 +1,111 @@
+# Editor (M4)
+
+The editor is a thin React layer over the same revisioned `Operation` API used by MCP and
+future automation. The Rust world core remains the only source of truth; the renderer and
+palette are derived views.
+
+## Tools
+
+| Tool | Key | Click behaviour |
+|---|---|---|
+| Select / inspect | 1 | Picks a block, updates the inspector and hover outline. |
+| Place | 2 | Places the palette state on the picked face. |
+| Remove | 3 | Replaces the picked block with `minecraft:air`. |
+| Brush | 4 | Places a radius-1…4 sphere on the picked face (19 blocks at radius 1). |
+| Box select | 5 | First click sets a corner, second click completes the box. |
+| Fill | 6 | Fills the current box selection with the palette state. |
+| Line | 7 | First click sets a start, second click places a connected 3D line. |
+| Replace | 8 | Replaces one source state inside the box selection with the palette state. |
+
+Alt+click picks a world block as the brush state. Right-click without dragging opens the
+context menu (place, remove, pick, replace source, box corner, copy/paste, fill, delete,
+focus). Right-drag stays reserved for the fly camera.
+
+## Selection and geometry
+
+- Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates
+  are normalized by `min`/`max`, never by truncation toward zero.
+- The box tool is a two-click state machine. Switching tools cancels a dangling corner;
+  Escape cancels the pending click first, then the job, then the selection.
+- Volumes above 1,000,000 blocks are rejected before an operation is built.
+- The line uses rounded sampling on the dominant axis, so horizontal, vertical and
+  negative diagonals stay connected.
+- The locally computed ghost is a coloured translucent box (green place, red remove,
+  amber brush/fill, cyan box/line, purple replace). It is a geometric preview, not a
+  claim about the final diff; the server preview validates the real operation before it
+  is committed.
+
+## Commit pipeline
+
+```text
+click → planBlockTool (local operation) → preview_operation (server validation)
+      → apply_operation (expectedRevision) → revision + dirty_chunks
+      → render_chunks (only dirty chunks) → history_state refresh
+```
+
+- `expectedRevision` is the revision shown in the UI. A `revision_mismatch` response
+  reloads the bounded snapshot and warns instead of silently overwriting newer work.
+- Only `dirty_chunks` are re-fetched and remeshed after an edit. Neighbouring chunks heal
+  through the renderer's border rebuild.
+- Undo/redo use the same pipeline and return their own dirty chunks.
+
+## Replace and conflicts
+
+- The replace source comes from the palette ("Use as replace source"), Alt-click, the
+  context menu or the current pick.
+- Source and target must differ; this is rejected client-side with a clear toast and is
+  revalidated by the Rust operation.
+- Fill/replace require a selection. Copy/paste requires a selection and a target; paste
+  uses the selection minimum or the hovered face.
+- Clipboard blocks are stored relative to the copied minimum corner, so a structure can
+  be pasted at negative coordinates or in another dimension. Air is implied, so a copy
+  contains only non-air blocks.
+
+## Undo, redo and history
+
+- Toolbar and viewport buttons, Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z and Ctrl/Cmd+Y drive the
+  Rust history. Buttons disable when the core reports no available action.
+- The History tab lists operation id, actor source, changed blocks, revision range and
+  time. History is bounded in the core (default 100 entries).
+
+## Jobs and cancellation
+
+- Preview validation and region reads are cancellable: the job is marked, its result is
+  discarded, and no write is dispatched.
+- A write that has already been dispatched is atomic and cannot be reported as cancelled
+  mid-flight. The Cancel button is therefore hidden during apply. This is deliberate:
+  pretending a partially applied write was cancelled would corrupt user trust.
+- The job pill and bottom status bar show the active job and its cancel affordance.
+
+## Save status
+
+The toolbar and viewport report `No unsaved edits`, `Unsaved changes` or `Preview scene`.
+Persistence is not part of M4; edits live in the running Rust session, and the Save button
+is explicitly disabled until M5. The status never claims a project was written to disk.
+
+## Keyboard protection
+
+`editorShortcut` returns null when the event target is an input, textarea, select or
+contenteditable element, so typing coordinates, block properties or search text never
+moves the camera, changes tools or edits the world. Escape/Enter are also left to open
+dialogs. Camera keys use the same guard.
+
+## Testing
+
+| Area | Evidence |
+|---|---|
+| Box selection, negative bounds, volume limits | `editor/session.test.ts`, `editor/commands.test.ts` |
+| Faces, lines, brush, fill, replace | `editor/session.test.ts` |
+| Conflicts (no selection/source, source = target, revision mismatch) | `editor/commands.test.ts` |
+| Cancellation and stale job completion | `editor/commands.test.ts`, `state/tool-store.test.ts` |
+| Hotkeys and text-field protection | `editor/use-editor-hotkeys.test.tsx`, `editor/session.test.ts` |
+| Click → preview → apply → dirty chunks | `features/viewport/Viewport.test.tsx` |
+| Palette search, canonical defaults, property editing | `features/workspace/BottomPanel.test.tsx` |
+
+## Limitations (M4)
+
+- Two-click box selection, not drag-rubber-band selection.
+- Brush overwrites every state inside its sphere; there is no "only replace air" mode yet.
+- Clipboard is session-scoped and does not survive a restart until M5/M6.
+- Approximate block shapes (ADR-009) and placeholder textures still apply.
+- Project persistence, autosave and crash recovery are M5.
