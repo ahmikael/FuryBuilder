@@ -50,13 +50,19 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`. The plan is the single
-source of truth for scope and acceptance criteria. Only tasks with passing verification
-are checked there.
+M0–M3 are implemented: application shell and IPC, the Rust world core with revisions,
+transactions and section-diff undo/redo, and a live Three.js viewport fed by revisioned
+render snapshots. The viewport supports fly/orbit cameras, exact block picking, chunk
+borders, capture with Observation metadata and a performance panel. Editing tools (M4)
+are next. Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`; only tasks with
+passing verification are checked there.
 
 ## Known limitations (early development)
 
-- Minecraft game assets are not bundled. The renderer ships open placeholder textures.
+- Minecraft game assets are not bundled. The renderer ships original placeholder textures
+  and approximate shapes for slabs/stairs/torches.
+- The M3 viewport starts with a deterministic demo scene. Projects, saving and exports
+  arrive in M5/M6; editing tools arrive in M4.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
 - Import of full Java world saves is read-only until the version/format matrix marks a

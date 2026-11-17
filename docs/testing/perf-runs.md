@@ -28,3 +28,27 @@ Notes:
   edit that produced them.
 - Region summaries and IPC payloads are bounded separately; these numbers do not measure
   renderer meshing or IPC throughput.
+
+## 2026-11-17 — M3 renderer meshing smoke benchmark
+
+Command (from `apps/desktop`):
+
+```powershell
+$env:FURY_PERF='1'; pnpm exec vitest run src/renderer/mesher.perf.test.ts --reporter=verbose
+```
+
+Scenario: centre 16×16 column of the offline demo scene (terrain, house, stairs, leaves,
+water), 50 iterations after 10 warm-up iterations. Node/Vitest, CPU only.
+
+```text
+MESH_PERF iterations=50 totalMs=228.33 perChunkMs=4.57 faces=875
+```
+
+Interpretation:
+
+- ~4.6 ms per dirty chunk on the development machine, with 875 emitted faces after
+  hidden-face culling and approximate stairs/torch shapes.
+- Initial 3×3 load is 9 chunk builds; later edits rebuild one chunk plus neighbours only.
+- Greedy meshing is not adopted (see `docs/design/renderer.md`). It would need UV tiling
+  in a custom shader and does not address the first bottleneck at this scene size.
+
