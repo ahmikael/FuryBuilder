@@ -23,18 +23,26 @@ Three modes only:
   Mojang metadata and Adoptium; checksums are verified; assets are cached by version.
 - The user must accept the Minecraft EULA themselves before the first run. FuryBuilder
   never writes `eula=true` on its own.
-- The server runs headless in an isolated temporary directory, with bounded CPU/RAM/time,
-  no external port, logs/progress/cancel, and guaranteed child-process termination.
-- Only requested chunks/regions are generated. The result is read through `world-io` and
-  imported into the World Core; generated base and FuryBuilder overlay stay distinct.
+- The planned server runs headless in an isolated temporary directory, with bounded
+  CPU/RAM/time, no external listener, logs/progress/cancel, and child-process termination
+  on cancel and crash. These controls are not implemented yet.
+- The planned bridge requests bounded regions, but the server may also generate spawn or
+  neighbouring chunks; `/forceload` is asynchronous. Resource limits must account for
+  that overhead, and the bridge must verify the requested chunks have finished before
+  reporting success. The result will be read through `world-io`; generated base and
+  FuryBuilder overlay must stay distinct.
 - If runtime, version or generator is unavailable, the operation fails with an explicit
   message. It **never** falls back to a custom noise generator.
 
 ## Parity testing
 
-Reference worlds are generated with the same version/seed/preset and compared per chunk
-(block palette, key block positions, biomes) on a fixed sample. Differences in chunk
-generation order are documented; parity is claimed only for verified configurations.
+The test design and sample comparator are described in
+[`docs/testing/worldgen-parity.md`](../testing/worldgen-parity.md). It requires matching
+version, server identity, seed, preset, settings, ordered datapacks, dimension and
+generation order, then compares all block states and biomes in the sampled chunks.
+Only synthetic comparator tests have been run so far. Neither the original-server bridge
+nor the production snapshot exporter exists yet: **vanilla parity has not been tested or
+established**.
 
 ## Consequences
 
