@@ -1,6 +1,7 @@
 import { Circle, Loader2 } from "lucide-react";
 import type { BackendState } from "@/hooks/use-backend";
 import { TOOL_LABELS } from "@/editor/session";
+import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
@@ -15,8 +16,10 @@ export function StatusBar({ backend }: { backend: BackendState }) {
   const metrics = useWorldStore((state) => state.metrics);
   const tool = useToolStore((state) => state.tool);
   const job = useToolStore((state) => state.job);
-  const syncState = useToolStore((state) => state.syncState);
   const selection = useToolStore((state) => state.selection);
+  const project = useProjectStore((state) => state.current);
+  const dirty = projectIsDirty(project, revision);
+  const autosaved = dirty && project?.autosavedRevision === revision;
 
   return (
     <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border bg-card/80 px-2.5 text-[10px] text-muted-foreground">
@@ -32,15 +35,17 @@ export function StatusBar({ backend }: { backend: BackendState }) {
         {backend.status === "online" ? "Core connected" : "Core offline"}
       </span>
       <span className="text-border">|</span>
-      <span>Untitled Project</span>
+      <span className="max-w-40 truncate">{project?.name ?? "No project"}</span>
       <span className="text-border">|</span>
-      <span>{source === "core" ? "Empty Project · demo scene" : "Preview scene"}</span>
+      <span>
+        {project?.folder ? "Project layer" : source === "core" ? "Empty core" : "Preview scene"}
+      </span>
       <span className="text-border">|</span>
       <span>{dimension.replace("minecraft:", "")}</span>
       <span className="text-border">|</span>
       <span className="inline-flex items-center gap-1">
         {job ? <Loader2 className="size-2.5 animate-spin text-primary" /> : null}
-        {job ? job.label : `tool: ${TOOL_LABELS[tool]}`}
+        {job ? job.label : project?.folder ? `tool: ${TOOL_LABELS[tool]}` : "no project open"}
       </span>
       {selection ? (
         <>
@@ -50,10 +55,14 @@ export function StatusBar({ backend }: { backend: BackendState }) {
       ) : null}
 
       <span className="ml-auto font-mono">
-        {syncState === "modified" ? (
-          <span className="text-status-warn">unsaved changes</span>
+        {!project?.folder ? (
+          <span>no project</span>
+        ) : dirty ? (
+          <span className="text-status-warn">
+            {autosaved ? "autosaved · unsaved" : "unsaved changes"}
+          </span>
         ) : (
-          "no edits"
+          <span className="text-status-ok">saved r{project.savedRevision}</span>
         )}
       </span>
       <span className="text-border">|</span>

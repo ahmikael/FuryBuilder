@@ -13,8 +13,10 @@ import { Separator } from "@/components/ui/separator";
 import { copySelection, pasteClipboard } from "@/editor/commands";
 import { boundsVolume } from "@/editor/session";
 import { isTauriRuntime } from "@/lib/ipc";
+import { creationModeLabel } from "@/project/types";
 import { blockColor } from "@/renderer/assets";
 import type { BlockState } from "@/renderer/types";
+import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 
@@ -55,7 +57,6 @@ export function Inspector() {
   const blockCount = useWorldStore((state) => state.blockCount);
   const chunkCount = useWorldStore((state) => state.chunkCount);
   const dimension = useWorldStore((state) => state.dimension);
-  const source = useWorldStore((state) => state.source);
   const selectedBlock = useToolStore((state) => state.selectedBlock);
   const replaceFrom = useToolStore((state) => state.replaceFrom);
   const boxSelection = useToolStore((state) => state.selection);
@@ -63,6 +64,12 @@ export function Inspector() {
   const setSelectedBlock = useToolStore((state) => state.setSelectedBlock);
   const setReplaceFrom = useToolStore((state) => state.setReplaceFrom);
   const setSelection = useToolStore((state) => state.setSelection);
+  const project = useProjectStore((state) => state.current);
+  const projectSummary = useProjectStore((state) =>
+    state.projects.find((entry) => entry.folder === state.current?.folder),
+  );
+  const projectDirty = projectIsDirty(project, revision);
+  const autosaved = projectDirty && project?.autosavedRevision === revision;
   const state = selection?.state ?? { name: "minecraft:air", properties: {} };
   const properties = Object.entries(state.properties ?? {});
   const editing = isTauriRuntime();
@@ -203,12 +210,35 @@ export function Inspector() {
 
         <section className="border-b border-border py-1.5">
           <SectionHeader icon={<Box className="size-3" />}>Project</SectionHeader>
-          <Field label="Mode" value="Empty Project (demo scene)" />
-          <Field label="Minecraft" value="1.21.4" />
-          <Field label="DataVersion" value="4189" />
+          <Field label="Name" value={project?.name ?? "No project open"} />
+          <Field label="Folder" value={project?.folder ?? "—"} />
+          <Field
+            label="Mode"
+            value={projectSummary ? creationModeLabel(projectSummary.creationMode) : "—"}
+          />
+          <Field label="Minecraft" value={projectSummary?.targetMinecraftVersion ?? "1.21.4"} />
+          <Field label="DataVersion" value={String(projectSummary?.targetDataVersion ?? 4189)} />
+          <Field label="Schema" value={projectSummary ? `v${projectSummary.schemaVersion}` : "—"} />
           <Field label="Dimension" value={dimension} />
-          <Field label="Source" value={source === "core" ? "Rust core" : "Preview data"} />
+          <Field label="Source" value={project ? "Project layer" : "Runtime core only"} />
           <Field label="Revision" value={String(revision)} />
+          <Field label="Saved revision" value={project ? String(project.savedRevision) : "—"} />
+          <Field
+            label="Autosave"
+            value={project?.autosavedRevision ? `r${project.autosavedRevision}` : "—"}
+          />
+          <Field
+            label="State"
+            value={
+              !project?.folder
+                ? "no project"
+                : projectDirty
+                  ? autosaved
+                    ? "autosaved, not saved"
+                    : "unsaved changes"
+                  : "saved"
+            }
+          />
           <Field label="Chunks" value={String(chunkCount)} />
           <Field label="Blocks" value={blockCount.toLocaleString()} />
         </section>
@@ -224,7 +254,7 @@ export function Inspector() {
 
       <Separator />
       <div className="px-2.5 py-2 text-[9px] text-muted-foreground">
-        Values shown here are read from the Rust world core and revisioned render snapshots.
+        Values shown here are read from the Rust world core and the versioned project manifest.
       </div>
     </aside>
   );

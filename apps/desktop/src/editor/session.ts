@@ -339,6 +339,7 @@ export type ShortcutAction =
   | { kind: "paste" }
   | { kind: "delete-selection" }
   | { kind: "apply-selection" }
+  | { kind: "save" }
   | { kind: "cancel" };
 
 /**
@@ -361,6 +362,7 @@ export function editorShortcut(event: {
     if (event.code === "KeyY") return { kind: "redo" };
     if (event.code === "KeyC") return { kind: "copy" };
     if (event.code === "KeyV") return { kind: "paste" };
+    if (event.code === "KeyS") return { kind: "save" };
     return null;
   }
   if (event.altKey) return null;

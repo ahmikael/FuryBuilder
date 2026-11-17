@@ -43,6 +43,7 @@ interface ToolState {
   requestCancel: () => void;
   finishJob: (id: number) => void;
   markModified: () => void;
+  markSaved: () => void;
   setLastOperation: (operation: {
     operationId: string;
     changedBlocks: number;
@@ -105,6 +106,7 @@ export const useToolStore = create<ToolState>()((set) => ({
     set((state) => (state.job ? { job: { ...state.job, cancelRequested: true } } : state)),
   finishJob: (id) => set((state) => (state.job && state.job.id === id ? { job: null } : state)),
   markModified: () => set({ syncState: "modified" }),
+  markSaved: () => set({ syncState: "pristine" }),
   setLastOperation: (lastOperation) => set({ lastOperation, syncState: "modified" }),
   resetTransient: () => set({ anchor: null, hover: null, ghost: null }),
 }));

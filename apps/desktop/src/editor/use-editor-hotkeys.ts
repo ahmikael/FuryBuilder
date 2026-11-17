@@ -9,6 +9,7 @@ import {
   undoWorld,
 } from "@/editor/commands";
 import { editorShortcut } from "@/editor/session";
+import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 
 function dialogOpen(): boolean {
@@ -61,6 +62,10 @@ export function useEditorHotkeys(): void {
         case "apply-selection":
           event.preventDefault();
           void applyActiveTool();
+          break;
+        case "save":
+          event.preventDefault();
+          void useProjectStore.getState().save();
           break;
       }
     };

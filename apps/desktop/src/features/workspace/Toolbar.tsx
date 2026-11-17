@@ -1,15 +1,29 @@
-import { Flame, Redo2, Save, Settings, Sun, Moon, Undo2 } from "lucide-react";
+import {
+  Flame,
+  FolderOpen,
+  HardDrive,
+  Redo2,
+  Save,
+  Settings,
+  Sun,
+  Moon,
+  Undo2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BackendStatus } from "@/lib/contracts";
+import { isTauriRuntime } from "@/lib/ipc";
 import { redoWorld, undoWorld } from "@/editor/commands";
 import { blockColor } from "@/renderer/assets";
 import { useHistoryStore } from "@/state/history-store";
+import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
+import { useWorldStore } from "@/state/world-store";
+import { formatRelativeTime } from "@/project/types";
 import { cn } from "@/lib/utils";
 
-const menus = ["Project", "View", "Tools", "AI / MCP", "Export"] as const;
+const menus = ["View", "Tools", "AI / MCP", "Export"] as const;
 
 interface ToolbarProps {
   backendStatus: BackendStatus;
@@ -22,10 +36,30 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
   const job = useToolStore((state) => state.job);
-  const syncState = useToolStore((state) => state.syncState);
   const selectedBlock = useToolStore((state) => state.selectedBlock);
-  const editing = backendStatus === "online";
-  const busy = Boolean(job);
+  const current = useProjectStore((state) => state.current);
+  const loading = useProjectStore((state) => state.loading);
+  const lastSavedAtMs = useProjectStore((state) => state.lastSavedAtMs);
+  const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
+  const worldRevision = useWorldStore((state) => state.revision);
+  const tauri = isTauriRuntime();
+  const projectOpen = Boolean(current?.folder);
+  const editing = backendStatus === "online" && tauri && projectOpen;
+  const busy = Boolean(job) || loading;
+  const dirty = projectIsDirty(current, worldRevision);
+  const autosaved = dirty && current?.autosavedRevision === worldRevision;
+
+  const saveState = !tauri
+    ? "Preview scene"
+    : !projectOpen
+      ? "No project open"
+      : dirty
+        ? autosaved
+          ? "Autosaved · unsaved"
+          : "Unsaved changes"
+        : lastSavedAtMs
+          ? `Saved ${formatRelativeTime(lastSavedAtMs)}`
+          : "Saved";
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card/70 px-2">
@@ -44,6 +78,22 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       <nav className="flex items-center" aria-label="Main menu">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn("text-muted-foreground", projectOpen && "text-foreground")}
+              onClick={() => setManagerOpen(true)}
+            >
+              <FolderOpen className="mr-1 size-3.5" />
+              Project
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Project manager — list, create, open, rename and checkpoints. Ctrl+S saves.
+          </TooltipContent>
+        </Tooltip>
         {menus.map((menu) => (
           <Tooltip key={menu}>
             <TooltipTrigger asChild>
@@ -93,30 +143,41 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
       <div className="ml-auto flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger asChild>
-            <span
+            <button
+              type="button"
+              onClick={() => setManagerOpen(true)}
               className={cn(
-                "mr-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px]",
-                syncState === "modified"
-                  ? "border-status-warn/30 text-status-warn"
-                  : "border-border text-muted-foreground",
+                "mr-1 inline-flex max-w-56 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px]",
+                !projectOpen
+                  ? "border-border text-muted-foreground"
+                  : dirty
+                    ? "border-status-warn/40 text-status-warn"
+                    : "border-status-ok/30 text-status-ok",
               )}
             >
               <span
                 className={cn(
-                  "size-1.5 rounded-full",
-                  syncState === "modified" ? "bg-status-warn" : "bg-status-ok",
+                  "size-1.5 shrink-0 rounded-full",
+                  !projectOpen
+                    ? "bg-muted-foreground/50"
+                    : dirty
+                      ? "bg-status-warn"
+                      : "bg-status-ok",
                 )}
               />
-              {syncState === "modified"
-                ? "Unsaved changes"
-                : editing
-                  ? "No unsaved edits"
-                  : "Preview scene"}
-            </span>
+              <span className="truncate">{current?.name ?? saveState}</span>
+              {projectOpen ? (
+                <>
+                  <span className="text-border">·</span>
+                  <span className="truncate text-muted-foreground">{saveState}</span>
+                </>
+              ) : null}
+            </button>
           </TooltipTrigger>
           <TooltipContent>
-            Project persistence arrives in M5. Edits are kept in the running Rust session and export
-            remembers the revision.
+            {projectOpen
+              ? `Revision ${worldRevision} · saved revision ${current?.savedRevision ?? 0}. Autosave runs every 30 s while edits are unsaved.`
+              : "Create or open a project to start editing."}
           </TooltipContent>
         </Tooltip>
 
@@ -167,13 +228,35 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Save project" disabled>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Save project"
+              disabled={!projectOpen || busy}
+              onClick={() => void useProjectStore.getState().save()}
+            >
               <Save />
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            Save project — persistence lands in M5. Current edits live in memory only.
+            {projectOpen
+              ? `Save project · Ctrl+S${dirty ? " · unsaved changes" : ""}`
+              : "Open a project before saving."}
           </TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Project storage"
+              onClick={() => setManagerOpen(true)}
+            >
+              <HardDrive />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Project storage, checkpoints and recovery.</TooltipContent>
         </Tooltip>
 
         <Tooltip>

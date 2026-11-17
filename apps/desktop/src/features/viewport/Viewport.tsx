@@ -7,6 +7,7 @@ import {
   ClipboardPaste,
   Copy,
   Eraser,
+  FolderOpen,
   Grid3X3,
   Loader2,
   MousePointer2,
@@ -52,6 +53,7 @@ import {
   useWorldStore,
 } from "@/state/world-store";
 import { useToolStore } from "@/state/tool-store";
+import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import {
   applyActiveTool,
   copySelection,
@@ -109,12 +111,10 @@ async function loadPreview(renderer: ViewportRenderer): Promise<void> {
 }
 
 async function loadCore(renderer: ViewportRenderer, radius: number): Promise<void> {
-  let info = await invokeCommand<WorldInfo>("world_info");
-  if (info.blockCount === 0) {
-    info = await invokeCommand<WorldInfo>("load_demo_world");
-  }
+  const dimension = useWorldStore.getState().dimension;
+  const info = await invokeCommand<WorldInfo>("world_info");
   const snapshot = await invokeCommand<RenderSnapshot>("render_snapshot", {
-    dimension: "minecraft:overworld",
+    dimension,
     center: { x: 0, z: 0 },
     radius,
   });
@@ -221,7 +221,10 @@ export function Viewport() {
   const [captureImage, setCaptureImage] = useState<string | null>(null);
   const [goto, setGoto] = useState({ x: "0", y: "70", z: "0" });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const editingEnabled = isTauriRuntime();
+  const tauri = isTauriRuntime();
+  const project = useProjectStore((state) => state.current);
+  const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
+  const editingEnabled = tauri && Boolean(project?.folder);
 
   const status = useWorldStore((state) => state.status);
   const error = useWorldStore((state) => state.error);
@@ -243,11 +246,12 @@ export function Viewport() {
   const boxSelection = useToolStore((state) => state.selection);
   const ghost = useToolStore((state) => state.ghost);
   const job = useToolStore((state) => state.job);
-  const syncState = useToolStore((state) => state.syncState);
   const clipboard = useToolStore((state) => state.clipboard);
   const lastOperation = useToolStore((state) => state.lastOperation);
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
+  const projectDirty = projectIsDirty(project, revision);
+  const autosaved = projectDirty && project?.autosavedRevision === revision;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -305,7 +309,9 @@ export function Viewport() {
 
     const observer = new ResizeObserver(() => renderer.resize());
     observer.observe(container);
-    void initialLoad(renderer);
+    void initialLoad(renderer).then(() => {
+      if (tauri) void useProjectStore.getState().resume();
+    });
 
     const onRefresh = (event: Event): void => {
       const detail = (event as CustomEvent<ChunkPos[]>).detail;
@@ -330,7 +336,7 @@ export function Viewport() {
       }
       useWorldStore.getState().setStatus("idle");
     };
-  }, [webgl2]);
+  }, [webgl2, tauri]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -600,6 +606,32 @@ export function Viewport() {
         </div>
       ) : null}
 
+      {webgl2 && tauri && !project?.folder && status === "ready" ? (
+        <div className="absolute inset-0 z-10 grid place-items-center bg-black/35 p-6">
+          <div className="w-full max-w-md space-y-3 rounded-lg border border-white/10 bg-card/95 p-5 text-center shadow-2xl">
+            <div className="mx-auto grid size-12 place-items-center rounded-lg border border-primary/30 bg-primary/10">
+              <FolderOpen className="size-6 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold">No project open</h2>
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Create an Empty Project or a flat base, or open an existing{" "}
+                <span className="font-mono">.furybuilder</span> folder. Edits are saved atomically
+                with checksums and autosave.
+              </p>
+            </div>
+            <div className="flex justify-center gap-2">
+              <Button size="sm" onClick={() => setManagerOpen(true)}>
+                <Plus className="mr-1 size-3.5" /> New project
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setManagerOpen(true)}>
+                <FolderOpen className="mr-1 size-3.5" /> Open project
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <div className="pointer-events-none absolute top-2 left-2 z-20 flex items-center gap-2">
         <span className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white/65">
           {dimension === "minecraft:overworld"
@@ -728,7 +760,9 @@ export function Viewport() {
           </div>
         ) : (
           <div className="rounded-md border border-status-warn/30 bg-black/60 px-2 py-1 font-mono text-[9px] text-status-warn">
-            Preview mode — block editing requires the desktop core
+            {tauri
+              ? "No project open — create or open a project to edit blocks"
+              : "Preview mode — block editing requires the desktop core"}
           </div>
         )}
 
@@ -921,10 +955,20 @@ export function Viewport() {
             <span
               className={cn(
                 "text-right",
-                syncState === "modified" ? "text-status-warn" : "text-status-ok",
+                !project?.folder
+                  ? "text-white/40"
+                  : projectDirty
+                    ? "text-status-warn"
+                    : "text-status-ok",
               )}
             >
-              {syncState === "modified" ? "unsaved" : "no edits"}
+              {!project?.folder
+                ? "no project"
+                : projectDirty
+                  ? autosaved
+                    ? `autosaved r${project.autosavedRevision}`
+                    : "unsaved"
+                  : `saved r${project.savedRevision}`}
             </span>
             {lastOperation ? (
               <>
@@ -940,8 +984,10 @@ export function Viewport() {
 
       <div className="pointer-events-none absolute right-2 bottom-2 z-20 max-w-[45%] rounded border border-white/10 bg-black/45 px-2.5 py-1 font-mono text-[9px] text-white/45">
         {editingEnabled
-          ? "WASD fly · RMB look · 1-8 tools · Alt-click pick · Ctrl+Z undo · Esc cancel · RMB menu"
-          : "WASD fly · RMB look · LMB pick · 1-8 select tool · Ctrl+Z undo"}
+          ? "WASD fly · RMB look · 1-8 tools · Alt-click pick · Ctrl+Z undo · Ctrl+S save · RMB menu"
+          : tauri
+            ? "WASD fly · RMB look · open a project to edit · Ctrl+S save"
+            : "WASD fly · RMB look · LMB pick · 1-8 select tool · Ctrl+Z undo"}
       </div>
 
       {boxSelection && editingEnabled ? (

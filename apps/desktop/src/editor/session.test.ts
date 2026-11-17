@@ -280,6 +280,8 @@ describe("editor keyboard map", () => {
     expect(editorShortcut(event("Digit8"))).toEqual({ kind: "tool", tool: "replace" });
     expect(editorShortcut(event("KeyC", { ctrlKey: true }))).toEqual({ kind: "copy" });
     expect(editorShortcut(event("KeyV", { ctrlKey: true }))).toEqual({ kind: "paste" });
+    expect(editorShortcut(event("KeyS", { ctrlKey: true }))).toEqual({ kind: "save" });
+    expect(editorShortcut(event("KeyS", { metaKey: true }))).toEqual({ kind: "save" });
     expect(editorShortcut(event("Enter"))).toEqual({ kind: "apply-selection" });
     expect(editorShortcut(event("Delete"))).toEqual({ kind: "delete-selection" });
     expect(editorShortcut(event("Escape"))).toEqual({ kind: "cancel" });

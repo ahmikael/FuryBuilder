@@ -23,6 +23,7 @@ import {
 import type { BlockState } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
 import { useHistoryStore } from "@/state/history-store";
+import { useProjectStore } from "@/state/project-store";
 import { isJobCancelled, pushToast, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { refreshViewportChunks, reloadViewport } from "@/features/viewport/viewport-bus";
@@ -64,6 +65,7 @@ async function refreshWorldSummary(): Promise<void> {
 function afterWrite(): void {
   void refreshWorldSummary();
   void useHistoryStore.getState().refresh();
+  void useProjectStore.getState().refreshSession();
 }
 
 async function reloadAfterConflict(): Promise<void> {

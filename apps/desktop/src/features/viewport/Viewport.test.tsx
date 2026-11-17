@@ -4,6 +4,7 @@ import type * as IpcModule from "@/lib/ipc";
 import type { RenderSnapshot } from "@/renderer/types";
 import { snapshotFromBlocks } from "@/renderer/builders";
 import { useToolStore } from "@/state/tool-store";
+import { useProjectStore } from "@/state/project-store";
 import { useWorldStore } from "@/state/world-store";
 
 interface FakeRenderer {
@@ -92,6 +93,26 @@ describe("Viewport", () => {
       syncState: "pristine",
       lastOperation: null,
     });
+    useProjectStore.setState({
+      projects: [],
+      warnings: [],
+      current: {
+        folder: "Test.furybuilder",
+        name: "Test",
+        savedRevision: 1,
+        autosavedRevision: null,
+        revision: 1,
+        dirty: false,
+        editorState: { selectedDimension: "minecraft:overworld", loadRadius: 1 },
+        availableCheckpoints: 0,
+      },
+      recovery: null,
+      checkpoints: [],
+      lastSave: null,
+      loading: false,
+      error: null,
+      managerOpen: false,
+    });
     useWorldStore.setState({
       status: "idle",
       source: null,
@@ -115,13 +136,10 @@ describe("Viewport", () => {
     vi.restoreAllMocks();
   });
 
-  it("loads the Rust demo world and applies the render snapshot", async () => {
+  it("loads the Rust world snapshot without inventing a demo scene", async () => {
     ipc.tauri = true;
     ipc.invoke.mockImplementation(async (command: string) => {
       if (command === "world_info") {
-        return { ...worldInfo, blockCount: 0, revision: 0 };
-      }
-      if (command === "load_demo_world") {
         return worldInfo;
       }
       if (command === "render_snapshot") {
@@ -129,6 +147,20 @@ describe("Viewport", () => {
       }
       if (command === "history_state") {
         return { canUndo: false, canRedo: false, revision: 1, entries: [] };
+      }
+      if (command === "project_status") {
+        return (
+          useProjectStore.getState().current ?? {
+            folder: null,
+            name: null,
+            savedRevision: 0,
+            autosavedRevision: null,
+            revision: 1,
+            dirty: false,
+            editorState: null,
+            availableCheckpoints: 0,
+          }
+        );
       }
       throw new Error(`unexpected command ${command}`);
     });
@@ -143,6 +175,7 @@ describe("Viewport", () => {
       center: { x: 0, z: 0 },
       radius: 1,
     });
+    expect(ipc.invoke).not.toHaveBeenCalledWith("load_demo_world");
     const state = useWorldStore.getState();
     expect(state.source).toBe("core");
     expect(state.revision).toBe(1);
@@ -185,6 +218,13 @@ describe("Viewport", () => {
       if (command === "render_snapshot") return snapshot;
       if (command === "history_state") {
         return { canUndo: true, canRedo: false, revision: 1, entries: [] };
+      }
+      if (command === "project_status") {
+        return {
+          ...useProjectStore.getState().current,
+          revision: 1,
+          dirty: false,
+        };
       }
       if (command === "preview_operation") {
         return { affectedBlocks: 1, changedBlocks: 1, dirtyChunks: [{ x: 0, z: 0 }], warnings: [] };
@@ -247,6 +287,13 @@ describe("Viewport", () => {
       if (command === "render_snapshot") return snapshot;
       if (command === "history_state") {
         return { canUndo: false, canRedo: false, revision: 1, entries: [] };
+      }
+      if (command === "project_status") {
+        return {
+          ...useProjectStore.getState().current,
+          revision: 1,
+          dirty: false,
+        };
       }
       if (command === "preview_operation") {
         return { affectedBlocks: 1, changedBlocks: 1, dirtyChunks: [], warnings: [] };
