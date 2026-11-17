@@ -855,7 +855,7 @@ furybuilder/
 - [x] Установить строгую типизацию, линтер, форматирование, pnpm/Cargo lock-файлы.
 - [x] Создать минимальный Rust workspace с независимым `world-domain`.
 - [x] Добавить Tauri IPC с типизированным `ping`/`app_info` и структурированными ошибками.
-- [ ] Настроить capabilities/permissions с минимальными правами.
+- [x] Настроить capabilities/permissions с минимальными правами.
 - [ ] Сделать базовый layout: toolbar, viewport placeholder, world tree, inspector, status bar.
 - [ ] Добавить тёмную/светлую тему, базовые дизайн-токены, масштабирование интерфейса.
 - [ ] Настроить CI: проверки TS/Rust и сборка на Windows.
