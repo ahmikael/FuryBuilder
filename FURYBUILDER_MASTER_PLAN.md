@@ -856,7 +856,7 @@ furybuilder/
 - [x] Создать минимальный Rust workspace с независимым `world-domain`.
 - [x] Добавить Tauri IPC с типизированным `ping`/`app_info` и структурированными ошибками.
 - [x] Настроить capabilities/permissions с минимальными правами.
-- [ ] Сделать базовый layout: toolbar, viewport placeholder, world tree, inspector, status bar.
+- [x] Сделать базовый layout: toolbar, viewport placeholder, world tree, inspector, status bar.
 - [ ] Добавить тёмную/светлую тему, базовые дизайн-токены, масштабирование интерфейса.
 - [ ] Настроить CI: проверки TS/Rust и сборка на Windows.
 - [ ] Описать запуск, dev workflow и известные ограничения в README.
