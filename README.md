@@ -50,19 +50,21 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-M0–M3 are implemented: application shell and IPC, the Rust world core with revisions,
-transactions and section-diff undo/redo, and a live Three.js viewport fed by revisioned
-render snapshots. The viewport supports fly/orbit cameras, exact block picking, chunk
-borders, capture with Observation metadata and a performance panel. Editing tools (M4)
-are next. Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`; only tasks with
-passing verification are checked there.
+M0–M4 are implemented: application shell and IPC, the Rust world core with revisions,
+transactions and section-diff undo/redo, a live Three.js viewport fed by revisioned
+render snapshots, and a manual editor with a searchable block palette, block-state
+properties, place/remove/brush/box/fill/line/replace tools, copy/paste, ghost previews,
+undo/redo, history and cancellable preview/read jobs. Project persistence (M5) is next.
+Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`; only tasks with passing
+verification are checked there.
 
 ## Known limitations (early development)
 
 - Minecraft game assets are not bundled. The renderer ships original placeholder textures
   and approximate shapes for slabs/stairs/torches.
-- The M3 viewport starts with a deterministic demo scene. Projects, saving and exports
-  arrive in M5/M6; editing tools arrive in M4.
+- The viewport starts with a deterministic demo scene. Projects, saving and exports
+  arrive in M5/M6; edits live in the running Rust session.
+- Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
 - Import of full Java world saves is read-only until the version/format matrix marks a

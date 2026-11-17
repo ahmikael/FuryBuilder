@@ -60,3 +60,17 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | T-20 mesh at chunk seam | `renderer/mesher.test.ts` — faces heal after a neighbour chunk is unloaded |
 | Transparency | `renderer/mesher.test.ts` — glass/water stay in the translucent buffer; same-material faces are culled |
 | Observation partial | `renderer/observation.test.ts` — missing requested chunks set `partial` and `missingChunks` |
+
+## Implemented coverage (M4)
+
+| Requirement | Automated evidence |
+|---|---|
+| Palette search and canonical state defaults | `features/workspace/BottomPanel.test.tsx` |
+| Place/remove/brush/line/fill/replace planning | `editor/session.test.ts` |
+| Box selection with negative coordinates | `editor/commands.test.ts` (`tool click state machine`) |
+| Selection volume limit (1,000,000 blocks) | `editor/commands.test.ts` |
+| Conflicting actions (no selection/source, source = target, revision mismatch) | `editor/commands.test.ts` |
+| Undo/redo buttons and dirty chunk refresh | `editor/commands.test.ts`, `features/viewport/Viewport.test.tsx` |
+| Cancellable preview/read jobs and stale job completion | `editor/commands.test.ts`, `state/tool-store.test.ts` |
+| Hotkey protection in inputs and contenteditable | `editor/use-editor-hotkeys.test.tsx`, `editor/session.test.ts` |
+| Click → preview → apply → chunk refresh IPC path | `features/viewport/Viewport.test.tsx` |
