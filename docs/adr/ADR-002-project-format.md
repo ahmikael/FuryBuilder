@@ -1,0 +1,42 @@
+# ADR-002: Native project format
+
+- **Status:** Accepted
+- **Date:** 2026-11-17
+
+## Decision
+
+A FuryBuilder project is a **folder** ending in `.furybuilder/`:
+
+```text
+MyCastle.furybuilder/
+├── project.json          # schema version, name, mode, target version, revisions
+├── source/               # immutable imported source (read-only)
+├── data/                 # chunk payloads (sparse, content-addressed segments)
+├── changes/              # transaction journal + checkpoints
+├── assets/               # user-approved references/resource packs
+├── previews/             # thumbnails and agreed screenshots
+└── cache/                # regenerable meshes/atlases (safe to delete)
+```
+
+- `project.json` is the only eagerly parsed document. It contains
+  `project_schema_version`, `project_id`, `name`, `creation_mode`, `target_minecraft_version`,
+  `target_data_version`, `world_revision`, `created_at`, `updated_at` and provenance.
+- World chunks are stored as individual versioned payload files under `data/`, written
+  atomically (temp file + fsync + rename). The first implementation stores a compact
+  custom binary encoding per section with a schema version.
+- `cache/` may be deleted at any time. `data/` and `changes/` may not.
+- Saves are atomic at the project level: write to a staging area, verify, publish,
+  keep a backup of the previous manifest.
+- Schema migrations are explicit functions with a pre-migration backup. Unknown newer
+  schema versions are refused (read-only inspection only).
+
+## Rationale
+
+Folder storage is inspectable, recoverable and testable. It avoids rewriting a monolithic
+file on every autosave. Separating `source/` supports the copy-on-write import model.
+
+## Consequences
+
+- Need atomic directory publish and crash-recovery tests.
+- A project can be copied and diffed with ordinary file tools.
+- `project_id` is stable and independent of the folder name.
