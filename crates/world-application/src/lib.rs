@@ -8,12 +8,14 @@ mod error;
 mod service;
 
 pub use dto::{
-    Actor, ActorSource, AuditAction, AuditEntry, ChunkStats, HistorySummary, OperationRequest,
-    OperationResult, PaletteEntry, PreviewResult, Query, QueryResult, RegionSummary,
+    Actor, ActorSource, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats,
+    HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
+    QueryResult, RegionSummary, RenderSnapshot, SectionSnapshot,
 };
 pub use error::{AppError, ErrorCode};
 pub use service::{
     WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_SUMMARY_BLOCKS,
+    MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,
 };
 
 use serde::{Deserialize, Serialize};

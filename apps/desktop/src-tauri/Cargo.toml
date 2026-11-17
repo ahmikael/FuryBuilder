@@ -18,3 +18,4 @@ tauri = { version = "2", features = [] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 world-application = { path = "../../../crates/world-application", package = "furybuilder-world-application" }
+world-domain = { path = "../../../crates/world-domain", package = "furybuilder-world-domain" }

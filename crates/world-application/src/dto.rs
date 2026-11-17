@@ -95,6 +95,48 @@ pub struct ChunkStats {
     pub blocks: usize,
 }
 
+/// One section transferred to the renderer. `data` is empty when `palette` has one entry;
+/// otherwise it contains little-endian `u32` halves of the packed `u64` words
+/// (`[lo0, hi0, lo1, hi1, ...]`) so JavaScript never loses integer precision.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SectionSnapshot {
+    pub section_y: i32,
+    pub palette: Vec<BlockState>,
+    pub data: Vec<u32>,
+    pub bits_per_index: u8,
+    pub non_air: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChunkSnapshot {
+    pub chunk: ChunkPos,
+    pub loaded: bool,
+    pub sections: Vec<SectionSnapshot>,
+}
+
+/// Snapshot of explicitly requested chunks, used to refresh dirty chunks after an edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChunkSnapshotBatch {
+    pub dimension: String,
+    pub revision: u64,
+    pub chunks: Vec<ChunkSnapshot>,
+}
+
+/// Bounded render data for a set of chunks. This is a derived view; it never mutates
+/// the world and carries the authoritative revision it was taken from.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderSnapshot {
+    pub dimension: String,
+    pub revision: u64,
+    pub center: ChunkPos,
+    pub radius: u32,
+    pub chunks: Vec<ChunkSnapshot>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Query {

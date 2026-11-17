@@ -879,6 +879,7 @@ name = "furybuilder-desktop"
 version = "0.1.0"
 dependencies = [
  "furybuilder-world-application",
+ "furybuilder-world-domain",
  "serde",
  "serde_json",
  "tauri",

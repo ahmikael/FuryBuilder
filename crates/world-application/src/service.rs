@@ -6,13 +6,16 @@ use world_domain::{BlockRegistry, ChunkPos, World, WorldInfo};
 use world_operations::{self as operations, Operation, SectionDiff};
 
 use crate::dto::{
-    Actor, AuditAction, AuditEntry, ChunkStats, HistorySummary, OperationRequest, OperationResult,
-    PaletteEntry, PreviewResult, Query, QueryResult, RegionSummary,
+    Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistorySummary,
+    OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query, QueryResult,
+    RegionSummary, RenderSnapshot, SectionSnapshot,
 };
 use crate::error::{AppError, ErrorCode};
 
 pub const MAX_REGION_SUMMARY_BLOCKS: u64 = 1_000_000;
 pub const MAX_IDEMPOTENCY_ENTRIES: usize = 256;
+pub const MAX_RENDER_RADIUS: u32 = 6;
+pub const MAX_RENDER_CHUNKS: usize = 256;
 pub const DEFAULT_MAX_HISTORY: usize = 100;
 const MAX_PROJECT_ID: usize = 128;
 const MAX_KEY_LENGTH: usize = 128;
@@ -104,6 +107,188 @@ impl WorldService {
 
     pub fn world_info(&self) -> WorldInfo {
         self.world.info()
+    }
+
+    /// Bounded section snapshots for the renderer. Missing chunks are returned with
+    /// `loaded: false` so the viewport can show holes and request them later.
+    pub fn render_snapshot(
+        &self,
+        dimension: &str,
+        center: ChunkPos,
+        radius: u32,
+    ) -> Result<RenderSnapshot, AppError> {
+        if radius > MAX_RENDER_RADIUS {
+            return Err(AppError::new(
+                ErrorCode::LimitExceeded,
+                format!("render radius {radius} exceeds limit {MAX_RENDER_RADIUS}"),
+            ));
+        }
+        let dim = self.world.dimension(dimension)?;
+        let mut chunks = Vec::new();
+        for dx in -(radius as i32)..=(radius as i32) {
+            for dz in -(radius as i32)..=(radius as i32) {
+                chunks.push(snapshot_chunk(
+                    dim,
+                    ChunkPos::new(center.x + dx, center.z + dz),
+                ));
+            }
+        }
+        Ok(RenderSnapshot {
+            dimension: dimension.to_owned(),
+            revision: self.world.revision(),
+            center,
+            radius,
+            chunks,
+        })
+    }
+
+    /// Snapshots an explicit set of chunks, bounded to `MAX_RENDER_CHUNKS`. Used after an
+    /// edit to refresh only dirty chunks and their neighbours.
+    pub fn render_chunks(
+        &self,
+        dimension: &str,
+        chunks: &[ChunkPos],
+    ) -> Result<ChunkSnapshotBatch, AppError> {
+        if chunks.len() > MAX_RENDER_CHUNKS {
+            return Err(AppError::new(
+                ErrorCode::LimitExceeded,
+                format!(
+                    "render request contains {} chunks, limit is {MAX_RENDER_CHUNKS}",
+                    chunks.len()
+                ),
+            ));
+        }
+        let dim = self.world.dimension(dimension)?;
+        let mut seen = BTreeSet::new();
+        let chunks = chunks
+            .iter()
+            .filter(|pos| seen.insert(**pos))
+            .map(|pos| snapshot_chunk(dim, *pos))
+            .collect();
+        Ok(ChunkSnapshotBatch {
+            dimension: dimension.to_owned(),
+            revision: self.world.revision(),
+            chunks,
+        })
+    }
+
+    /// Seeds a small deterministic demo scene for the viewport milestone. This is
+    /// demo content, not a Minecraft world and not a substitute for Vanilla World.
+    pub fn load_demo_world(&mut self) -> Result<WorldInfo, AppError> {
+        self.world = World::new_empty();
+        self.history.clear();
+        self.redo.clear();
+        self.idempotency.clear();
+        self.idempotency_order.clear();
+        self.audit.clear();
+
+        const DIMENSION: &str = "minecraft:overworld";
+        {
+            let mut place = |x: i32, y: i32, z: i32, name: &str| -> Result<(), AppError> {
+                let state: world_domain::BlockState = name
+                    .parse()
+                    .map_err(|error| AppError::internal(format!("invalid demo state: {error}")))?;
+                self.world
+                    .set_block(DIMENSION, world_domain::BlockPos::new(x, y, z), &state)?;
+                Ok(())
+            };
+
+            for chunk_x in -1..=1 {
+                for chunk_z in -1..=1 {
+                    for local_x in 0..16 {
+                        for local_z in 0..16 {
+                            let x = chunk_x * 16 + local_x;
+                            let z = chunk_z * 16 + local_z;
+                            for y in -64..61 {
+                                place(x, y, z, "minecraft:stone")?;
+                            }
+                            for y in 61..64 {
+                                place(x, y, z, "minecraft:dirt")?;
+                            }
+                            place(x, 64, z, "minecraft:grass_block")?;
+                        }
+                    }
+                }
+            }
+
+            // Small pond.
+            for x in 10..=15 {
+                for z in 4..=10 {
+                    place(x, 64, z, "minecraft:water")?;
+                    place(x, 63, z, "minecraft:water")?;
+                    place(x, 62, z, "minecraft:water")?;
+                }
+            }
+
+            // House floor and walls.
+            for x in 2..=10 {
+                for z in -8..=0 {
+                    place(x, 65, z, "minecraft:stone_bricks")?;
+                }
+            }
+            for y in 66..=69 {
+                for x in 2..=10 {
+                    place(x, y, -8, "minecraft:oak_planks")?;
+                    place(x, y, 0, "minecraft:oak_planks")?;
+                }
+                for z in -8..=0 {
+                    place(2, y, z, "minecraft:oak_planks")?;
+                    place(10, y, z, "minecraft:oak_planks")?;
+                }
+            }
+            // Door opening and glass windows.
+            for y in 66..=67 {
+                place(6, y, -8, "minecraft:air")?;
+                place(6, y, 0, "minecraft:air")?;
+            }
+            for x in [4, 8] {
+                place(x, 67, -8, "minecraft:glass")?;
+                place(x, 67, 0, "minecraft:glass")?;
+            }
+            for z in [-4, -6] {
+                place(2, 67, z, "minecraft:glass")?;
+                place(10, 67, z, "minecraft:glass")?;
+            }
+            // Flat roof with a stair border.
+            for x in 1..=11 {
+                for z in -9..=1 {
+                    place(x, 70, z, "minecraft:dark_oak_planks")?;
+                }
+            }
+            for x in 1..=11 {
+                place(x, 71, -9, "minecraft:oak_stairs")?;
+                place(x, 71, 1, "minecraft:oak_stairs")?;
+            }
+            for z in -9..=1 {
+                place(1, 71, z, "minecraft:oak_stairs")?;
+                place(11, 71, z, "minecraft:oak_stairs")?;
+            }
+            // Interior light sources.
+            for (x, z) in [(4, -6), (8, -2)] {
+                place(x, 66, z, "minecraft:torch")?;
+                place(x, 70, z, "minecraft:sea_lantern")?;
+            }
+
+            // Trees.
+            for (tree_x, tree_z) in [(-6, -6), (-6, 6), (12, -10)] {
+                for y in 65..=67 {
+                    place(tree_x, y, tree_z, "minecraft:oak_log")?;
+                }
+                for dx in -2i32..=2 {
+                    for dz in -2i32..=2 {
+                        for dy in 0..=1 {
+                            if dx.abs() == 2 && dz.abs() == 2 {
+                                continue;
+                            }
+                            place(tree_x + dx, 68 + dy, tree_z + dz, "minecraft:oak_leaves")?;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.world.bump_revision();
+        Ok(self.world.info())
     }
 
     pub fn history(&self) -> Vec<HistorySummary> {
@@ -564,6 +749,41 @@ fn dirty_chunks(diffs: &[SectionDiff]) -> Vec<ChunkPos> {
     set.into_iter().collect()
 }
 
+/// Builds one chunk snapshot from sparse sections. The payload is deliberately compact:
+/// palette + little-endian u32 halves of packed u64 words.
+fn snapshot_chunk(dim: &world_domain::Dimension, chunk_pos: ChunkPos) -> ChunkSnapshot {
+    match dim.chunk(chunk_pos) {
+        Some(chunk) => {
+            let sections = chunk
+                .sections()
+                .iter()
+                .filter(|(_, section)| !section.is_empty())
+                .map(|(section_y, section)| SectionSnapshot {
+                    section_y: *section_y,
+                    palette: section.palette().to_vec(),
+                    data: section
+                        .packed_data()
+                        .iter()
+                        .flat_map(|word| [*word as u32, (*word >> 32) as u32])
+                        .collect(),
+                    bits_per_index: section.bits_per_index(),
+                    non_air: section.non_air_count(),
+                })
+                .collect();
+            ChunkSnapshot {
+                chunk: chunk_pos,
+                loaded: true,
+                sections,
+            }
+        }
+        None => ChunkSnapshot {
+            chunk: chunk_pos,
+            loaded: false,
+            sections: Vec::new(),
+        },
+    }
+}
+
 fn now_ms() -> Result<u128, AppError> {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -577,6 +797,8 @@ fn new_operation_id(prefix: &str) -> String {
 
 #[cfg(test)]
 mod provenance_tests;
+#[cfg(test)]
+mod render_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

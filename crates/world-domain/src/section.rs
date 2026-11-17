@@ -74,6 +74,11 @@ impl Section {
         self.bits_per_index
     }
 
+    /// Packed palette indices sent to the renderer. Empty when the palette has one state.
+    pub fn packed_data(&self) -> &[u64] {
+        &self.data
+    }
+
     #[inline]
     pub fn local_index(x: u8, y: u8, z: u8) -> Option<usize> {
         if x >= 16 || y >= 16 || z >= 16 {
