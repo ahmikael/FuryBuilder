@@ -1,63 +1,27 @@
 //! Application facade shared by the Tauri UI and the MCP bridge.
 //!
-//! The facade owns structured errors and (later) project state, policy, jobs and audit.
-//! It never depends on Tauri or a UI framework.
+//! The facade owns structured errors, the authoritative world service, revisions,
+//! idempotency and the audit trail. It never depends on Tauri or a UI framework.
+
+mod dto;
+mod error;
+mod service;
+
+pub use dto::{
+    Actor, ActorSource, AuditAction, AuditEntry, ChunkStats, HistorySummary, OperationRequest,
+    OperationResult, PaletteEntry, PreviewResult, Query, QueryResult, RegionSummary,
+};
+pub use error::{AppError, ErrorCode};
+pub use service::{
+    WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_SUMMARY_BLOCKS,
+};
 
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
-use thiserror::Error;
 use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
 
 pub const APP_NAME: &str = "FuryBuilder";
 pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
-
-/// Stable machine-readable error codes. New codes are additive.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ErrorCode {
-    InvalidArgument,
-    OutOfBounds,
-    NotFound,
-    Conflict,
-    PermissionDenied,
-    RevisionMismatch,
-    UnsupportedVersion,
-    UnsupportedFormat,
-    BackendUnavailable,
-    Internal,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
-#[error("{code:?}: {message}")]
-pub struct AppError {
-    pub code: ErrorCode,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub details: Option<serde_json::Value>,
-}
-
-impl AppError {
-    pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self {
-            code,
-            message: message.into(),
-            details: None,
-        }
-    }
-
-    pub fn invalid_argument(message: impl Into<String>) -> Self {
-        Self::new(ErrorCode::InvalidArgument, message)
-    }
-
-    pub fn internal(message: impl Into<String>) -> Self {
-        Self::new(ErrorCode::Internal, message)
-    }
-
-    pub fn with_details(mut self, details: impl Into<serde_json::Value>) -> Self {
-        self.details = Some(details.into());
-        self
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -128,13 +92,5 @@ mod tests {
         let long = "a".repeat(65);
         let error = ping(Some(&long)).expect_err("must reject");
         assert_eq!(error.code, ErrorCode::InvalidArgument);
-    }
-
-    #[test]
-    fn errors_serialize_with_machine_readable_code() {
-        let error = AppError::invalid_argument("bad bounds");
-        let json = serde_json::to_value(&error).expect("serializable");
-        assert_eq!(json["code"], "invalid_argument");
-        assert_eq!(json["message"], "bad bounds");
     }
 }

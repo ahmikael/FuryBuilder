@@ -2,6 +2,7 @@
 name = "furybuilder-world-application"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "FuryBuilder application facade: commands, queries, policy and jobs"
 [lib]
@@ -11,4 +12,10 @@ name = "world_application"
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+uuid = { workspace = true }
 world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
+world-operations = { path = "../world-operations", package = "furybuilder-world-operations" }
+
+[[bench]]
+name = "world_ops"
+harness = false
