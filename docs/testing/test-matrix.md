@@ -50,3 +50,13 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 - Open exported world copy in Minecraft 1.21.4 client/server.
 - Verify MCP with at least one real external client (OpenCode).
 - Long-session memory/FPS run recorded in `docs/testing/perf-runs.md` once available.
+
+## Implemented coverage (M3)
+
+| Matrix row | Automated evidence |
+|---|---|
+| T-04 chunk boundary | `renderer/world.test.ts`, `renderer/mesher.test.ts` (border culling and neighbour unload rebuild) |
+| T-05 negative coordinates | `renderer/world.test.ts`, `renderer/raycast.test.ts`, Rust `coords::tests` |
+| T-20 mesh at chunk seam | `renderer/mesher.test.ts` — faces heal after a neighbour chunk is unloaded |
+| Transparency | `renderer/mesher.test.ts` — glass/water stay in the translucent buffer; same-material faces are culled |
+| Observation partial | `renderer/observation.test.ts` — missing requested chunks set `partial` and `missingChunks` |
