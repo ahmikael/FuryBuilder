@@ -871,7 +871,7 @@ furybuilder/
 - [x] Реализовать координаты, chunk/section/region indexes, отрицательные значения и Y-range.
 - [x] Реализовать `World`, `Dimension`, `Chunk`, `Section`, палитры и sparse storage.
 - [x] Реализовать чтение/запись отдельного блока, batch changes, `fill_cuboid`, `replace`.
-- [ ] Добавить выделения/границы и проверку пересечения/лимитов.
+- [x] Добавить выделения/границы и проверку пересечения/лимитов.
 - [ ] Создать слой `Command/Query API` и единый формат ошибок.
 - [ ] Добавить `world_revision`, операции с `expected_revision`, `operation_id`.
 - [ ] Реализовать атомарное применение batch и начальный undo/redo.
