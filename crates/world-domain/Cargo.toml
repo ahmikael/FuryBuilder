@@ -2,6 +2,7 @@
 name = "furybuilder-world-domain"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Versioned Minecraft Java world domain: block states, coordinates, chunks, sections"
 [lib]
