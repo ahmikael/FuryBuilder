@@ -1,17 +1,30 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Box,
   Camera,
   ChevronDown,
   ChevronRight,
+  ClipboardPaste,
+  Copy,
+  Eraser,
   Grid3X3,
   Loader2,
   MousePointer2,
   Orbit,
+  PaintBucket,
+  Paintbrush,
   Plane,
+  Plus,
+  Redo2,
+  Replace,
   Scan,
+  Spline,
+  SquareDashed,
   TriangleAlert,
+  Trash2,
+  Undo2,
   Waypoints,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,12 +44,29 @@ import { createDemoSnapshot } from "@/renderer/demo";
 import { ViewportRenderer, type CameraMode } from "@/renderer/viewport-renderer";
 import type { ChunkPos, ChunkSnapshotBatch, RenderSnapshot } from "@/renderer/types";
 import type { CaptureResult } from "@/renderer/observation";
+import type { RayHit } from "@/renderer/raycast";
 import {
   MAX_LOAD_RADIUS,
   MIN_LOAD_RADIUS,
   clampLoadRadius,
   useWorldStore,
 } from "@/state/world-store";
+import { useToolStore } from "@/state/tool-store";
+import {
+  applyActiveTool,
+  copySelection,
+  deleteSelection,
+  handleToolClick,
+  pasteClipboard,
+  pickBlockAsBrush,
+  redoWorld,
+  refreshGhost,
+  setReplaceSource,
+  undoWorld,
+} from "@/editor/commands";
+import type { EditorTool } from "@/editor/types";
+import { MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS } from "@/editor/session";
+import { useHistoryStore } from "@/state/history-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +135,7 @@ async function initialLoad(renderer: ViewportRenderer): Promise<void> {
   try {
     if (isTauriRuntime()) {
       await loadCore(renderer, store.loadRadius);
+      void useHistoryStore.getState().refresh();
     } else {
       await loadPreview(renderer);
     }
@@ -155,16 +186,42 @@ async function refreshChunks(renderer: ViewportRenderer, chunks: ChunkPos[]): Pr
   }
 }
 
+interface ContextMenuState {
+  x: number;
+  y: number;
+  hit: RayHit | null;
+}
+
+const TOOL_ITEMS: Array<{
+  tool: EditorTool;
+  label: string;
+  shortcut: string;
+  icon: typeof MousePointer2;
+}> = [
+  { tool: "select", label: "Select / inspect", shortcut: "1", icon: MousePointer2 },
+  { tool: "place", label: "Place block", shortcut: "2", icon: Plus },
+  { tool: "remove", label: "Remove block", shortcut: "3", icon: Eraser },
+  { tool: "brush", label: "Brush", shortcut: "4", icon: Paintbrush },
+  { tool: "box", label: "Box select", shortcut: "5", icon: SquareDashed },
+  { tool: "fill", label: "Fill selection", shortcut: "6", icon: PaintBucket },
+  { tool: "line", label: "Line", shortcut: "7", icon: Spline },
+  { tool: "replace", label: "Replace in selection", shortcut: "8", icon: Replace },
+];
+
 export function Viewport() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<ViewportRenderer | null>(null);
   const pointerDown = useRef<{ x: number; y: number } | null>(null);
+  const rightDown = useRef<{ x: number; y: number } | null>(null);
+  const hoverFrame = useRef<number | null>(null);
   const [webgl2] = useState(() => detectWebGl2());
   const [captureOpen, setCaptureOpen] = useState(false);
   const [gotoOpen, setGotoOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(true);
   const [captureImage, setCaptureImage] = useState<string | null>(null);
   const [goto, setGoto] = useState({ x: "0", y: "70", z: "0" });
+  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const editingEnabled = isTauriRuntime();
 
   const status = useWorldStore((state) => state.status);
   const error = useWorldStore((state) => state.error);
@@ -178,6 +235,19 @@ export function Viewport() {
   const lastCapture = useWorldStore((state) => state.lastCapture);
   const gridVisible = useWorldStore((state) => state.gridVisible);
   const chunkBordersVisible = useWorldStore((state) => state.chunkBordersVisible);
+
+  const tool = useToolStore((state) => state.tool);
+  const brushRadius = useToolStore((state) => state.brushRadius);
+  const selectedBlock = useToolStore((state) => state.selectedBlock);
+  const replaceFrom = useToolStore((state) => state.replaceFrom);
+  const boxSelection = useToolStore((state) => state.selection);
+  const ghost = useToolStore((state) => state.ghost);
+  const job = useToolStore((state) => state.job);
+  const syncState = useToolStore((state) => state.syncState);
+  const clipboard = useToolStore((state) => state.clipboard);
+  const lastOperation = useToolStore((state) => state.lastOperation);
+  const canUndo = useHistoryStore((state) => state.canUndo);
+  const canRedo = useHistoryStore((state) => state.canRedo);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -200,6 +270,10 @@ export function Viewport() {
               : null,
           );
         },
+        onHover: (hit) => {
+          useToolStore.getState().setHover(hit, useToolStore.getState().ghost);
+          refreshGhost();
+        },
         onContextLost: () =>
           useWorldStore
             .getState()
@@ -221,6 +295,14 @@ export function Viewport() {
     if (import.meta.env.DEV) {
       (window as unknown as { __furyViewport?: ViewportRenderer }).__furyViewport = renderer;
     }
+    const syncOverlays = (): void => {
+      const state = useToolStore.getState();
+      renderer.setSelectionBox(state.selection);
+      renderer.setGhostBox(state.ghost?.bounds ?? null, state.ghost?.kind ?? "place");
+    };
+    syncOverlays();
+    const unsubscribe = useToolStore.subscribe(syncOverlays);
+
     const observer = new ResizeObserver(() => renderer.resize());
     observer.observe(container);
     void initialLoad(renderer);
@@ -229,10 +311,16 @@ export function Viewport() {
       const detail = (event as CustomEvent<ChunkPos[]>).detail;
       if (Array.isArray(detail)) void refreshChunks(renderer, detail);
     };
+    const onReload = (): void => {
+      void reloadRadius(renderer, useWorldStore.getState().loadRadius);
+    };
     viewportBus.addEventListener("refresh-chunks", onRefresh);
+    viewportBus.addEventListener("reload-world", onReload);
 
     return () => {
       viewportBus.removeEventListener("refresh-chunks", onRefresh);
+      viewportBus.removeEventListener("reload-world", onReload);
+      unsubscribe();
       observer.disconnect();
       renderer.dispose();
       rendererRef.current = null;
@@ -243,6 +331,37 @@ export function Viewport() {
       useWorldStore.getState().setStatus("idle");
     };
   }, [webgl2]);
+
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = (event: Event): void => {
+      if (event instanceof KeyboardEvent) {
+        if (event.key === "Escape") setContextMenu(null);
+        return;
+      }
+      const target = event.target;
+      if (target instanceof Element && target.closest('[role="menu"]')) return;
+      setContextMenu(null);
+    };
+    window.addEventListener("pointerdown", close);
+    window.addEventListener("keydown", close);
+    return () => {
+      window.removeEventListener("pointerdown", close);
+      window.removeEventListener("keydown", close);
+    };
+  }, [contextMenu]);
+
+  useEffect(() => {
+    refreshGhost();
+  }, [tool, brushRadius, boxSelection, selectedBlock, replaceFrom]);
+
+  useEffect(
+    () => () => {
+      if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
+      hoverFrame.current = null;
+    },
+    [],
+  );
 
   const handleRadius = (radius: number): void => {
     const clamped = clampLoadRadius(radius);
@@ -314,8 +433,51 @@ export function Viewport() {
     setGotoOpen(true);
   };
 
+  const closeContextMenu = (): void => setContextMenu(null);
+
+  const menuPlace = (): void => {
+    if (!contextMenu?.hit) return;
+    useToolStore.getState().setTool("place");
+    void handleToolClick(contextMenu.hit);
+    closeContextMenu();
+  };
+
+  const menuRemove = (): void => {
+    if (!contextMenu?.hit) return;
+    useToolStore.getState().setTool("remove");
+    void handleToolClick(contextMenu.hit);
+    closeContextMenu();
+  };
+
+  const menuPick = (): void => {
+    pickBlockAsBrush(contextMenu?.hit ?? null);
+    closeContextMenu();
+  };
+
+  const menuReplaceSource = (): void => {
+    setReplaceSource(contextMenu?.hit ?? null);
+    closeContextMenu();
+  };
+
+  const menuBoxCorner = (): void => {
+    const hit = contextMenu?.hit;
+    if (!hit) return;
+    useToolStore.getState().setTool("box");
+    useToolStore.getState().setAnchor(hit.pos);
+    useToolStore.getState().setGhost(null);
+    closeContextMenu();
+  };
+
+  const menuFocus = (): void => {
+    const hit = contextMenu?.hit;
+    if (hit) rendererRef.current?.focusOn(hit.pos);
+    closeContextMenu();
+  };
+
   const position = cameraPose?.position.map((value) => Math.round(value)) ?? [0, 0, 0];
   const positionLabel = `${position[0]}, ${position[1]}, ${position[2]}`;
+  const toolLabel = TOOL_ITEMS.find((item) => item.tool === tool)?.label ?? "Tool";
+  const canApplySelection = Boolean(boxSelection);
 
   return (
     <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[oklch(0.17_0.014_260)]">
@@ -326,6 +488,28 @@ export function Viewport() {
           if (event.button === 0) {
             pointerDown.current = { x: event.clientX, y: event.clientY };
           }
+          if (event.button === 2) {
+            rightDown.current = { x: event.clientX, y: event.clientY };
+          }
+        }}
+        onPointerMove={(event) => {
+          if (event.buttons !== 0) return;
+          const target = event.currentTarget;
+          const clientX = event.clientX;
+          const clientY = event.clientY;
+          if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
+          hoverFrame.current = requestAnimationFrame(() => {
+            hoverFrame.current = null;
+            const renderer = rendererRef.current;
+            if (!renderer || !target.isConnected) return;
+            renderer.hoverAt(clientX, clientY);
+          });
+        }}
+        onPointerLeave={() => {
+          if (hoverFrame.current !== null) cancelAnimationFrame(hoverFrame.current);
+          hoverFrame.current = null;
+          useToolStore.getState().setHover(null, null);
+          rendererRef.current?.setSelection(null);
         }}
         onPointerUp={(event) => {
           if (event.button !== 0) return;
@@ -334,13 +518,40 @@ export function Viewport() {
           if (!start) return;
           if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
           const renderer = rendererRef.current;
-          if (renderer) renderer.pickAt(event.clientX, event.clientY);
+          if (!renderer) return;
+          const hit = renderer.pickAt(event.clientX, event.clientY);
+          if (!hit && tool !== "fill" && tool !== "replace") return;
+          if (event.altKey) {
+            pickBlockAsBrush(hit);
+            return;
+          }
+          if (!editingEnabled) return;
+          void handleToolClick(hit);
         }}
         onDoubleClick={(event) => {
+          if (tool !== "select") return;
           const renderer = rendererRef.current;
           if (!renderer) return;
           const hit = renderer.pickAt(event.clientX, event.clientY);
           if (hit) renderer.focusOn(hit.pos);
+        }}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          const start = rightDown.current;
+          rightDown.current = null;
+          if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) {
+            return;
+          }
+          const renderer = rendererRef.current;
+          if (!renderer) return;
+          const hit = renderer.pickAt(event.clientX, event.clientY);
+          const rect = containerRef.current?.getBoundingClientRect() ?? null;
+          if (!rect) return;
+          setContextMenu({
+            x: Math.max(4, Math.min(event.clientX - rect.left, rect.width - 232)),
+            y: Math.max(4, Math.min(event.clientY - rect.top, rect.height - 340)),
+            hit,
+          });
         }}
         data-testid="viewport-canvas"
       />
@@ -410,6 +621,161 @@ export function Viewport() {
         >
           {source === "core" ? "Rust core" : source === "preview" ? "Preview data" : "…"}
         </span>
+      </div>
+
+      <div className="absolute top-2 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 shadow-lg backdrop-blur-sm">
+          {TOOL_ITEMS.map((item) => {
+            const Icon = item.icon;
+            const active = tool === item.tool;
+            return (
+              <Tooltip key={item.tool}>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={item.label}
+                    aria-pressed={active}
+                    className={cn(
+                      "size-7 rounded",
+                      active
+                        ? "bg-primary/25 text-primary hover:bg-primary/30"
+                        : "text-white/65 hover:bg-white/10 hover:text-white",
+                    )}
+                    disabled={!editingEnabled}
+                    onClick={() => useToolStore.getState().setTool(item.tool)}
+                  >
+                    <Icon />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {item.label} · {item.shortcut}
+                </TooltipContent>
+              </Tooltip>
+            );
+          })}
+          <Separator orientation="vertical" className="mx-0.5 h-5 bg-white/15" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Undo"
+                className="size-7 rounded text-white/65 hover:bg-white/10 hover:text-white"
+                disabled={!editingEnabled || Boolean(job) || !canUndo}
+                onClick={() => void undoWorld()}
+              >
+                <Undo2 />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Undo · Ctrl+Z</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Redo"
+                className="size-7 rounded text-white/65 hover:bg-white/10 hover:text-white"
+                disabled={!editingEnabled || Boolean(job) || !canRedo}
+                onClick={() => void redoWorld()}
+              >
+                <Redo2 />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Redo · Ctrl+Shift+Z</TooltipContent>
+          </Tooltip>
+        </div>
+
+        {editingEnabled ? (
+          <div className="flex items-center gap-1.5 rounded-md border border-white/10 bg-black/55 px-2 py-1 font-mono text-[9px] text-white/55">
+            <span className="text-white/80">{toolLabel}</span>
+            {tool === "brush" ? (
+              <label className="flex items-center gap-1">
+                radius
+                <select
+                  aria-label="Brush radius"
+                  value={brushRadius}
+                  onChange={(event) =>
+                    useToolStore.getState().setBrushRadius(Number(event.target.value))
+                  }
+                  className="rounded border border-white/15 bg-black/40 px-1 py-0.5"
+                >
+                  {Array.from(
+                    { length: MAX_BRUSH_RADIUS - MIN_BRUSH_RADIUS + 1 },
+                    (_, index) => MIN_BRUSH_RADIUS + index,
+                  ).map((radius) => (
+                    <option key={radius} value={radius}>
+                      {radius} ({Math.pow(radius * 2 + 1, 3)} max)
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <span className="text-primary/90">{selectedBlock.name.replace("minecraft:", "")}</span>
+            {tool === "replace" ? (
+              <span className="text-white/45">
+                from {replaceFrom?.name.replace("minecraft:", "") ?? "—"}
+              </span>
+            ) : null}
+            {boxSelection ? (
+              <span className="text-sky-300">
+                sel {boxSelection.min.x},{boxSelection.min.y},{boxSelection.min.z} →{" "}
+                {boxSelection.max.x},{boxSelection.max.y},{boxSelection.max.z}
+              </span>
+            ) : null}
+            {ghost ? <span className="text-white/40">{ghost.label}</span> : null}
+          </div>
+        ) : (
+          <div className="rounded-md border border-status-warn/30 bg-black/60 px-2 py-1 font-mono text-[9px] text-status-warn">
+            Preview mode — block editing requires the desktop core
+          </div>
+        )}
+
+        {job ? (
+          <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-black/70 px-2 py-1 font-mono text-[9px] text-white/75">
+            <Loader2 className="size-3 animate-spin text-primary" />
+            {job.label}
+            {job.cancelRequested ? " · cancelling…" : null}
+            {job.cancellable && !job.cancelRequested ? (
+              <button
+                type="button"
+                className="ml-1 rounded border border-white/20 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/10"
+                onClick={() => useToolStore.getState().requestCancel()}
+              >
+                Cancel
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {editingEnabled && (tool === "fill" || tool === "replace") ? (
+          <div className="flex items-center gap-1 rounded-md border border-white/10 bg-black/55 px-1.5 py-1">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[10px] text-white/75 hover:bg-white/10"
+              disabled={!canApplySelection || Boolean(job)}
+              onClick={() => void applyActiveTool()}
+            >
+              {tool === "fill" ? (
+                <PaintBucket className="mr-1 size-3" />
+              ) : (
+                <Replace className="mr-1 size-3" />
+              )}
+              Apply {tool}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-6 px-2 text-[10px] text-white/75 hover:bg-white/10"
+              disabled={!canApplySelection || Boolean(job)}
+              onClick={() => void deleteSelection()}
+            >
+              <Trash2 className="mr-1 size-3" /> Delete
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
@@ -551,16 +917,49 @@ export function Viewport() {
                 ))}
               </select>
             </span>
+            <span>Save</span>
+            <span
+              className={cn(
+                "text-right",
+                syncState === "modified" ? "text-status-warn" : "text-status-ok",
+              )}
+            >
+              {syncState === "modified" ? "unsaved" : "no edits"}
+            </span>
+            {lastOperation ? (
+              <>
+                <span>Last op</span>
+                <span className="text-right">
+                  {lastOperation.changedBlocks.toLocaleString()} blk · rev {lastOperation.revision}
+                </span>
+              </>
+            ) : null}
           </div>
         ) : null}
       </div>
 
-      <div className="pointer-events-none absolute right-2 bottom-2 z-20 rounded border border-white/10 bg-black/45 px-2.5 py-1 font-mono text-[9px] text-white/45">
-        WASD fly · RMB look · Shift boost · click pick · dbl-click focus
+      <div className="pointer-events-none absolute right-2 bottom-2 z-20 max-w-[45%] rounded border border-white/10 bg-black/45 px-2.5 py-1 font-mono text-[9px] text-white/45">
+        {editingEnabled
+          ? "WASD fly · RMB look · 1-8 tools · Alt-click pick · Ctrl+Z undo · Esc cancel · RMB menu"
+          : "WASD fly · RMB look · LMB pick · 1-8 select tool · Ctrl+Z undo"}
       </div>
 
+      {boxSelection && editingEnabled ? (
+        <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 rounded border border-sky-400/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-sky-200">
+          box {boxSelection.max.x - boxSelection.min.x + 1}×
+          {boxSelection.max.y - boxSelection.min.y + 1}×
+          {boxSelection.max.z - boxSelection.min.z + 1} ·{" "}
+          {(
+            (boxSelection.max.x - boxSelection.min.x + 1) *
+            (boxSelection.max.y - boxSelection.min.y + 1) *
+            (boxSelection.max.z - boxSelection.min.z + 1)
+          ).toLocaleString()}{" "}
+          blocks
+        </div>
+      ) : null}
+
       {selection ? (
-        <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 max-w-[60%] -translate-x-1/2 truncate rounded border border-primary/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-white/75">
+        <div className="pointer-events-none absolute bottom-10 left-1/2 z-20 max-w-[60%] -translate-x-1/2 truncate rounded border border-primary/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-white/75">
           selected {selection.pos.x}, {selection.pos.y}, {selection.pos.z} ·{" "}
           {selection.state.name.replace("minecraft:", "")}
           {selection.state.properties && Object.keys(selection.state.properties).length > 0
@@ -568,6 +967,102 @@ export function Viewport() {
                 .map(([key, value]) => `${key}=${value}`)
                 .join(",")}]`
             : ""}
+        </div>
+      ) : null}
+
+      {contextMenu ? (
+        <div
+          className="absolute z-40 w-56 overflow-hidden rounded-md border border-border bg-card/95 text-[11px] shadow-2xl backdrop-blur"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          role="menu"
+        >
+          <div className="border-b border-border px-2.5 py-1.5 font-mono text-[9px] text-muted-foreground">
+            {contextMenu.hit
+              ? `${contextMenu.hit.pos.x}, ${contextMenu.hit.pos.y}, ${contextMenu.hit.pos.z} · ${contextMenu.hit.state.name.replace("minecraft:", "")}`
+              : "Empty space"}
+          </div>
+          <ContextItem
+            icon={<Plus />}
+            label="Place block"
+            hint="2"
+            disabled={!contextMenu.hit || !editingEnabled}
+            onClick={menuPlace}
+          />
+          <ContextItem
+            icon={<Eraser />}
+            label="Remove block"
+            hint="3"
+            disabled={!contextMenu.hit || !editingEnabled}
+            onClick={menuRemove}
+          />
+          <ContextItem
+            icon={<Copy />}
+            label="Pick block as brush"
+            hint="Alt+click"
+            disabled={!contextMenu.hit || !editingEnabled}
+            onClick={menuPick}
+          />
+          <ContextItem
+            icon={<Replace />}
+            label="Set replace source"
+            disabled={!contextMenu.hit || !editingEnabled}
+            onClick={menuReplaceSource}
+          />
+          <ContextItem
+            icon={<SquareDashed />}
+            label="Set box corner"
+            disabled={!contextMenu.hit || !editingEnabled}
+            onClick={menuBoxCorner}
+          />
+          <div className="my-1 h-px bg-border" />
+          <ContextItem
+            icon={<Copy />}
+            label="Copy selection"
+            hint="Ctrl+C"
+            disabled={!boxSelection || !editingEnabled}
+            onClick={() => {
+              closeContextMenu();
+              void copySelection();
+            }}
+          />
+          <ContextItem
+            icon={<ClipboardPaste />}
+            label={`Paste${clipboard ? ` (${clipboard.blocks.length})` : ""}`}
+            hint="Ctrl+V"
+            disabled={!clipboard || !editingEnabled}
+            onClick={() => {
+              closeContextMenu();
+              void pasteClipboard();
+            }}
+          />
+          <ContextItem
+            icon={<PaintBucket />}
+            label="Fill selection"
+            hint="Enter"
+            disabled={!boxSelection || !editingEnabled}
+            onClick={() => {
+              closeContextMenu();
+              void applyActiveTool("fill");
+            }}
+          />
+          <ContextItem
+            icon={<Trash2 />}
+            label="Delete selection"
+            hint="Del"
+            disabled={!boxSelection || !editingEnabled}
+            onClick={() => {
+              closeContextMenu();
+              void deleteSelection();
+            }}
+          />
+          <div className="my-1 h-px bg-border" />
+          <ContextItem
+            icon={<Scan />}
+            label="Focus camera"
+            disabled={!contextMenu.hit}
+            onClick={menuFocus}
+          />
+          <ContextItem icon={<X />} label="Close menu" hint="Esc" onClick={closeContextMenu} />
         </div>
       ) : null}
 
@@ -685,13 +1180,39 @@ export function Viewport() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {status === "ready" ? (
-        <span className="pointer-events-none absolute top-11 left-2 z-10 rounded border border-white/5 bg-black/30 px-2 py-0.5 font-mono text-[9px] text-white/35">
-          <Scan className="mr-1 inline size-3" />
-          rev {revision} · {metrics?.geometries ?? 0} geometries
-        </span>
-      ) : null}
     </main>
+  );
+}
+
+function ContextItem({
+  icon,
+  label,
+  hint,
+  disabled,
+  onClick,
+}: {
+  icon: ReactNode;
+  label: string;
+  hint?: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="menuitem"
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
+        disabled
+          ? "cursor-not-allowed text-muted-foreground/50"
+          : "hover:bg-accent hover:text-accent-foreground",
+      )}
+    >
+      <span className="grid size-3.5 place-items-center [&>svg]:size-3.5">{icon}</span>
+      <span className="flex-1">{label}</span>
+      {hint ? <span className="font-mono text-[9px] text-muted-foreground">{hint}</span> : null}
+    </button>
   );
 }

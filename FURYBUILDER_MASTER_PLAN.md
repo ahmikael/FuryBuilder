@@ -906,7 +906,7 @@ furybuilder/
 **Цель:** полноценная редактируемая сцена, а не статический viewer.
 
 - [x] Добавить палитру блоков с поиском и инспектор block states.
-- [ ] Реализовать place/remove, кисть, box selection и fill.
+- [x] Реализовать place/remove, кисть, box selection и fill.
 - [ ] Добавить replace, line, copy/paste базовых структур.
 - [ ] Сделать ghost preview операции и подсветку затрагиваемой области.
 - [ ] Интегрировать undo/redo с кнопками и горячими клавишами.

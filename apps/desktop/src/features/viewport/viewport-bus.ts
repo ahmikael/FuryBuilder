@@ -10,3 +10,8 @@ export function refreshViewportChunks(chunks: ChunkPos[]): void {
   if (chunks.length === 0) return;
   viewportBus.dispatchEvent(new CustomEvent("refresh-chunks", { detail: chunks }));
 }
+
+/** Reloads the full bounded snapshot (used after a revision conflict). */
+export function reloadViewport(): void {
+  viewportBus.dispatchEvent(new CustomEvent("reload-world"));
+}

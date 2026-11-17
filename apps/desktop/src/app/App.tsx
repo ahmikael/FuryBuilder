@@ -7,8 +7,10 @@ import { Toolbar } from "@/features/workspace/Toolbar";
 import { Viewport } from "@/features/viewport/Viewport";
 import { WorldTree } from "@/features/workspace/WorldTree";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
+import { Toaster } from "@/components/ui/toaster";
 import { useBackendInfo } from "@/hooks/use-backend";
 import { useAppliedScale, useAppliedTheme } from "@/app/theme";
+import { useEditorHotkeys } from "@/editor/use-editor-hotkeys";
 import { useEditorStore } from "@/state/editor-store";
 
 export function App() {
@@ -20,6 +22,7 @@ export function App() {
 
   useAppliedTheme(theme);
   useAppliedScale(uiScale);
+  useEditorHotkeys();
 
   const currentResolvedTheme =
     theme === "system"
@@ -45,6 +48,7 @@ export function App() {
         <BottomPanel backend={backend} />
         <StatusBar backend={backend} />
       </div>
+      <Toaster />
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} backend={backend} />
     </TooltipProvider>
   );

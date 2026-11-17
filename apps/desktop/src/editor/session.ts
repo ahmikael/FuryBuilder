@@ -1,0 +1,373 @@
+import type {
+  BlockChange,
+  BoxBounds,
+  ClipboardPayload,
+  EditorOperation,
+  EditorTool,
+} from "@/editor/types";
+import type { BlockPosition, BlockState } from "@/renderer/types";
+import type { RayHit } from "@/renderer/raycast";
+
+export const AIR_STATE: BlockState = { name: "minecraft:air", properties: {} };
+export const MAX_EDIT_VOLUME = 1_000_000;
+export const MIN_BRUSH_RADIUS = 1;
+export const MAX_BRUSH_RADIUS = 4;
+
+export const TOOL_SHORTCUTS: Record<string, EditorTool> = {
+  Digit1: "select",
+  Digit2: "place",
+  Digit3: "remove",
+  Digit4: "brush",
+  Digit5: "box",
+  Digit6: "fill",
+  Digit7: "line",
+  Digit8: "replace",
+};
+
+export const TOOL_LABELS: Record<EditorTool, string> = {
+  select: "Select",
+  place: "Place",
+  remove: "Remove",
+  brush: "Brush",
+  box: "Box select",
+  fill: "Fill",
+  line: "Line",
+  replace: "Replace",
+};
+
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable ||
+    target.getAttribute("contenteditable") === "true" ||
+    target.getAttribute("contenteditable") === ""
+  );
+}
+
+export function normalizeBounds(a: BlockPosition, b: BlockPosition): BoxBounds {
+  return {
+    min: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), z: Math.min(a.z, b.z) },
+    max: { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y), z: Math.max(a.z, b.z) },
+  };
+}
+
+export function boundsVolume(bounds: BoxBounds): number {
+  return (
+    (bounds.max.x - bounds.min.x + 1) *
+    (bounds.max.y - bounds.min.y + 1) *
+    (bounds.max.z - bounds.min.z + 1)
+  );
+}
+
+export function boundsCenter(bounds: BoxBounds): [number, number, number] {
+  return [
+    (bounds.min.x + bounds.max.x + 1) / 2,
+    (bounds.min.y + bounds.max.y + 1) / 2,
+    (bounds.min.z + bounds.max.z + 1) / 2,
+  ];
+}
+
+export function boundsFromPositions(positions: BlockPosition[]): BoxBounds | null {
+  if (positions.length === 0) return null;
+  let min = { ...positions[0]! };
+  let max = { ...positions[0]! };
+  for (const pos of positions) {
+    min = { x: Math.min(min.x, pos.x), y: Math.min(min.y, pos.y), z: Math.min(min.z, pos.z) };
+    max = { x: Math.max(max.x, pos.x), y: Math.max(max.y, pos.y), z: Math.max(max.z, pos.z) };
+  }
+  return { min, max };
+}
+
+/** Position adjacent to a picked block along the entered face. */
+export function adjacentPosition(pos: BlockPosition, face: readonly number[]): BlockPosition {
+  return {
+    x: pos.x + (face[0] ?? 0),
+    y: pos.y + (face[1] ?? 0),
+    z: pos.z + (face[2] ?? 0),
+  };
+}
+
+export function translateBounds(bounds: BoxBounds, delta: BlockPosition): BoxBounds {
+  return {
+    min: {
+      x: bounds.min.x + delta.x,
+      y: bounds.min.y + delta.y,
+      z: bounds.min.z + delta.z,
+    },
+    max: {
+      x: bounds.max.x + delta.x,
+      y: bounds.max.y + delta.y,
+      z: bounds.max.z + delta.z,
+    },
+  };
+}
+
+/**
+ * Integer sphere used by the brush. `radius + 0.5` keeps a radius-1 brush at the
+ * familiar 19-block ball instead of a 7-block plus sign.
+ */
+export function spherePositions(center: BlockPosition, radius: number): BlockPosition[] {
+  const r = Math.max(MIN_BRUSH_RADIUS, Math.min(MAX_BRUSH_RADIUS, Math.round(radius)));
+  const limit = (r + 0.5) * (r + 0.5);
+  const positions: BlockPosition[] = [];
+  for (let dx = -r; dx <= r; dx += 1) {
+    for (let dy = -r; dy <= r; dy += 1) {
+      for (let dz = -r; dz <= r; dz += 1) {
+        if (dx * dx + dy * dy + dz * dz <= limit) {
+          positions.push({ x: center.x + dx, y: center.y + dy, z: center.z + dz });
+        }
+      }
+    }
+  }
+  return positions;
+}
+
+/**
+ * Rounded 3D line. Sampling on the dominant axis keeps the line exactly connected for
+ * horizontal, vertical and diagonal directions, including negative deltas.
+ */
+export function linePoints(from: BlockPosition, to: BlockPosition): BlockPosition[] {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const dz = to.z - from.z;
+  const steps = Math.max(Math.abs(dx), Math.abs(dy), Math.abs(dz));
+  if (steps === 0) return [{ ...from }];
+  const points: BlockPosition[] = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const point = {
+      x: Math.round(from.x + (dx * step) / steps),
+      y: Math.round(from.y + (dy * step) / steps),
+      z: Math.round(from.z + (dz * step) / steps),
+    };
+    const previous = points[points.length - 1];
+    if (!previous || previous.x !== point.x || previous.y !== point.y || previous.z !== point.z) {
+      points.push(point);
+    }
+  }
+  return points;
+}
+
+export function changesFromPositions(positions: BlockPosition[], state: BlockState): BlockChange[] {
+  return positions.map((pos) => ({ pos, state }));
+}
+
+export function pasteChanges(clipboard: ClipboardPayload, min: BlockPosition): BlockChange[] {
+  return clipboard.blocks.map((change) => ({
+    pos: {
+      x: min.x + change.pos.x,
+      y: min.y + change.pos.y,
+      z: min.z + change.pos.z,
+    },
+    state: change.state,
+  }));
+}
+
+export function operationLabel(operation: EditorOperation): string {
+  switch (operation.type) {
+    case "set_block":
+      return operation.state.name === "minecraft:air" ? "Remove block" : "Place block";
+    case "batch":
+      return `Edit ${operation.changes.length} block${operation.changes.length === 1 ? "" : "s"}`;
+    case "fill_cuboid":
+      return `Fill ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+    case "replace":
+      return `Replace in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+  }
+}
+
+export type GhostKind = "place" | "remove" | "brush" | "box" | "line" | "fill" | "replace";
+
+export interface GhostPreview {
+  bounds: BoxBounds;
+  kind: GhostKind;
+  blocks: number;
+  label: string;
+}
+
+export interface GhostContext {
+  tool: EditorTool;
+  hit: RayHit | null;
+  anchor: BlockPosition | null;
+  selection: BoxBounds | null;
+  brushRadius: number;
+}
+
+/** Local, synchronous preview geometry for the renderer. Never mutates world data. */
+export function ghostForContext(context: GhostContext): GhostPreview | null {
+  const { tool, hit, anchor, selection, brushRadius } = context;
+  if (tool === "select") return null;
+
+  if (tool === "fill" || tool === "replace") {
+    if (!selection) return null;
+    const blocks = boundsVolume(selection);
+    return {
+      bounds: selection,
+      kind: tool,
+      blocks,
+      label: `${tool === "fill" ? "Fill" : "Replace"} ${blocks.toLocaleString()} blocks`,
+    };
+  }
+
+  if (!hit) return null;
+  const target =
+    tool === "remove" ? hit.pos : tool === "brush" ? hit.pos : adjacentPosition(hit.pos, hit.face);
+
+  if (tool === "brush") {
+    const center = adjacentPosition(hit.pos, hit.face);
+    const blocks = spherePositions(center, brushRadius).length;
+    return {
+      bounds: {
+        min: { x: center.x - brushRadius, y: center.y - brushRadius, z: center.z - brushRadius },
+        max: { x: center.x + brushRadius, y: center.y + brushRadius, z: center.z + brushRadius },
+      },
+      kind: "brush",
+      blocks,
+      label: `Brush ${blocks} blocks`,
+    };
+  }
+
+  if (tool === "box") {
+    const bounds = anchor ? normalizeBounds(anchor, hit.pos) : { min: target, max: target };
+    const blocks = boundsVolume(bounds);
+    return {
+      bounds,
+      kind: "box",
+      blocks,
+      label: anchor ? `Select ${blocks.toLocaleString()} blocks` : "Select first corner",
+    };
+  }
+
+  if (tool === "line") {
+    const end = target;
+    const points = anchor ? linePoints(anchor, end) : [end];
+    const bounds = boundsFromPositions(points) ?? { min: end, max: end };
+    return {
+      bounds,
+      kind: "line",
+      blocks: points.length,
+      label: anchor ? `Line ${points.length} blocks` : "Set line start",
+    };
+  }
+
+  return {
+    bounds: { min: target, max: target },
+    kind: tool,
+    blocks: 1,
+    label: tool === "remove" ? "Remove block" : "Place block",
+  };
+}
+
+export interface BlockToolContext {
+  tool: EditorTool;
+  dimension: string;
+  hit: RayHit | null;
+  anchor: BlockPosition | null;
+  selection: BoxBounds | null;
+  brushRadius: number;
+  selected: BlockState;
+  replaceFrom: BlockState | null;
+}
+
+/**
+ * Builds the immutable operation for tools that can be resolved from one click (plus an
+ * optional anchor for lines). Box selection is a UI state machine and returns null.
+ */
+export function planBlockTool(context: BlockToolContext): EditorOperation | null {
+  const { tool, dimension, hit, anchor, selection, brushRadius, selected, replaceFrom } = context;
+  if (tool === "select" || tool === "box") return null;
+
+  if (tool === "fill") {
+    if (!selection) return null;
+    return { type: "fill_cuboid", dimension, bounds: selection, state: selected };
+  }
+
+  if (tool === "replace") {
+    if (!selection || !replaceFrom) return null;
+    return {
+      type: "replace",
+      dimension,
+      bounds: selection,
+      from: replaceFrom,
+      to: selected,
+    };
+  }
+
+  if (!hit) return null;
+
+  if (tool === "remove") {
+    return { type: "set_block", dimension, pos: hit.pos, state: AIR_STATE };
+  }
+
+  if (tool === "place") {
+    return {
+      type: "set_block",
+      dimension,
+      pos: adjacentPosition(hit.pos, hit.face),
+      state: selected,
+    };
+  }
+
+  if (tool === "brush") {
+    const center = adjacentPosition(hit.pos, hit.face);
+    return {
+      type: "batch",
+      dimension,
+      changes: changesFromPositions(spherePositions(center, brushRadius), selected),
+    };
+  }
+
+  if (tool === "line") {
+    if (!anchor) return null;
+    const end = adjacentPosition(hit.pos, hit.face);
+    const changes = changesFromPositions(linePoints(anchor, end), selected);
+    if (changes.length === 0) return null;
+    return { type: "batch", dimension, changes };
+  }
+
+  return null;
+}
+
+export type ShortcutAction =
+  | { kind: "tool"; tool: EditorTool }
+  | { kind: "undo" }
+  | { kind: "redo" }
+  | { kind: "copy" }
+  | { kind: "paste" }
+  | { kind: "delete-selection" }
+  | { kind: "apply-selection" }
+  | { kind: "cancel" };
+
+/**
+ * Keyboard map shared by the hook and tests. Returns null while the user is typing so
+ * Ctrl+Z in a coordinate field never edits the world.
+ */
+export function editorShortcut(event: {
+  key: string;
+  code: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+  target: EventTarget | null;
+}): ShortcutAction | null {
+  if (isEditableTarget(event.target)) return null;
+  const mod = event.ctrlKey || event.metaKey;
+  if (mod && !event.altKey) {
+    if (event.code === "KeyZ") return event.shiftKey ? { kind: "redo" } : { kind: "undo" };
+    if (event.code === "KeyY") return { kind: "redo" };
+    if (event.code === "KeyC") return { kind: "copy" };
+    if (event.code === "KeyV") return { kind: "paste" };
+    return null;
+  }
+  if (event.altKey) return null;
+  if (event.code === "Escape") return { kind: "cancel" };
+  if (event.code === "Delete" || event.code === "Backspace") return { kind: "delete-selection" };
+  if (event.code === "Enter") return { kind: "apply-selection" };
+  const tool = TOOL_SHORTCUTS[event.code];
+  if (tool) return { kind: "tool", tool };
+  return null;
+}
