@@ -1,0 +1,19 @@
+{
+  "name": "furybuilder",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Offline-first 3D studio for Minecraft Java worlds and structures",
+  "license": "MIT",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @furybuilder/desktop dev",
+    "build": "pnpm --filter @furybuilder/desktop build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "tauri": "pnpm --filter @furybuilder/desktop tauri"
+  }
+}

@@ -1,0 +1,33 @@
+# Node
+node_modules/
+dist/
+dist-ssr/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Rust
+target/
+**/*.rs.bk
+
+# Tauri
+apps/desktop/src-tauri/target/
+apps/desktop/src-tauri/gen/
+
+# Editors / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+
+# Local runtime data
+.furybuilder/
+*.furybuilder/cache/
+*.log
+.env
+.env.local
+
+# Test output
+test-results/
+playwright-report/
