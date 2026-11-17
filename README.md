@@ -51,13 +51,11 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-M0–M5 are implemented: application shell and IPC, the Rust world core with revisions,
-transactions and section-diff undo/redo, a live Three.js viewport fed by revisioned
-render snapshots, a manual editor with a searchable block palette and geometry tools, and
-versioned `.furybuilder` projects with atomic checksum-verified snapshots, editor state,
-autosave, rolling checkpoints, crash recovery and safe schema migrations. Source formats
-and export (M6+) are next. Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`;
-only tasks with passing verification are checked there.
+The application shell, Rust world core, Three.js viewport, manual editor and initial
+project persistence are implemented. M0 still has outstanding research and reference
+fixture tasks, and the Java structure adapter (M6) is not yet verified for release.
+Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`; a checked implementation
+item is not by itself a guarantee that its whole milestone is complete.
 
 ## Known limitations (early development)
 
