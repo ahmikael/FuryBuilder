@@ -40,3 +40,18 @@ file on every autosave. Separating `source/` supports the copy-on-write import m
 - Need atomic directory publish and crash-recovery tests.
 - A project can be copied and diffed with ordinary file tools.
 - `project_id` is stable and independent of the folder name.
+
+## Implementation note (M5)
+
+The MVP stores one deterministic whole-world snapshot per committed revision
+(`data/world-<revision>.fwl`, newest eight kept) plus `autosave.fwl` and rolling
+checkpoints. The manifest carries the SHA-256 of the active snapshot. This preserves the
+decision's atomicity, versioning, backup and recovery guarantees without inventing a
+segment format before profiling shows a need. Per-chunk content-addressed segments remain
+the planned direction for large worlds; `data/` is already the only payload directory, so
+that change is internal to `project_store`.
+
+`assets/` and `previews/` are reserved for the asset/capture milestones; the M5 folder
+contains `data/`, `changes/`, `source/` and `cache/`. Immutable imported source bytes live
+under `source/files/` with hashes in `source/source.json`; the editable overlay is the
+versioned snapshot.

@@ -58,6 +58,56 @@ impl Section {
         &self.palette
     }
 
+    /// Rehydrates a section from persisted palette and packed indices.
+    ///
+    /// Validation is strict: the palette must be non-empty and within the section limit,
+    /// `bits_per_index` must match the palette size, the word count must match the packed
+    /// layout, and every index must address a palette entry. `non_air` is recomputed from
+    /// the indices instead of being trusted from disk.
+    pub fn from_raw(palette: Vec<BlockState>, data: Vec<u64>, bits_per_index: u8) -> Option<Self> {
+        if palette.is_empty() || palette.len() > MAX_PALETTE {
+            return None;
+        }
+        if palette.len() == 1 {
+            if bits_per_index != 0 || !data.is_empty() {
+                return None;
+            }
+            let non_air = if palette[0].is_air() {
+                0
+            } else {
+                SECTION_VOLUME as u16
+            };
+            return Some(Self {
+                palette,
+                data,
+                bits_per_index,
+                non_air,
+            });
+        }
+        let expected_bits = bits_for(palette.len());
+        if bits_per_index != expected_bits {
+            return None;
+        }
+        let expected_words = (SECTION_VOLUME * bits_per_index as usize).div_ceil(64);
+        if data.len() != expected_words {
+            return None;
+        }
+        let mut non_air = 0u16;
+        for index in 0..SECTION_VOLUME {
+            let palette_index = read_packed(&data, bits_per_index, index) as usize;
+            let state = palette.get(palette_index)?;
+            if !state.is_air() {
+                non_air += 1;
+            }
+        }
+        Some(Self {
+            palette,
+            data,
+            bits_per_index,
+            non_air,
+        })
+    }
+
     pub fn non_air_count(&self) -> usize {
         self.non_air as usize
     }
@@ -326,5 +376,34 @@ mod tests {
                 assert_eq!(read_packed(&data, bits, index), (index as u16) & mask);
             }
         }
+    }
+
+    #[test]
+    fn from_raw_recomputes_non_air_and_rejects_corruption() {
+        let mut section = Section::empty();
+        section.set(0, 0, 0, &stone());
+        let rebuilt = Section::from_raw(
+            section.palette().to_vec(),
+            section.packed_data().to_vec(),
+            section.bits_per_index(),
+        )
+        .expect("valid section");
+        assert_eq!(rebuilt.non_air_count(), 1);
+        assert_eq!(rebuilt.get(0, 0, 0), Some(&stone()));
+
+        assert!(Section::from_raw(Vec::new(), Vec::new(), 0).is_none());
+        assert!(Section::from_raw(section.palette().to_vec(), Vec::new(), 0).is_none());
+        assert!(Section::from_raw(
+            section.palette().to_vec(),
+            section.packed_data().to_vec(),
+            7
+        )
+        .is_none());
+        assert!(Section::from_raw(
+            section.palette().to_vec(),
+            vec![0; section.packed_data().len() + 1],
+            section.bits_per_index()
+        )
+        .is_none());
     }
 }

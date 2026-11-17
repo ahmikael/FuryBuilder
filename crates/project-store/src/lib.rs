@@ -1,0 +1,36 @@
+//! Versioned FuryBuilder project folders.
+//!
+//! Layout:
+//! ```text
+//! MyProject.furybuilder/
+//!   project.json        # versioned manifest, checksum of the active snapshot
+//!   data/world-*.fwl    # deterministic binary world snapshots
+//!   data/autosave.fwl   # crash-recovery snapshot (adopted only after a crash marker)
+//!   changes/            # rolling checkpoints and their metadata
+//!   source/             # immutable imported source files + manifest
+//!   cache/              # recreatable caches, cleared on graceful close
+//!   session.lock        # present while a session is open
+//! ```
+//!
+//! Every publish is temp + verification + rename, and the world snapshot is verified by
+//! decoding and re-encoding it before the manifest references it.
+
+pub mod error;
+pub mod manifest;
+pub mod snapshot;
+pub mod source;
+pub mod store;
+
+pub use error::ProjectError;
+pub use manifest::{
+    CreationMode, EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary,
+    RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, PROJECT_EXTENSION, PROJECT_FILE,
+    PROJECT_SCHEMA_VERSION,
+};
+pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION};
+pub use source::{SourceFile, SourceManifest};
+pub use store::{
+    build_world, checksum, create_flat_base, migrate_manifest, snapshot_bytes, CheckpointMeta,
+    ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR, DATA_DIR, MAX_CHECKPOINTS,
+    MAX_SNAPSHOTS, SESSION_MARKER, SOURCE_DIR,
+};

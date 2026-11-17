@@ -68,6 +68,12 @@ impl World {
         self.revision
     }
 
+    /// Restores the persisted revision when loading a project snapshot. Live edits must
+    /// still use `bump_revision`.
+    pub fn restore_revision(&mut self, revision: u64) {
+        self.revision = revision;
+    }
+
     pub fn dimensions(&self) -> &BTreeMap<String, Dimension> {
         &self.dimensions
     }
