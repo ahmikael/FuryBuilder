@@ -873,7 +873,7 @@ furybuilder/
 - [x] Реализовать чтение/запись отдельного блока, batch changes, `fill_cuboid`, `replace`.
 - [x] Добавить выделения/границы и проверку пересечения/лимитов.
 - [x] Создать слой `Command/Query API` и единый формат ошибок.
-- [ ] Добавить `world_revision`, операции с `expected_revision`, `operation_id`.
+- [x] Добавить `world_revision`, операции с `expected_revision`, `operation_id`.
 - [ ] Реализовать атомарное применение batch и начальный undo/redo.
 - [ ] Сформировать `operation provenance` (actor, source, параметры/связанные `object_id`, timestamp) для будущих параметрических операций и AI-проверок.
 - [ ] Протестировать конвертацию координат, палитры, bounds, idempotency, undo-инварианты.
