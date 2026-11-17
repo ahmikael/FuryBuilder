@@ -84,6 +84,23 @@ impl WorldService {
         self
     }
 
+    /// Builds a service around an already loaded world. History, redo, idempotency and
+    /// audit start empty: they belong to a live session, not to the saved project.
+    pub fn from_world(world: World) -> Self {
+        Self {
+            registry: BlockRegistry::target_1_21_4(),
+            world,
+            history: Vec::new(),
+            redo: Vec::new(),
+            idempotency: BTreeMap::new(),
+            idempotency_order: VecDeque::new(),
+            audit: Vec::new(),
+            writes_enabled: true,
+            allow_unknown_targets: false,
+            max_history: DEFAULT_MAX_HISTORY,
+        }
+    }
+
     pub fn world(&self) -> &World {
         &self.world
     }
