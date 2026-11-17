@@ -852,7 +852,7 @@ furybuilder/
 
 - [x] Инициализировать Tauri 2 + React + TypeScript + Vite.
 - [x] Настроить Tailwind CSS v4 и shadcn/ui по актуальной документации.
-- [ ] Установить строгую типизацию, линтер, форматирование, pnpm/Cargo lock-файлы.
+- [x] Установить строгую типизацию, линтер, форматирование, pnpm/Cargo lock-файлы.
 - [ ] Создать минимальный Rust workspace с независимым `world-domain`.
 - [ ] Добавить Tauri IPC с типизированным `ping`/`app_info` и структурированными ошибками.
 - [ ] Настроить capabilities/permissions с минимальными правами.

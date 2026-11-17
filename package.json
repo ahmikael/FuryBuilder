@@ -14,6 +14,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
-    "tauri": "pnpm --filter @furybuilder/desktop tauri"
+    "tauri": "pnpm --filter @furybuilder/desktop tauri",
+    "tauri:dev": "pnpm --filter @furybuilder/desktop tauri dev",
+    "tauri:build": "pnpm --filter @furybuilder/desktop tauri build"
   }
 }
