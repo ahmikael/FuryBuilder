@@ -887,7 +887,7 @@ furybuilder/
 
 - [x] Подключить Three.js как отдельный renderer/scene module.
 - [x] Создать тестовый мир и отобразить чанковые меши без `Mesh` на каждый блок.
-- [ ] Реализовать hidden-face culling; затем оценить greedy meshing на профиле.
+- [x] Реализовать hidden-face culling; затем оценить greedy meshing на профиле.
 - [ ] Сделать базовые block materials/texture atlas, корректное отображение выбранного набора block states.
 - [ ] Разделить `BlockState Registry` и `Asset Source`: поддержать собственные безопасные placeholder-текстуры при отсутствии Minecraft без изменения данных блоков.
 - [ ] Сделать fly/orbit camera, управление мышью/клавиатурой и переход к координатам.
