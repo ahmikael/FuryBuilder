@@ -57,6 +57,83 @@ not test Java structure files, verify block-state conversion, run Minecraft,
 or demonstrate successful exports. Those checks remain separate roadmap tasks.
 No Mojang executable, texture, or game asset is included.
 
+## Original game-saved structure fixtures
+
+On 2026-11-17, the project created two small original test arrangements in a
+new, isolated flat world and captured them using the **official Java 1.21.4
+server**. The server JAR was already present in the user's installation and its
+size and SHA-1 matched Mojang's 1.21.4 metadata:
+`56880250` bytes, `4707d00eb834b446575d89a61a11b5d548d8c001`.
+The user approved creating the test data; the server profile already contained
+an EULA acceptance record. That existing record was copied unchanged into the
+temporary test directory. No EULA was accepted by the test, and no existing
+world or launcher setting was modified.
+
+The server ran on Java Temurin 21, bound to loopback only, with no external
+datapacks and structures disabled. Its fresh flat world used seed `47042024`.
+The following commands created the test arrangement:
+
+```text
+forceload add 0 -16 31 0
+fill 15 80 -1 16 80 0 minecraft:stone_bricks
+setblock 15 81 -1 minecraft:oak_stairs[facing=east,half=bottom,shape=straight,waterlogged=false]
+setblock 16 81 -1 minecraft:chest[facing=north,type=single,waterlogged=false]
+setblock 17 80 0 minecraft:structure_block[mode=save]
+```
+
+A temporary loopback-only operator client using `minecraft-protocol` 1.68.0
+sent the standard structure-block **save** action; the official server, not
+that client or FuryBuilder, wrote the `.nbt` files. It saved one 1×2×1
+selection at `(15,80,-1)` and one 2×2×2 selection at the same origin. The
+latter crosses the X=15/16 chunk boundary and contains a chest block entity.
+The server then completed `save-all flush` and exited normally.
+
+| Fixture | Bytes | SHA-256 |
+|---|---:|---|
+| [`plain.nbt`](../../fixtures/java-1.21.4/structures/plain.nbt) | 211 | `35a3f89de502cd9a6f1cc1b7496d4aebbfc336625389ef50dc5d22932849616b` |
+| [`chest_boundary.nbt`](../../fixtures/java-1.21.4/structures/chest_boundary.nbt) | 293 | `ad4066be63af09d269c8b5c6297548b8c948daaaed2e74df238ea35267f8b7ad` |
+
+The files were independently parsed using `prismarine-nbt` 2.8.0; their
+versions, dimensions, block positions, palette properties and chest data were
+verified. `python -m unittest discover -s scripts -p
+"test_java_reference_structures.py" -v` repeats integrity and semantic checks
+using only Python's standard library. The original arrangement is distributed
+under the project MIT license; no server/client binaries, textures, prebuilt
+vanilla structures or third-party world files are included.
+
+These fixtures establish real Minecraft-produced **inputs**. They do not prove
+FuryBuilder exports load in Minecraft, cover every item in the test matrix, or
+establish vanilla worldgen parity.
+
+## Candidate structure files — provenance not yet confirmed
+
+On 2026-11-17, a separately published third-party datapack, [Mesa Palace][mesa],
+was examined as a potential source of 1.21.4 structures. Its Modrinth project
+page declares the pack MIT-licensed and identifies AkhiAlby as its owner. The
+selected [release][mesa-release] targets Java 1.21–1.21.4. The downloaded ZIP
+matched the release's published SHA-512:
+
+`392e52868277f3188a9b1460d4f5e05b0830b27585b40773b623253b43d4fecb83c197dbbda9f3509e6d67dce2c5d75a025f7bd791cebf19f97b1b6a8b93e742`
+
+Thirteen structure files of at most 256 KiB were inspected; all have root
+`DataVersion` 4189. One larger structure was not inspected. Two examples,
+independently read with `prismarine-nbt` 2.8.0, are:
+
+| Path within ZIP under `data/ahmads_dungeon/structure/mesa_palace/` | SHA-256 | Observed contents |
+|---|---|---|
+| `mesa_palace_chest_normal_0.nbt` | `1ab19c095a76eb429d34b474fe06e1df82bff5f4be31d1d8f9be783cdb5fecde` | 1×2×1, chest and jigsaw with block entities |
+| `mesa_palace_barrel_normal_0.nbt` | `b5a34c5a8e04b0e56110f341e49284565abde520dffdc3a5ea08544d1d7ff659` | 1×2×1, barrel and jigsaw with block entities |
+
+These are **candidates, not verified game-produced goldens**. The release page
+does not establish how these individual files were created; matching
+`DataVersion` and independently decoding them does not prove Minecraft wrote
+or successfully loaded them. The archive contains no separate license or
+copyright notice, and the MIT listing cannot establish rights over possible
+third-party content. Until provenance and any additional rights are resolved,
+the files remain outside the repository and are not used as reference fixtures.
+
 [pr]: https://github.com/PrismarineJS/prismarine-provider-anvil/pull/107
 [file]: https://github.com/PrismarineJS/prismarine-provider-anvil/blob/43231fc3f1f8194d2efc3498d060a28b47c05961/test/fixtures/1.21.4/r.0.0.mca
 [versions]: https://minecraft.wiki/w/Data_version
+[mesa]: https://modrinth.com/datapack/new-mesa-palace-structure
+[mesa-release]: https://modrinth.com/datapack/new-mesa-palace-structure/version/YIxyYD5V
