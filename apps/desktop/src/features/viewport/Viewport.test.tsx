@@ -1,17 +1,22 @@
-import { render, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
+import type * as IpcModule from "@/lib/ipc";
 import type { RenderSnapshot } from "@/renderer/types";
 import { snapshotFromBlocks } from "@/renderer/builders";
+import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 
 interface FakeRenderer {
   setSnapshot: Mock;
   setGridVisible: Mock;
   setChunkBordersVisible: Mock;
+  setSelectionBox: Mock;
+  setGhostBox: Mock;
   resize: Mock;
   dispose: Mock;
   setCameraMode: Mock;
   pickAt: Mock;
+  hoverAt: Mock;
   focusOn: Mock;
   capture: Mock;
   updateChunks: Mock;
@@ -23,10 +28,13 @@ const mocks = vi.hoisted(() => {
     setSnapshot = vi.fn();
     setGridVisible = vi.fn();
     setChunkBordersVisible = vi.fn();
+    setSelectionBox = vi.fn();
+    setGhostBox = vi.fn();
     resize = vi.fn();
     dispose = vi.fn();
     setCameraMode = vi.fn();
     pickAt = vi.fn(() => null);
+    hoverAt = vi.fn(() => null);
     focusOn = vi.fn();
     capture = vi.fn(() => ({
       dataUrl: "data:image/png;base64,stub",
@@ -46,10 +54,10 @@ vi.mock("@/renderer/viewport-renderer", () => ({
   ViewportRenderer: mocks.ViewportRenderer,
 }));
 
-vi.mock("@/lib/ipc", () => ({
-  isTauriRuntime: () => ipc.tauri,
-  invokeCommand: ipc.invoke,
-}));
+vi.mock("@/lib/ipc", async (importOriginal) => {
+  const actual = await importOriginal<typeof IpcModule>();
+  return { ...actual, isTauriRuntime: () => ipc.tauri, invokeCommand: ipc.invoke };
+});
 
 import { Viewport } from "@/features/viewport/Viewport";
 
@@ -73,6 +81,17 @@ describe("Viewport", () => {
     ipc.tauri = false;
     ipc.invoke.mockReset();
     mocks.instances.length = 0;
+    useToolStore.setState({
+      tool: "place",
+      selection: null,
+      anchor: null,
+      hover: null,
+      ghost: null,
+      clipboard: null,
+      job: null,
+      syncState: "pristine",
+      lastOperation: null,
+    });
     useWorldStore.setState({
       status: "idle",
       source: null,
@@ -108,6 +127,9 @@ describe("Viewport", () => {
       if (command === "render_snapshot") {
         return snapshot;
       }
+      if (command === "history_state") {
+        return { canUndo: false, canRedo: false, revision: 1, entries: [] };
+      }
       throw new Error(`unexpected command ${command}`);
     });
 
@@ -141,6 +163,144 @@ describe("Viewport", () => {
     expect(state.source).toBe("preview");
     expect(state.blockCount).toBeGreaterThan(0);
     expect(ipc.invoke).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Place block" })).toBeDisabled();
+    expect(screen.getByText(/editing requires the desktop core/i)).toBeInTheDocument();
+  });
+
+  it("maps a viewport click to the Rust operation API and refreshes dirty chunks", async () => {
+    ipc.tauri = true;
+    const hit = {
+      pos: { x: 0, y: 64, z: 0 },
+      state: { name: "minecraft:stone", properties: {} },
+      face: [0, 1, 0] as [number, number, number],
+    };
+    const operations: Array<{ command: string; args?: Record<string, unknown> | undefined }> = [];
+    let infoCalls = 0;
+    ipc.invoke.mockImplementation(async (command: string, args?: Record<string, unknown>) => {
+      operations.push({ command, args });
+      if (command === "world_info") {
+        infoCalls += 1;
+        return { ...worldInfo, revision: infoCalls === 1 ? 1 : 2 };
+      }
+      if (command === "render_snapshot") return snapshot;
+      if (command === "history_state") {
+        return { canUndo: true, canRedo: false, revision: 1, entries: [] };
+      }
+      if (command === "preview_operation") {
+        return { affectedBlocks: 1, changedBlocks: 1, dirtyChunks: [{ x: 0, z: 0 }], warnings: [] };
+      }
+      if (command === "apply_operation") {
+        return {
+          operationId: "op-ui",
+          worldRevision: 2,
+          changedBlocks: 1,
+          dirtyChunks: [{ x: 0, z: 0 }],
+          warnings: [],
+          replayed: false,
+        };
+      }
+      if (command === "render_chunks") {
+        return { dimension: "minecraft:overworld", revision: 2, chunks: [snapshot.chunks[0]] };
+      }
+      throw new Error(`unexpected command ${command}`);
+    });
+
+    render(<Viewport />);
+    await waitFor(() => expect(useWorldStore.getState().status).toBe("ready"));
+    const renderer = mocks.instances[0]!;
+    renderer.pickAt.mockReturnValue(hit);
+
+    const surface = screen.getByTestId("viewport-canvas");
+    fireEvent.pointerDown(surface, { button: 0, clientX: 100, clientY: 100 });
+    fireEvent.pointerUp(surface, { button: 0, clientX: 100, clientY: 100 });
+
+    await waitFor(() =>
+      expect(operations.some((entry) => entry.command === "apply_operation")).toBe(true),
+    );
+    const preview = operations.find((entry) => entry.command === "preview_operation");
+    const applied = operations.find((entry) => entry.command === "apply_operation");
+    expect(preview?.args?.operation).toEqual({
+      type: "set_block",
+      dimension: "minecraft:overworld",
+      pos: { x: 0, y: 65, z: 0 },
+      state: { name: "minecraft:stone_bricks", properties: {} },
+    });
+    expect(applied?.args).toMatchObject({ expectedRevision: 1 });
+    await waitFor(() =>
+      expect(operations.some((entry) => entry.command === "render_chunks")).toBe(true),
+    );
+    expect(renderer.updateChunks).toHaveBeenCalled();
+    expect(useWorldStore.getState().revision).toBe(2);
+  });
+
+  it("opens a context menu and dispatches the chosen tool", async () => {
+    ipc.tauri = true;
+    const hit = {
+      pos: { x: -4, y: 64, z: 3 },
+      state: { name: "minecraft:oak_planks", properties: {} },
+      face: [0, 1, 0] as [number, number, number],
+    };
+    const operations: string[] = [];
+    ipc.invoke.mockImplementation(async (command: string) => {
+      operations.push(command);
+      if (command === "world_info") return worldInfo;
+      if (command === "render_snapshot") return snapshot;
+      if (command === "history_state") {
+        return { canUndo: false, canRedo: false, revision: 1, entries: [] };
+      }
+      if (command === "preview_operation") {
+        return { affectedBlocks: 1, changedBlocks: 1, dirtyChunks: [], warnings: [] };
+      }
+      if (command === "apply_operation") {
+        return {
+          operationId: "op-menu",
+          worldRevision: 2,
+          changedBlocks: 1,
+          dirtyChunks: [],
+          warnings: [],
+          replayed: false,
+        };
+      }
+      throw new Error(`unexpected command ${command}`);
+    });
+
+    render(<Viewport />);
+    await waitFor(() => expect(useWorldStore.getState().status).toBe("ready"));
+    const renderer = mocks.instances[0]!;
+    renderer.pickAt.mockReturnValue(hit);
+    fireEvent.contextMenu(screen.getByTestId("viewport-canvas"), {
+      clientX: 200,
+      clientY: 160,
+    });
+
+    const menu = screen.getByRole("menu");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: /Remove block/ }));
+
+    await waitFor(() =>
+      expect(operations.filter((command) => command === "apply_operation")).toHaveLength(1),
+    );
+    expect(useToolStore.getState().tool).toBe("remove");
+    expect(renderer.pickAt).toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("mirrors the box selection and ghost preview into the renderer", async () => {
+    ipc.tauri = false;
+    render(<Viewport />);
+    await waitFor(() => expect(useWorldStore.getState().status).toBe("ready"));
+    const renderer = mocks.instances[0]!;
+    const selection = { min: { x: 0, y: 64, z: 0 }, max: { x: 3, y: 66, z: 3 } };
+    const ghost = {
+      bounds: selection,
+      kind: "fill" as const,
+      blocks: 4 * 3 * 4,
+      label: "Fill 48 blocks",
+    };
+    act(() => {
+      useToolStore.setState({ tool: "fill", selection, ghost });
+    });
+    expect(renderer.setSelectionBox).toHaveBeenLastCalledWith(selection);
+    expect(renderer.setGhostBox).toHaveBeenLastCalledWith(selection, "fill");
   });
 
   it("disposes the renderer on unmount", async () => {
