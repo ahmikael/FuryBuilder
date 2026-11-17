@@ -1,8 +1,21 @@
 import type { ReactNode } from "react";
-import { Box, ChevronDown, Layers, SlidersHorizontal, Sparkles } from "lucide-react";
+import {
+  Box,
+  ChevronDown,
+  Copy,
+  Layers,
+  Paintbrush,
+  SlidersHorizontal,
+  Sparkles,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { copySelection, pasteClipboard } from "@/editor/commands";
+import { boundsVolume } from "@/editor/session";
+import { isTauriRuntime } from "@/lib/ipc";
 import { blockColor } from "@/renderer/assets";
 import type { BlockState } from "@/renderer/types";
+import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -43,8 +56,16 @@ export function Inspector() {
   const chunkCount = useWorldStore((state) => state.chunkCount);
   const dimension = useWorldStore((state) => state.dimension);
   const source = useWorldStore((state) => state.source);
+  const selectedBlock = useToolStore((state) => state.selectedBlock);
+  const replaceFrom = useToolStore((state) => state.replaceFrom);
+  const boxSelection = useToolStore((state) => state.selection);
+  const clipboard = useToolStore((state) => state.clipboard);
+  const setSelectedBlock = useToolStore((state) => state.setSelectedBlock);
+  const setReplaceFrom = useToolStore((state) => state.setReplaceFrom);
+  const setSelection = useToolStore((state) => state.setSelection);
   const state = selection?.state ?? { name: "minecraft:air", properties: {} };
   const properties = Object.entries(state.properties ?? {});
+  const editing = isTauriRuntime();
 
   return (
     <aside className="flex min-h-0 w-64 shrink-0 flex-col border-l border-border bg-sidebar text-sidebar-foreground">
@@ -95,24 +116,88 @@ export function Inspector() {
         <section className="border-b border-border py-1.5">
           <SectionHeader icon={<Layers className="size-3" />}>Selection</SectionHeader>
           <div className="px-2.5 py-1">
-            {selection ? (
-              <div className="rounded border border-primary/40 bg-accent/30 px-2 py-2">
+            {boxSelection ? (
+              <div className="rounded border border-sky-400/40 bg-sky-400/5 px-2 py-2">
                 <div className="font-mono text-[10px]">
-                  {selection.pos.x}, {selection.pos.y}, {selection.pos.z}
+                  {boxSelection.min.x},{boxSelection.min.y},{boxSelection.min.z} →{" "}
+                  {boxSelection.max.x},{boxSelection.max.y},{boxSelection.max.z}
                 </div>
-                <div className="mt-1 truncate font-mono text-[9px] text-muted-foreground">
-                  {selection.dimension}
+                <div className="mt-1 flex justify-between font-mono text-[9px] text-muted-foreground">
+                  <span>{boundsVolume(boxSelection).toLocaleString()} blocks</span>
+                  <button
+                    type="button"
+                    className="underline-offset-2 hover:underline"
+                    onClick={() => setSelection(null)}
+                  >
+                    clear
+                  </button>
                 </div>
               </div>
             ) : (
               <div className="rounded border border-dashed border-border px-2 py-3 text-center text-[10px] text-muted-foreground">
-                Click the viewport to pick a block
+                Use the Box select tool (5) and click two corners
               </div>
             )}
-            <div className="mt-1 flex justify-between font-mono text-[9px] text-muted-foreground">
-              <span>{selection ? "1 block" : "0 blocks"}</span>
-              <span>{selection ? "1 chunk" : "0 chunks"}</span>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                disabled={!boxSelection || !editing}
+                onClick={() => void copySelection()}
+              >
+                <Copy className="mr-1 size-3" /> Copy
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                disabled={!clipboard || !editing}
+                onClick={() => void pasteClipboard()}
+              >
+                Paste{clipboard ? ` (${clipboard.blocks.length})` : ""}
+              </Button>
             </div>
+          </div>
+        </section>
+
+        <section className="border-b border-border py-1.5">
+          <SectionHeader icon={<Paintbrush className="size-3" />}>Edit target</SectionHeader>
+          <div className="px-2.5 py-1">
+            <div className="flex items-center gap-2 rounded border border-border bg-card/50 px-2 py-1.5">
+              <span
+                className="size-4 shrink-0 rounded-[2px] border border-black/30"
+                style={{ backgroundColor: blockColor(selectedBlock.name) }}
+              />
+              <span className="min-w-0 flex-1 truncate font-mono text-[10px]">
+                {selectedBlock.name.replace("minecraft:", "")}
+              </span>
+              <span className="font-mono text-[8px] text-muted-foreground">brush</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                disabled={!selection}
+                onClick={() => selection && setSelectedBlock(selection.state)}
+              >
+                Use picked as brush
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-[10px]"
+                disabled={!selection}
+                onClick={() => selection && setReplaceFrom(selection.state)}
+              >
+                Use picked as source
+              </Button>
+            </div>
+            <Field
+              label="Replace source"
+              value={replaceFrom?.name.replace("minecraft:", "") ?? "not set"}
+            />
           </div>
         </section>
 
@@ -131,8 +216,8 @@ export function Inspector() {
         <section className="py-2">
           <SectionHeader icon={<Sparkles className="size-3" />}>AI actions</SectionHeader>
           <p className="px-2.5 text-[10px] leading-relaxed text-muted-foreground">
-            The viewport already exposes revisioned render snapshots. MCP tools become available
-            after the operation API and bridge milestones.
+            The same Operation API will be exposed to MCP tools after the bridge milestone. Every
+            edit is revisioned, audited and undoable.
           </p>
         </section>
       </div>

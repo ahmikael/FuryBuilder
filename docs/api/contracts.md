@@ -1,6 +1,6 @@
 # IPC and MCP contract
 
-Status: v1 (M3). Versioned alongside the app; breaking changes require a migration note.
+Status: v2 (M4). Versioned alongside the app; breaking changes require a migration note.
 
 ## Error envelope
 
@@ -94,6 +94,81 @@ after an edit.
 Request: `{ dimension: string, pos: {x,y,z} }`. Returns the exact `BlockState` from the
 Rust core, including negative coordinates. Out-of-range Y and unknown dimensions return
 structured errors.
+
+## Editor commands (v2, M4)
+
+### `block_catalog`
+
+Returns `BlockDefinition[]` sorted by block id:
+
+```ts
+interface BlockDefinition {
+  name: string;                       // "minecraft:oak_stairs"
+  properties: Record<string, string>; // canonical defaults for 1.21.4
+}
+```
+
+The catalog is curated data from the versioned Rust registry. It never contains textures
+or asset paths.
+
+### `preview_operation`
+
+Request: `{ operation: Operation }`.
+
+```ts
+interface PreviewResult {
+  affectedBlocks: number;
+  changedBlocks: number;
+  dirtyChunks: ChunkPos[];
+  warnings: string[];
+}
+```
+
+Validates bounds, limits and target states without mutating the world or the revision.
+The editor uses it before every write; it is safe to cancel by discarding the result.
+
+### `apply_operation`
+
+Request:
+
+```ts
+{
+  operation: Operation;
+  expectedRevision?: number | null;
+  idempotencyKey?: string | null;
+}
+```
+
+Returns `OperationResult { operationId, worldRevision, changedBlocks, dirtyChunks,
+warnings, replayed }`. The operation is atomic. If `expectedRevision` is set and does not
+match the current core revision, the command fails with `revision_mismatch` and no write
+occurs. Retrying with the same idempotency key returns the original result.
+
+### `undo_operation` / `redo_operation`
+
+`undo_operation` accepts `{ operationId?: string | null }`; `redo_operation` takes no
+arguments. Both return `OperationResult` with the chunks that must be remeshed.
+
+### `history_state`
+
+Returns `{ canUndo, canRedo, revision, entries: HistorySummary[] }`; the UI uses it to
+enable toolbar buttons. `operation_history` returns only the entry array for panels that
+do not need the flags.
+
+### `read_region`
+
+Request: `{ dimension: string, bounds: { min: {x,y,z}, max: {x,y,z} } }`.
+
+```ts
+interface RegionBlocks {
+  dimension: string;
+  bounds: BoxBounds;
+  volume: number;              // inclusive volume, bounded to 65,536
+  blocks: Array<{ pos: BlockPos; state: BlockState }>; // non-air only
+}
+```
+
+Used by copy/paste. Air is implied, so an all-air region returns an empty block list.
 
 ## Conventions
 

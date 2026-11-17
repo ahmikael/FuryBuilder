@@ -210,6 +210,14 @@ pub enum RegistryError {
     InvalidState(#[from] BlockStateError),
 }
 
+/// One curated block with its default property set, safe to send to the UI.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlockDefinition {
+    pub name: String,
+    pub properties: BTreeMap<String, String>,
+}
+
 /// Versioned catalog of known blocks and their default property sets.
 #[derive(Debug, Clone)]
 pub struct BlockRegistry {
@@ -297,6 +305,20 @@ impl BlockRegistry {
     pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
         self.blocks.keys().copied()
     }
+
+    /// Full curated catalog with canonical defaults, ordered by block id.
+    pub fn definitions(&self) -> Vec<BlockDefinition> {
+        self.blocks
+            .iter()
+            .map(|(name, defaults)| BlockDefinition {
+                name: (*name).to_owned(),
+                properties: defaults
+                    .iter()
+                    .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                    .collect(),
+            })
+            .collect()
+    }
 }
 
 impl Default for BlockRegistry {
@@ -361,5 +383,31 @@ mod tests {
         assert!(registry
             .validate(&"minecraft:modded_block[facing=south]".parse().unwrap())
             .is_err());
+    }
+
+    #[test]
+    fn definitions_are_sorted_and_carry_canonical_defaults() {
+        let registry = BlockRegistry::target_1_21_4();
+        let definitions = registry.definitions();
+        assert_eq!(definitions.len(), registry.len());
+        let names: Vec<&str> = definitions
+            .iter()
+            .map(|entry| entry.name.as_str())
+            .collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted);
+        let stairs = definitions
+            .iter()
+            .find(|entry| entry.name == "minecraft:oak_stairs")
+            .expect("stairs are curated");
+        assert_eq!(
+            stairs.properties.get("facing").map(String::as_str),
+            Some("north")
+        );
+        assert_eq!(
+            stairs.properties.get("waterlogged").map(String::as_str),
+            Some("false")
+        );
     }
 }

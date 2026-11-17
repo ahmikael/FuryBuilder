@@ -20,7 +20,7 @@ pub use coords::{
     SECTION_SIZE,
 };
 pub use dimension::{BlockWrite, Dimension, DimensionError, DimensionInfo, DimensionKind};
-pub use registry::{BlockRegistry, RegistryError, CATALOG_VERSION};
+pub use registry::{BlockDefinition, BlockRegistry, RegistryError, CATALOG_VERSION};
 pub use section::Section;
 pub use world::{World, WorldError, WorldInfo};
 

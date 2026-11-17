@@ -9,14 +9,15 @@ mod service;
 
 pub use dto::{
     Actor, ActorSource, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats,
-    HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
-    QueryResult, RegionSummary, RenderSnapshot, SectionSnapshot,
+    HistoryState, HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult,
+    Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot,
 };
 pub use error::{AppError, ErrorCode};
 pub use service::{
-    WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_SUMMARY_BLOCKS,
-    MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,
+    WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_READ_BLOCKS,
+    MAX_REGION_SUMMARY_BLOCKS, MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,
 };
+pub use world_operations::{BlockChange, Operation};
 
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};

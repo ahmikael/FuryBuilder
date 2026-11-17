@@ -85,6 +85,17 @@ pub struct RegionSummary {
     pub palette: Vec<PaletteEntry>,
 }
 
+/// Sparse region payload for copy/paste. Air positions are implied, so a mostly empty
+/// volume stays small. Bounded by `MAX_REGION_READ_BLOCKS`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionBlocks {
+    pub dimension: String,
+    pub bounds: BlockBox,
+    pub volume: u64,
+    pub blocks: Vec<world_operations::BlockChange>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChunkStats {
@@ -143,6 +154,7 @@ pub enum Query {
     WorldInfo,
     GetBlock { dimension: String, pos: BlockPos },
     RegionSummary { dimension: String, bounds: BlockBox },
+    RegionBlocks { dimension: String, bounds: BlockBox },
     ChunkStats { dimension: String, chunk: ChunkPos },
 }
 
@@ -156,6 +168,7 @@ pub enum QueryResult {
         state: BlockState,
     },
     RegionSummary(RegionSummary),
+    RegionBlocks(RegionBlocks),
     ChunkStats(ChunkStats),
 }
 
@@ -170,6 +183,16 @@ pub struct HistorySummary {
     pub revision_after: u64,
     pub changed_blocks: u64,
     pub timestamp_ms: u128,
+}
+
+/// Bounded editor history state for undo/redo buttons and the history panel.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryState {
+    pub can_undo: bool,
+    pub can_redo: bool,
+    pub revision: u64,
+    pub entries: Vec<HistorySummary>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

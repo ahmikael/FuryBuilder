@@ -1,0 +1,84 @@
+import type { BlockPosition, BlockState, ChunkPos } from "@/renderer/types";
+
+export interface BlockDefinition {
+  name: string;
+  properties: Record<string, string>;
+}
+
+export interface BlockChange {
+  pos: BlockPosition;
+  state: BlockState;
+}
+
+export interface BoxBounds {
+  min: BlockPosition;
+  max: BlockPosition;
+}
+export type EditorOperation =
+  | { type: "set_block"; dimension: string; pos: BlockPosition; state: BlockState }
+  | { type: "batch"; dimension: string; changes: BlockChange[] }
+  | { type: "fill_cuboid"; dimension: string; bounds: BoxBounds; state: BlockState }
+  | { type: "replace"; dimension: string; bounds: BoxBounds; from: BlockState; to: BlockState };
+
+export interface PreviewResult {
+  affectedBlocks: number;
+  changedBlocks: number;
+  dirtyChunks: ChunkPos[];
+  warnings: string[];
+}
+
+export interface OperationResult {
+  operationId: string;
+  worldRevision: number;
+  changedBlocks: number;
+  dirtyChunks: ChunkPos[];
+  warnings: string[];
+  replayed: boolean;
+}
+
+export type ActorSource = "ui" | "mcp" | "api" | "system";
+
+export interface HistorySummary {
+  projectId: string;
+  operationId: string;
+  actorId: string;
+  source: ActorSource;
+  revisionBefore: number;
+  revisionAfter: number;
+  changedBlocks: number;
+  timestampMs: number;
+}
+
+export interface HistoryState {
+  canUndo: boolean;
+  canRedo: boolean;
+  revision: number;
+  entries: HistorySummary[];
+}
+
+export interface RegionBlocks {
+  dimension: string;
+  bounds: BoxBounds;
+  volume: number;
+  blocks: BlockChange[];
+}
+
+export type EditorTool =
+  "select" | "place" | "remove" | "brush" | "box" | "fill" | "line" | "replace";
+
+export type SavedState = "clean" | "dirty" | "saving" | "saved";
+
+export interface ToastMessage {
+  id: string;
+  kind: "info" | "success" | "warning" | "error";
+  title: string;
+  description?: string;
+}
+
+export interface ClipboardPayload {
+  dimension: string;
+  /** Size of the copied bounds; paste preserves this volume. */
+  size: [number, number, number];
+  /** Positions are relative to the copied minimum corner. */
+  blocks: BlockChange[];
+}

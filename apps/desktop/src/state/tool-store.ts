@@ -1,0 +1,144 @@
+import { create } from "zustand";
+import type { ClipboardPayload, EditorTool, ToastMessage } from "@/editor/types";
+import { MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS, type GhostPreview } from "@/editor/session";
+import type { BlockPosition, BlockState } from "@/renderer/types";
+import type { RayHit } from "@/renderer/raycast";
+
+export interface EditorJob {
+  id: number;
+  label: string;
+  cancellable: boolean;
+  cancelRequested: boolean;
+  startedAt: number;
+}
+
+interface ToolState {
+  tool: EditorTool;
+  brushRadius: number;
+  selectedBlock: BlockState;
+  replaceFrom: BlockState | null;
+  anchor: BlockPosition | null;
+  selection: { min: BlockPosition; max: BlockPosition } | null;
+  hover: RayHit | null;
+  ghost: GhostPreview | null;
+  clipboard: ClipboardPayload | null;
+  job: EditorJob | null;
+  syncState: "pristine" | "modified";
+  lastOperation: {
+    operationId: string;
+    changedBlocks: number;
+    revision: number;
+    warnings: string[];
+  } | null;
+  setTool: (tool: EditorTool) => void;
+  setBrushRadius: (radius: number) => void;
+  setSelectedBlock: (state: BlockState) => void;
+  setReplaceFrom: (state: BlockState | null) => void;
+  setAnchor: (anchor: BlockPosition | null) => void;
+  setSelection: (selection: { min: BlockPosition; max: BlockPosition } | null) => void;
+  setHover: (hover: RayHit | null, ghost: GhostPreview | null) => void;
+  setGhost: (ghost: GhostPreview | null) => void;
+  setClipboard: (clipboard: ClipboardPayload | null) => void;
+  beginJob: (label: string, cancellable?: boolean) => number;
+  requestCancel: () => void;
+  finishJob: (id: number) => void;
+  markModified: () => void;
+  setLastOperation: (operation: {
+    operationId: string;
+    changedBlocks: number;
+    revision: number;
+    warnings: string[];
+  }) => void;
+  resetTransient: () => void;
+}
+
+export function clampBrushRadius(radius: number): number {
+  if (!Number.isFinite(radius)) return MIN_BRUSH_RADIUS;
+  return Math.min(MAX_BRUSH_RADIUS, Math.max(MIN_BRUSH_RADIUS, Math.round(radius)));
+}
+
+let nextJobId = 1;
+
+export const useToolStore = create<ToolState>()((set) => ({
+  tool: "place",
+  brushRadius: 1,
+  selectedBlock: { name: "minecraft:stone_bricks", properties: {} },
+  replaceFrom: null,
+  anchor: null,
+  selection: null,
+  hover: null,
+  ghost: null,
+  clipboard: null,
+  job: null,
+  syncState: "pristine",
+  lastOperation: null,
+  setTool: (tool) =>
+    set({
+      tool,
+      // Switching tools must not leave a dangling first corner from another tool.
+      anchor: null,
+      ghost: null,
+      hover: null,
+    }),
+  setBrushRadius: (radius) => set({ brushRadius: clampBrushRadius(radius) }),
+  setSelectedBlock: (selectedBlock) => set({ selectedBlock }),
+  setReplaceFrom: (replaceFrom) => set({ replaceFrom }),
+  setAnchor: (anchor) => set({ anchor }),
+  setSelection: (selection) => set({ selection }),
+  setHover: (hover, ghost) => set({ hover, ghost }),
+  setGhost: (ghost) => set({ ghost }),
+  setClipboard: (clipboard) => set({ clipboard }),
+  beginJob: (label, cancellable = false) => {
+    const id = nextJobId++;
+    set({
+      job: {
+        id,
+        label,
+        cancellable,
+        cancelRequested: false,
+        startedAt: Date.now(),
+      },
+    });
+    return id;
+  },
+  requestCancel: () =>
+    set((state) => (state.job ? { job: { ...state.job, cancelRequested: true } } : state)),
+  finishJob: (id) => set((state) => (state.job && state.job.id === id ? { job: null } : state)),
+  markModified: () => set({ syncState: "modified" }),
+  setLastOperation: (lastOperation) => set({ lastOperation, syncState: "modified" }),
+  resetTransient: () => set({ anchor: null, hover: null, ghost: null }),
+}));
+
+interface ToastState {
+  toasts: ToastMessage[];
+  push: (toast: Omit<ToastMessage, "id"> & { id?: string }) => string;
+  dismiss: (id: string) => void;
+  clear: () => void;
+}
+
+let nextToastId = 1;
+const MAX_TOASTS = 4;
+
+export const useToastStore = create<ToastState>()((set) => ({
+  toasts: [],
+  push: (toast) => {
+    const id = toast.id ?? `toast-${nextToastId++}`;
+    set((state) => ({
+      toasts: [...state.toasts.filter((entry) => entry.id !== id), { ...toast, id }].slice(
+        -MAX_TOASTS,
+      ),
+    }));
+    return id;
+  },
+  dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
+  clear: () => set({ toasts: [] }),
+}));
+
+export function pushToast(toast: Omit<ToastMessage, "id">): string {
+  return useToastStore.getState().push(toast);
+}
+
+export function isJobCancelled(id: number): boolean {
+  const job = useToolStore.getState().job;
+  return !job || job.id !== id || job.cancelRequested;
+}

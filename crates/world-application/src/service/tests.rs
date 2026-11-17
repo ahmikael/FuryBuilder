@@ -336,3 +336,48 @@ fn dimensions_are_isolated_in_commands_and_queries() {
         })
     ));
 }
+
+#[test]
+fn region_blocks_returns_a_sparse_copy_payload() {
+    let mut service = WorldService::new();
+    service
+        .execute(request(Operation::FillCuboid {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 64, 0), BlockPos::new(1, 64, 0)).unwrap(),
+            state: state("minecraft:stone_bricks"),
+        }))
+        .unwrap();
+    let result = service
+        .query(Query::RegionBlocks {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(-1, 63, -1), BlockPos::new(1, 64, 1)).unwrap(),
+        })
+        .unwrap();
+    match result {
+        QueryResult::RegionBlocks(region) => {
+            assert_eq!(region.volume, 18);
+            assert_eq!(region.blocks.len(), 2);
+            assert!(region
+                .blocks
+                .iter()
+                .all(|change| change.state == state("minecraft:stone_bricks")));
+            assert!(region
+                .blocks
+                .iter()
+                .all(|change| change.pos.y == 64 && change.pos.z == 0));
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+}
+
+#[test]
+fn region_blocks_limit_is_enforced_before_reading() {
+    let service = WorldService::new();
+    let error = service
+        .query(Query::RegionBlocks {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 0, 0), BlockPos::new(50, 50, 50)).unwrap(),
+        })
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::LimitExceeded);
+}

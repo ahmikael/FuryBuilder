@@ -3,16 +3,17 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde_json::json;
 use uuid::Uuid;
 use world_domain::{BlockRegistry, ChunkPos, World, WorldInfo};
-use world_operations::{self as operations, Operation, SectionDiff};
+use world_operations::{self as operations, BlockChange, Operation, SectionDiff};
 
 use crate::dto::{
-    Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistorySummary,
-    OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query, QueryResult,
-    RegionSummary, RenderSnapshot, SectionSnapshot,
+    Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
+    HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
+    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot,
 };
 use crate::error::{AppError, ErrorCode};
 
 pub const MAX_REGION_SUMMARY_BLOCKS: u64 = 1_000_000;
+pub const MAX_REGION_READ_BLOCKS: u64 = 65_536;
 pub const MAX_IDEMPOTENCY_ENTRIES: usize = 256;
 pub const MAX_RENDER_RADIUS: u32 = 6;
 pub const MAX_RENDER_CHUNKS: usize = 256;
@@ -305,6 +306,15 @@ impl WorldService {
                 timestamp_ms: entry.timestamp_ms,
             })
             .collect()
+    }
+
+    pub fn history_state(&self) -> HistoryState {
+        HistoryState {
+            can_undo: !self.history.is_empty(),
+            can_redo: !self.redo.is_empty(),
+            revision: self.world.revision(),
+            entries: self.history(),
+        }
     }
 
     pub fn audit_log(&self) -> &[AuditEntry] {
@@ -605,6 +615,30 @@ impl WorldService {
                     blocks: volume,
                     non_air_blocks,
                     palette,
+                }))
+            }
+            Query::RegionBlocks { dimension, bounds } => {
+                let volume = bounds.volume();
+                if volume > MAX_REGION_READ_BLOCKS {
+                    return Err(AppError::new(
+                        ErrorCode::LimitExceeded,
+                        format!(
+                            "region read affects {volume} blocks, limit is {MAX_REGION_READ_BLOCKS}"
+                        ),
+                    ));
+                }
+                let mut blocks = Vec::new();
+                for pos in bounds.iter() {
+                    let state = self.world.get_block(&dimension, pos)?;
+                    if !state.is_air() {
+                        blocks.push(BlockChange { pos, state });
+                    }
+                }
+                Ok(QueryResult::RegionBlocks(RegionBlocks {
+                    dimension,
+                    bounds,
+                    volume,
+                    blocks,
                 }))
             }
             Query::ChunkStats { dimension, chunk } => {

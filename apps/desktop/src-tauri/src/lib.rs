@@ -10,10 +10,18 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::ping,
+            commands::block_catalog,
             commands::world_info,
             commands::load_demo_world,
             commands::render_snapshot,
             commands::render_chunks,
+            commands::preview_operation,
+            commands::apply_operation,
+            commands::undo_operation,
+            commands::redo_operation,
+            commands::operation_history,
+            commands::history_state,
+            commands::read_region,
             commands::get_block
         ])
         .run(tauri::generate_context!())
