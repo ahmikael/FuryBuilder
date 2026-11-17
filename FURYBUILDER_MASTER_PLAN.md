@@ -850,7 +850,7 @@ furybuilder/
 
 **Цель:** запускается чистое desktop-приложение с архитектурным каркасом.
 
-- [ ] Инициализировать Tauri 2 + React + TypeScript + Vite.
+- [x] Инициализировать Tauri 2 + React + TypeScript + Vite.
 - [ ] Настроить Tailwind CSS v4 и shadcn/ui по актуальной документации.
 - [ ] Установить строгую типизацию, линтер, форматирование, pnpm/Cargo lock-файлы.
 - [ ] Создать минимальный Rust workspace с независимым `world-domain`.
