@@ -1,11 +1,15 @@
-import { Flame, Save, Settings, Sun, Moon } from "lucide-react";
+import { Flame, Redo2, Save, Settings, Sun, Moon, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { BackendStatus } from "@/lib/contracts";
+import { redoWorld, undoWorld } from "@/editor/commands";
+import { blockColor } from "@/renderer/assets";
+import { useHistoryStore } from "@/state/history-store";
+import { useToolStore } from "@/state/tool-store";
 import { cn } from "@/lib/utils";
 
-const menus = ["Project", "Edit", "View", "Tools", "AI / MCP", "Export"] as const;
+const menus = ["Project", "View", "Tools", "AI / MCP", "Export"] as const;
 
 interface ToolbarProps {
   backendStatus: BackendStatus;
@@ -15,6 +19,14 @@ interface ToolbarProps {
 }
 
 export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }: ToolbarProps) {
+  const canUndo = useHistoryStore((state) => state.canUndo);
+  const canRedo = useHistoryStore((state) => state.canRedo);
+  const job = useToolStore((state) => state.job);
+  const syncState = useToolStore((state) => state.syncState);
+  const selectedBlock = useToolStore((state) => state.selectedBlock);
+  const editing = backendStatus === "online";
+  const busy = Boolean(job);
+
   return (
     <header className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card/70 px-2">
       <div className="flex items-center gap-2 pr-2">
@@ -39,12 +51,75 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
                 {menu}
               </Button>
             </TooltipTrigger>
-            <TooltipContent>{menu} commands arrive with the editor milestones.</TooltipContent>
+            <TooltipContent>
+              {menu} menus arrive with later milestones. Editing actions live in the viewport
+              toolbar and context menu.
+            </TooltipContent>
           </Tooltip>
         ))}
       </nav>
 
+      <div className="ml-2 flex items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Undo edit"
+              disabled={!editing || busy || !canUndo}
+              onClick={() => void undoWorld()}
+            >
+              <Undo2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Undo · Ctrl+Z</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Redo edit"
+              disabled={!editing || busy || !canRedo}
+              onClick={() => void redoWorld()}
+            >
+              <Redo2 />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Redo · Ctrl+Shift+Z</TooltipContent>
+        </Tooltip>
+      </div>
+
       <div className="ml-auto flex items-center gap-1.5">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span
+              className={cn(
+                "mr-1 inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px]",
+                syncState === "modified"
+                  ? "border-status-warn/30 text-status-warn"
+                  : "border-border text-muted-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "size-1.5 rounded-full",
+                  syncState === "modified" ? "bg-status-warn" : "bg-status-ok",
+                )}
+              />
+              {syncState === "modified"
+                ? "Unsaved changes"
+                : editing
+                  ? "No unsaved edits"
+                  : "Preview scene"}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            Project persistence arrives in M5. Edits are kept in the running Rust session and export
+            remembers the revision.
+          </TooltipContent>
+        </Tooltip>
+
         <span
           className={cn(
             "mr-1 inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground",
@@ -74,11 +149,31 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
 
         <Tooltip>
           <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden gap-1.5 font-mono text-[10px] text-muted-foreground md:inline-flex"
+              disabled
+            >
+              <span
+                className="size-2.5 rounded-[2px] border border-black/30"
+                style={{ backgroundColor: blockColor(selectedBlock.name) }}
+              />
+              {selectedBlock.name.replace("minecraft:", "")}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Active palette block (choose it in the Palette panel).</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
             <Button variant="ghost" size="icon" aria-label="Save project" disabled>
               <Save />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Save project (available after M5).</TooltipContent>
+          <TooltipContent>
+            Save project — persistence lands in M5. Current edits live in memory only.
+          </TooltipContent>
         </Tooltip>
 
         <Tooltip>

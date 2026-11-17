@@ -1,5 +1,7 @@
-import { Circle } from "lucide-react";
+import { Circle, Loader2 } from "lucide-react";
 import type { BackendState } from "@/hooks/use-backend";
+import { TOOL_LABELS } from "@/editor/session";
+import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
 
@@ -11,6 +13,10 @@ export function StatusBar({ backend }: { backend: BackendState }) {
   const loadRadius = useWorldStore((state) => state.loadRadius);
   const source = useWorldStore((state) => state.source);
   const metrics = useWorldStore((state) => state.metrics);
+  const tool = useToolStore((state) => state.tool);
+  const job = useToolStore((state) => state.job);
+  const syncState = useToolStore((state) => state.syncState);
+  const selection = useToolStore((state) => state.selection);
 
   return (
     <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border bg-card/80 px-2.5 text-[10px] text-muted-foreground">
@@ -31,8 +37,27 @@ export function StatusBar({ backend }: { backend: BackendState }) {
       <span>{source === "core" ? "Empty Project · demo scene" : "Preview scene"}</span>
       <span className="text-border">|</span>
       <span>{dimension.replace("minecraft:", "")}</span>
+      <span className="text-border">|</span>
+      <span className="inline-flex items-center gap-1">
+        {job ? <Loader2 className="size-2.5 animate-spin text-primary" /> : null}
+        {job ? job.label : `tool: ${TOOL_LABELS[tool]}`}
+      </span>
+      {selection ? (
+        <>
+          <span className="text-border">|</span>
+          <span className="text-sky-300">box selected</span>
+        </>
+      ) : null}
 
-      <span className="ml-auto font-mono">rev {revision}</span>
+      <span className="ml-auto font-mono">
+        {syncState === "modified" ? (
+          <span className="text-status-warn">unsaved changes</span>
+        ) : (
+          "no edits"
+        )}
+      </span>
+      <span className="text-border">|</span>
+      <span className="font-mono">rev {revision}</span>
       <span className="text-border">|</span>
       <span className="font-mono">{chunkCount} chunks</span>
       <span className="text-border">|</span>
