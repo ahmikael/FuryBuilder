@@ -44,7 +44,7 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             </TabsTrigger>
           </TabsList>
           <span className="ml-auto font-mono text-[9px] text-muted-foreground">
-            UI shells only — operations arrive in M2/M4
+            Viewport live · editing tools arrive in M4
           </span>
         </div>
 

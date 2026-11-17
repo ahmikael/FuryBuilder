@@ -2,6 +2,7 @@ import { Box, ChevronDown, ChevronRight, Globe2, Layers, Search } from "lucide-r
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useEditorStore } from "@/state/editor-store";
+import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
 
 const dimensions = [
@@ -19,6 +20,10 @@ export function WorldTree() {
   const [expanded, setExpanded] = useState(true);
   const selectedDimension = useEditorStore((state) => state.selectedDimension);
   const setSelectedDimension = useEditorStore((state) => state.setSelectedDimension);
+  const chunkCount = useWorldStore((state) => state.chunkCount);
+  const blockCount = useWorldStore((state) => state.blockCount);
+  const revision = useWorldStore((state) => state.revision);
+  const source = useWorldStore((state) => state.source);
 
   return (
     <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
@@ -49,7 +54,7 @@ export function WorldTree() {
           <Box className="size-3.5 text-primary" />
           <span className="truncate text-xs font-medium">Untitled Project</span>
           <span className="ml-auto rounded bg-muted px-1 py-0.5 text-[9px] text-muted-foreground">
-            Empty
+            {source === "core" ? "Demo" : "Preview"}
           </span>
         </button>
 
@@ -71,7 +76,9 @@ export function WorldTree() {
                   <Layers className="size-3" />
                   <span className="truncate text-[11px]">{dimension.label}</span>
                   <span className="ml-auto font-mono text-[9px] text-muted-foreground">
-                    {dimension.loaded ? "0 chunks" : "—"}
+                    {dimension.id === "minecraft:overworld" && source
+                      ? `${chunkCount} chunks`
+                      : "—"}
                   </span>
                 </button>
               );
@@ -97,8 +104,11 @@ export function WorldTree() {
         </div>
       </div>
 
-      <div className="border-t border-border px-2.5 py-2 font-mono text-[9px] text-muted-foreground">
-        target 1.21.4 · DV 4189
+      <div
+        className="truncate border-t border-border px-2.5 py-2 font-mono text-[9px] text-muted-foreground"
+        title={`target 1.21.4 · DV 4189 · rev ${revision} · ${blockCount.toLocaleString()} blocks`}
+      >
+        1.21.4 · DV 4189 · rev {revision} · {blockCount.toLocaleString()} blocks
       </div>
     </aside>
   );
