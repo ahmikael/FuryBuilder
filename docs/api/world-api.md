@@ -52,9 +52,7 @@ History stores section-level before/after snapshots (not full world copies).
 - A new applied operation clears the redo stack.
 - History is bounded (default 100 entries); oldest entries are pruned first.
 
-## Queries
-
-```ts
+## Queries```ts
 Query =
   | { type: "world_info" }
   | { type: "get_block", dimension, pos }
@@ -70,6 +68,20 @@ QueryResult =
 
 `region_summary` is bounded to 1,000,000 blocks and returns a palette sorted by count.
 Queries never mutate the world or bump revisions.
+
+## Render snapshots
+
+The renderer receives derived, revisioned payloads from the same core:
+
+- `render_snapshot(dimension, center, radius)` returns a bounded square (radius ≤ 6) with
+  `loaded: false` entries for missing chunks.
+- `render_chunks(dimension, chunks)` returns at most 256 explicitly requested chunks and
+  is used to refresh dirty chunks after an edit.
+- Sections carry a palette and packed indices (`u64` words split into `[lo32, hi32, ...]`
+  for JavaScript), not per-block JSON.
+
+Queries and snapshots never increment the revision. They are safe to retry and contain no
+filesystem or account data.
 
 ## Provenance and audit
 
