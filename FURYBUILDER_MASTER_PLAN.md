@@ -870,7 +870,7 @@ furybuilder/
 - [x] Реализовать `BlockState` с ID и properties; registry/catalog для выбранной версии.
 - [x] Реализовать координаты, chunk/section/region indexes, отрицательные значения и Y-range.
 - [x] Реализовать `World`, `Dimension`, `Chunk`, `Section`, палитры и sparse storage.
-- [ ] Реализовать чтение/запись отдельного блока, batch changes, `fill_cuboid`, `replace`.
+- [x] Реализовать чтение/запись отдельного блока, batch changes, `fill_cuboid`, `replace`.
 - [ ] Добавить выделения/границы и проверку пересечения/лимитов.
 - [ ] Создать слой `Command/Query API` и единый формат ошибок.
 - [ ] Добавить `world_revision`, операции с `expected_revision`, `operation_id`.

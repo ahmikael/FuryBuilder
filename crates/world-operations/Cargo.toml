@@ -2,7 +2,13 @@
 name = "furybuilder-world-operations"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Selections, edits, transactions and undo/redo for FuryBuilder"
 [lib]
 name = "world_operations"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
