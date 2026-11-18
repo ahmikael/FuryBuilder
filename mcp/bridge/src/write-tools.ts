@@ -12,7 +12,7 @@ import { errorResult, textResult, withRevision } from "./tool-result.js";
  */
 
 const PREVIEW_TIMEOUT_MS = 15_000;
-const WRITE_TIMEOUT_MS = 30_000;
+const WRITE_TIMEOUT_MS = 120_000;
 const MAX_BATCH_CHANGES = 8192;
 
 const dimension = z

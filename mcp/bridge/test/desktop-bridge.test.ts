@@ -45,6 +45,15 @@ describe("MCP bridge to the authoritative desktop API", () => {
           worldRevision: 9,
         },
         bridge: { protocolVersion: 1, transport: "local_socket", pid: 4242 },
+        mcp: {
+          mode: "edit_in_selection",
+          writesEnabled: true,
+          maxBlocks: 4000,
+          maxBatchChanges: 100,
+          requireConfirmation: true,
+        },
+        renderer: { listening: true },
+        pendingConfirmations: 1,
       });
     });
     harnesses.push(harness);
@@ -75,6 +84,14 @@ describe("MCP bridge to the authoritative desktop API", () => {
         desktop: {
           connected: boolean;
           project: { projectId: string; worldRevision: number };
+          access: {
+            mode: string;
+            writesEnabled: boolean;
+            maxBlocks: number;
+            requireConfirmation: boolean;
+          } | null;
+          renderer: { listening: boolean } | null;
+          pendingConfirmations: number;
         };
         connection: { state: string; lifecycle: string };
         context: {
@@ -90,6 +107,14 @@ describe("MCP bridge to the authoritative desktop API", () => {
       projectId: "project-live",
       worldRevision: 9,
     });
+    expect(info.bridge.desktop.access).toMatchObject({
+      mode: "edit_in_selection",
+      writesEnabled: true,
+      maxBlocks: 4000,
+      requireConfirmation: true,
+    });
+    expect(info.bridge.desktop.renderer).toEqual({ listening: true });
+    expect(info.bridge.desktop.pendingConfirmations).toBe(1);
     expect(info.bridge.connection).toMatchObject({
       state: "ready",
       lifecycle: "ephemeral-stdio",

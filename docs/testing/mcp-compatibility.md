@@ -68,14 +68,33 @@ claims that a partial frame is complete.
 | `undo_operation`         | endpoint `undo_operation`    | latest/named undo; requires user grant                   |
 | `get_operation_status`   | endpoint `operation_status`  | audit entry or recent history; jobs reported unavailable |
 
-MCP starts **read-only**. The bridge cannot enable writes: only the Tauri UI can call
-`set_mcp_writes_enabled`. The endpoint enforces the grant for every apply/undo request and
-records `actor: mcp-bridge`, `source: mcp` in the authoritative history and audit log.
-Without the grant the call fails with `permission_denied` and touches nothing. Preview and
-status remain available without a grant.
+MCP starts **read-only**. The bridge cannot change the policy: only the Tauri UI can call
+`set_mcp_access`. Three modes exist:
 
-The grant is currently a single on/off switch. Selection-scoped access, project modes and
-per-request confirmation are the next M7 task, so this is not yet a complete access policy.
+| Mode                | Effect                                                                 |
+| ------------------- | ---------------------------------------------------------------------- |
+| `read_only`         | preview/status work; apply and undo return `permission_denied`         |
+| `edit_in_selection` | writes and undo must fit one dimension and one inclusive box           |
+| `full_project`      | writes are not box-restricted, but hard block/batch limits still apply |
+
+The default policy allows 50,000 blocks per operation and 4,096 changes per batch; the
+hard ceilings are 1,000,000 blocks and 8,192 changes. Limits are enforced on the operation
+itself, not only on the request schema. A selection with an overflowing volume is rejected
+through the saturating `BlockBox::checked_volume` path instead of panicking.
+
+Every apply and undo requires an explicit `world_revision`. Undo is checked against the
+exact extent recorded for the operation, and it is executed with that resolved
+`operation_id`, so a newer operation cannot be silently undone after approval. With
+`require_confirmation` enabled (the default), the endpoint emits
+`furybuilder-mcp-confirmation-request` to the editor, waits up to 90 seconds, and writes
+only after the user calls `submit_mcp_confirmation` with `approved: true`. Denial, timeout
+or a missing UI fails closed with `permission_denied`. The policy is re-checked after the
+approval in case the user changed it while the dialog was open.
+
+Accepted writes are recorded with `actor: mcp-bridge`, `source: mcp` in the authoritative
+history and audit log. `preview_operation` remains read-only and now reports
+`access.allowed`, the denial code and details so a client knows whether an apply would be
+permitted without guessing. Preview and status remain available in every mode.
 
 ## Explicit request context and connection lifecycle
 
@@ -119,7 +138,7 @@ pnpm --filter @furybuilder/mcp-bridge build
 ```
 
 Observed: 24 tests passed, typecheck and build clean; the Rust local-bridge module runs
-17 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
+25 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
 use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
@@ -146,14 +165,20 @@ use `@modelcontextprotocol/client` 2.4.0:
   app is absent;
 - live calls map `preview_operation`, `apply_operations_batch`, `operation_status` and
   `undo_operation` to the expected endpoint payloads;
+- `bridge_info` exposes the live access mode, write flags, limits, renderer readiness and
+  pending confirmation count from `ping`;
 - the desktop client maps a wrong token to `authentication_failed`, a stale endpoint
   to `app_not_running`, malformed discovery files to `invalid_runtime_file`, and a
   silent endpoint to `timeout`.
 
 The Rust tests cover camera/capture revision verification, dimension mismatch, invalid
 image rejection, renderer timeout without a viewport, one-answer-per-request bridge
-semantics, read-only preview/status, write refusal without a grant, and granted batch
-apply/undo with audit entries.
+semantics, read-only preview/status, policy enforcement for both edit modes, block and
+batch limits, missing revision rejection, approval/denial of apply and undo, undo extent
+tracking, and granted batch apply/undo with audit entries. The frontend tests cover the
+policy command payloads, confirmation submission, dialog rendering and restoring a pending
+confirmation after the UI reloads; the Rust bridge keeps the request id and expiry so the
+dialog can be reconstructed.
 
 ### Real Tauri process
 
@@ -162,12 +187,13 @@ apply/undo with audit entries.
 ```text
 discovery: schemaVersion 1, local_socket, protocol 1, named pipe, tokenLength 64
 ping: ok, projectId "local-project", worldRevision 0, app 0.1.0, rendererListening false
+ping access: read_only, maxBlocks 50000, requireConfirmation true
 renderer: listening true after the WebView mounted
 world_info: ok, target Minecraft 1.21.4, revision 0, 3 dimensions
 camera: overworld, render revision 0 = authoritative revision 0, stale false
 capture: image/png, PNG signature valid, 492714 bytes, partial true, stale false
-preview: affected 1, changed 1, world revision 0 (world unchanged)
-apply without grant: permission_denied, mcpWritesEnabled false
+preview: affected 1, changed 1, world revision 0, access.allowed false (permission_denied)
+apply in read-only: permission_denied, accessMode read_only, operation apply_operation
 operation_status: revision 0, canUndo false, job.available false
 wrong token: unauthorized, responseContainsToken false
 LOCAL_BRIDGE_PROBE_OK
@@ -194,9 +220,11 @@ assume a protocol revision.
 ## Limitations
 
 - `bridge_info` is a handshake diagnostic, not an editor tool.
-- Writes exist but are disabled by default. A single UI-level on/off grant exists; modes,
-  selection scoping, per-request confirmation and quotas are the next M7 task. Until then
-  an AI cannot edit a fresh installation.
+- Writes are disabled by default. Access modes, limits and per-request confirmation now
+  exist, but the live Tauri probe exercised only the read-only refusal; the approval dialog
+  itself is covered by Rust and frontend tests, not by an automated click in a real window.
+- The policy is process-wide, not per MCP connection. A future task should scope grants to a
+  connection and add a visible activity log for pending and completed AI edits.
 - The Job API is still absent: long operations are synchronous, and status reports
   `job.available=false` instead of inventing progress.
 - Camera and capture require a mounted viewport in the running editor. A hidden or

@@ -182,6 +182,38 @@ fn undo_restores_ten_thousand_blocks_and_redo_reapplies() {
 }
 
 #[test]
+fn undo_target_reports_the_exact_operation_extent_without_mutating() {
+    let mut service = WorldService::new();
+    service
+        .execute(request(Operation::Batch {
+            dimension: "minecraft:overworld".to_owned(),
+            changes: vec![
+                BlockChange {
+                    pos: BlockPos::new(-2, 64, 5),
+                    state: state("minecraft:stone"),
+                },
+                BlockChange {
+                    pos: BlockPos::new(3, 70, -1),
+                    state: state("minecraft:glass"),
+                },
+            ],
+        }))
+        .unwrap();
+    let revision = service.world().revision();
+    let target = service.undo_target(None).expect("undo target");
+    assert_eq!(target.dimension, "minecraft:overworld");
+    assert_eq!(
+        target.bounds,
+        BlockBox::new(BlockPos::new(-2, 64, -1), BlockPos::new(3, 70, 5)).unwrap()
+    );
+    assert_eq!(service.world().revision(), revision);
+    assert!(service.can_undo());
+
+    let error = service.undo_target(Some("op-missing")).unwrap_err();
+    assert_eq!(error.code, ErrorCode::NoHistory);
+}
+
+#[test]
 fn read_only_policy_rejects_writes_but_allows_queries() {
     let mut service = WorldService::new();
     service.set_writes_enabled(false);

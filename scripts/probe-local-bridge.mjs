@@ -98,6 +98,9 @@ console.log(
         worldRevision: ping.result.project.worldRevision,
         appVersion: ping.result.app.version,
         rendererListening: ping.result.renderer?.listening ?? null,
+        accessMode: ping.result.mcp?.mode ?? null,
+        maxBlocks: ping.result.mcp?.maxBlocks ?? null,
+        requireConfirmation: ping.result.mcp?.requireConfirmation ?? null,
       },
     },
     null,
@@ -128,6 +131,11 @@ async function waitForRenderer(timeoutMs) {
 
 const renderer = await waitForRenderer(60_000);
 console.log(JSON.stringify({ renderer }, null, 2));
+if (ping.result.mcp?.mode !== "read_only") {
+  throw new Error(
+    `expected read-only MCP access by default, got ${JSON.stringify(ping.result.mcp)}`,
+  );
+}
 
 const world = await request(
   runtime,
@@ -243,6 +251,11 @@ if (!preview.ok) {
     `authorized preview_operation failed: ${JSON.stringify(preview.error)}`,
   );
 }
+if (preview.result.access?.allowed !== false) {
+  throw new Error(
+    `preview should report denied write access in read-only mode: ${JSON.stringify(preview.result.access)}`,
+  );
+}
 console.log(
   JSON.stringify(
     {
@@ -250,6 +263,8 @@ console.log(
         affectedBlocks: preview.result.affectedBlocks,
         changedBlocks: preview.result.changedBlocks,
         worldRevision: preview.result.worldRevision,
+        accessAllowed: preview.result.access?.allowed ?? null,
+        accessCode: preview.result.access?.code ?? null,
       },
     },
     null,
@@ -277,12 +292,18 @@ if (apply.error?.code !== "permission_denied") {
     `expected permission_denied, got ${JSON.stringify(apply.error)}`,
   );
 }
+if (apply.error.details?.mcpAccessMode !== "read_only") {
+  throw new Error(
+    `expected read-only policy details, got ${JSON.stringify(apply.error)}`,
+  );
+}
 console.log(
   JSON.stringify(
     {
       writeGuard: {
         code: apply.error.code,
-        mcpWritesEnabled: apply.error.details?.mcpWritesEnabled,
+        accessMode: apply.error.details?.mcpAccessMode,
+        operation: apply.error.details?.operation,
       },
     },
     null,

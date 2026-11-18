@@ -68,6 +68,14 @@ pub struct PreviewResult {
     pub warnings: Vec<String>,
 }
 
+/// The operation a read-only undo check would target. It contains no history payloads.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UndoTarget {
+    pub operation_id: String,
+    pub dimension: String,
+    pub bounds: BlockBox,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteEntry {

@@ -69,6 +69,15 @@ export interface DesktopProbeConnected {
     transport: string;
     pid: number;
   };
+  access: {
+    mode: string;
+    writesEnabled: boolean;
+    maxBlocks: number;
+    maxBatchChanges: number;
+    requireConfirmation: boolean;
+  } | null;
+  renderer: { listening: boolean } | null;
+  pendingConfirmations: number;
 }
 
 export interface DesktopProbeDisconnected {
@@ -351,6 +360,15 @@ export async function probeDesktop(
         transport?: unknown;
         pid?: unknown;
       };
+      mcp?: {
+        mode?: unknown;
+        writesEnabled?: unknown;
+        maxBlocks?: unknown;
+        maxBatchChanges?: unknown;
+        requireConfirmation?: unknown;
+      };
+      renderer?: { listening?: unknown };
+      pendingConfirmations?: unknown;
     };
     if (
       typeof result !== "object" ||
@@ -382,6 +400,28 @@ export async function probeDesktop(
             : "unknown",
         pid: typeof result.bridge.pid === "number" ? result.bridge.pid : 0,
       },
+      access:
+        typeof result.mcp?.mode === "string" &&
+        typeof result.mcp.writesEnabled === "boolean" &&
+        typeof result.mcp.maxBlocks === "number" &&
+        typeof result.mcp.maxBatchChanges === "number" &&
+        typeof result.mcp.requireConfirmation === "boolean"
+          ? {
+              mode: result.mcp.mode,
+              writesEnabled: result.mcp.writesEnabled,
+              maxBlocks: result.mcp.maxBlocks,
+              maxBatchChanges: result.mcp.maxBatchChanges,
+              requireConfirmation: result.mcp.requireConfirmation,
+            }
+          : null,
+      renderer:
+        typeof result.renderer?.listening === "boolean"
+          ? { listening: result.renderer.listening }
+          : null,
+      pendingConfirmations:
+        typeof result.pendingConfirmations === "number"
+          ? result.pendingConfirmations
+          : 0,
     };
   } catch (error) {
     if (error instanceof DesktopUnavailableError) {

@@ -117,22 +117,24 @@ second format and is not enabled in the UI.
 
 ## Implemented coverage (M7, first MCP slice)
 
-| Requirement                                                        | Automated / recorded evidence                                                                                                                                         |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pinned MCP SDK and transport                                       | `docs/research/mcp-2026-07-28.md`; `@modelcontextprotocol/server` 2.4.0 in `mcp/bridge/package.json`                                                                  |
-| Modern and legacy protocol negotiation                             | `mcp/bridge/test/protocol.test.ts` spawns the real stdio bridge for both eras                                                                                         |
-| Tasks as an explicit option with fallback tools                    | `mcp/bridge/test/tasks-policy.test.ts`; `job-tools.ts` returns `job_api_unavailable` instead of inventing work                                                        |
-| Authenticated local endpoint over the authoritative `WorldService` | `apps/desktop/src-tauri/src/local_bridge.rs` tests: token rejection, protocol mismatch, `world_info`, bounded `query`, project mismatch, real local-socket round-trip |
-| Discovery file and stale-endpoint handling                         | `local_bridge.rs` discovery test; `mcp/bridge/test/desktop-client.test.ts`                                                                                            |
-| Real bridge process reaching a live local endpoint                 | `mcp/bridge/test/desktop-bridge.test.ts` (`bridge_info.desktop.connected`)                                                                                            |
-| Explicit `project_id` / `world_revision` / `job_id` contract       | `mcp/bridge/test/context.test.ts`; `local_bridge.rs` stale-revision test; `job-tools.ts` schema exposes `job_id`, `world_revision`, `idempotency_key`                 |
-| Explicit connection lifecycle                                      | `bridge_info.connection` (`instanceId`, `startedAtMs`, `ephemeral-stdio`, `expiresWithProcess`, state); asserted in `protocol.test.ts` and `desktop-bridge.test.ts`   |
-| Read-only tools: world info, block, region summary/blocks          | `mcp/bridge/src/read-tools.ts`; `protocol.test.ts`; live-endpoint reads in `desktop-bridge.test.ts`                                                                   |
-| Camera and real viewport screenshot                                | `apps/desktop/src/lib/renderer-bridge.test.ts`; Rust camera/capture/revision tests; real Tauri probe recorded in `docs/testing/mcp-compatibility.md`                  |
-| Preview, apply, batch and undo tools                               | `mcp/bridge/src/write-tools.ts`; `protocol.test.ts`; live-endpoint mapping in `desktop-bridge.test.ts`                                                                |
-| Read-only by default and explicit write grant                      | Rust `local_bridge` tests: preview/status without grant, apply/undo `permission_denied`, granted batch apply + audit + undo; real Tauri probe                         |
-| Real Tauri process                                                 | `scripts/probe-local-bridge.mjs`; recorded in `docs/testing/mcp-compatibility.md` — reads, PNG capture, preview, denied write, status, wrong token `unauthorized`     |
+| Requirement                                                        | Automated / recorded evidence                                                                                                                                              |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Pinned MCP SDK and transport                                       | `docs/research/mcp-2026-07-28.md`; `@modelcontextprotocol/server` 2.4.0 in `mcp/bridge/package.json`                                                                       |
+| Modern and legacy protocol negotiation                             | `mcp/bridge/test/protocol.test.ts` spawns the real stdio bridge for both eras                                                                                              |
+| Tasks as an explicit option with fallback tools                    | `mcp/bridge/test/tasks-policy.test.ts`; `job-tools.ts` returns `job_api_unavailable` instead of inventing work                                                             |
+| Authenticated local endpoint over the authoritative `WorldService` | `apps/desktop/src-tauri/src/local_bridge.rs` tests: token rejection, protocol mismatch, `world_info`, bounded `query`, project mismatch, real local-socket round-trip      |
+| Discovery file and stale-endpoint handling                         | `local_bridge.rs` discovery test; `mcp/bridge/test/desktop-client.test.ts`                                                                                                 |
+| Real bridge process reaching a live local endpoint                 | `mcp/bridge/test/desktop-bridge.test.ts` (`bridge_info.desktop.connected`)                                                                                                 |
+| Explicit `project_id` / `world_revision` / `job_id` contract       | `mcp/bridge/test/context.test.ts`; `local_bridge.rs` stale-revision test; `job-tools.ts` schema exposes `job_id`, `world_revision`, `idempotency_key`                      |
+| Explicit connection lifecycle                                      | `bridge_info.connection` (`instanceId`, `startedAtMs`, `ephemeral-stdio`, `expiresWithProcess`, state); asserted in `protocol.test.ts` and `desktop-bridge.test.ts`        |
+| Read-only tools: world info, block, region summary/blocks          | `mcp/bridge/src/read-tools.ts`; `protocol.test.ts`; live-endpoint reads in `desktop-bridge.test.ts`                                                                        |
+| Camera and real viewport screenshot                                | `apps/desktop/src/lib/renderer-bridge.test.ts`; Rust camera/capture/revision tests; real Tauri probe recorded in `docs/testing/mcp-compatibility.md`                       |
+| Preview, apply, batch and undo tools                               | `mcp/bridge/src/write-tools.ts`; `protocol.test.ts`; live-endpoint mapping in `desktop-bridge.test.ts`                                                                     |
+| Access modes, limits and confirmations                             | `apps/desktop/src-tauri/src/mcp_access.rs` tests (read-only, selection box, block/batch limits, undo extent, one-answer confirmation); Rust endpoint approval/denial tests |
+| Access policy UI and confirmation host                             | `apps/desktop/src/lib/mcp-access.test.ts`; `McpAccessDialog` and `McpConfirmationHost`; policy is Tauri-only and the bridge cannot widen it                                |
+| Read-only by default and explicit write grant                      | Rust `local_bridge` tests: preview access status, apply/undo `permission_denied`, granted batch apply + audit + undo; real Tauri probe                                     |
+| Real Tauri process                                                 | `scripts/probe-local-bridge.mjs`; recorded in `docs/testing/mcp-compatibility.md` — reads, PNG capture, read-only preview/deny, status, wrong token `unauthorized`         |
 
-Remaining M7 work: the access-policy modes/selection/confirmation, the Core Job API, an
-external MCP client connection and the full AI build/verify/undo loop. No AI editing is
-claimed yet.
+Remaining M7 work: binding tool calls to the operation history/activity log, the Core Job
+API, an external MCP client connection and the full AI build/verify/undo loop. No AI
+editing through a real external client is claimed yet.

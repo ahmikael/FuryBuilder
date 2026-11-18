@@ -1,5 +1,6 @@
 mod commands;
 mod local_bridge;
+mod mcp_access;
 mod state;
 
 use tauri::Manager;
@@ -65,7 +66,9 @@ pub fn run() {
             commands::structure_export_preview,
             commands::structure_export,
             local_bridge::renderer_ready,
-            local_bridge::set_mcp_writes_enabled,
+            local_bridge::set_mcp_access,
+            local_bridge::mcp_access_status,
+            local_bridge::submit_mcp_confirmation,
             local_bridge::submit_renderer_response
         ])
         .build(tauri::generate_context!())

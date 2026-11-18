@@ -30,9 +30,16 @@ interface ToolbarProps {
   theme: "dark" | "light" | "system";
   onToggleTheme: () => void;
   onOpenSettings: () => void;
+  onOpenMcpAccess: () => void;
 }
 
-export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }: ToolbarProps) {
+export function Toolbar({
+  backendStatus,
+  theme,
+  onToggleTheme,
+  onOpenSettings,
+  onOpenMcpAccess,
+}: ToolbarProps) {
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
   const job = useToolStore((state) => state.job);
@@ -94,19 +101,37 @@ export function Toolbar({ backendStatus, theme, onToggleTheme, onOpenSettings }:
             Project manager — list, create, open, rename and checkpoints. Ctrl+S saves.
           </TooltipContent>
         </Tooltip>
-        {menus.map((menu) => (
-          <Tooltip key={menu}>
-            <TooltipTrigger asChild>
-              <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
-                {menu}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {menu} menus arrive with later milestones. Editing actions live in the viewport
-              toolbar and context menu.
-            </TooltipContent>
-          </Tooltip>
-        ))}
+        {menus.map((menu) =>
+          menu === "AI / MCP" ? (
+            <Tooltip key={menu}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground"
+                  onClick={onOpenMcpAccess}
+                >
+                  {menu}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                MCP access mode, write limits and confirmation. Read-only by default.
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Tooltip key={menu}>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
+                  {menu}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                {menu} menus arrive with later milestones. Editing actions live in the viewport
+                toolbar and context menu.
+              </TooltipContent>
+            </Tooltip>
+          ),
+        )}
       </nav>
 
       <div className="ml-2 flex items-center gap-1">

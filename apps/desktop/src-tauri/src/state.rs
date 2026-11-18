@@ -6,7 +6,8 @@ use project_store::{EditorState, ProjectStore};
 use serde::Serialize;
 use world_application::{AppError, WorldService};
 
-use crate::local_bridge::{McpWriteAccess, RendererBridge};
+use crate::local_bridge::RendererBridge;
+use crate::mcp_access::{McpAccessState, McpConfirmationBridge};
 
 /// Project namespace used by the local editor until a project is opened. The MCP bridge
 /// must supply this identifier explicitly instead of inferring context from a session.
@@ -69,7 +70,8 @@ pub struct AppState {
     pub service: Mutex<WorldService>,
     pub projects: Mutex<ProjectSession>,
     pub renderer: RendererBridge,
-    pub mcp_writes: McpWriteAccess,
+    pub mcp_access: McpAccessState,
+    pub mcp_confirmations: McpConfirmationBridge,
 }
 
 impl AppState {
@@ -78,7 +80,8 @@ impl AppState {
             service: Mutex::new(WorldService::new()),
             projects: Mutex::new(ProjectSession::new(ProjectStore::new(projects_root))),
             renderer: RendererBridge::default(),
-            mcp_writes: McpWriteAccess::default(),
+            mcp_access: McpAccessState::default(),
+            mcp_confirmations: McpConfirmationBridge::default(),
         }
     }
 }

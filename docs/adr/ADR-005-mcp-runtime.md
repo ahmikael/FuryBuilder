@@ -37,12 +37,18 @@ The first transport slice is implemented and exercised against the real Tauri pr
 - `query`/`world_info` require an explicit `project_id` matching the project currently open
   in the editor. The handler calls the same `WorldService` as the UI; writes are gated (see
   below).
-- Preview validates and counts blocks without mutating. Apply and undo require an explicit
-  user grant made through the Tauri-only `set_mcp_writes_enabled` command; the bridge cannot
-  grant itself. Tool writes are recorded as `actor: mcp-bridge`, `source: mcp` in the same
-  history and audit log as UI operations, and `operation_status` reads that audit trail.
-  The grant is a single on/off switch until the access-policy task adds modes, selections
-  and confirmation.
+- Preview validates and counts blocks without mutating and reports whether current access
+  would allow the write. Apply and undo enforce the process-wide access policy, which the
+  bridge cannot change: only the Tauri-only `set_mcp_access` command can select
+  `read_only`, `edit_in_selection` or `full_project` and set block/batch limits. The
+  default is read-only with confirmation enabled. Undo is checked against the exact
+  recorded operation extent and executed with that resolved operation id.
+- With confirmation enabled, apply/undo emit `furybuilder-mcp-confirmation-request` and
+  wait up to 90 seconds for the Tauri-only `submit_mcp_confirmation` command. Denial,
+  timeout or a missing UI fails closed with `permission_denied`; the policy is re-checked
+  after approval. Tool writes are recorded as `actor: mcp-bridge`, `source: mcp` in the
+  same history and audit log as UI operations, and `operation_status` reads that audit
+  trail.
 - Camera and capture requests go from the Tauri process to the mounted viewport over a local
   event and come back through `submit_renderer_response`. `ping.renderer.listening` reports
   readiness. The endpoint validates the response size and PNG format, refuses a different
@@ -51,8 +57,11 @@ The first transport slice is implemented and exercised against the real Tauri pr
 - `mcp/bridge` reads the discovery file, connects over the local socket, and reports a
   non-failing `desktop` status in `bridge_info`. It never opens project or world files.
 - Verified with a real `tauri dev` process: authorized `ping`, `world_info`, `get_camera` and
-  `capture_viewport` succeeded (a valid 492714-byte PNG), and a wrong token returned
-  `unauthorized` without leaking the secret.
+  `capture_viewport` succeeded (a valid 492714-byte PNG); `ping` reported `read_only` access
+  with confirmation enabled; preview reported `access.allowed=false`; apply returned
+  `permission_denied` with `mcpAccessMode=read_only`; and a wrong token returned
+  `unauthorized` without leaking the secret. The approval dialog itself is covered by Rust
+  and frontend tests rather than an automated click in the real window.
 - Unix domain sockets are not exercised yet; Windows is the first target. The discovery
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.

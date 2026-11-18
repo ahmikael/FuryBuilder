@@ -45,10 +45,22 @@ impl BlockBox {
         Self { min: pos, max: pos }
     }
 
+    /// Volume of the box, or `u64::MAX` if the true volume would overflow. Callers that
+    /// enforce limits should treat the saturated value as "too large" rather than panic.
     pub fn volume(&self) -> u64 {
-        (self.max.x - self.min.x + 1) as u64
-            * (self.max.y - self.min.y + 1) as u64
-            * (self.max.z - self.min.z + 1) as u64
+        self.checked_volume().unwrap_or(u64::MAX)
+    }
+
+    /// Exact volume, or `None` when the per-axis sizes overflow `u64`. This is the
+    /// fail-closed form used by access policies and limit checks.
+    pub fn checked_volume(&self) -> Option<u64> {
+        let x = i64::from(self.max.x) - i64::from(self.min.x) + 1;
+        let y = i64::from(self.max.y) - i64::from(self.min.y) + 1;
+        let z = i64::from(self.max.z) - i64::from(self.min.z) + 1;
+        u64::try_from(x)
+            .ok()?
+            .checked_mul(u64::try_from(y).ok()?)?
+            .checked_mul(u64::try_from(z).ok()?)
     }
 
     pub fn size(&self) -> [u32; 3] {
@@ -77,6 +89,22 @@ impl BlockBox {
             && pos.y <= self.max.y
             && pos.z >= self.min.z
             && pos.z <= self.max.z
+    }
+
+    /// Smallest box containing both inputs.
+    pub fn union(&self, other: &Self) -> Self {
+        Self {
+            min: BlockPos::new(
+                self.min.x.min(other.min.x),
+                self.min.y.min(other.min.y),
+                self.min.z.min(other.min.z),
+            ),
+            max: BlockPos::new(
+                self.max.x.max(other.max.x),
+                self.max.y.max(other.max.y),
+                self.max.z.max(other.max.z),
+            ),
+        }
     }
 
     pub fn intersects(&self, other: &Self) -> bool {
@@ -181,5 +209,21 @@ mod tests {
         );
         assert!(a.limit(100).is_err());
         assert!(a.limit(11 * 11 * 11).is_ok());
+        let union =
+            a.union(&BlockBox::new(BlockPos::new(-2, 3, 4), BlockPos::new(6, 12, 20)).unwrap());
+        assert_eq!(union.min, BlockPos::new(-2, 0, 0));
+        assert_eq!(union.max, BlockPos::new(10, 12, 20));
+    }
+
+    #[test]
+    fn oversized_boxes_saturate_instead_of_overflowing() {
+        let huge = BlockBox::new(
+            BlockPos::new(i32::MIN, i32::MIN, i32::MIN),
+            BlockPos::new(i32::MAX, i32::MAX, i32::MAX),
+        )
+        .unwrap();
+        assert_eq!(huge.checked_volume(), None);
+        assert_eq!(huge.volume(), u64::MAX);
+        assert!(huge.limit(1_000_000).is_err());
     }
 }

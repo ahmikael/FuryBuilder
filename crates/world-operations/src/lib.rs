@@ -117,6 +117,25 @@ impl Operation {
         }
     }
 
+    /// Exact inclusive extent of the operation, or `None` for an empty batch. Access
+    /// policies use this to keep an undo inside the same region as the original edit.
+    pub fn bounds(&self) -> Option<BlockBox> {
+        match self {
+            Operation::SetBlock { pos, .. } => Some(BlockBox::single(*pos)),
+            Operation::Batch { changes, .. } => {
+                let first = changes.first()?;
+                let mut bounds = BlockBox::single(first.pos);
+                for change in &changes[1..] {
+                    bounds = bounds.union(&BlockBox::single(change.pos));
+                }
+                Some(bounds)
+            }
+            Operation::FillCuboid { bounds, .. } | Operation::Replace { bounds, .. } => {
+                Some(*bounds)
+            }
+        }
+    }
+
     pub fn exceeds_limit(&self) -> Option<OperationError> {
         let requested = self.affected_blocks();
         (requested > MAX_OPERATION_BLOCKS).then_some(OperationError::TooManyBlocks {
@@ -403,6 +422,45 @@ mod tests {
             )
             .unwrap();
         world
+    }
+
+    #[test]
+    fn operation_bounds_cover_sparse_batches_and_single_blocks() {
+        let single = Operation::SetBlock {
+            dimension: "minecraft:overworld".into(),
+            pos: BlockPos::new(4, 64, -2),
+            state: state("minecraft:stone"),
+        };
+        assert_eq!(
+            single.bounds(),
+            Some(BlockBox::single(BlockPos::new(4, 64, -2)))
+        );
+
+        let batch = Operation::Batch {
+            dimension: "minecraft:overworld".into(),
+            changes: vec![
+                BlockChange {
+                    pos: BlockPos::new(-1, 60, 7),
+                    state: state("minecraft:stone"),
+                },
+                BlockChange {
+                    pos: BlockPos::new(5, 72, -3),
+                    state: state("minecraft:glass"),
+                },
+            ],
+        };
+        assert_eq!(
+            batch.bounds(),
+            Some(BlockBox::new(BlockPos::new(-1, 60, -3), BlockPos::new(5, 72, 7)).unwrap())
+        );
+        assert_eq!(
+            Operation::Batch {
+                dimension: "minecraft:overworld".into(),
+                changes: Vec::new(),
+            }
+            .bounds(),
+            None
+        );
     }
 
     #[test]

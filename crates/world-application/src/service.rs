@@ -2,13 +2,13 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde_json::json;
 use uuid::Uuid;
-use world_domain::{BlockRegistry, ChunkPos, World, WorldInfo};
+use world_domain::{BlockBox, BlockRegistry, ChunkPos, World, WorldInfo};
 use world_operations::{self as operations, BlockChange, Operation, SectionDiff};
 
 use crate::dto::{
     Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
     HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
-    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot,
+    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot, UndoTarget,
 };
 use crate::error::{AppError, ErrorCode};
 
@@ -32,6 +32,9 @@ struct HistoryEntry {
     changed_blocks: u64,
     parameter_summary: serde_json::Value,
     linked_object_id: Option<String>,
+    /// Dimension and exact operation extent, kept so an access policy can bound undo
+    /// without exposing section payloads.
+    extent: Option<(String, BlockBox)>,
     diffs: Vec<SectionDiff>,
 }
 
@@ -408,6 +411,10 @@ impl WorldService {
         self.validate_target_states(&request.operation)?;
         let timestamp_ms = now_ms()?;
         let revision_before = self.world.revision();
+        let extent = request
+            .operation
+            .bounds()
+            .map(|bounds| (request.operation.dimension().to_owned(), bounds));
         let applied = operations::apply(&mut self.world, &request.operation)?;
         let revision_after = if applied.changed_blocks > 0 {
             self.world.bump_revision()
@@ -436,6 +443,7 @@ impl WorldService {
                 changed_blocks: applied.changed_blocks,
                 parameter_summary: summarize_operation(&request.operation),
                 linked_object_id: request.linked_object_id.clone(),
+                extent,
                 diffs: applied.diffs,
             });
             if self.history.len() > self.max_history {
@@ -479,25 +487,7 @@ impl WorldService {
                 "writes are disabled for this project",
             ));
         }
-        let index = match operation_id {
-            Some(id) => self
-                .history
-                .iter()
-                .rposition(|entry| entry.operation_id == id)
-                .ok_or_else(|| {
-                    AppError::new(ErrorCode::NoHistory, format!("unknown operation `{id}`"))
-                })?,
-            None => self.history.len().checked_sub(1).ok_or_else(|| {
-                AppError::new(ErrorCode::NoHistory, "there is no operation to undo")
-            })?,
-        };
-        if index + 1 != self.history.len() {
-            return Err(AppError::new(
-                ErrorCode::Conflict,
-                "cannot undo an operation that is not the latest; newer operations exist",
-            ));
-        }
-
+        self.undo_index(operation_id)?;
         let entry = self.history.pop().expect("index checked");
         for diff in entry.diffs.iter().rev() {
             diff.revert(&mut self.world)?;
@@ -535,6 +525,45 @@ impl WorldService {
         };
         self.redo.push(entry);
         Ok(result)
+    }
+
+    /// Resolves the operation that `undo` would affect without mutating anything.
+    /// The MCP access policy uses this to keep an undo inside the same region as the
+    /// original edit; `undo` itself repeats the latest-operation check.
+    pub fn undo_target(&self, operation_id: Option<&str>) -> Result<UndoTarget, AppError> {
+        let index = self.undo_index(operation_id)?;
+        let entry = &self.history[index];
+        let (dimension, bounds) = entry
+            .extent
+            .clone()
+            .ok_or_else(|| AppError::internal("history entry has no recorded operation extent"))?;
+        Ok(UndoTarget {
+            operation_id: entry.operation_id.clone(),
+            dimension,
+            bounds,
+        })
+    }
+
+    fn undo_index(&self, operation_id: Option<&str>) -> Result<usize, AppError> {
+        let index = match operation_id {
+            Some(id) => self
+                .history
+                .iter()
+                .rposition(|entry| entry.operation_id == id)
+                .ok_or_else(|| {
+                    AppError::new(ErrorCode::NoHistory, format!("unknown operation `{id}`"))
+                })?,
+            None => self.history.len().checked_sub(1).ok_or_else(|| {
+                AppError::new(ErrorCode::NoHistory, "there is no operation to undo")
+            })?,
+        };
+        if index + 1 != self.history.len() {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                "cannot undo an operation that is not the latest; newer operations exist",
+            ));
+        }
+        Ok(index)
     }
 
     pub fn redo(&mut self, project_id: &str, actor: Actor) -> Result<OperationResult, AppError> {
