@@ -1,13 +1,16 @@
 # Minecraft Java version and world-layout risks
 
-Status: M0 risk register. Target 1.21.4 / DataVersion 4189.
+Status: updated by the M8 inventory on 2026-11-18. Target 1.21.4 / DataVersion 4189.
+The full layout map is in [`java-world-layouts.md`](java-world-layouts.md).
 
 ## Known risk areas
 
 1. **World directory layout changed across releases.** Older versions stored dimensions
    under `DIM-1/`, `DIM1/`; newer versions use `dimensions/<namespace>/<dimension>/`.
-   Never assume one layout. The importer detects layout from `level.dat` + directory
-   probes and records which layout was found.
+   From **26.1 Snapshot 6** (data version 4774), even the Overworld moved to
+   `dimensions/minecraft/overworld/` and the root `region/` folder is gone. Never assume
+   one layout. The importer detects layout from `level.dat` + directory probes and records
+   which layout was found.
 2. **`DataVersion` is not a compatibility guarantee.** Two saves with the same version
    can carry different mod/custom fields. Unknown fields are passthrough or the write is
    refused.
@@ -28,11 +31,20 @@ Status: M0 risk register. Target 1.21.4 / DataVersion 4189.
 9. **level.dat** carries `DataVersion` twice (root `Data.DataVersion`, `Data.Version.Id`);
    both must agree or the import is flagged.
 10. **Snapshots/newer versions** (1.21.5+, 26.x) may change formats. They are read-only
-    candidates until a dedicated adapter and fixtures exist.
+    candidates until a dedicated adapter and fixtures exist. 26.1+ uses the split layout;
+    26.3 requires Java 25, not the Java 21 used by 1.21.4.
+11. **26.1 split more than the dimension folders.** `level.dat` lost world generation,
+    game rules, weather and several other fields to namespaced files under
+    `data/<namespace>/`; player storage moved under `players/`; the world resource pack
+    moved under `resourcepacks/`. A 26.1+ importer must read those new locations or refuse
+    the world instead of opening an apparently empty Overworld.
 
 ## Mitigation
 
 - Versioned adapters + compatibility matrix (`docs/formats/format-matrix.md`).
+- Explicit layout inventory and read-only probe:
+  [`java-world-layouts.md`](java-world-layouts.md) and
+  `scripts/inspect_world_layout.py`; both version values in `level.dat` must agree.
 - Fail-closed writes for unverified combinations.
 - Immutable source + overlay; export always to a new copy.
 - Golden fixtures for negative coordinates, chunk borders, unknown tags and malformed data.

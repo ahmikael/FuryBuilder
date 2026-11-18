@@ -31,3 +31,7 @@ Thumbs.db
 # Test output
 test-results/
 playwright-report/
+
+# Python helpers
+__pycache__/
+*.pyc

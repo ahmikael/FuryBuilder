@@ -16,14 +16,14 @@ The first target for implementation is **Minecraft Java Edition 1.21.4**. The
 `DataVersion` has been checked against an external, real region file, but this
 does **not** yet establish write compatibility with the game.
 
-| Property | Value |
-|---|---|
-| Release date | 2024-12-03 |
-| `DataVersion` | **4189** |
-| Protocol version | 769 |
-| Required Java | Java SE 21 |
-| Resource pack format | 46 |
-| Data pack format | 61 |
+| Property             | Value      |
+| -------------------- | ---------- |
+| Release date         | 2024-12-03 |
+| `DataVersion`        | **4189**   |
+| Protocol version     | 769        |
+| Required Java        | Java SE 21 |
+| Resource pack format | 46         |
+| Data pack format     | 61         |
 
 The published 1.21.4 region fixture from PrismarineJS has `DataVersion = 4189`
 in all 341 allocated chunks. Its source, hashes, limitations and reproducible
@@ -33,9 +33,9 @@ The fixture's contributor reports that it was created by the official server;
 that provenance has not been independently verified by FuryBuilder. The
 Minecraft Wiki version table independently identifies 4189 as Java 1.21.4.
 
-- Reading data with a *newer* `DataVersion` is **not** silently accepted: the importer
+- Reading data with a _newer_ `DataVersion` is **not** silently accepted: the importer
   reports a version mismatch and opens read-only or refuses the write path.
-- Reading a *known older* version is allowed only through an explicit, tested adapter.
+- Reading a _known older_ version is allowed only through an explicit, tested adapter.
   No automatic upgrade is promised until a migration is implemented and verified.
 - The target constants live in `world-domain` and are surfaced by `world_info`.
 - Adding a version requires: real reference save, format notes, golden fixtures, and an
@@ -49,5 +49,9 @@ Minecraft Wiki version table independently identifies 4189 as Java 1.21.4.
 - Export reports always state the target version and `DataVersion`.
 - Newer versions (1.21.5+, 26.x) are not verified write targets. Read-only
   support must not be claimed until an appropriate importer is implemented.
+  26.1+ also changed the world folder layout (all dimensions under
+  `dimensions/`, namespaced data, player storage under `players/`) and 26.3
+  requires Java 25. The observed layouts and release DataVersions are recorded
+  in [`docs/formats/java-world-layouts.md`](../formats/java-world-layouts.md).
 - A `DataVersion` match does not prove block-state, structure or full-world
   compatibility; those require separate format and game/editor tests.

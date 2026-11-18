@@ -1,0 +1,25 @@
+﻿Minecraft Java 26.3 official server jar metadata
+Checked: 2026-11-18
+Source: https://piston-meta.mojang.com/v1/packages/ead839cbccf0ddf013c3f935f2840080b5cb0d26/26.3.json
+server.url SHA-1: 33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c
+Downloaded SHA-1: 33680f5f2ac32864d6d7cf5e56a705fdb3e05f4c
+Size: 62294556
+version.json:
+{
+    "id": "26.3",
+    "name": "26.3",
+    "world_version": 5023,
+    "series_id": "main",
+    "protocol_version": 777,
+    "pack_version": {
+        "resource_major": 97,
+        "resource_minor": 1,
+        "data_major": 121,
+        "data_minor": 0
+    },
+    "build_time": "2026-09-15T11:20:48+00:00",
+    "java_component": "java-runtime-epsilon",
+    "java_version": 25,
+    "stable": true,
+    "use_editor": false
+}

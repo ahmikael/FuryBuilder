@@ -1,0 +1,90 @@
+﻿{
+  "tool": {
+    "name": "furybuilder-world-layout-inspector",
+    "version": 1
+  },
+  "inspectedAt": "2026-11-18T15:06:49.209882+00:00",
+  "worldFolder": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+  "layout": "classic_anvil",
+  "layoutConsistency": "consistent",
+  "dataVersion": 4189,
+  "version": {
+    "id": 4189,
+    "name": "1.21.4",
+    "snapshot": false
+  },
+  "dataVersionAgrees": true,
+  "levelName": "world",
+  "versionHistory": null,
+  "dimensions": [
+    {
+      "id": "minecraft:overworld",
+      "folder": ".",
+      "region": {
+        "present": true,
+        "files": 4,
+        "bytes": 3477504,
+        "legacyFiles": 0,
+        "legacyBytes": 0
+      },
+      "entities": true,
+      "poi": true,
+      "data": true
+    },
+    {
+      "id": "minecraft:the_end",
+      "folder": "DIM1",
+      "region": {
+        "present": false,
+        "files": 0,
+        "bytes": 0,
+        "legacyFiles": 0,
+        "legacyBytes": 0
+      },
+      "entities": false,
+      "poi": false,
+      "data": true
+    },
+    {
+      "id": "minecraft:the_nether",
+      "folder": "DIM-1",
+      "region": {
+        "present": false,
+        "files": 0,
+        "bytes": 0,
+        "legacyFiles": 0,
+        "legacyBytes": 0
+      },
+      "entities": false,
+      "poi": false,
+      "data": true
+    }
+  ],
+  "markers": {
+    "rootRegion": true,
+    "rootMcaRegion": true,
+    "rootMcrRegion": false,
+    "rootEntities": true,
+    "rootPoi": true,
+    "netherDimFolder": true,
+    "endDimFolder": true,
+    "modernOverworldRegion": false,
+    "worldGenSettingsFile": false,
+    "playersDirectory": false,
+    "rootPlayerdata": true,
+    "rootStats": false,
+    "rootAdvancements": false,
+    "rootResourcesZip": false,
+    "resourcepacksZip": false,
+    "unrecognizedTopLevel": []
+  },
+  "compatibility": {
+    "targetDataVersion": 4189,
+    "targetVersion": "1.21.4",
+    "targetMatch": true,
+    "readImplemented": false,
+    "writeVerified": false
+  },
+  "issues": [],
+  "readOnly": true
+}

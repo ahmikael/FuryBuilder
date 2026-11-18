@@ -51,6 +51,20 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 - Verify MCP with at least one real external client (OpenCode).
 - Long-session memory/FPS run recorded in `docs/testing/perf-runs.md` once available.
 
+## M8 world inventory
+
+| Requirement                                       | Automated / recorded evidence                                                                                                                                                                               |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Distinguish classic and 26.1+ split world folders | `scripts/inspect_world_layout.py`; `scripts/test_inspect_world_layout.py` (classic, split, legacy `.mcr`, mixed markers, unknown folders)                                                                   |
+| Both `level.dat` versions agree                   | Inspector reads `Data.DataVersion` and `Data.Version.Id`; a synthetic disagreement is flagged; malformed gzip/NBT, trailing bytes, duplicate tags and symlinked `level.dat` are refused                     |
+| Real 1.21.4 classic world                         | `docs/testing/evidence/2026-11-18-world-layout-1.21.4.json` — official server world, revision 4189, 4 Overworld region files, `targetMatch: true`                                                           |
+| Real 26.3 split world                             | `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — official server world, revision 5023, all dimensions under `dimensions/minecraft/`, `version_history: [5023]`, `targetMatch: false`             |
+| Current release metadata and DataVersion          | `docs/testing/evidence/2026-11-18-world-layout-26.3-server-version.txt` — official server SHA-1, `world_version: 5023`, Java 25, protocol 777; release/layout table in `docs/formats/java-world-layouts.md` |
+
+The inventory is deliberately read-only: no region file is decoded and no world is
+modified. `python -m unittest discover -s scripts -p "test_inspect_world_layout.py" -v`
+runs the unit tests.
+
 ## Implemented coverage (M3)
 
 | Matrix row                | Automated evidence                                                                                     |

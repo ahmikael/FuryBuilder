@@ -66,6 +66,8 @@ milestone is complete.
 
 - `docs/mcp-setup.md` — connect an MCP client, access modes, common errors and how to
   turn access off.
+- `docs/formats/java-world-layouts.md` — observed Java world layouts, release
+  `DataVersion`s and the supported-version matrix.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
 - `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
 - `docs/adr/` — architecture decision records (format, MCP runtime, versions).
