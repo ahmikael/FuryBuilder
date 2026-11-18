@@ -15,6 +15,7 @@ pub mod java_structure;
 pub mod nbt;
 pub mod overlay;
 pub mod passthrough;
+pub mod region_write;
 pub mod structure;
 pub mod world_import;
 
@@ -48,6 +49,11 @@ pub use passthrough::{
     passthrough_java_world, passthrough_java_world_with_options, CopiedFile, PassthroughError,
     PassthroughOptions, PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES,
     MAX_PASSTHROUGH_FILE_BYTES, MAX_PASSTHROUGH_TOTAL_BYTES,
+};
+pub use region_write::{
+    write_region_from_overlay, write_verified_region, RegionWriteError, RegionWriteReport,
+    VerifiedChunkReplacement, VerifiedWriteSupport, VERIFIED_WRITE_DATA_VERSION,
+    VERIFIED_WRITE_FIELDS, VERIFIED_WRITE_LAYOUT, VERIFIED_WRITE_SUPPORT, VERIFIED_WRITE_VERSION,
 };
 pub use structure::{
     Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,

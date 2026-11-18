@@ -62,7 +62,10 @@ materialises a patched chunk NBT while preserving unknown tags, biomes, block
 entities and entities; the source stays byte-identical. The `Import World` wizard
 finally analyzes a selected world read-only, reports blockers and limitations, and
 creates a project with a byte-for-byte immutable source copy plus an editable block
-snapshot. Export of a new world copy is next. The first interchange format,
+snapshot. A verified writer now publishes a new region file for classic 1.21.4
+when only `sections[].block_states` changes; untouched chunk records stay
+byte-identical and the source hash is rechecked. Full world-folder export is next.
+The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
 1.21.4 server load. Block states and orientations are preserved; entities and
@@ -103,6 +106,8 @@ guarantee that its whole milestone is complete.
 - Import of full Java world saves is read-only. M8 implements version/layout
   validation, region/NBT reading, block states and biomes, a byte-preserving copy
   of unchanged worlds, an in-memory block-edit overlay with a versioned JSON
-  document and verified chunk NBT materialization, and the `Import World` wizard
-  with an immutable source copy. Region-file writing and export of modified worlds
-  are not available yet, and the source world is never written.
+  document and verified chunk NBT materialization, the `Import World` wizard
+  with an immutable source copy, and a verified writer for a new region file
+  limited to classic 1.21.4 `sections[].block_states`. Export of a complete
+  modified world folder is not available yet, and the source world is never
+  written.

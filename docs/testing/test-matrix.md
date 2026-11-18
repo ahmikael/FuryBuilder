@@ -78,6 +78,9 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Overlay document round-trip and tamper refusal    | `crates/world-io/tests/overlay.rs` — schema/DataVersion, section Y, palette, bits, hex words, duplicate chunks and missing chunks are refused                                                                                                                                  |
 | Wide palette non-spanning encoding                | `crates/world-io/tests/overlay.rs` — 40 block states, 6-bit non-spanning data, re-decoded blocks match and the long-array length is exact                                                                                                                                      |
 | Real 1.21.4 overlay edit                          | `docs/testing/evidence/2026-11-18-anvil-overlay-1.21.4.json` — grass block became gold block in chunk (-1, -1), one section dirty, biome preserved, 16,671-byte patched NBT re-decoded, all 21 source files unchanged                                                          |
+| Verified region write scope                       | `crates/world-io/src/region_write.rs`; `crates/world-io/tests/region_write.rs` — only 1.21.4 classic `sections[].block_states`; biomes, status, entities, DataVersion and identical replacements are refused; non-full chunks cannot be edited                                 |
+| Verified region write safety                      | `crates/world-io/tests/region_write.rs` — existing destination, source path/source region directory and wrong region filename are refused; source SHA-256 is rechecked; output is reopened and every untouched record is compared byte for byte                                |
+| Real 1.21.4 verified region write                 | `docs/testing/evidence/2026-11-18-region-write-1.21.4.json` — 196 chunks, 1 replaced, 195 untouched records byte-identical with unchanged timestamps; output 811,008 bytes re-decoded to gold block with plains biome; all 21 source files unchanged                           |
 | Import World analysis and limits                  | `crates/world-io/src/world_import.rs`; `crates/world-io/tests/world_import.rs` — supported world counts, blockers for 26.1+ split and non-4189 versions, source immutability, chunk/section/block limits, empty world                                                          |
 | Import World project and source copy              | `crates/project-store/src/store.rs`; `crates/project-store/tests/source_overlay.rs` — `create_imported`, immutable tree manifest, traversal/missing-file refusal, generic creator still refuses `import`                                                                       |
 | Import World wizard UI                            | `apps/desktop/src/features/project/ProjectManager.tsx`; `ProjectManager.test.tsx` — folder input, Analyze, supported metrics, blockers disable import, `project_import_world` called with the selected folder                                                                  |
@@ -87,16 +90,19 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 The Python inventory script is deliberately metadata-only: it does not decode chunks.
 `crates/world-io/src/anvil.rs` and `crates/world-io/src/java_chunk.rs` are the read-only
 decoder; `crates/world-io/src/passthrough.rs` is the byte-preserving copy,
-`crates/world-io/src/overlay.rs` is the in-memory edit overlay and
+`crates/world-io/src/overlay.rs` is the in-memory edit overlay,
+`crates/world-io/src/region_write.rs` writes verified new region files and
 `crates/world-io/src/world_import.rs` is the analysis/editable-import layer used by the
 `Import World` wizard. None of them writes in place. `cargo test -p furybuilder-world-io`
-runs the anvil, java_chunk, passthrough, overlay and world_import suites, and
+runs the anvil, java_chunk, passthrough, overlay, region_write and world_import suites, and
 `cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --decode`
 reproduces the real-world read evidence without modifying the world.
 `cargo run -p furybuilder-world-io --example passthrough_world -- <source> <destination>`
 reproduces the copy evidence.
 `cargo run -p furybuilder-world-io --example overlay_probe -- <source> <dimension> <x> <y> <z> <state>`
 reproduces the overlay evidence.
+`cargo run -p furybuilder-world-io --example region_write_probe -- <source> <new-region-file> <dimension> <x> <y> <z> <state>`
+reproduces the verified region write evidence without modifying the source world.
 `cargo run -p furybuilder-desktop --example import_world_probe -- <source> <empty-project-root> "Imported Flat"`
 reproduces the Import World evidence, and `--analysis-only` prints an analysis report.
 

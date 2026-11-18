@@ -963,7 +963,10 @@ fn block_bits(palette_len: usize) -> u8 {
     bits.max(4)
 }
 
-fn verify_preserved_fields(source: &NbtFile, patched: &NbtFile) -> Result<(), OverlayError> {
+pub(crate) fn verify_preserved_fields(
+    source: &NbtFile,
+    patched: &NbtFile,
+) -> Result<(), OverlayError> {
     if source.root_name != patched.root_name {
         return Err(OverlayError::VerificationFailed(
             "root name changed while editing blocks".to_owned(),
@@ -996,6 +999,11 @@ fn verify_preserved_fields(source: &NbtFile, patched: &NbtFile) -> Result<(), Ov
     if source_sections.keys().collect::<Vec<_>>() != patched_sections.keys().collect::<Vec<_>>() {
         return Err(OverlayError::VerificationFailed(
             "section list changed while editing blocks".to_owned(),
+        ));
+    }
+    if section_order(source_root)? != section_order(patched_root)? {
+        return Err(OverlayError::VerificationFailed(
+            "section order changed while editing blocks".to_owned(),
         ));
     }
     for (y, source_section) in source_sections {
@@ -1048,6 +1056,30 @@ fn section_compounds(
         }
     }
     Ok(sections)
+}
+
+fn section_order(root: &BTreeMap<String, NbtValue>) -> Result<Vec<i32>, OverlayError> {
+    let value = root
+        .get("sections")
+        .ok_or_else(|| OverlayError::VerificationFailed("missing sections list".to_owned()))?;
+    let (_, items) = value
+        .as_list()
+        .ok_or_else(|| OverlayError::VerificationFailed("sections is not a list".to_owned()))?;
+    let mut order = Vec::with_capacity(items.len());
+    for item in items {
+        let compound = item.as_compound().ok_or_else(|| {
+            OverlayError::VerificationFailed("section is not a compound".to_owned())
+        })?;
+        match compound.get("Y") {
+            Some(NbtValue::Byte(value)) => order.push(*value as i32),
+            _ => {
+                return Err(OverlayError::VerificationFailed(
+                    "section has no byte Y".to_owned(),
+                ))
+            }
+        }
+    }
+    Ok(order)
 }
 
 /// Serialized overlay document. Packed words are lowercase hexadecimal strings.

@@ -373,7 +373,7 @@ impl ChunkCompression {
         }
     }
 
-    fn from_id(id: u8) -> Result<Self, AnvilError> {
+    pub(crate) fn from_id(id: u8) -> Result<Self, AnvilError> {
         match id {
             1 => Ok(ChunkCompression::Gzip),
             2 => Ok(ChunkCompression::Zlib),
