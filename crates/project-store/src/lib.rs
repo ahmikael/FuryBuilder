@@ -24,8 +24,8 @@ pub mod store;
 pub use error::ProjectError;
 pub use manifest::{
     CreationMode, EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary,
-    RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, PROJECT_EXTENSION, PROJECT_FILE,
-    PROJECT_SCHEMA_VERSION,
+    RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaDatapack,
+    VanillaProvenance, PROJECT_EXTENSION, PROJECT_FILE, PROJECT_SCHEMA_VERSION,
 };
 pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION};
 pub use source::{SourceFile, SourceManifest};

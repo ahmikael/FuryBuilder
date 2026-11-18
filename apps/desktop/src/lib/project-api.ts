@@ -77,3 +77,16 @@ export function importJavaWorld(
     editorState,
   });
 }
+
+/** Imports a completed official-server generation run as an immutable-source project. */
+export function importGeneratedWorld(
+  name: string,
+  runId: string,
+  editorState: EditorState,
+): Promise<OpenedProjectPayload> {
+  return invokeCommand<OpenedProjectPayload>("project_import_generated_world", {
+    name,
+    runId,
+    editorState,
+  });
+}

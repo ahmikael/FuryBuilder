@@ -214,6 +214,39 @@ async function clickTabByText(text) {
   })()`);
 }
 
+async function hashTree(rootPath) {
+  const files = [];
+  async function walk(current, prefix) {
+    const entries = await readdir(current, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name === "session.lock") continue;
+      const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+      const full = join(current, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full, relativePath);
+      } else if (entry.isFile()) {
+        files.push({
+          relativePath,
+          sha256: createHash("sha256")
+            .update(await readFile(full))
+            .digest("hex"),
+        });
+      } else {
+        throw new Error(`unexpected file type in generated world: ${full}`);
+      }
+    }
+  }
+  await walk(rootPath, "");
+  files.sort((left, right) =>
+    left.relativePath.localeCompare(right.relativePath),
+  );
+  return files;
+}
+
+function treeDigest(files) {
+  return createHash("sha256").update(JSON.stringify(files)).digest("hex");
+}
+
 async function runSummary(runDir) {
   const report = await readJson(join(runDir, "report.json"));
   const properties = await readFile(join(runDir, "server.properties"), "utf8");
@@ -522,6 +555,82 @@ try {
   const screenshot = Buffer.from(capture.data, "base64");
   await writeFile(screenshotPath, screenshot, { flag: "wx" });
 
+  const generatedTreeBefore = await hashTree(first.report.worldDir);
+  const openEnabled = await waitFor(
+    "!document.querySelector('button[aria-label=\"Open generated world as a project\"]')?.disabled",
+    30_000,
+  );
+  if (!openEnabled) {
+    throw new Error("the generated world could not be opened as a project");
+  }
+  const openClicked = await clickByAriaLabel(
+    "Open generated world as a project",
+  );
+  if (!openClicked) {
+    throw new Error("Open as project button could not be clicked");
+  }
+  const importedList = await waitForInvoke(async () => {
+    const list = await invoke("project_list");
+    return list.projects.length === 1 ? list : null;
+  }, 120_000);
+  if (!importedList) throw new Error("the generated world was not imported");
+  const projectSummary = importedList.projects[0];
+  const projectDir = join(appData, "projects", projectSummary.folder);
+  const projectManifest = await readJson(join(projectDir, "project.json"));
+  const importedInfo = await invoke("world_info");
+  const session = await invoke("project_status");
+  const sourceTree = await hashTree(join(projectDir, "source", "world"));
+  const generatedTreeAfter = await hashTree(first.report.worldDir);
+  const generatedTreePreserved =
+    JSON.stringify(sourceTree) === JSON.stringify(generatedTreeBefore);
+  const generatedWorldUnchanged =
+    JSON.stringify(generatedTreeAfter) === JSON.stringify(generatedTreeBefore);
+  const provenance = projectManifest.vanilla;
+  const provenanceStored =
+    Boolean(provenance) &&
+    provenance.seed === first.report.seed &&
+    provenance.preset === first.report.preset &&
+    provenance.centerX === first.report.centerX &&
+    provenance.centerZ === first.report.centerZ &&
+    provenance.radiusChunks === first.report.radiusChunks &&
+    provenance.generateStructures === first.report.generateStructures &&
+    provenance.datapacks.length === 0 &&
+    provenance.minecraftVersion === "1.21.4" &&
+    provenance.dataVersion === 4189 &&
+    provenance.serverJarSha1 === first.report.serverSha1 &&
+    provenance.runId === firstRunId &&
+    provenance.chunks === first.report.snapshot.generatedChunks &&
+    provenance.regionFiles === first.report.snapshot.regionFiles;
+  const importedAsVanilla =
+    projectManifest.creationMode === "vanilla" &&
+    projectManifest.source?.kind === "generated" &&
+    projectManifest.source?.immutable === true &&
+    projectManifest.source?.reference === "world" &&
+    session.folder === projectSummary.folder &&
+    session.name === projectSummary.name;
+  if (!provenanceStored) {
+    throw new Error(
+      `vanilla provenance was not stored: ${JSON.stringify(provenance)}`,
+    );
+  }
+  if (!generatedTreePreserved) {
+    throw new Error(
+      "the project source copy does not match the generated world",
+    );
+  }
+  if (!generatedWorldUnchanged) {
+    throw new Error("importing changed the generated run world");
+  }
+  if (
+    !importedAsVanilla ||
+    importedInfo.chunkCount === 0 ||
+    importedInfo.blockCount === 0
+  ) {
+    throw new Error(
+      `the imported project is not an editable vanilla world: ${JSON.stringify({ projectManifest, importedInfo, session })}`,
+    );
+  }
+
   const inspected = await invoke("server_inspect_datapacks", {
     paths: [datapackPath],
   });
@@ -601,9 +710,10 @@ try {
     .digest("hex");
   const settings = await readJson(join(appData, "server.json"));
   const evidence = {
-    tool: { name: "furybuilder-vanilla-wizard-ui", version: 1 },
+    tool: { name: "furybuilder-vanilla-wizard-ui", version: 2 },
     generatedAt: new Date().toISOString(),
-    target: "Minecraft Java 1.21.4 / Vanilla World wizard",
+    target:
+      "Minecraft Java 1.21.4 / Vanilla World wizard and World Core import",
     executableSha256,
     isolatedAppData: appData,
     java: {
@@ -647,6 +757,23 @@ try {
       regionFiles: first.regionFiles,
       eulaFile: first.eula,
       properties: first.properties,
+    },
+    importedProject: {
+      summary: projectSummary,
+      creationMode: projectManifest.creationMode,
+      source: projectManifest.source,
+      vanilla: provenance ?? null,
+      worldFile: projectManifest.worldFile,
+      worldChecksum: projectManifest.worldChecksum,
+      worldBytes: projectManifest.worldBytes,
+      worldInfo: importedInfo,
+      session,
+      sourceFiles: sourceTree.length,
+      sourceTreeDigest: treeDigest(sourceTree),
+      generatedTreeDigest: treeDigest(generatedTreeBefore),
+      generatedTreeAfterDigest: treeDigest(generatedTreeAfter),
+      generatedTreePreserved,
+      generatedWorldUnchanged,
     },
     datapackRun: {
       inspection: inspected[0],
@@ -705,6 +832,12 @@ try {
       processTreeGuarded:
         first.report.processTreeGuarded === true &&
         second.report.processTreeGuarded === true,
+      worldImportedAsVanillaProject: importedAsVanilla,
+      vanillaProvenanceStored: provenanceStored,
+      generatedWorldSourcePreserved: generatedTreePreserved,
+      generatedWorldUnchanged: generatedWorldUnchanged,
+      importedWorldNonEmpty:
+        importedInfo.chunkCount > 0 && importedInfo.blockCount > 0,
       externalJavaUnchanged: javaSha256Before === javaSha256After,
       screenshotCaptured: screenshot.length > 10_000,
       noConsoleErrors: consoleErrors.length === 0,
@@ -712,7 +845,8 @@ try {
     limitations: [
       "the official 1.21.4 server.jar is the previously verified file; this smoke does not re-download it",
       "the data pack is a small local validation fixture, not a third-party pack",
-      "the generated worlds stay in isolated run directories; importing them into the Rust World Core is M9.7",
+      "only a completed run can be imported; incomplete runs stay in the run inventory until a new run is generated",
+      "the imported project keeps a byte-for-byte immutable source copy; edits are stored in the project overlay and are not exported by this smoke",
       "generation is a small verification area, not a full world",
     ],
   };
@@ -749,6 +883,15 @@ try {
           expected: second.report.snapshot.expectedChunks,
           packFormat: second.report.datapacks[0].packFormat,
           structures: second.report.generateStructures,
+        },
+        importedProject: {
+          mode: projectManifest.creationMode,
+          source: projectManifest.source,
+          seed: provenance?.seed,
+          chunks: importedInfo.chunkCount,
+          blocks: importedInfo.blockCount,
+          generatedTreePreserved,
+          generatedWorldUnchanged,
         },
         conclusions: evidence.conclusions,
       },

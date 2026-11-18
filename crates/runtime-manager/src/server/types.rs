@@ -365,6 +365,29 @@ pub struct GenerationRunsReport {
     pub problems: Vec<String>,
 }
 
+/// A completed, manifest-owned generation run whose world can be imported into a project.
+/// Only terminal runs reported as completed are exposed; the world directory and report are
+/// re-verified when this value is produced, and the source folder is never modified.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratedWorld {
+    pub run_id: String,
+    pub world_dir: String,
+    pub seed: String,
+    pub preset: WorldPreset,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius_chunks: u32,
+    pub generate_structures: bool,
+    pub datapacks: Vec<GenerationDatapack>,
+    pub java_version: String,
+    pub server_sha1: String,
+    pub chunks: u64,
+    pub region_files: u64,
+    pub world_bytes: u64,
+    pub finished_at: u64,
+}
+
 /// Marker written before any server process starts. Only directories carrying this manifest
 /// may be deleted by `Clear generation runs`.
 #[derive(Debug, Clone, Serialize, Deserialize)]

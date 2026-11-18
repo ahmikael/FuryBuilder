@@ -10,7 +10,8 @@ use crate::error::ProjectError;
 use crate::manifest::{
     folder_component, is_hex_sha256, normalize_name, now_ms, validate_folder, CreationMode,
     EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, RecoveryInfo,
-    SaveKind, SaveOutcome, SourceInfo, SourceKind, PROJECT_FILE, PROJECT_SCHEMA_VERSION,
+    SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaProvenance, PROJECT_FILE,
+    PROJECT_SCHEMA_VERSION,
 };
 use crate::snapshot::{decode_world, encode_world};
 use crate::source::{read_source_manifest, SourceFile, SourceManifest};
@@ -309,6 +310,7 @@ impl ProjectStore {
             summary: ProjectSummary::from_manifest(folder, &manifest, recoverable),
             editor_state: manifest.editor_state.clone(),
             source: manifest.source.clone(),
+            vanilla: manifest.vanilla.clone(),
             created_at_ms: manifest.created_at_ms,
             warnings,
         })
@@ -331,7 +333,14 @@ impl ProjectStore {
         editor_state.validate()?;
         let mut world = build_world(mode)?;
         world.bump_revision();
-        self.create_with_world(&name, mode, editor_state, &world, SourceInfo::generated())
+        self.create_with_world(
+            &name,
+            mode,
+            editor_state,
+            &world,
+            SourceInfo::generated(),
+            None,
+        )
     }
 
     /// Creates an `Import World` project from an already decoded editable world.
@@ -355,7 +364,46 @@ impl ProjectStore {
             immutable: true,
             reference: Some(source_reference.to_owned()),
         };
-        self.create_with_world(&name, CreationMode::Import, editor_state, world, source)
+        self.create_with_world(
+            &name,
+            CreationMode::Import,
+            editor_state,
+            world,
+            source,
+            None,
+        )
+    }
+
+    /// Creates a `Vanilla World` project from a completed official-server generation. The
+    /// generated base becomes an immutable source tree, and the exact generator identity is
+    /// persisted in `project.json` rather than being reduced to a block snapshot.
+    pub fn create_vanilla(
+        &self,
+        name: &str,
+        editor_state: EditorState,
+        world: &World,
+        source_reference: &str,
+        provenance: VanillaProvenance,
+    ) -> Result<ProjectDetail, ProjectError> {
+        let name = normalize_name(name)?;
+        editor_state.validate()?;
+        if !valid_source_component(source_reference) {
+            return Err(ProjectError::UnsafeSource(source_reference.to_owned()));
+        }
+        provenance.validate()?;
+        let source = SourceInfo {
+            kind: SourceKind::Generated,
+            immutable: true,
+            reference: Some(source_reference.to_owned()),
+        };
+        self.create_with_world(
+            &name,
+            CreationMode::Vanilla,
+            editor_state,
+            world,
+            source,
+            Some(provenance),
+        )
     }
 
     fn create_with_world(
@@ -365,6 +413,7 @@ impl ProjectStore {
         editor_state: EditorState,
         world: &World,
         source: SourceInfo,
+        vanilla: Option<VanillaProvenance>,
     ) -> Result<ProjectDetail, ProjectError> {
         fs::create_dir_all(&self.root)
             .map_err(|error| io_error(format!("creating {}", self.root.display()), error))?;
@@ -400,6 +449,7 @@ impl ProjectStore {
             ProjectManifest::new(project_id, name.to_owned(), mode, world.revision(), now);
         manifest.editor_state = editor_state;
         manifest.source = source;
+        manifest.vanilla = vanilla;
         manifest.set_world_payload(format!("{DATA_DIR}/{file}"), checksum, bytes.len() as u64);
         manifest.validate()?;
         write_json(&dir.join(PROJECT_FILE), &manifest)?;
@@ -936,7 +986,12 @@ impl ProjectStore {
         };
         write_json(&dir.join(SOURCE_DIR).join("source.json"), &source)?;
         manifest.source = SourceInfo {
-            kind: SourceKind::Imported,
+            // A vanilla base stays a generated source even after it is copied into the
+            // project; only an arbitrary imported world is labelled as imported.
+            kind: match manifest.creation_mode {
+                CreationMode::Vanilla => SourceKind::Generated,
+                _ => SourceKind::Imported,
+            },
             immutable: true,
             reference: Some(source_reference.to_owned()),
         };
@@ -1173,6 +1228,89 @@ mod tests {
         let list = store.list();
         assert_eq!(list.projects.len(), 1);
         assert!(list.warnings.is_empty());
+    }
+
+    #[test]
+    fn vanilla_provenance_is_persisted_and_validated() {
+        let root = temp_root("vanilla");
+        let store = ProjectStore::new(&root);
+        let mut world = build_world(CreationMode::Empty).expect("world");
+        world.bump_revision();
+        let provenance = VanillaProvenance {
+            seed: "FuryBuilder".to_owned(),
+            preset: "normal".to_owned(),
+            center_x: 0,
+            center_z: 0,
+            radius_chunks: 1,
+            generate_structures: true,
+            datapacks: vec![crate::manifest::VanillaDatapack {
+                name: "test.zip".to_owned(),
+                sha256: "a".repeat(64),
+                size: 123,
+                pack_format: 61,
+            }],
+            minecraft_version: world_domain::TARGET_MINECRAFT_VERSION.to_owned(),
+            data_version: world_domain::TARGET_DATA_VERSION,
+            java_version: "21.0.12".to_owned(),
+            server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            run_id: "run-1-2".to_owned(),
+            generated_at_ms: 1,
+            chunks: 9,
+            region_files: 1,
+            world_bytes: 4096,
+        };
+        let detail = store
+            .create_vanilla(
+                "Vanilla Base",
+                EditorState::default(),
+                &world,
+                "world",
+                provenance.clone(),
+            )
+            .expect("vanilla create");
+        assert_eq!(detail.summary.creation_mode, CreationMode::Vanilla);
+        assert_eq!(detail.vanilla.as_ref(), Some(&provenance));
+        assert_eq!(detail.source.kind, SourceKind::Generated);
+        assert_eq!(detail.source.reference.as_deref(), Some("world"));
+
+        let reopened = store.detail(&detail.summary.folder).expect("reopen");
+        assert_eq!(reopened.vanilla, Some(provenance.clone()));
+        let manifest = store
+            .manifest(&root.join(&detail.summary.folder))
+            .expect("manifest");
+        assert_eq!(manifest.creation_mode, CreationMode::Vanilla);
+        assert_eq!(manifest.vanilla, Some(provenance.clone()));
+
+        let recorded = store
+            .record_source_tree(&detail.summary.folder, "world", &[])
+            .expect("record source tree");
+        assert_eq!(recorded.source.kind, SourceKind::Generated);
+        assert_eq!(recorded.source.reference.as_deref(), Some("world"));
+        assert_eq!(
+            store
+                .detail(&detail.summary.folder)
+                .expect("detail")
+                .source
+                .kind,
+            SourceKind::Generated
+        );
+
+        let mut bad = provenance.clone();
+        bad.server_jar_sha1 = "not-a-sha1".to_owned();
+        assert!(store
+            .create_vanilla("Bad Base", EditorState::default(), &world, "world", bad)
+            .is_err());
+        let mut bad_preset = provenance;
+        bad_preset.preset = "superflat".to_owned();
+        assert!(store
+            .create_vanilla(
+                "Bad Preset",
+                EditorState::default(),
+                &world,
+                "world",
+                bad_preset
+            )
+            .is_err());
     }
 
     #[test]

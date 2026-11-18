@@ -103,8 +103,10 @@ reports real region-header progress and always terminates the whole Java tree on
 cancel/crash. M9.6 adds the `Vanilla World` project wizard: it shows the verified Java 21,
 server JAR and EULA state, lets the user choose a seed, preset, supported worldgen settings
 and validated local `.zip` data packs, and requires a separate explicit consent before
-starting the official generator. Generated worlds stay in isolated run directories until
-the M9.7 import into the Rust World Core.
+starting the official generator. M9.7 imports a completed run as a `Vanilla World` project:
+the generated folder is copied byte-for-byte as an immutable source, decoded into the Rust
+World Core, and its seed, preset, data packs, Java/server identity and requested area are
+recorded in `project.json`.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

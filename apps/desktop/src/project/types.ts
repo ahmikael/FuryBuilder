@@ -15,6 +15,32 @@ export interface SourceInfo {
   reference?: string;
 }
 
+export interface VanillaDatapack {
+  name: string;
+  sha256: string;
+  size: number;
+  packFormat: number;
+}
+
+export interface VanillaProvenance {
+  seed: string;
+  preset: string;
+  centerX: number;
+  centerZ: number;
+  radiusChunks: number;
+  generateStructures: boolean;
+  datapacks: VanillaDatapack[];
+  minecraftVersion: string;
+  dataVersion: number;
+  javaVersion: string;
+  serverJarSha1: string;
+  runId: string;
+  generatedAtMs: number;
+  chunks: number;
+  regionFiles: number;
+  worldBytes: number;
+}
+
 export interface ProjectSummary {
   folder: string;
   projectId: string;
@@ -35,6 +61,7 @@ export interface ProjectDetail {
   summary: ProjectSummary;
   editorState: EditorState;
   source: SourceInfo;
+  vanilla?: VanillaProvenance;
   createdAtMs: number;
   warnings: string[];
 }

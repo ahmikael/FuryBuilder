@@ -39,12 +39,12 @@ pub use datapack::TARGET_DATAPACK_FORMAT;
 pub use jar::{inspect_server_jar, sha1_file, ServerJarInfo};
 pub use mojang::VERSION_MANIFEST_URL;
 pub use types::{
-    DatapackInspection, DatapackSelection, GenerationDatapack, GenerationPhase, GenerationReport,
-    GenerationRequest, GenerationRunInfo, GenerationRunsReport, GenerationSnapshot,
-    GenerationStatusReport, GenerationStopReason, InstalledServerJar, ManagedServerCacheReport,
-    ManagedServerJar, RunManifest, SavedEula, SavedServerJar, ServerDiscoveryReport,
-    ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource, WorldPreset, EULA_URL,
-    MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
+    DatapackInspection, DatapackSelection, GeneratedWorld, GenerationDatapack, GenerationPhase,
+    GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
+    GenerationSnapshot, GenerationStatusReport, GenerationStopReason, InstalledServerJar,
+    ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
+    ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource,
+    WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
     SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATA_VERSION,
 };
 
@@ -537,6 +537,13 @@ impl ServerManager {
 
     pub fn generation_runs(&self) -> GenerationRunsReport {
         generation::scan_runs(&self.inner.runs_root)
+    }
+
+    /// Resolves a completed generation run into an importable world. The run must still be
+    /// manifest-owned and have a completed terminal report; the returned path is read-only
+    /// input for project import.
+    pub fn generated_world(&self, run_id: &str) -> Result<GeneratedWorld, ServerError> {
+        generation::load_completed_world(&self.inner.runs_root, run_id)
     }
 
     pub fn clear_generation_runs(&self) -> Result<GenerationRunsReport, ServerError> {

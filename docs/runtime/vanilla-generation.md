@@ -1,15 +1,17 @@
-# Isolated Vanilla World generation (M9.5–M9.6)
+# Isolated Vanilla World generation (M9.5–M9.7)
 
 Scope: explicitly accept the Minecraft EULA and run the **official** Minecraft Java 1.21.4
 server process in an isolated temporary directory. M9.5 adds the safe process boundary,
 EULA flow, progress and termination. M9.6 adds the Vanilla World wizard: Java/runtime setup
 check, seed, preset, supported worldgen settings, validated local data packs and a separate
-explicit consent for the local run. Importing the generated world into the Rust World Core
-belongs to M9.7.
+explicit consent for the local run. M9.7 imports a completed run into the Rust World Core as
+a Vanilla World project with a byte-preserving immutable source copy and full generator
+provenance.
 
 Implementation: `crates/runtime-manager/src/server/generation.rs`,
-`process_tree.rs` and `datapack.rs`, the Tauri `server_*generation*` and
-`vanilla_setup_check` commands, `Settings → Minecraft server JAR → Isolated
+`process_tree.rs` and `datapack.rs`, the Tauri `server_*generation*`,
+`vanilla_setup_check` and `project_import_generated_world` commands,
+`Settings → Minecraft server JAR → Isolated
 vanilla generation`, and `Project → New project → Vanilla World`.
 
 ## Explicit EULA
@@ -116,6 +118,33 @@ The copied pack is recorded in the run manifest and report. This validates archi
 and declared compatibility, **not** the semantic behavior of the pack. Third-party data
 packs are still untrusted game content; selected packs are never downloaded automatically.
 
+## Importing a generated world (M9.7)
+
+`Open as project` in the wizard calls `project_import_generated_world`. The run id alone is
+never trusted as a path: `ServerManager` reopens the run, rejects symlinks and traversal,
+requires the run manifest and terminal report to belong to that exact id and to agree on
+seed, preset, center, radius, structures and data packs, and requires
+`stop_reason = completed`, `worldComplete = true` and enough generated chunks. The world
+directory must still be `<run>/world` inside the runs root.
+
+The import then reuses the M8 pipeline:
+
+1. `world_io::analyze_java_world` and `load_java_world` decode the verified 1.21.4 world into
+   the Rust World Core; unsupported versions or layouts fail closed.
+2. `passthrough_java_world` copies every generated file byte-for-byte into the project's
+   `source/world/` (the only skipped file is `session.lock`). Every copied file's SHA-256 and
+   size is recorded in `source/source.json`; the run directory itself is never modified.
+3. The project is created with `creation_mode = vanilla` and `source.kind = generated`,
+   `immutable = true`, `reference = "world"`.
+4. The exact generator identity is stored in `project.json` under `vanilla`: seed, preset,
+   center/radius, structures flag, each data pack's name/SHA-256/size/format, Minecraft
+   1.21.4 + `DataVersion` 4189, Java version, official server JAR SHA-1, run id, generation
+   time, requested chunk count, region count and generated world bytes.
+
+Edits are stored in the project overlay/snapshot. The generated base stays read-only, so a
+later export can use passthrough for untouched files. Clearing the generation runs after a
+successful import does not delete the project's own source copy.
+
 ## Run directory
 
 ```text
@@ -140,17 +169,18 @@ modified.
 
 ## Commands
 
-| Command                        | Purpose                                                   |
-| ------------------------------ | --------------------------------------------------------- |
-| `vanilla_setup_check`          | Read-only Java/JAR/EULA readiness and blockers            |
-| `server_inspect_datapacks`     | Validate selected local `.zip` data packs per path        |
-| `server_accept_eula`           | Record an explicit acceptance for the selected JAR        |
-| `server_clear_eula`            | Withdraw the acceptance                                   |
-| `server_start_generation`      | Validate (including consent/data packs) and start one run |
-| `server_generation_status`     | Active snapshot and last terminal report                  |
-| `server_cancel_generation`     | Request cooperative stop, then forced tree termination    |
-| `server_generation_runs`       | Inventory of FuryBuilder-owned run directories            |
-| `server_clear_generation_runs` | Delete only manifest-owned run directories                |
+| Command                          | Purpose                                                   |
+| -------------------------------- | --------------------------------------------------------- |
+| `vanilla_setup_check`            | Read-only Java/JAR/EULA readiness and blockers            |
+| `server_inspect_datapacks`       | Validate selected local `.zip` data packs per path        |
+| `server_accept_eula`             | Record an explicit acceptance for the selected JAR        |
+| `server_clear_eula`              | Withdraw the acceptance                                   |
+| `server_start_generation`        | Validate (including consent/data packs) and start one run |
+| `server_generation_status`       | Active snapshot and last terminal report                  |
+| `server_cancel_generation`       | Request cooperative stop, then forced tree termination    |
+| `server_generation_runs`         | Inventory of FuryBuilder-owned run directories            |
+| `server_clear_generation_runs`   | Delete only manifest-owned run directories                |
+| `project_import_generated_world` | Verify a completed run and import it as a Vanilla project |
 
 The UI polls `server_generation_status` once per second while a run is active; no unbounded
 event stream is required.
@@ -194,6 +224,25 @@ wizard run with fresh isolated app data:
 - both runs stayed loopback-only, exited 0 with the requested chunks, and no console errors
   were recorded.
 
+### M9.7 World Core import
+
+`docs/testing/evidence/2026-11-19-vanilla-world-import.json` and `.png` record the same real
+WebView2 flow with the import step:
+
+- after a completed `9/9`-chunk run, **Open as project** created
+  `Vanilla FuryBuilderM96UI.furybuilder` with `creationMode = vanilla` and
+  `source.kind = generated`, `immutable = true`, `reference = "world"`;
+- `project.json` stored the run id, seed `FuryBuilderM96UI`, `normal` preset, center
+  `(4500, 4500)`, radius 1, structures enabled, zero data packs, Java 21.0.12.1, official
+  server SHA-1 `4707d00e…8c001`, `DataVersion` 4189, 9 requested chunks and 8 regions;
+- the project's immutable `source/world` had 29 files; a SHA-256 tree digest
+  (`1dfc64f9…076f`) matched the generated run world exactly, and re-hashing the run world
+  after import produced the same digest (the generated source was untouched);
+- the imported project opened non-empty and editable: 242 overworld chunks and 7,627,482
+  blocks in the Rust World Core, revision 1, not dirty;
+- a second run with the validated data pack and `generateStructures=false` still completed
+  after the import, and all prior loopback/process-tree guarantees held.
+
 Reproduce:
 
 ```powershell
@@ -213,10 +262,13 @@ checkboxes and buttons above.
 
 ## Limits
 
-- No generated world is imported into the editor in M9.6; the `world/` folder remains in the
-  isolated run directory until M9.7 adds the World Core import and project creation.
-- Spawn-area chunks are generated in addition to the requested area; only the in-area chunks
-  are counted for completion.
+- Only a `completed` run can be opened as a project. `incomplete`, `time_limit`, `cancelled`
+  and failed runs remain visible in the run inventory but are not importable.
+- The requested area is bounded (radius 1–16 chunks) and generated in forceload tiles. This
+  is limited/batched generation, not an infinite lazy world stream.
+- Spawn-area chunks are generated and imported in addition to the requested area; only the
+  in-area chunks are counted for completion. The M9.7 smoke imported 242 overworld chunks for
+  a 9-chunk requested area.
 - `incomplete` and `time limit reached` are valid terminal states; they are not silently
   retried and the user sees the shortfall.
 - No resume of an interrupted generation; start a new run.

@@ -71,6 +71,122 @@ impl SourceInfo {
     }
 }
 
+/// One validated local data pack that participated in Vanilla World generation. This is
+/// provenance for reproducing the original worldgen configuration, not a reference to a
+/// still-existing external file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VanillaDatapack {
+    pub name: String,
+    pub sha256: String,
+    pub size: u64,
+    pub pack_format: u32,
+}
+
+/// Exact identity of the original generator and the requested area. It is stored in
+/// `project.json` so a Vanilla World project never loses why its base looks the way it does.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VanillaProvenance {
+    pub seed: String,
+    pub preset: String,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius_chunks: u32,
+    pub generate_structures: bool,
+    pub datapacks: Vec<VanillaDatapack>,
+    pub minecraft_version: String,
+    pub data_version: i32,
+    pub java_version: String,
+    pub server_jar_sha1: String,
+    pub run_id: String,
+    pub generated_at_ms: u64,
+    pub chunks: u64,
+    pub region_files: u64,
+    pub world_bytes: u64,
+}
+
+impl VanillaProvenance {
+    pub fn validate(&self) -> Result<(), ProjectError> {
+        if self.seed.trim().is_empty()
+            || self.seed.len() > 64
+            || !self.seed.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')
+            })
+        {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla seed must be 1..=64 ASCII letters, digits, '-', '_' or '.'",
+            ));
+        }
+        if !matches!(
+            self.preset.as_str(),
+            "normal" | "flat" | "large_biomes" | "amplified"
+        ) {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance has an unsupported preset",
+            ));
+        }
+        if self.radius_chunks == 0 || self.radius_chunks > 16 {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance radius must be 1..=16 chunks",
+            ));
+        }
+        if self.minecraft_version != TARGET_MINECRAFT_VERSION
+            || self.data_version != TARGET_DATA_VERSION
+        {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance does not match the supported target version",
+            ));
+        }
+        if self.java_version.trim().is_empty() || self.java_version.len() > 64 {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance java version is empty or too long",
+            ));
+        }
+        if self.server_jar_sha1.len() != 40
+            || !self
+                .server_jar_sha1
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance server SHA-1 must be 40 lowercase hex characters",
+            ));
+        }
+        if self.run_id.len() > 128
+            || !self
+                .run_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance run id is invalid",
+            ));
+        }
+        if self.datapacks.len() > 16 {
+            return Err(ProjectError::invalid_manifest(
+                "vanilla provenance has too many data packs",
+            ));
+        }
+        for datapack in &self.datapacks {
+            if datapack.name.is_empty()
+                || datapack.name.len() > 255
+                || datapack.sha256.len() != 64
+                || !datapack
+                    .sha256
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || datapack.pack_format == 0
+            {
+                return Err(ProjectError::invalid_manifest(
+                    "vanilla provenance data pack is invalid",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EditorState {
@@ -124,6 +240,10 @@ pub struct ProjectManifest {
     pub last_save_kind: SaveKind,
     pub editor_state: EditorState,
     pub source: SourceInfo,
+    /// Present only for `creation_mode = vanilla`; records the original generator identity,
+    /// requested area and data packs. Optional so existing schema-1 projects still load.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vanilla: Option<VanillaProvenance>,
     pub created_by: String,
     pub app_version: String,
 }
@@ -153,6 +273,7 @@ impl ProjectManifest {
             last_save_kind: SaveKind::Manual,
             editor_state: EditorState::default(),
             source: SourceInfo::generated(),
+            vanilla: None,
             created_by: "FuryBuilder".to_owned(),
             app_version: env!("CARGO_PKG_VERSION").to_owned(),
         }
@@ -196,6 +317,16 @@ impl ProjectManifest {
         if self.source.kind == SourceKind::Imported && self.source.reference.is_none() {
             return Err(ProjectError::invalid_manifest(
                 "imported projects need a source reference",
+            ));
+        }
+        if self.creation_mode == CreationMode::Vanilla {
+            let vanilla = self.vanilla.as_ref().ok_or_else(|| {
+                ProjectError::invalid_manifest("vanilla projects need generator provenance")
+            })?;
+            vanilla.validate()?;
+        } else if self.vanilla.is_some() {
+            return Err(ProjectError::invalid_manifest(
+                "generator provenance is only valid for vanilla projects",
             ));
         }
         Ok(())
@@ -253,6 +384,8 @@ pub struct ProjectDetail {
     pub summary: ProjectSummary,
     pub editor_state: EditorState,
     pub source: SourceInfo,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vanilla: Option<VanillaProvenance>,
     pub created_at_ms: u64,
     pub warnings: Vec<String>,
 }

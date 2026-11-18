@@ -9,6 +9,7 @@ import {
   fetchCheckpoints,
   fetchProjectStatus,
   fetchProjects,
+  importGeneratedWorld as importGeneratedWorldApi,
   importJavaWorld,
   openCheckpoint,
   openProject,
@@ -59,6 +60,7 @@ interface ProjectUiState {
   analyzeWorld: (folder: string) => Promise<JavaWorldAnalysis | null>;
   clearWorldAnalysis: () => void;
   importWorld: (name: string, folder: string) => Promise<boolean>;
+  importGeneratedWorld: (name: string, runId: string) => Promise<boolean>;
   importStructure: (args: StructureImportProjectArgs) => Promise<boolean>;
   insertStructure: (args: StructureInsertArgs) => Promise<boolean>;
   open: (folder: string, options?: { discardCurrent?: boolean }) => Promise<boolean>;
@@ -263,6 +265,30 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     } catch (error) {
       set({ loading: false });
       reportError(error, "World import failed");
+      return false;
+    }
+  },
+
+  importGeneratedWorld: async (name, runId) => {
+    if (!runId.trim()) return false;
+    set({ loading: true });
+    try {
+      const payload = await importGeneratedWorldApi(name.trim(), runId, currentEditorState());
+      applyPayload(payload);
+      set({ managerOpen: false });
+      const vanilla = payload.detail.vanilla;
+      pushToast({
+        kind: "success",
+        title: `Imported “${payload.detail.summary.name}”`,
+        description: vanilla
+          ? `Minecraft ${vanilla.minecraftVersion} · seed ${vanilla.seed} · ${vanilla.chunks} chunk(s) · ${payload.info.blockCount.toLocaleString()} editable block(s) · generated base kept read-only`
+          : `${payload.info.chunkCount} chunk(s) · ${payload.info.blockCount.toLocaleString()} editable block(s) · generated base kept read-only`,
+      });
+      void get().refreshList();
+      return true;
+    } catch (error) {
+      set({ loading: false });
+      reportError(error, "Generated world import failed");
       return false;
     }
   },

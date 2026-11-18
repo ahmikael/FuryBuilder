@@ -30,9 +30,9 @@ use super::datapack;
 use super::jar::ServerJarInfo;
 use super::process_tree::ProcessTree;
 use super::types::{
-    GenerationDatapack, GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo,
-    GenerationRunsReport, GenerationSnapshot, GenerationStopReason, RunManifest, WorldPreset,
-    RUN_MANIFEST_SCHEMA_VERSION,
+    GeneratedWorld, GenerationDatapack, GenerationPhase, GenerationReport, GenerationRequest,
+    GenerationRunInfo, GenerationRunsReport, GenerationSnapshot, GenerationStopReason, RunManifest,
+    WorldPreset, RUN_MANIFEST_SCHEMA_VERSION,
 };
 use crate::error::ServerError;
 
@@ -1305,6 +1305,164 @@ pub(crate) fn load_last_report(runs_root: &Path) -> Option<GenerationReport> {
     best
 }
 
+fn valid_run_id(run_id: &str) -> bool {
+    let mut parts = run_id.split('-');
+    let (Some("run"), Some(millis), Some(pid), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    !millis.is_empty()
+        && !pid.is_empty()
+        && millis.len() <= 20
+        && pid.len() <= 20
+        && millis.bytes().all(|byte| byte.is_ascii_digit())
+        && pid.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+fn read_report_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, ServerError> {
+    let bytes = fs::read(path).map_err(|error| {
+        ServerError::Invalid(format!(
+            "the generation run is missing {}: {error}",
+            path.display()
+        ))
+    })?;
+    serde_json::from_slice(&bytes).map_err(|error| {
+        ServerError::Invalid(format!(
+            "{} is not a valid generation record: {error}",
+            path.display()
+        ))
+    })
+}
+
+/// Opens a generation run only when it is manifest-owned, terminal, completed and its world
+/// directory is still inside that exact run. The returned world is read-only input for the
+/// project import pipeline; this function never writes to it.
+pub(crate) fn load_completed_world(
+    runs_root: &Path,
+    run_id: &str,
+) -> Result<GeneratedWorld, ServerError> {
+    if !valid_run_id(run_id) {
+        return Err(ServerError::Invalid(
+            "the generation run id is not a valid FuryBuilder run id".to_owned(),
+        ));
+    }
+    let root = fs::canonicalize(runs_root).map_err(|error| {
+        ServerError::Invalid(format!(
+            "cannot resolve the generation runs root {}: {error}",
+            runs_root.display()
+        ))
+    })?;
+    let run_dir = root.join(run_id);
+    let metadata = fs::symlink_metadata(&run_dir).map_err(|error| {
+        ServerError::Invalid(format!(
+            "the generation run {run_id} is not available: {error}"
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(ServerError::Invalid(format!(
+            "the generation run {run_id} is not a regular directory"
+        )));
+    }
+    let run_dir = fs::canonicalize(&run_dir).map_err(|error| {
+        ServerError::Invalid(format!(
+            "cannot resolve the generation run {run_id}: {error}"
+        ))
+    })?;
+    if run_dir.parent() != Some(root.as_path()) {
+        return Err(ServerError::Invalid(format!(
+            "the generation run {run_id} escapes the runs root"
+        )));
+    }
+    let manifest: RunManifest = read_report_json(&run_dir.join(RUN_MANIFEST_NAME))?;
+    if manifest.schema_version != RUN_MANIFEST_SCHEMA_VERSION || manifest.run_id != run_id {
+        return Err(ServerError::Invalid(format!(
+            "the generation manifest for {run_id} does not match this run"
+        )));
+    }
+    let report: GenerationReport = read_report_json(&run_dir.join(RUN_REPORT_NAME))?;
+    if report.snapshot.run_id != run_id {
+        return Err(ServerError::Invalid(format!(
+            "the generation report for {run_id} belongs to a different run"
+        )));
+    }
+    if report.stop_reason != GenerationStopReason::Completed
+        || !report.world_complete
+        || report.snapshot.running
+    {
+        return Err(ServerError::Invalid(format!(
+            "the generation run {run_id} did not complete; only a completed world can be imported"
+        )));
+    }
+    if report.snapshot.expected_chunks == 0
+        || report.snapshot.generated_chunks < report.snapshot.expected_chunks
+    {
+        return Err(ServerError::Invalid(format!(
+            "the generation report for {run_id} does not prove the requested chunks were written"
+        )));
+    }
+    if report.seed != manifest.seed
+        || report.preset != manifest.preset
+        || report.center_x != manifest.center_x
+        || report.center_z != manifest.center_z
+        || report.radius_chunks != manifest.radius_chunks
+        || report.generate_structures != manifest.generate_structures
+        || report.datapacks != manifest.datapacks
+    {
+        return Err(ServerError::Invalid(format!(
+            "the generation report for {run_id} does not match its manifest"
+        )));
+    }
+    let world_dir = run_dir.join("world");
+    let metadata = fs::symlink_metadata(&world_dir).map_err(|error| {
+        ServerError::Invalid(format!(
+            "the generated world for {run_id} is missing: {error}"
+        ))
+    })?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(ServerError::Invalid(format!(
+            "the generated world for {run_id} is not a regular directory"
+        )));
+    }
+    let world_dir = fs::canonicalize(&world_dir).map_err(|error| {
+        ServerError::Invalid(format!(
+            "cannot resolve the generated world for {run_id}: {error}"
+        ))
+    })?;
+    if world_dir.parent() != Some(run_dir.as_path()) {
+        return Err(ServerError::Invalid(format!(
+            "the generated world for {run_id} is outside its run directory"
+        )));
+    }
+    let reported_world = fs::canonicalize(Path::new(&report.world_dir)).map_err(|error| {
+        ServerError::Invalid(format!(
+            "the generation report points to an unavailable world: {error}"
+        ))
+    })?;
+    if reported_world != world_dir {
+        return Err(ServerError::Invalid(format!(
+            "the generation report for {run_id} points to a different world directory"
+        )));
+    }
+    Ok(GeneratedWorld {
+        run_id: run_id.to_owned(),
+        world_dir: world_dir.display().to_string(),
+        seed: manifest.seed,
+        preset: manifest.preset,
+        center_x: manifest.center_x,
+        center_z: manifest.center_z,
+        radius_chunks: manifest.radius_chunks,
+        generate_structures: manifest.generate_structures,
+        datapacks: manifest.datapacks,
+        java_version: report.java_version,
+        server_sha1: report.server_sha1,
+        chunks: report.snapshot.generated_chunks,
+        region_files: report.snapshot.region_files,
+        world_bytes: report.snapshot.world_bytes,
+        finished_at: report.finished_at,
+    })
+}
+
 pub(crate) fn scan_runs(runs_root: &Path) -> GenerationRunsReport {
     let mut runs = Vec::new();
     let mut total_bytes = 0u64;
@@ -1835,6 +1993,114 @@ public class FakeCrash {
         let cleared = clear_runs(&root).expect("clear runs");
         assert!(cleared.runs.is_empty());
         assert!(root.join("keep.txt").is_file());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn completed_generation_world_is_verified_before_import() {
+        let root = std::env::temp_dir().join(format!(
+            "furybuilder-import-world-{}-{}-{}",
+            std::process::id(),
+            now_millis(),
+            FAKE_COUNTER.fetch_add(1, Ordering::SeqCst)
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("runs root");
+        let run_id = "run-1700000000000-1234";
+        let run_dir = root.join(run_id);
+        let world_dir = run_dir.join("world");
+        fs::create_dir_all(world_dir.join("region")).expect("world dir");
+        fs::write(world_dir.join("level.dat"), b"level").expect("level.dat");
+        let manifest = RunManifest {
+            schema_version: RUN_MANIFEST_SCHEMA_VERSION,
+            run_id: run_id.to_owned(),
+            created_at: 1,
+            seed: "FuryBuilder".to_owned(),
+            preset: WorldPreset::Normal,
+            center_x: 0,
+            center_z: 0,
+            radius_chunks: 1,
+            generate_structures: true,
+            datapacks: Vec::new(),
+        };
+        let report = GenerationReport {
+            snapshot: GenerationSnapshot {
+                run_id: run_id.to_owned(),
+                running: false,
+                phase: GenerationPhase::Completed,
+                elapsed_ms: 1000,
+                expected_chunks: 9,
+                generated_chunks: 9,
+                region_files: 1,
+                world_bytes: 8192,
+                message: "completed".to_owned(),
+                error: None,
+            },
+            stop_reason: GenerationStopReason::Completed,
+            world_complete: true,
+            exit_code: Some(0),
+            server_pid: Some(10),
+            seed: manifest.seed.clone(),
+            preset: manifest.preset,
+            center_x: manifest.center_x,
+            center_z: manifest.center_z,
+            radius_chunks: manifest.radius_chunks,
+            time_limit_seconds: 120,
+            memory_mb: 1024,
+            view_distance: 2,
+            cpu_threads: 1,
+            generate_structures: manifest.generate_structures,
+            java_path: "java.exe".to_owned(),
+            java_version: "21.0.12".to_owned(),
+            server_jar: "server.jar".to_owned(),
+            server_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            eula_accepted_at: 1,
+            consent_at: 2,
+            datapacks: manifest.datapacks.clone(),
+            bind_address: Some("127.0.0.1:12345".to_owned()),
+            process_tree_guarded: true,
+            run_dir: run_dir.display().to_string(),
+            world_dir: world_dir.display().to_string(),
+            log_path: run_dir.join("logs").display().to_string(),
+            started_at: 1,
+            finished_at: 2,
+            log_tail: Vec::new(),
+        };
+        write_json(&run_dir.join(RUN_MANIFEST_NAME), &manifest).expect("manifest");
+        write_json(&run_dir.join(RUN_REPORT_NAME), &report).expect("report");
+
+        let world = load_completed_world(&root, run_id).expect("completed world");
+        assert_eq!(world.run_id, run_id);
+        assert_eq!(world.seed, "FuryBuilder");
+        assert_eq!(world.chunks, 9);
+        assert_eq!(world.region_files, 1);
+        assert_eq!(world.server_sha1, report.server_sha1);
+        let world_path = std::path::Path::new(&world.world_dir);
+        assert_eq!(
+            world_path
+                .parent()
+                .and_then(|parent| parent.file_name())
+                .and_then(|name| name.to_str()),
+            Some(run_id)
+        );
+        assert_eq!(
+            world_path.file_name().and_then(|name| name.to_str()),
+            Some("world")
+        );
+
+        assert!(load_completed_world(&root, "../outside").is_err());
+        assert!(load_completed_world(&root, "run-1700000000000").is_err());
+
+        let mut cancelled = report.clone();
+        cancelled.stop_reason = GenerationStopReason::Cancelled;
+        cancelled.world_complete = false;
+        write_json(&run_dir.join(RUN_REPORT_NAME), &cancelled).expect("cancelled report");
+        assert!(load_completed_world(&root, run_id).is_err());
+
+        let mut wrong_world = report;
+        wrong_world.world_dir = root.join("other-world").display().to_string();
+        write_json(&run_dir.join(RUN_REPORT_NAME), &wrong_world).expect("wrong report");
+        assert!(load_completed_world(&root, run_id).is_err());
         let _ = fs::remove_dir_all(&root);
     }
 

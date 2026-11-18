@@ -321,13 +321,54 @@ describe("VanillaWorldWizard", () => {
     expect(await screen.findByText(/Cancellation requested/)).toBeInTheDocument();
   });
 
-  it("shows the completed world and states that project import is the next task", async () => {
+  it("shows the completed world and states how it becomes a project", async () => {
     api.status.mockResolvedValue({ active: null, last });
     render(<VanillaWorldWizard />);
 
     expect(await screen.findByText("Last isolated generation")).toBeInTheDocument();
     expect(screen.getAllByText("completed").length).toBeGreaterThan(0);
-    expect(screen.getByText(/M9\.7/)).toBeInTheDocument();
+    expect(screen.getByText(/Opening it creates a/)).toBeInTheDocument();
     expect(screen.getByText(/127\.0\.0\.1:51234/)).toBeInTheDocument();
+    const open = screen.getByRole("button", {
+      name: "Open generated world as a project",
+    });
+    expect(open).toBeDisabled();
+  });
+
+  it("opens a completed generated world as a project", async () => {
+    const user = userEvent.setup();
+    const onOpenWorld = vi.fn().mockResolvedValue(true);
+    api.status.mockResolvedValue({ active: null, last });
+    render(<VanillaWorldWizard onOpenWorld={onOpenWorld} />);
+
+    const open = await screen.findByRole("button", {
+      name: "Open generated world as a project",
+    });
+    await waitFor(() => expect(open).toBeEnabled());
+    await user.click(open);
+    await waitFor(() => expect(onOpenWorld).toHaveBeenCalledWith("run-0", "Vanilla FuryBuilder"));
+    expect(await screen.findByText(/kept read-only/)).toBeInTheDocument();
+  });
+
+  it("does not offer project import for an incomplete run", async () => {
+    const incomplete: GenerationReport = {
+      ...last,
+      stopReason: "cancelled",
+      worldComplete: false,
+      snapshot: {
+        ...last.snapshot,
+        phase: "cancelled",
+        generatedChunks: 3,
+        message: "Generation cancelled",
+      },
+    };
+    api.status.mockResolvedValue({ active: null, last: incomplete });
+    render(<VanillaWorldWizard onOpenWorld={vi.fn().mockResolvedValue(true)} />);
+
+    const open = await screen.findByRole("button", {
+      name: "Open generated world as a project",
+    });
+    expect(open).toBeDisabled();
+    expect(screen.getByText(/Only a completed run can be opened/)).toBeInTheDocument();
   });
 });

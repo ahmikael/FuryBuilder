@@ -671,7 +671,70 @@ pub fn project_import_world(
     state: State<'_, AppState>,
     name: String,
     world_folder: String,
+    editor_state: project_store::EditorState,
+) -> Result<OpenedProjectPayload, AppError> {
+    import_world_project(state.inner(), name, world_folder, editor_state, None)
+}
+
+/// Imports a completed official-server generation run. The run is re-verified (manifest,
+/// completed report, world directory) before reading; the generated world becomes an
+/// immutable source copy and its exact generator identity is stored in `project.json`.
+#[tauri::command]
+pub fn project_import_generated_world(
+    state: State<'_, AppState>,
+    manager: State<'_, ServerManager>,
+    name: String,
+    run_id: String,
+    editor_state: project_store::EditorState,
+) -> Result<OpenedProjectPayload, AppError> {
+    let generated = manager.generated_world(&run_id).map_err(server_error)?;
+    let provenance = project_store::VanillaProvenance {
+        seed: generated.seed.clone(),
+        preset: generated.preset.label().to_owned(),
+        center_x: generated.center_x,
+        center_z: generated.center_z,
+        radius_chunks: generated.radius_chunks,
+        generate_structures: generated.generate_structures,
+        datapacks: generated
+            .datapacks
+            .iter()
+            .map(|datapack| project_store::VanillaDatapack {
+                name: datapack.name.clone(),
+                sha256: datapack.sha256.clone(),
+                size: datapack.size,
+                pack_format: datapack.pack_format,
+            })
+            .collect(),
+        minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
+        data_version: TARGET_DATA_VERSION,
+        java_version: generated.java_version,
+        server_jar_sha1: generated.server_sha1,
+        run_id: generated.run_id,
+        generated_at_ms: generated.finished_at,
+        chunks: generated.chunks,
+        region_files: generated.region_files,
+        world_bytes: generated.world_bytes,
+    };
+    let name = if name.trim().is_empty() {
+        format!("Vanilla {}", generated.seed)
+    } else {
+        name
+    };
+    import_world_project(
+        state.inner(),
+        name,
+        generated.world_dir,
+        editor_state,
+        Some(provenance),
+    )
+}
+
+fn import_world_project(
+    state: &AppState,
+    name: String,
+    world_folder: String,
     mut editor_state: project_store::EditorState,
+    vanilla: Option<project_store::VanillaProvenance>,
 ) -> Result<OpenedProjectPayload, AppError> {
     let analysis = world_io::analyze_java_world(&world_folder);
     if !analysis.supported {
@@ -709,11 +772,18 @@ pub fn project_import_world(
         .projects
         .lock()
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
-    ensure_current_closed(&state, &mut projects)?;
-    let detail = projects
-        .store
-        .create_imported(&name, editor_state.clone(), &world, "world")
-        .map_err(project_error)?;
+    ensure_current_closed(state, &mut projects)?;
+    let detail = match vanilla {
+        Some(provenance) => {
+            projects
+                .store
+                .create_vanilla(&name, editor_state.clone(), &world, "world", provenance)
+        }
+        None => projects
+            .store
+            .create_imported(&name, editor_state.clone(), &world, "world"),
+    }
+    .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
     let project_dir = projects.store.root().join(&folder);
     let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");
@@ -764,7 +834,7 @@ pub fn project_import_world(
             });
             projects.refresh_checkpoints(&folder);
             drop(projects);
-            current_payload(&state, detail, info, None)
+            current_payload(state, detail, info, None)
         }
         Err(error) => {
             drop(projects);

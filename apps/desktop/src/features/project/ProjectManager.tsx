@@ -140,6 +140,7 @@ export function ProjectManager() {
   const error = useProjectStore((state) => state.error);
   const lastSave = useProjectStore((state) => state.lastSave);
   const worldAnalysis = useProjectStore((state) => state.worldAnalysis);
+  const importGeneratedWorld = useProjectStore((state) => state.importGeneratedWorld);
   const analysisLoading = useProjectStore((state) => state.analysisLoading);
   const worldRevision = useWorldStore((state) => state.revision);
   const [tab, setTab] = useState("projects");
@@ -563,7 +564,11 @@ export function ProjectManager() {
                   ))}
                 </div>
 
-                {mode === "vanilla" ? <VanillaWorldWizard /> : null}
+                {mode === "vanilla" ? (
+                  <VanillaWorldWizard
+                    onOpenWorld={(runId, projectName) => importGeneratedWorld(projectName, runId)}
+                  />
+                ) : null}
 
                 {mode === "import" ? (
                   <div className="space-y-1.5 rounded border border-border bg-background/40 p-2">
@@ -768,7 +773,7 @@ export function ProjectManager() {
                   </Button>
                   <span className="text-[9px] text-muted-foreground">
                     {mode === "vanilla"
-                      ? "Generate an isolated official-world result above. Importing it into an editable project is the next roadmap task (M9.7)."
+                      ? "Generate an isolated official-world result above, then use “Open as project”. The generated folder becomes a read-only source copy with its seed, preset and data packs recorded."
                       : mode === "import"
                         ? "Analyze a supported world first. The source folder is copied byte for byte and stays read-only."
                         : "Folders get a unique suffix when the name already exists. Renaming changes the display name only."}

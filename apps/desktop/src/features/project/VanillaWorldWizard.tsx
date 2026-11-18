@@ -56,7 +56,12 @@ type Busy =
   | "datapacks"
   | "start"
   | "cancel"
+  | "import"
   | null;
+
+interface VanillaWorldWizardProps {
+  onOpenWorld?: (runId: string, name: string) => Promise<boolean>;
+}
 
 function stopReasonLabel(report: GenerationReport): string {
   switch (report.stopReason) {
@@ -89,7 +94,7 @@ function statusTone(ready: boolean): string {
     : "border-status-warn/40 bg-status-warn/5 text-status-warn";
 }
 
-export function VanillaWorldWizard() {
+export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
   const [setup, setSetup] = useState<VanillaSetupReport | null>(null);
   const [runtimes, setRuntimes] = useState<RuntimeDiscoveryReport | null>(null);
   const [servers, setServers] = useState<ServerDiscoveryReport | null>(null);
@@ -344,6 +349,20 @@ export function VanillaWorldWizard() {
           : "No active generation run.",
       );
       await refresh(false);
+    });
+  }
+
+  async function openGeneratedWorld() {
+    if (!last || !last.worldComplete || !onOpenWorld) return;
+    const name = `Vanilla ${last.seed}`;
+    await runBusy("import", async () => {
+      const opened = await onOpenWorld(last.snapshot.runId, name);
+      if (!opened) {
+        throw new Error("The generated world could not be opened as a project.");
+      }
+      setNotice(
+        "Generated world imported. The generated folder is kept read-only and edits use the project overlay.",
+      );
     });
   }
 
@@ -870,9 +889,28 @@ export function VanillaWorldWizard() {
           {last.snapshot.error ? (
             <div className="text-status-warn">{last.snapshot.error}</div>
           ) : null}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-1.5 text-[9px]"
+              onClick={() => void openGeneratedWorld()}
+              disabled={busy !== null || !last.worldComplete || !onOpenWorld}
+              aria-label="Open generated world as a project"
+            >
+              {busy === "import" ? <Loader2 className="animate-spin" /> : <FolderOpen />}
+              Open as project
+            </Button>
+            <span className="text-[9px] text-muted-foreground">
+              {last.worldComplete
+                ? "The generated folder is copied byte-for-byte as an immutable source; seed, preset, data packs and generator identity are stored in project.json."
+                : "Only a completed run can be opened as a project."}
+            </span>
+          </div>
           <p className="text-[9px] text-muted-foreground">
-            The generated world remains in the isolated run directory. Importing it into the Rust
-            World Core without losing metadata is the next roadmap task (M9.7).
+            The generated world remains in the isolated run directory. Opening it creates a Vanilla
+            World project backed by that read-only copy; edits are stored in the project overlay and
+            exported as a new copy.
           </p>
         </div>
       ) : null}
