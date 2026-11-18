@@ -12,3 +12,4 @@ name = "world_operations"
 serde = { workspace = true }
 thiserror = { workspace = true }
 world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
+world-generation = { path = "../world-generation", package = "furybuilder-world-generation" }

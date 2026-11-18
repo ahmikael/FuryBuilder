@@ -114,7 +114,13 @@ adds deterministic terrain brushes - raise, lower, smooth, flatten, noise, erode
 over the box selection. They adjust the topmost non-air block of each column in one reversible
 operation, read heights before writing, use a stable SplitMix64 noise seed, and are previewed
 by the Rust core. They are local surface tools, not a whole-world generator; heightmaps are
-still preserved raw and are not recalculated after a brush.
+still preserved raw and are not recalculated after a brush. M9.10 adds a bounded deterministic
+local heightmap generator: an explicit seed, scale, octaves, amplitude, base Y and surface
+depth produce an integer fBm patch that is previewed by the Rust core and applied as one
+reversible operation. The surface and filler materials are chosen explicitly, above-surface
+blocks inside the bounds are cleared, and repeating the same parameters reproduces the same
+blocks. It is a construction tool, not a vanilla world generator, and it makes no worldgen
+parity claim.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

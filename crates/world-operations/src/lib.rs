@@ -7,6 +7,7 @@ use thiserror::Error;
 use world_domain::{
     BlockBox, BlockPos, BlockState, BoundsError, ChunkPos, Section, World, WorldError,
 };
+use world_generation::{generate_heightmap, HeightmapParams};
 
 pub const MAX_OPERATION_BLOCKS: u64 = 1_000_000;
 /// Largest allowed raise/lower/noise/smooth/erode step per brush application.
@@ -15,6 +16,14 @@ pub const MAX_TERRAIN_BRUSH_AMOUNT: u32 = 16;
 pub const MIN_TERRACE_STEP: u32 = 2;
 /// Largest terrace step in blocks.
 pub const MAX_TERRACE_STEP: u32 = 16;
+/// Largest supported heightmap noise cell size.
+pub const MAX_HEIGHTMAP_SCALE: u32 = world_generation::MAX_HEIGHTMAP_SCALE;
+/// Largest supported heightmap fractal octave count.
+pub const MAX_HEIGHTMAP_OCTAVES: u32 = world_generation::MAX_HEIGHTMAP_OCTAVES;
+/// Largest supported heightmap amplitude above the base surface.
+pub const MAX_HEIGHTMAP_AMPLITUDE: u32 = world_generation::MAX_HEIGHTMAP_AMPLITUDE;
+/// Largest supported number of surface layers in a generated heightmap patch.
+pub const MAX_HEIGHTMAP_SURFACE_DEPTH: u32 = 32;
 
 /// Deterministic surface brush. Each brush changes the topmost non-air block of every
 /// non-empty column inside the selection; it never invents or scales a whole world.
@@ -70,6 +79,8 @@ pub enum OperationError {
     EmptyBatch,
     #[error("invalid terrain brush: {0}")]
     InvalidBrush(String),
+    #[error("invalid heightmap generator: {0}")]
+    InvalidHeightmap(String),
     #[error("operation was cancelled before it could be committed")]
     Cancelled,
     #[error(transparent)]
@@ -195,6 +206,26 @@ pub enum Operation {
         #[serde(default, rename = "targetY")]
         target_y: Option<i32>,
     },
+    /// Deterministic local heightmap patch. This is a bounded construction tool, not a
+    /// whole-world generator and it makes no vanilla-parity claim.
+    GenerateHeightmap {
+        dimension: String,
+        bounds: BlockBox,
+        #[serde(default)]
+        seed: u64,
+        #[serde(default = "default_heightmap_scale")]
+        scale: u32,
+        #[serde(default = "default_heightmap_octaves")]
+        octaves: u32,
+        #[serde(default = "default_heightmap_amplitude")]
+        amplitude: u32,
+        #[serde(rename = "baseY")]
+        base_y: i32,
+        #[serde(default = "default_surface_depth", rename = "surfaceDepth")]
+        surface_depth: u32,
+        surface: BlockState,
+        filler: BlockState,
+    },
 }
 
 fn default_brush_amount() -> u32 {
@@ -205,6 +236,22 @@ fn default_terrace_step() -> u32 {
     4
 }
 
+fn default_heightmap_scale() -> u32 {
+    8
+}
+
+fn default_heightmap_octaves() -> u32 {
+    3
+}
+
+fn default_heightmap_amplitude() -> u32 {
+    8
+}
+
+fn default_surface_depth() -> u32 {
+    1
+}
+
 impl Operation {
     pub fn dimension(&self) -> &str {
         match self {
@@ -212,7 +259,8 @@ impl Operation {
             | Operation::Batch { dimension, .. }
             | Operation::FillCuboid { dimension, .. }
             | Operation::Replace { dimension, .. }
-            | Operation::TerrainBrush { dimension, .. } => dimension,
+            | Operation::TerrainBrush { dimension, .. }
+            | Operation::GenerateHeightmap { dimension, .. } => dimension,
         }
     }
 
@@ -224,6 +272,12 @@ impl Operation {
             Operation::FillCuboid { bounds, .. }
             | Operation::Replace { bounds, .. }
             | Operation::TerrainBrush { bounds, .. } => bounds.volume(),
+            Operation::GenerateHeightmap { bounds, base_y, .. } => {
+                let columns = (i64::from(bounds.max.x) - i64::from(bounds.min.x) + 1).max(0) as u64
+                    * (i64::from(bounds.max.z) - i64::from(bounds.min.z) + 1).max(0) as u64;
+                let layers = (i64::from(bounds.max.y) - i64::from(*base_y) + 1).max(0) as u64;
+                columns.saturating_mul(layers)
+            }
         }
     }
 
@@ -240,10 +294,10 @@ impl Operation {
                 }
                 Some(bounds)
             }
-            Operation::FillCuboid { bounds, .. } | Operation::Replace { bounds, .. } => {
-                Some(*bounds)
-            }
-            Operation::TerrainBrush { bounds, .. } => Some(*bounds),
+            Operation::FillCuboid { bounds, .. }
+            | Operation::Replace { bounds, .. }
+            | Operation::TerrainBrush { bounds, .. }
+            | Operation::GenerateHeightmap { bounds, .. } => Some(*bounds),
         }
     }
 
@@ -350,6 +404,92 @@ fn prevalidate(world: &World, operation: &Operation) -> Result<(), OperationErro
             check(bounds.max)?;
             validate_terrain_brush(*bounds, *kind, material, *amount, *step, *target_y)?;
         }
+        Operation::GenerateHeightmap {
+            dimension,
+            bounds,
+            seed,
+            scale,
+            octaves,
+            amplitude,
+            base_y,
+            surface_depth,
+            surface,
+            filler,
+        } => {
+            check(bounds.min)?;
+            check(bounds.max)?;
+            validate_heightmap(&HeightmapRequest {
+                dimension,
+                bounds: *bounds,
+                seed: *seed,
+                scale: *scale,
+                octaves: *octaves,
+                amplitude: *amplitude,
+                base_y: *base_y,
+                surface_depth: *surface_depth,
+                surface,
+                filler,
+            })?;
+        }
+    }
+    Ok(())
+}
+
+struct HeightmapRequest<'a> {
+    dimension: &'a str,
+    bounds: BlockBox,
+    seed: u64,
+    scale: u32,
+    octaves: u32,
+    amplitude: u32,
+    base_y: i32,
+    surface_depth: u32,
+    surface: &'a BlockState,
+    filler: &'a BlockState,
+}
+
+fn validate_heightmap(request: &HeightmapRequest<'_>) -> Result<(), OperationError> {
+    if !(1..=MAX_HEIGHTMAP_SCALE).contains(&request.scale) {
+        return Err(OperationError::InvalidHeightmap(format!(
+            "scale must be 1..={MAX_HEIGHTMAP_SCALE}, got {}",
+            request.scale
+        )));
+    }
+    if !(1..=MAX_HEIGHTMAP_OCTAVES).contains(&request.octaves) {
+        return Err(OperationError::InvalidHeightmap(format!(
+            "octaves must be 1..={MAX_HEIGHTMAP_OCTAVES}, got {}",
+            request.octaves
+        )));
+    }
+    if !(1..=MAX_HEIGHTMAP_AMPLITUDE).contains(&request.amplitude) {
+        return Err(OperationError::InvalidHeightmap(format!(
+            "amplitude must be 1..={MAX_HEIGHTMAP_AMPLITUDE}, got {}",
+            request.amplitude
+        )));
+    }
+    if !(1..=MAX_HEIGHTMAP_SURFACE_DEPTH).contains(&request.surface_depth) {
+        return Err(OperationError::InvalidHeightmap(format!(
+            "surfaceDepth must be 1..={MAX_HEIGHTMAP_SURFACE_DEPTH}, got {}",
+            request.surface_depth
+        )));
+    }
+    if request.surface.is_air() || request.filler.is_air() {
+        return Err(OperationError::InvalidHeightmap(
+            "surface and filler must not be minecraft:air".to_owned(),
+        ));
+    }
+    if request.base_y < request.bounds.min.y || request.base_y > request.bounds.max.y {
+        return Err(OperationError::InvalidHeightmap(format!(
+            "baseY {} is outside the selection Y range {}..={}",
+            request.base_y, request.bounds.min.y, request.bounds.max.y
+        )));
+    }
+    let max_height = i64::from(request.base_y) + i64::from(request.amplitude);
+    if max_height > i64::from(request.bounds.max.y) {
+        return Err(OperationError::InvalidHeightmap(format!(
+            "baseY {} plus amplitude {} exceeds the selection maxY {}",
+            request.base_y, request.amplitude, request.bounds.max.y
+        )));
     }
     Ok(())
 }
@@ -515,6 +655,35 @@ fn target_changes(
                 observer,
             );
         }
+        Operation::GenerateHeightmap {
+            dimension,
+            bounds,
+            seed,
+            scale,
+            octaves,
+            amplitude,
+            base_y,
+            surface_depth,
+            surface,
+            filler,
+        } => {
+            return plan_heightmap(
+                world,
+                HeightmapRequest {
+                    dimension,
+                    bounds: *bounds,
+                    seed: *seed,
+                    scale: *scale,
+                    octaves: *octaves,
+                    amplitude: *amplitude,
+                    base_y: *base_y,
+                    surface_depth: *surface_depth,
+                    surface,
+                    filler,
+                },
+                observer,
+            );
+        }
     };
     Ok(PlannedChanges {
         changes,
@@ -673,6 +842,82 @@ fn plan_terrain_brush(
     }
 
     Ok(PlannedChanges { changes, warnings })
+}
+
+/// Plans a bounded local heightmap patch. It fills from `base_y` to the generated surface,
+/// places `surface` on the top `surface_depth` layers, and clears the remaining selection
+/// above the new surface. Blocks below `base_y` are not touched.
+fn plan_heightmap(
+    world: &World,
+    request: HeightmapRequest<'_>,
+    observer: &dyn OperationObserver,
+) -> Result<PlannedChanges, OperationError> {
+    let width = (request.bounds.max.x - request.bounds.min.x + 1) as u32;
+    let depth = (request.bounds.max.z - request.bounds.min.z + 1) as u32;
+    let patch = generate_heightmap(
+        width,
+        depth,
+        request.bounds.min.x,
+        request.bounds.min.z,
+        HeightmapParams {
+            seed: request.seed,
+            scale: request.scale,
+            octaves: request.octaves,
+            amplitude: request.amplitude,
+        },
+    )
+    .map_err(|error| OperationError::InvalidHeightmap(error.to_string()))?;
+    let total = u64::from(width) * u64::from(depth);
+    report(observer, OperationPhase::Planning, 0, total)?;
+
+    let air = BlockState::default();
+    let mut changes = Vec::new();
+    let mut done = 0u64;
+    for z_local in 0..depth {
+        let z = request.bounds.min.z + z_local as i32;
+        for x_local in 0..width {
+            let x = request.bounds.min.x + x_local as i32;
+            let offset = patch
+                .offset(x_local, z_local)
+                .expect("the patch matches the requested footprint");
+            let height = request.base_y + offset as i32;
+            let layers = request
+                .surface_depth
+                .min((height - request.base_y + 1) as u32) as i32;
+            let surface_start = height - layers + 1;
+            for y in request.base_y..=height {
+                let desired = if y >= surface_start {
+                    request.surface
+                } else {
+                    request.filler
+                };
+                let pos = BlockPos::new(x, y, z);
+                if world.get_block(request.dimension, pos)? != *desired {
+                    changes.push(BlockChange {
+                        pos,
+                        state: desired.clone(),
+                    });
+                }
+            }
+            for y in (height + 1)..=request.bounds.max.y {
+                let pos = BlockPos::new(x, y, z);
+                if world.get_block(request.dimension, pos)? != air {
+                    changes.push(BlockChange {
+                        pos,
+                        state: air.clone(),
+                    });
+                }
+            }
+            done += 1;
+            if done == total || done % 256 == 0 {
+                report(observer, OperationPhase::Planning, done, total)?;
+            }
+        }
+    }
+    Ok(PlannedChanges {
+        changes,
+        warnings: Vec::new(),
+    })
 }
 
 fn median_height(heights: &[Option<i32>]) -> Option<i32> {
@@ -1744,5 +1989,248 @@ mod tests {
             world.get_block(DIM, BlockPos::new(0, 71, 0)).unwrap(),
             air()
         );
+    }
+
+    #[derive(Clone, Copy)]
+    struct HeightmapSpec<'a> {
+        seed: u64,
+        scale: u32,
+        octaves: u32,
+        amplitude: u32,
+        base_y: i32,
+        surface_depth: u32,
+        surface: &'a str,
+        filler: &'a str,
+    }
+
+    impl Default for HeightmapSpec<'_> {
+        fn default() -> Self {
+            Self {
+                seed: 0,
+                scale: 8,
+                octaves: 3,
+                amplitude: 8,
+                base_y: 60,
+                surface_depth: 1,
+                surface: "minecraft:grass_block",
+                filler: "minecraft:dirt",
+            }
+        }
+    }
+
+    fn heightmap_operation(bounds: BlockBox, spec: HeightmapSpec<'_>) -> Operation {
+        Operation::GenerateHeightmap {
+            dimension: DIM.into(),
+            bounds,
+            seed: spec.seed,
+            scale: spec.scale,
+            octaves: spec.octaves,
+            amplitude: spec.amplitude,
+            base_y: spec.base_y,
+            surface_depth: spec.surface_depth,
+            surface: state(spec.surface),
+            filler: state(spec.filler),
+        }
+    }
+
+    #[test]
+    fn heightmap_patch_places_surface_and_clears_above_the_base() {
+        let mut world = World::new_empty();
+        for y in 60..=70 {
+            world
+                .set_block(DIM, BlockPos::new(0, y, 0), &state("minecraft:stone"))
+                .unwrap();
+        }
+        world
+            .set_block(DIM, BlockPos::new(0, 59, 0), &state("minecraft:gold_block"))
+            .unwrap();
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(0, 70, 0)).unwrap();
+        let operation = heightmap_operation(
+            bounds,
+            HeightmapSpec {
+                seed: 7,
+                scale: 4,
+                octaves: 2,
+                amplitude: 6,
+                surface_depth: 2,
+                surface: "minecraft:dirt",
+                filler: "minecraft:cobblestone",
+                ..HeightmapSpec::default()
+            },
+        );
+        assert_eq!(operation.dimension(), DIM);
+        assert_eq!(operation.bounds(), Some(bounds));
+        let patch = world_generation::generate_heightmap(
+            1,
+            1,
+            0,
+            0,
+            world_generation::HeightmapParams {
+                seed: 7,
+                scale: 4,
+                octaves: 2,
+                amplitude: 6,
+            },
+        )
+        .unwrap();
+        let height = 60 + patch.offsets[0] as i32;
+        apply(&mut world, &operation).unwrap();
+
+        assert_eq!(
+            world.get_block(DIM, BlockPos::new(0, 59, 0)).unwrap(),
+            state("minecraft:gold_block"),
+            "blocks below baseY must stay untouched"
+        );
+        for y in 60..=height {
+            let expected = if y >= height - 1 {
+                "minecraft:dirt"
+            } else {
+                "minecraft:cobblestone"
+            };
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(0, y, 0)).unwrap(),
+                state(expected),
+                "unexpected state at y={y}, generated height {height}"
+            );
+        }
+        for y in (height + 1)..=70 {
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(0, y, 0)).unwrap(),
+                air(),
+                "generated air missing at y={y}, generated height {height}"
+            );
+        }
+    }
+
+    #[test]
+    fn heightmap_patch_is_deterministic_bounded_and_reversible() {
+        let bounds = BlockBox::new(BlockPos::new(-3, 60, -2), BlockPos::new(4, 72, 5)).unwrap();
+        let mut first = World::new_empty();
+        let mut second = World::new_empty();
+        for world in [&mut first, &mut second] {
+            for x in -3..=4 {
+                for z in -2..=5 {
+                    for y in 60..=62 {
+                        world
+                            .set_block(DIM, BlockPos::new(x, y, z), &state("minecraft:stone"))
+                            .unwrap();
+                    }
+                }
+            }
+        }
+        let operation = heightmap_operation(
+            bounds,
+            HeightmapSpec {
+                seed: 0x5EED,
+                scale: 4,
+                octaves: 3,
+                amplitude: 7,
+                ..HeightmapSpec::default()
+            },
+        );
+        assert_eq!(operation.affected_blocks(), bounds.volume());
+        let preview_first = preview(&first, &operation).unwrap();
+        let preview_second = preview(&second, &operation).unwrap();
+        assert_eq!(preview_first.changed_blocks, preview_second.changed_blocks);
+        assert_eq!(preview_first.dirty_chunks, preview_second.dirty_chunks);
+        assert!(preview_first.changed_blocks > 0);
+
+        let before_count = first.block_count();
+        let applied = apply(&mut first, &operation).unwrap();
+        apply(&mut second, &operation).unwrap();
+        let mut heights = BTreeSet::new();
+        for x in -3..=4 {
+            for z in -2..=5 {
+                let mut top = None;
+                for y in (60..=72).rev() {
+                    if !first
+                        .get_block(DIM, BlockPos::new(x, y, z))
+                        .unwrap()
+                        .is_air()
+                    {
+                        top = Some(y);
+                        break;
+                    }
+                }
+                let top = top.expect("generated column must not be empty");
+                assert!((60..=67).contains(&top));
+                assert_eq!(
+                    first.get_block(DIM, BlockPos::new(x, top, z)).unwrap(),
+                    state("minecraft:grass_block")
+                );
+                for y in 63..top {
+                    assert_eq!(
+                        first.get_block(DIM, BlockPos::new(x, y, z)).unwrap(),
+                        state("minecraft:dirt")
+                    );
+                }
+                heights.insert(top);
+            }
+        }
+        assert!(heights.len() > 1, "noise should produce varied heights");
+
+        for diff in applied.diffs.iter().rev() {
+            diff.revert(&mut first).unwrap();
+        }
+        assert_eq!(first.block_count(), before_count);
+        assert_eq!(
+            first.get_block(DIM, BlockPos::new(0, 61, 0)).unwrap(),
+            state("minecraft:stone")
+        );
+    }
+
+    #[test]
+    fn heightmap_parameters_are_validated_before_planning() {
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 70, 1)).unwrap();
+        let world = World::new_empty();
+        let invalid = |spec: HeightmapSpec<'_>| {
+            matches!(
+                preview(&world, &heightmap_operation(bounds, spec)),
+                Err(OperationError::InvalidHeightmap(_))
+            )
+        };
+        for scale in [0, 65] {
+            assert!(invalid(HeightmapSpec {
+                scale,
+                ..HeightmapSpec::default()
+            }));
+        }
+        for octaves in [0, 7] {
+            assert!(invalid(HeightmapSpec {
+                octaves,
+                ..HeightmapSpec::default()
+            }));
+        }
+        for amplitude in [0, 257] {
+            assert!(invalid(HeightmapSpec {
+                amplitude,
+                ..HeightmapSpec::default()
+            }));
+        }
+        for surface_depth in [0, 33] {
+            assert!(invalid(HeightmapSpec {
+                surface_depth,
+                ..HeightmapSpec::default()
+            }));
+        }
+        assert!(invalid(HeightmapSpec {
+            surface: "minecraft:air",
+            ..HeightmapSpec::default()
+        }));
+        assert!(invalid(HeightmapSpec {
+            filler: "minecraft:air",
+            ..HeightmapSpec::default()
+        }));
+        for base_y in [59, 65, 71] {
+            assert!(invalid(HeightmapSpec {
+                base_y,
+                ..HeightmapSpec::default()
+            }));
+        }
+        assert!(preview(
+            &world,
+            &heightmap_operation(bounds, HeightmapSpec::default())
+        )
+        .is_ok());
     }
 }

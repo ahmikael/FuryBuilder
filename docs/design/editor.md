@@ -49,6 +49,34 @@ surface without escaping the operation bounds.
 - Brushes adjust block states only. Heightmaps, light, biomes and other derived data are
   not recalculated yet; that is a separate M9 task.
 
+## Heightmap generator (M9.10)
+
+The `Heightmap` tab builds a bounded local surface patch from explicit parameters instead
+of editing the existing surface. It requires a box selection and writes one reversible
+operation; it is not a whole-world generator and makes no vanilla worldgen parity claim.
+
+| Parameter | Behaviour |
+|---|---|
+| Seed | Unsigned integer seed; the same seed and parameters reproduce the same patch. |
+| Scale | Noise cell size in blocks, 1..64. |
+| Octaves | Fractal octave count, 1..6; each octave contributes half the weight of the previous one. |
+| Amplitude | Maximum height offset above `baseY`, 1..256. |
+| Base Y | Starting surface height; empty uses the selection's minimum Y. |
+| Surface depth | Number of top layers written with the surface material, 1..32. |
+| Surface | Palette material placed on the top layer(s). |
+| Filler | Material placed between `baseY` and the surface layers. |
+
+- The footprint is the selected X/Z extent. The vertical bounds expand to include `baseY`
+  and `baseY + amplitude`, so the whole patch stays inside the recorded operation extent.
+- Heights are sampled with integer value noise/fBm anchored to world coordinates. There is
+  no floating-point state, so the same inputs match on every platform.
+- Blocks from `baseY` to the generated height are filled; blocks above the generated
+  surface inside the bounds are cleared. Blocks below `baseY` are untouched.
+- The panel previews the exact Rust operation and applies it through the same revisioned
+  pipeline, so it is one undoable history entry.
+- This tool changes block states only. World heightmaps, light, biomes and other derived
+  data are not recalculated.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

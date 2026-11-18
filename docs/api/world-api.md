@@ -24,6 +24,12 @@ Operation =
       type: "terrain_brush", dimension, bounds, kind, material:
         BlockState, amount: 1..16, seed: u64, step: 2..16, targetY?
     }
+  | {
+      type: "generate_heightmap", dimension, bounds, seed: u64,
+        scale: 1..64, octaves: 1..6, amplitude: 1..256,
+        baseY: i32, surfaceDepth: 1..32,
+        surface: BlockState, filler: BlockState
+    }
 
 OperationResult {
   operationId: string,

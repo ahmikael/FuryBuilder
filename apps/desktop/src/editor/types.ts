@@ -19,6 +19,21 @@ export interface BoxBounds {
 export type TerrainBrushKind =
   "raise" | "lower" | "smooth" | "flatten" | "noise" | "erode" | "terrace";
 
+/** Deterministic bounded heightmap patch. It is a local construction tool, not worldgen. */
+export interface HeightmapOperation {
+  type: "generate_heightmap";
+  dimension: string;
+  bounds: BoxBounds;
+  seed: number;
+  scale: number;
+  octaves: number;
+  amplitude: number;
+  baseY: number;
+  surfaceDepth: number;
+  surface: BlockState;
+  filler: BlockState;
+}
+
 export type EditorOperation =
   | { type: "set_block"; dimension: string; pos: BlockPosition; state: BlockState }
   | { type: "batch"; dimension: string; changes: BlockChange[] }
@@ -34,7 +49,8 @@ export type EditorOperation =
       seed: number;
       step: number;
       targetY?: number | null;
-    };
+    }
+  | HeightmapOperation;
 
 export interface PreviewResult {
   affectedBlocks: number;

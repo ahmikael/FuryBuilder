@@ -239,7 +239,8 @@ impl McpAccessState {
                 }
                 Operation::FillCuboid { bounds, .. }
                 | Operation::Replace { bounds, .. }
-                | Operation::TerrainBrush { bounds, .. } => {
+                | Operation::TerrainBrush { bounds, .. }
+                | Operation::GenerateHeightmap { bounds, .. } => {
                     if !box_contains(&selection.bounds, bounds) {
                         return Err(AppError::new(
                             ErrorCode::PermissionDenied,

@@ -6,11 +6,13 @@ import {
   boundsVolume,
   editorShortcut,
   ghostForContext,
+  heightmapBounds,
   linePoints,
   normalizeBounds,
   operationLabel,
   pasteChanges,
   planBlockTool,
+  planHeightmap,
   planTerrainBrush,
   spherePositions,
   terrainBrushBounds,
@@ -401,5 +403,103 @@ describe("terrain brush planning", () => {
     });
     expect(operation).not.toBeNull();
     expect(operationLabel(operation!)).toBe("Terrace terrain in 387 blocks");
+  });
+});
+
+describe("heightmap planning", () => {
+  const selection = { min: { x: -4, y: 64, z: 2 }, max: { x: 3, y: 70, z: 9 } };
+  const dirt: BlockState = { name: "minecraft:dirt", properties: {} };
+
+  it("expands the vertical extent to include the base and full amplitude", () => {
+    expect(heightmapBounds(selection, 60, 8)).toEqual({
+      min: { x: -4, y: 60, z: 2 },
+      max: { x: 3, y: 70, z: 9 },
+    });
+    expect(heightmapBounds(selection, 68, 16)).toEqual({
+      min: { x: -4, y: 64, z: 2 },
+      max: { x: 3, y: 84, z: 9 },
+    });
+  });
+
+  it("requires a box selection and defaults the base to the selection floor", () => {
+    expect(
+      planHeightmap({
+        dimension: "minecraft:overworld",
+        selection: null,
+        seed: 1,
+        scale: 8,
+        octaves: 3,
+        amplitude: 8,
+        baseY: null,
+        surfaceDepth: 1,
+        surface: stone,
+        filler: dirt,
+      }),
+    ).toBeNull();
+
+    expect(
+      planHeightmap({
+        dimension: "minecraft:overworld",
+        selection,
+        seed: 1,
+        scale: 8,
+        octaves: 3,
+        amplitude: 8,
+        baseY: null,
+        surfaceDepth: 1,
+        surface: stone,
+        filler: dirt,
+      }),
+    ).toMatchObject({
+      type: "generate_heightmap",
+      baseY: 64,
+      bounds: heightmapBounds(selection, 64, 8),
+    });
+  });
+
+  it("normalizes limits without changing the requested materials", () => {
+    expect(
+      planHeightmap({
+        dimension: "minecraft:overworld",
+        selection,
+        seed: -5,
+        scale: 999,
+        octaves: 0,
+        amplitude: 9999,
+        baseY: 60,
+        surfaceDepth: 99,
+        surface: stone,
+        filler: dirt,
+      }),
+    ).toEqual({
+      type: "generate_heightmap",
+      dimension: "minecraft:overworld",
+      bounds: heightmapBounds(selection, 60, 256),
+      seed: 0,
+      scale: 64,
+      octaves: 1,
+      amplitude: 256,
+      baseY: 60,
+      surfaceDepth: 32,
+      surface: stone,
+      filler: dirt,
+    });
+  });
+
+  it("labels the generated patch for jobs and history", () => {
+    const operation = planHeightmap({
+      dimension: "minecraft:overworld",
+      selection,
+      seed: 42,
+      scale: 8,
+      octaves: 3,
+      amplitude: 8,
+      baseY: 64,
+      surfaceDepth: 1,
+      surface: stone,
+      filler: dirt,
+    });
+    expect(operation).not.toBeNull();
+    expect(operationLabel(operation!)).toBe("Generate heightmap in 576 blocks");
   });
 });

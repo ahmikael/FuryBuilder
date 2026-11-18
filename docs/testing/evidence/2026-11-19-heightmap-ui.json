@@ -1,0 +1,73 @@
+{
+  "tool": {
+    "name": "furybuilder-heightmap-ui",
+    "version": 1
+  },
+  "generatedAt": "2026-11-18T21:41:27.115Z",
+  "target": "Minecraft Java 1.21.4 / M9.10 deterministic local heightmap",
+  "executableSha256": "344aed9ee24d609132ecafffc675c47abb11c6cf473ef56a3ac15d25bca02ca8",
+  "project": {
+    "name": "Heightmap Smoke",
+    "folder": "Heightmap Smoke.furybuilder",
+    "creationMode": "flat"
+  },
+  "viewport": {
+    "selectionClicks": "real viewport pointer events",
+    "canvas": {
+      "left": 224,
+      "top": 40,
+      "width": 960,
+      "height": 660
+    }
+  },
+  "panel": {
+    "seed": 1,
+    "scale": 4,
+    "octaves": 3,
+    "amplitude": 4,
+    "surfaceDepth": 2,
+    "surfaceMaterial": "minecraft:stone_bricks",
+    "fillerMaterial": "minecraft:dirt",
+    "previewText": "14 block(s) would change out of 30 selected.",
+    "previewScreenshot": {
+      "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-19-heightmap-ui.png",
+      "bytes": 494687
+    },
+    "appliedScreenshot": {
+      "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-19-heightmap-ui-applied.png",
+      "bytes": 496146
+    }
+  },
+  "world": {
+    "revisionBefore": 1,
+    "revisionAfter": 2,
+    "revisionAfterUndo": 3,
+    "revisionAfterRepeat": 4,
+    "revisionAfterFinalUndo": 5,
+    "surfaceBlocksBefore": 0,
+    "surfaceBlocksAfter": 12,
+    "surfaceBlocksAfterUndo": 0,
+    "surfaceBlocksAfterRepeat": 12,
+    "sameSurfaceAfterRepeat": true,
+    "canUndoAfterApply": true,
+    "historyEntriesAfterApply": 1
+  },
+  "conclusions": {
+    "realFlatProjectOpened": true,
+    "realSelectionProduced": true,
+    "previewWasNonEmpty": true,
+    "heightmapCommittedRevision": true,
+    "generatedSurfacePresent": true,
+    "undoRestoredSurface": true,
+    "deterministicRepeat": true,
+    "undoRecordedInHistory": true,
+    "noConsoleErrors": true
+  },
+  "consoleErrors": [],
+  "limitations": [
+    "the viewport selection used synthetic pointer events on the real viewport element; all subsequent operations used the real Tauri backend",
+    "the flat base is deliberate manual geometry, not Minecraft world generation",
+    "the heightmap tool is deterministic local construction only and makes no vanilla worldgen parity claim",
+    "heightmaps, light, biomes and other derived data are outside this smoke"
+  ]
+}

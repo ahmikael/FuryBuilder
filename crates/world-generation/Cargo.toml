@@ -7,3 +7,6 @@ license.workspace = true
 description = "Deterministic local generators and Build DSL compiler for FuryBuilder"
 [lib]
 name = "world_generation"
+
+[dependencies]
+thiserror = { workspace = true }

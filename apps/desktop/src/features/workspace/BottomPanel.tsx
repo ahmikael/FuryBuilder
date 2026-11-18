@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Blocks,
+  Grid3X3,
   History,
   Loader2,
   Mountain,
@@ -21,6 +22,7 @@ import type { BlockDefinition } from "@/editor/types";
 import { TOOL_LABELS, TOOL_SHORTCUTS } from "@/editor/session";
 import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor/commands";
 import { TerrainPanel } from "@/features/workspace/TerrainPanel";
+import { HeightmapPanel } from "@/features/workspace/HeightmapPanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -625,6 +627,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="terrain">
               <Mountain className="size-3" /> Terrain
             </TabsTrigger>
+            <TabsTrigger value="heightmap">
+              <Grid3X3 className="size-3" /> Heightmap
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -650,6 +655,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="terrain" className="m-0 p-2">
           <TerrainPanel />
+        </TabsContent>
+
+        <TabsContent value="heightmap" className="m-0 p-2">
+          <HeightmapPanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

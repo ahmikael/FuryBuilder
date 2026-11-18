@@ -495,3 +495,94 @@ fn invalid_terrain_brush_is_rejected_without_history_or_revision() {
     assert_eq!(service.world_info().revision, 0);
     assert!(service.history().is_empty());
 }
+
+#[test]
+fn heightmap_generation_is_revisioned_audited_and_reversible() {
+    let mut service = WorldService::new();
+    let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 70, 1)).unwrap();
+    let base = service
+        .execute(request(Operation::FillCuboid {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 63, 1)).unwrap(),
+            state: state("minecraft:stone"),
+        }))
+        .unwrap();
+    assert_eq!(base.world_revision, 1);
+
+    let applied = service
+        .execute(request(Operation::GenerateHeightmap {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            seed: 0x5EED,
+            scale: 4,
+            octaves: 3,
+            amplitude: 7,
+            base_y: 60,
+            surface_depth: 2,
+            surface: state("minecraft:grass_block"),
+            filler: state("minecraft:dirt"),
+        }))
+        .unwrap();
+    assert!(applied.changed_blocks > 0);
+    assert_eq!(applied.world_revision, 2);
+    let summary = &service
+        .audit_log()
+        .last()
+        .expect("audit entry")
+        .parameter_summary;
+    assert_eq!(summary["type"], "generate_heightmap");
+    assert_eq!(summary["seed"], 0x5EED);
+    assert_eq!(summary["scale"], 4);
+    assert_eq!(summary["baseY"], 60);
+    assert_eq!(summary["surfaceDepth"], 2);
+    assert_eq!(summary["surface"], "minecraft:grass_block");
+
+    match service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 70, 0),
+        })
+        .unwrap()
+    {
+        QueryResult::Block { state, .. } => assert_eq!(state, self::state("minecraft:air")),
+        other => panic!("unexpected query result: {other:?}"),
+    }
+
+    let undo = service
+        .undo("project-1", actor(), Some(&applied.operation_id))
+        .unwrap();
+    assert_eq!(undo.changed_blocks, applied.changed_blocks);
+    assert_eq!(service.world_info().revision, 3);
+    match service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 63, 0),
+        })
+        .unwrap()
+    {
+        QueryResult::Block { state, .. } => assert_eq!(state, self::state("minecraft:stone")),
+        other => panic!("unexpected query result: {other:?}"),
+    }
+}
+
+#[test]
+fn invalid_heightmap_is_rejected_without_history_or_revision() {
+    let mut service = WorldService::new();
+    let error = service
+        .execute(request(Operation::GenerateHeightmap {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 70, 1)).unwrap(),
+            seed: 0,
+            scale: 8,
+            octaves: 3,
+            amplitude: 8,
+            base_y: 65,
+            surface_depth: 1,
+            surface: state("minecraft:grass_block"),
+            filler: state("minecraft:dirt"),
+        }))
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArgument);
+    assert_eq!(service.world_info().revision, 0);
+    assert!(service.history().is_empty());
+}

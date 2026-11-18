@@ -4,6 +4,7 @@ import type {
   ClipboardPayload,
   EditorOperation,
   EditorTool,
+  HeightmapOperation,
   TerrainBrushKind,
 } from "@/editor/types";
 import type { BlockPosition, BlockState } from "@/renderer/types";
@@ -201,6 +202,8 @@ export function operationLabel(operation: EditorOperation): string {
       return `${TERRAIN_BRUSH_LABELS[operation.kind]} terrain in ${boundsVolume(
         operation.bounds,
       ).toLocaleString()} blocks`;
+    case "generate_heightmap":
+      return `Generate heightmap in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
   }
 }
 
@@ -416,6 +419,86 @@ export function planTerrainBrush(context: TerrainBrushContext): EditorOperation 
     seed: clampTerrainSeed(context.seed),
     step: clampTerraceStep(context.step),
     targetY: context.kind === "flatten" ? context.targetY : null,
+  };
+}
+
+export const MAX_HEIGHTMAP_SCALE = 64;
+export const MAX_HEIGHTMAP_OCTAVES = 6;
+export const MAX_HEIGHTMAP_AMPLITUDE = 256;
+export const MAX_SURFACE_DEPTH = 32;
+
+export interface HeightmapContext {
+  dimension: string;
+  selection: BoxBounds | null;
+  seed: number;
+  scale: number;
+  octaves: number;
+  amplitude: number;
+  /** `null` uses the selection's minimum Y as the base surface. */
+  baseY: number | null;
+  surfaceDepth: number;
+  surface: BlockState;
+  filler: BlockState;
+}
+
+export function clampHeightmapScale(scale: number): number {
+  if (!Number.isFinite(scale)) return 8;
+  return Math.min(MAX_HEIGHTMAP_SCALE, Math.max(1, Math.round(scale)));
+}
+
+export function clampHeightmapOctaves(octaves: number): number {
+  if (!Number.isFinite(octaves)) return 3;
+  return Math.min(MAX_HEIGHTMAP_OCTAVES, Math.max(1, Math.round(octaves)));
+}
+
+export function clampHeightmapAmplitude(amplitude: number): number {
+  if (!Number.isFinite(amplitude)) return 8;
+  return Math.min(MAX_HEIGHTMAP_AMPLITUDE, Math.max(1, Math.round(amplitude)));
+}
+
+export function clampSurfaceDepth(depth: number): number {
+  if (!Number.isFinite(depth)) return 1;
+  return Math.min(MAX_SURFACE_DEPTH, Math.max(1, Math.round(depth)));
+}
+
+/**
+ * The heightmap footprint is the selected X/Z extent; the vertical extent grows to include
+ * the requested base surface and full amplitude, so every generated column stays inside the
+ * recorded operation bounds.
+ */
+export function heightmapBounds(selection: BoxBounds, baseY: number, amplitude: number): BoxBounds {
+  return {
+    min: {
+      ...selection.min,
+      y: Math.min(selection.min.y, baseY),
+    },
+    max: {
+      ...selection.max,
+      y: Math.max(selection.max.y, baseY + amplitude),
+    },
+  };
+}
+
+/**
+ * Builds the typed deterministic heightmap operation. Like the brush helper, this only
+ * normalizes UI numbers; the Rust core validates ranges, materials and final bounds.
+ */
+export function planHeightmap(context: HeightmapContext): HeightmapOperation | null {
+  if (!context.selection) return null;
+  const amplitude = clampHeightmapAmplitude(context.amplitude);
+  const baseY = context.baseY ?? context.selection.min.y;
+  return {
+    type: "generate_heightmap",
+    dimension: context.dimension,
+    bounds: heightmapBounds(context.selection, baseY, amplitude),
+    seed: clampTerrainSeed(context.seed),
+    scale: clampHeightmapScale(context.scale),
+    octaves: clampHeightmapOctaves(context.octaves),
+    amplitude,
+    baseY,
+    surfaceDepth: clampSurfaceDepth(context.surfaceDepth),
+    surface: context.surface,
+    filler: context.filler,
   };
 }
 

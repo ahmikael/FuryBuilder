@@ -104,6 +104,7 @@ impl From<OperationError> for AppError {
                 AppError::invalid_argument(error.to_string())
             }
             OperationError::InvalidBrush(_) => AppError::invalid_argument(error.to_string()),
+            OperationError::InvalidHeightmap(_) => AppError::invalid_argument(error.to_string()),
             OperationError::Cancelled => AppError::new(ErrorCode::Cancelled, error.to_string()),
         }
     }

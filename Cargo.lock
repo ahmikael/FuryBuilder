@@ -992,6 +992,9 @@ dependencies = [
 [[package]]
 name = "furybuilder-world-generation"
 version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "furybuilder-world-io"
@@ -1010,6 +1013,7 @@ name = "furybuilder-world-operations"
 version = "0.1.0"
 dependencies = [
  "furybuilder-world-domain",
+ "furybuilder-world-generation",
  "serde",
  "thiserror 2.0.21",
 ]

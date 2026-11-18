@@ -88,6 +88,24 @@ const operation = z.discriminatedUnion("type", [
     step: z.number().int().min(2).max(16).default(4),
     targetY: z.number().int().optional(),
   }),
+  z.object({
+    type: z.literal("generate_heightmap"),
+    dimension,
+    bounds,
+    seed: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .default(0),
+    scale: z.number().int().min(1).max(64).default(8),
+    octaves: z.number().int().min(1).max(6).default(3),
+    amplitude: z.number().int().min(1).max(256).default(8),
+    baseY: z.number().int(),
+    surfaceDepth: z.number().int().min(1).max(32).default(1),
+    surface: blockState,
+    filler: blockState,
+  }),
 ]);
 
 const project = {

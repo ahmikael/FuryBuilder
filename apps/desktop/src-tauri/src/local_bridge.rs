@@ -1131,6 +1131,29 @@ fn operation_summary(operation: &Operation) -> Value {
             "step": step,
             "targetY": target_y,
         }),
+        Operation::GenerateHeightmap {
+            seed,
+            scale,
+            octaves,
+            amplitude,
+            base_y,
+            surface_depth,
+            surface,
+            filler,
+            ..
+        } => json!({
+            "type": "generate_heightmap",
+            "dimension": dimension,
+            "bounds": bounds,
+            "seed": seed,
+            "scale": scale,
+            "octaves": octaves,
+            "amplitude": amplitude,
+            "baseY": base_y,
+            "surfaceDepth": surface_depth,
+            "surface": surface.to_string(),
+            "filler": filler.to_string(),
+        }),
     }
 }
 
