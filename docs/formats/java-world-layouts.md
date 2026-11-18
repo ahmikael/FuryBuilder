@@ -247,8 +247,8 @@ Refused explicitly instead of guessed:
 
 Biomes are decoded but not yet persisted in `world-domain`; they remain on
 `DecodedChunk`, and `to_chunk()` copies blocks only. Raw chunk NBT is also kept
-on `RegionChunk` for the passthrough work. Passthrough, overlay, import UI and
-any write path are later M8 stages.
+on `RegionChunk` for the passthrough work. The byte-preserving copy is described
+below; overlay, import UI and any in-place write path are later M8 stages.
 
 Probe and tests:
 
@@ -263,19 +263,67 @@ Every mode decodes all allocated chunks before printing, so a zero exit code
 means the whole region table was read. `--decode` additionally reports block
 and biome aggregates; `--all-chunks` prints every per-chunk summary.
 
+## Byte-preserving passthrough copy (M8.4)
+
+`crates/world-io/src/passthrough.rs` copies a supported classic world to a new
+folder without re-encoding any data. It is the safe baseline for an overlay:
+unchanged chunks, unknown NBT fields, unknown files and `datapacks/` never pass
+through a lossy parser.
+
+Guarantees and checks:
+
+- the source is opened read-only and must pass `JavaWorld::open` and the fixed
+  `DataVersion` check;
+- every allocated chunk is decoded and structurally validated before copying
+  (default `validate_chunks: true`);
+- every regular file is copied byte for byte, including unknown top-level files
+  and unknown directories; `.mca` files are copied as complete containers, not
+  rebuilt from decoded chunks;
+- `session.lock` is the only skipped file, because it is a transient game lock;
+  the report records this explicitly;
+- symlinks, junctions, reparse points and special files are refused, including a
+  symlinked source root;
+- the destination must not exist and must not be inside the source world;
+- files are written to a temporary sibling directory, hashed with SHA-256,
+  re-read and compared, then the copied world is opened and validated again;
+- only after those checks is the temporary directory renamed to the destination;
+- limits default to 100,000 files, 8 GiB per file and 64 GiB total; tests can
+  lower them through `PassthroughOptions`.
+
+File names, directory layout and file contents are preserved. OS timestamps,
+ACLs and alternate data streams are outside the passthrough contract.
+
+The report contains the canonical source and destination, every copied relative
+path with its size and SHA-256, skipped entries, region/chunk counts and whether
+chunks were validated. `PassthroughReport::bytes()` returns the copied byte
+count. Errors have stable codes such as `unsupported_format`,
+`verification_failed`, `unsafe_path`, `already_exists` and `limit_exceeded`.
+
+Unknown fields inside a region are preserved because the whole region file is
+copied. Re-encoding a _modified_ chunk while carrying unknown tags is **not**
+implemented yet; that belongs to the overlay/write stages and must be proven by
+round-trip tests before use.
+
+```powershell
+cargo test -p furybuilder-world-io --test passthrough
+cargo run -p furybuilder-world-io --example passthrough_world -- <source> <new-destination> --all-files
+```
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                                                        | Write | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | --------------------------------------------------------------------------- | ----- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3); passthrough/edit pending | no    | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                                          | no    | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                                          | no    | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                                          | no    | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                                          | no    | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                                          | no    | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Write | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ----- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | no    | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no    | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no    | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no    | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no    | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no    | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
-the inventory script is not read support.
+the inventory script is not read support. “Passthrough” means unchanged files
+are copied byte for byte; it does not mean modified chunks can be re-encoded
+without loss.
 
 ## Safety rules for the M8 importer
 
@@ -334,6 +382,12 @@ Recorded evidence:
   in an empty section above terrain, the server reported `ocean` while the
   stored NBT says `beach`; the adapter reports stored NBT and does not claim
   that the game uses those cells.
+- `docs/testing/evidence/2026-11-18-anvil-passthrough-1.21.4.json` — the
+  841-chunk world copied to a new temporary folder: 20 files, 3,481,260 bytes,
+  4 regions, all chunks validated, and a deterministic manifest SHA-256. The
+  source had 21 files; only `session.lock` was skipped. An independent
+  PowerShell SHA-256 comparison confirmed that all 20 destination files match
+  the source and that all 21 source files were unchanged after the copy.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
@@ -364,11 +418,12 @@ Sources checked on 2026-11-18:
 ## Consequences for the next M8 tasks
 
 1. The M8.3 reader covers `level.dat`, region containers, block-state palettes
-   and biomes for 1.21.4 classic. The next step is passthrough of unmodified
-   fields, chunks and files, including unknown metadata.
+   and biomes for 1.21.4 classic. M8.4 adds a byte-preserving, validated copy of
+   unchanged files, including unknown metadata. The next step is the overlay for
+   edits on top of imported data.
 2. Keep layout detection explicit. Opening a 26.1+ folder must return a
    structured `unsupported_layout`/`unsupported_version`, not a partial world.
 3. Add a real 26.1+ fixture and adapter only when the game format and the
    importer can be tested together; do not promise it from the folder names.
-4. Never write in place. Build an overlay and export a new world copy after
-   the read path is verified.
+4. Never write in place. Build the overlay first and export a new world copy
+   only after the read and passthrough paths are verified.

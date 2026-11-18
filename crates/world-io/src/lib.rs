@@ -13,6 +13,7 @@ pub mod exchange;
 pub mod java_chunk;
 pub mod java_structure;
 pub mod nbt;
+pub mod passthrough;
 pub mod structure;
 
 pub use anvil::{
@@ -36,6 +37,11 @@ pub use java_structure::{
     JAVA_STRUCTURE_EXTENSION, JAVA_STRUCTURE_FORMAT,
 };
 pub use nbt::{NbtError, NbtFile, NbtValue};
+pub use passthrough::{
+    passthrough_java_world, passthrough_java_world_with_options, CopiedFile, PassthroughError,
+    PassthroughOptions, PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES,
+    MAX_PASSTHROUGH_FILE_BYTES, MAX_PASSTHROUGH_TOTAL_BYTES,
+};
 pub use structure::{
     Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,
     MAX_STRUCTURE_VOLUME,

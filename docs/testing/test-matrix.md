@@ -69,14 +69,20 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Corrupt palette fail-closed checks                | `crates/world-io/tests/java_chunk.rs` — wrong long counts, out-of-range indices, missing/extra data, invalid biome ids and missing biome palettes are refused                                                          |
 | Real 1.21.4 chunk decoding                        | `docs/testing/evidence/2026-11-18-anvil-decode-1.21.4.json` — 841 chunks, 20,184 sections, 125 non-empty, 123,908 non-air blocks, 0 missing sections in present chunks, 5 block states, `minecraft:plains`             |
 | Real multi-biome cross-check                      | `docs/testing/evidence/2026-11-18-anvil-biomes-1.21.4.json` — 5 biomes, 98 block states; 48 running-server biome queries matched the decoded cell grid at y=63/65/100 in chunk (-2, -3); empty-section caveat recorded |
+| Passthrough of unchanged files and unknown data   | `crates/world-io/src/passthrough.rs`; `crates/world-io/tests/passthrough.rs` — byte equality for region/level/unknown files, unknown directories, source snapshot unchanged, only `session.lock` skipped               |
+| Passthrough fail-closed checks                    | `crates/world-io/tests/passthrough.rs` — existing/nested destination, symlinked file/dir, corrupt chunk, file limit; no destination or temp directory is left after failure                                            |
+| Real 1.21.4 passthrough copy                      | `docs/testing/evidence/2026-11-18-anvil-passthrough-1.21.4.json` — 20 files, 3,481,260 bytes, 4 regions, 841 chunks validated; independent SHA-256 comparison matched all files and source stayed unchanged            |
 | Classic/modern layout and version refusal         | `crates/world-io/tests/anvil.rs` — unsupported DataVersion, 26.1+ split, mixed markers and a missing `region/` are refused                                                                                             |
 
 The Python inventory script is deliberately metadata-only: it does not decode chunks.
 `crates/world-io/src/anvil.rs` and `crates/world-io/src/java_chunk.rs` are the read-only
-decoder; they have no write API. `cargo test -p furybuilder-world-io` runs the anvil and
-java_chunk suites, and
+decoder; `crates/world-io/src/passthrough.rs` is the byte-preserving copy. None of them
+writes in place. `cargo test -p furybuilder-world-io` runs the anvil, java_chunk and
+passthrough suites, and
 `cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --decode`
-reproduces the real-world evidence without modifying the world.
+reproduces the real-world read evidence without modifying the world.
+`cargo run -p furybuilder-world-io --example passthrough_world -- <source> <destination>`
+reproduces the copy evidence.
 
 ## Implemented coverage (M3)
 

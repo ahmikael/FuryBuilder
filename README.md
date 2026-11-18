@@ -54,7 +54,9 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 M0–M7 are complete. M8 is in progress: the read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
 coordinates and proto-chunks, then decodes block-state palettes, sections and
-biomes without writing to the source world. Passthrough, overlay and the
+biomes without writing to the source world. A byte-preserving, fail-closed copy
+of an unchanged world — including unknown files and region containers — is
+implemented and verified against a real 841-chunk world. Overlay and the
 `Import World` wizard are next. The first interchange format, Minecraft Java
 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and verified
 against real game-saved fixtures, a real Tauri IPC flow and an official 1.21.4
@@ -90,6 +92,7 @@ guarantee that its whole milestone is complete.
   a hard crash can lose up to half a minute of edits.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
-- Import of full Java world saves is read-only. M8 currently implements version/layout
-  validation plus region/NBT reading; block-state palettes, editing and export are not
-  available yet, and no write path is exposed.
+- Import of full Java world saves is read-only. M8 implements version/layout
+  validation, region/NBT reading, block states and biomes, and a byte-preserving copy
+  of unchanged worlds. Overlay, editing and export of modified worlds are not available
+  yet, and the source world is never written.
