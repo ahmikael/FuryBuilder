@@ -182,6 +182,9 @@ export function ServerGenerationPanel({
       memoryMb: Number(memory),
       viewDistance: Number(viewDistance),
       cpuThreads: Number(cpuThreads),
+      generateStructures: true,
+      consent: true,
+      datapacks: [],
     };
     const numbers = [
       request.centerX,

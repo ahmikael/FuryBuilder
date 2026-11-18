@@ -168,8 +168,8 @@ export const CREATION_MODES: Array<{
     mode: "vanilla",
     label: "Vanilla World",
     description:
-      "Future mode. Will require a user-provided Java runtime and official server JAR; the EULA is never accepted for you.",
-    available: false,
+      "Choose a seed, preset, supported world settings and optional local data packs. The official local Java server generates the requested area after you accept the EULA and explicitly confirm the run.",
+    available: true,
   },
   {
     mode: "import",

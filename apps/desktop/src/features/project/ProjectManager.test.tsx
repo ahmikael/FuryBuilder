@@ -258,7 +258,7 @@ beforeEach(() => {
 });
 
 describe("project manager", () => {
-  it("lists projects with modes and marks only Vanilla World as unavailable", async () => {
+  it("lists projects with all creation modes available", async () => {
     render(<ProjectManager />);
     expect((await screen.findAllByText("First Castle")).length).toBeGreaterThan(0);
     expect(screen.getByText("Second Base")).toBeInTheDocument();
@@ -266,7 +266,7 @@ describe("project manager", () => {
     expect(screen.getAllByText(/recoverable/i).length).toBeGreaterThan(0);
 
     await userEvent.setup().click(screen.getByRole("tab", { name: /New project/ }));
-    expect(screen.getByRole("button", { name: /Vanilla World/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Vanilla World/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Import World/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Empty Project/ })).toBeEnabled();
     expect(screen.getByLabelText("Target Java version")).toBeDisabled();

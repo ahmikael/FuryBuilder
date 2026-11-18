@@ -1,18 +1,22 @@
-//! Reproducible M9.5 probe for the isolated Vanilla generation process.
+//! Reproducible M9.6 probe for the isolated Vanilla generation process.
 //!
 //! Examples:
 //!   cargo run -p furybuilder-runtime-manager --example generation_probe -- \
-//!     --root <dir> --java <java.exe> --jar <server.jar> --accept-eula
+//!     --root <dir> --java <java.exe> --jar <server.jar> --accept-eula --consent
 //!
-//! The `--accept-eula` flag is this CLI's explicit user confirmation; the UI performs the
-//! same action through a checkbox and a separate button. No EULA is accepted implicitly.
+//! `--accept-eula` records the official EULA acceptance; `--consent` confirms starting the
+//! local Java server for this run. Neither happens implicitly. Optional:
+//! `--datapack <pack.zip>` (repeatable) and `--no-structures`.
+//!
 //! The probe starts the official server, generates a small area, saves it, stops and prints
 //! the final report. Use `--cancel-after <seconds>` to exercise cancellation.
 
 use std::path::PathBuf;
 use std::time::Duration;
 
-use furybuilder_runtime_manager::{GenerationRequest, ServerManager, WorldPreset};
+use furybuilder_runtime_manager::{
+    DatapackSelection, GenerationRequest, ServerManager, WorldPreset,
+};
 
 fn main() {
     if let Err(error) = run() {
@@ -36,6 +40,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut view_distance = 3u8;
     let mut cpu_threads = 2u8;
     let mut accept_eula = false;
+    let mut consent = false;
+    let mut generate_structures = true;
+    let mut datapacks: Vec<DatapackSelection> = Vec::new();
     let mut cancel_after: Option<u64> = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
@@ -60,6 +67,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "--cpu" => cpu_threads = args.next().unwrap_or_default().parse()?,
             "--cancel-after" => cancel_after = args.next().unwrap_or_default().parse().ok(),
             "--accept-eula" => accept_eula = true,
+            "--consent" => consent = true,
+            "--no-structures" => generate_structures = false,
+            "--datapack" => {
+                if let Some(path) = args.next() {
+                    datapacks.push(DatapackSelection { path });
+                }
+            }
             other => {
                 eprintln!("unknown argument: {other}");
                 std::process::exit(2);
@@ -96,6 +110,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         memory_mb,
         view_distance,
         cpu_threads,
+        generate_structures,
+        consent,
+        datapacks,
     };
     let snapshot = manager.start_generation(&java, request)?;
     eprintln!("{}", serde_json::to_string_pretty(&snapshot)?);

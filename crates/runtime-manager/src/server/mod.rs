@@ -6,14 +6,16 @@
 //! also select an existing local JAR, which must pass the same internal-version and server
 //! entry-point checks.
 //!
-//! Isolated generation requires an explicit EULA acceptance for that exact JAR. The server
-//! is bound to loopback only, runs in a temporary directory, is bounded by memory/time and
-//! is placed in a kill-on-close Windows Job Object (or Unix process group), so cancel, crash
-//! and normal completion all terminate the whole Java/bundler tree. M9.5 deliberately stops
-//! at this verified process boundary; the Vanilla World wizard, datapacks and world import
-//! belong to M9.6 and later tasks.
+//! Isolated generation requires an explicit EULA acceptance for that exact JAR and a
+//! separate per-run consent. The server is bound to loopback only, runs in a temporary
+//! directory, is bounded by memory/time and is placed in a kill-on-close Windows Job Object
+//! (or Unix process group), so cancel, crash and normal completion all terminate the whole
+//! Java/bundler tree. M9.6 adds the Vanilla World wizard contract: target Java/runtime setup,
+//! supported worldgen settings, validated local data packs and an explicit local-run consent.
+//! Importing the generated world into the Rust World Core belongs to M9.7.
 
 mod cache;
+mod datapack;
 mod generation;
 mod jar;
 mod mojang;
@@ -33,14 +35,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::probe::probe_java;
 use crate::types::RuntimeStatus;
 
+pub use datapack::TARGET_DATAPACK_FORMAT;
 pub use jar::{inspect_server_jar, sha1_file, ServerJarInfo};
 pub use mojang::VERSION_MANIFEST_URL;
 pub use types::{
-    GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
-    GenerationSnapshot, GenerationStatusReport, GenerationStopReason, InstalledServerJar,
-    ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
-    ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource,
-    WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
+    DatapackInspection, DatapackSelection, GenerationDatapack, GenerationPhase, GenerationReport,
+    GenerationRequest, GenerationRunInfo, GenerationRunsReport, GenerationSnapshot,
+    GenerationStatusReport, GenerationStopReason, InstalledServerJar, ManagedServerCacheReport,
+    ManagedServerJar, RunManifest, SavedEula, SavedServerJar, ServerDiscoveryReport,
+    ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource, WorldPreset, EULA_URL,
+    MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
     SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATA_VERSION,
 };
 
@@ -107,6 +111,12 @@ impl ServerManager {
 
     pub fn runs_root(&self) -> &Path {
         &self.inner.runs_root
+    }
+
+    /// Validates selected local data packs without starting anything. The result is per-path
+    /// so the wizard can show why a pack is rejected.
+    pub fn inspect_datapacks(&self, paths: &[String]) -> Vec<DatapackInspection> {
+        datapack::inspect_all(paths)
     }
 
     pub fn discover(&self) -> ServerDiscoveryReport {
@@ -406,6 +416,13 @@ impl ServerManager {
             }
         }
         generation::validate_request(&request)?;
+        let datapack_paths: Vec<String> = request
+            .datapacks
+            .iter()
+            .map(|datapack| datapack.path.clone())
+            .collect();
+        let datapacks = datapack::validate_selection(&datapack_paths)?;
+        let consent_at = now_secs();
         let saved = self.inner.settings.selected().ok_or_else(|| {
             ServerError::Invalid("choose the Minecraft 1.21.4 server JAR first".to_owned())
         })?;
@@ -448,12 +465,18 @@ impl ServerManager {
         let java_version = probe.version.clone().unwrap_or_default();
         let plan = generation::prepare(
             &self.inner.runs_root,
-            java,
-            &java_version,
-            server_path,
-            &info,
+            generation::GenerationRuntime {
+                java_exe: java,
+                java_version: &java_version,
+                server_jar: server_path,
+                server: &info,
+            },
             &request,
-            eula.accepted_at,
+            generation::RunApproval {
+                eula_accepted_at: eula.accepted_at,
+                consent_at,
+            },
+            &datapacks,
         )?;
         let snapshot = generation::initial_snapshot(&plan);
         let run_id = plan.run_id.clone();

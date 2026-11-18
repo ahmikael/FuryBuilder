@@ -1,6 +1,7 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invokeCommand } from "@/lib/ipc";
 import type {
+  DatapackInspection,
   GenerationRequest,
   GenerationRunsReport,
   GenerationSnapshot,
@@ -12,6 +13,7 @@ import type {
   ServerJarReport,
   ServerProgress,
   ServerReleaseInfo,
+  VanillaSetupReport,
 } from "@/runtime/server-types";
 
 export function discoverMinecraftServers(): Promise<ServerDiscoveryReport> {
@@ -76,6 +78,16 @@ export function serverGenerationRuns(): Promise<GenerationRunsReport> {
 
 export function clearServerGenerationRuns(): Promise<GenerationRunsReport> {
   return invokeCommand<GenerationRunsReport>("server_clear_generation_runs");
+}
+
+/** Validates local `.zip` data packs; invalid entries are returned individually. */
+export function inspectServerDatapacks(paths: string[]): Promise<DatapackInspection[]> {
+  return invokeCommand<DatapackInspection[]>("server_inspect_datapacks", { paths });
+}
+
+/** Reads the verified Java/server/EULA state without starting anything. */
+export function vanillaSetupCheck(): Promise<VanillaSetupReport> {
+  return invokeCommand<VanillaSetupReport>("vanilla_setup_check");
 }
 
 export function listenServerDownload(

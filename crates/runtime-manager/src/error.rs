@@ -68,6 +68,8 @@ pub enum ServerError {
     Busy(String),
     #[error("Minecraft EULA confirmation is required: {0}")]
     EulaRequired(String),
+    #[error("explicit generation consent is required: {0}")]
+    ConsentRequired(String),
     #[error("Java runtime is not compatible with Minecraft {target}: {detail}")]
     UnsupportedJava {
         target: &'static str,
@@ -87,6 +89,7 @@ impl ServerError {
             ServerError::Limit(_) => "limit_exceeded",
             ServerError::Busy(_) => "busy",
             ServerError::EulaRequired(_) => "eula_required",
+            ServerError::ConsentRequired(_) => "consent_required",
             ServerError::UnsupportedJava { .. } => "unsupported_runtime",
         }
     }

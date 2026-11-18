@@ -1,14 +1,16 @@
-# Isolated Vanilla World generation (M9.5)
+# Isolated Vanilla World generation (M9.5–M9.6)
 
 Scope: explicitly accept the Minecraft EULA and run the **official** Minecraft Java 1.21.4
-server process in an isolated temporary directory. M9.5 proves the safe process boundary,
-EULA flow, progress and termination. The Vanilla World wizard, datapacks, presets UI inside
-project creation, and importing the generated world into the Rust World Core belong to
-M9.6 and later tasks.
+server process in an isolated temporary directory. M9.5 adds the safe process boundary,
+EULA flow, progress and termination. M9.6 adds the Vanilla World wizard: Java/runtime setup
+check, seed, preset, supported worldgen settings, validated local data packs and a separate
+explicit consent for the local run. Importing the generated world into the Rust World Core
+belongs to M9.7.
 
-Implementation: `crates/runtime-manager/src/server/generation.rs` and `process_tree.rs`,
-the Tauri `server_*generation*` commands and `Settings → Minecraft server JAR → Isolated
-vanilla generation`.
+Implementation: `crates/runtime-manager/src/server/generation.rs`,
+`process_tree.rs` and `datapack.rs`, the Tauri `server_*generation*` and
+`vanilla_setup_check` commands, `Settings → Minecraft server JAR → Isolated
+vanilla generation`, and `Project → New project → Vanilla World`.
 
 ## Explicit EULA
 
@@ -25,6 +27,10 @@ FuryBuilder never accepts the Minecraft EULA on the user's behalf.
 - `eula.txt` with `eula=true` is written only inside a new run directory, and only after the
   acceptance record for that exact SHA-1 has been checked.
 - The acceptance can be withdrawn with **Withdraw**; no server can start afterwards.
+- Starting a run requires a **second, separate confirmation** that the selected official
+  server JAR may run locally with the selected Java 21 runtime. The backend rejects
+  `consent=false` with `consent_required`; it never infers consent from the EULA record or
+  from an earlier run. Each report records `consentAt` and `eulaAcceptedAt`.
 
 ## Isolation and limits
 
@@ -54,9 +60,12 @@ a firewall port for external players.
 ## Generation flow
 
 1. Validate the seed (`1–64` ASCII letters/digits/`-_.`), preset, center, radius (1–16
-   chunks), time, memory, view distance and CPU threads.
+   chunks), time, memory, view distance, CPU threads, structures flag, consent and the
+   selected data packs.
 2. Create the run directory, write `.furybuilder-run.json`, `server.properties` and the
-   run-local `eula.txt`.
+   run-local `eula.txt`. Validated `.zip` data packs are copied into
+   `world/datapacks/` before the server starts and their names, sizes, formats and SHA-256
+   are recorded.
 3. Start the official server with the selected, re-probed Java 21 executable.
 4. Wait for the `Done (…)!` line, then send `/forceload add` commands covering the requested
    area. Areas larger than 256 chunks are split into bounded tiles.
@@ -68,8 +77,44 @@ a firewall port for external players.
 7. Write `report.json` and present the result. Cancelled/crashed/incomplete runs are reported
    honestly; they are never labelled completed.
 
-Presets exposed by M9.5 are `normal`, `flat`, `large_biomes` and `amplified` via
-`level-type`. Datapacks and the full project wizard are not part of M9.5.
+Presets exposed by M9.5/M9.6 are `normal`, `flat`, `large_biomes` and `amplified` via
+`level-type`. The supported worldgen setting exposed by the wizard is
+`generate-structures` (`generate-structures=true|false`). Other `server.properties` values
+remain fixed by the isolation policy.
+
+## Vanilla World wizard (M9.6)
+
+`Project → New project → Vanilla World` performs a single setup check before exposing the
+generation action:
+
+| Check      | What is verified                                                                                                                    |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Target     | Minecraft Java 1.21.4, `DataVersion` 4189, Java major 21, data pack format 61                                                       |
+| Java       | A saved runtime that was actually probed as compatible; the wizard can select a discovered Java 21 candidate or a manual `java.exe` |
+| Loader JAR | A ready, verified 1.21.4 `server.jar` from the managed cache or a manual file                                                       |
+| EULA       | Acceptance is tied to the selected JAR's SHA-1; the EULA is never accepted implicitly                                               |
+
+The action stays disabled while a blocker remains. It also stays disabled until the user
+checks the separate run-consent box. The backend re-checks the JAR, Java, EULA record,
+consent, seed, limits and every data pack; the UI is not the security boundary.
+
+### Data pack validation
+
+Only regular local `.zip` files are accepted. The backend checks:
+
+- a bounded number of packs (16), per-file size (64 MiB), total size (256 MiB), archive
+  entry count (20 000) and declared uncompressed size (512 MiB);
+- valid ZIP structure and safe entry paths (no absolute paths, drive prefixes, `..`, `.`
+  components or backslashes; no symlink entries);
+- exactly a root `pack.mcmeta` with a numeric `pack_format` and valid JSON;
+- format 61 is the target; older formats are accepted with a warning; newer formats are
+  refused unless `supported_formats` explicitly includes 61;
+- duplicate file names are refused; the file is re-inspected and hash-checked immediately
+  before copying, so a change between selection and start fails closed.
+
+The copied pack is recorded in the run manifest and report. This validates archive safety
+and declared compatibility, **not** the semantic behavior of the pack. Third-party data
+packs are still untrusted game content; selected packs are never downloaded automatically.
 
 ## Run directory
 
@@ -95,20 +140,24 @@ modified.
 
 ## Commands
 
-| Command                        | Purpose                                                |
-| ------------------------------ | ------------------------------------------------------ |
-| `server_accept_eula`           | Record an explicit acceptance for the selected JAR     |
-| `server_clear_eula`            | Withdraw the acceptance                                |
-| `server_start_generation`      | Validate and start one isolated run                    |
-| `server_generation_status`     | Active snapshot and last terminal report               |
-| `server_cancel_generation`     | Request cooperative stop, then forced tree termination |
-| `server_generation_runs`       | Inventory of FuryBuilder-owned run directories         |
-| `server_clear_generation_runs` | Delete only manifest-owned run directories             |
+| Command                        | Purpose                                                   |
+| ------------------------------ | --------------------------------------------------------- |
+| `vanilla_setup_check`          | Read-only Java/JAR/EULA readiness and blockers            |
+| `server_inspect_datapacks`     | Validate selected local `.zip` data packs per path        |
+| `server_accept_eula`           | Record an explicit acceptance for the selected JAR        |
+| `server_clear_eula`            | Withdraw the acceptance                                   |
+| `server_start_generation`      | Validate (including consent/data packs) and start one run |
+| `server_generation_status`     | Active snapshot and last terminal report                  |
+| `server_cancel_generation`     | Request cooperative stop, then forced tree termination    |
+| `server_generation_runs`       | Inventory of FuryBuilder-owned run directories            |
+| `server_clear_generation_runs` | Delete only manifest-owned run directories                |
 
 The UI polls `server_generation_status` once per second while a run is active; no unbounded
 event stream is required.
 
 ## Evidence
+
+### M9.5 process boundary
 
 `docs/testing/evidence/2026-11-18-vanilla-generation-ui.json` and `.png` record a real
 WebView2 run with isolated app data:
@@ -125,29 +174,59 @@ WebView2 run with isolated app data:
 - **Clear generation runs** removed both run directories (2 → 0);
 - the external `java.exe` SHA-256 was unchanged and no console errors were recorded.
 
+### M9.6 Vanilla World wizard
+
+`docs/testing/evidence/2026-11-19-vanilla-wizard-ui.json` and `.png` record a real WebView2
+wizard run with fresh isolated app data:
+
+- the wizard started **not ready**: only the EULA blocker remained before acceptance, and
+  the Accept button was disabled until its checkbox was checked;
+- after EULA acceptance for `4707d00e…8c001`, `vanilla_setup_check` reported Java 21,
+  verified JAR and EULA ready;
+- the Start button was disabled before the separate run consent was checked;
+- the wizard generated 9/9 chunks in 8 regions for seed `FuryBuilderM96UI`, bind
+  `127.0.0.1:60645`, Job Object active, `generateStructures=true`, consent and EULA times
+  recorded;
+- a second real run used the validated local `furybuilder-m96-pack.zip`
+  (format 61, SHA-256 `08de01a4…6623`), `generateStructures=false`; the pack was copied into
+  `world/datapacks/` with the same SHA-256, the report recorded it, and the server properties
+  contained `generate-structures=false`;
+- both runs stayed loopback-only, exited 0 with the requested chunks, and no console errors
+  were recorded.
+
 Reproduce:
 
 ```powershell
 cargo test -p furybuilder-runtime-manager
 cargo run -p furybuilder-runtime-manager --example generation_probe -- `
-  --root <dir> --java <java.exe> --jar <server.jar> --accept-eula
+  --root <dir> --java <java.exe> --jar <server.jar> --accept-eula --consent `
+  [--no-structures] [--datapack <pack.zip>]
 
 # start the Vite dev server first
 node scripts/generation-webview2-smoke.mjs <java.exe> <server.jar> <out.json> <out.png>
+node scripts/vanilla-wizard-webview2-smoke.mjs <java.exe> <server.jar> <pack.zip> <out.json> <out.png>
 ```
 
-The CLI example prints progress to stderr and the final report to stdout. The `--accept-eula`
-flag is that CLI's explicit confirmation; the desktop UI uses the checkbox and button above.
+The CLI example prints progress to stderr and the final report to stdout. `--accept-eula`
+and `--consent` are that CLI's two explicit confirmations; the desktop UI uses the wizard
+checkboxes and buttons above.
 
 ## Limits
 
-- No world is imported into the editor in M9.5; the generated `world/` is only evidence and
-  temporary output until M9.6 adds the wizard/import.
+- No generated world is imported into the editor in M9.6; the `world/` folder remains in the
+  isolated run directory until M9.7 adds the World Core import and project creation.
 - Spawn-area chunks are generated in addition to the requested area; only the in-area chunks
   are counted for completion.
 - `incomplete` and `time limit reached` are valid terminal states; they are not silently
   retried and the user sees the shortfall.
 - No resume of an interrupted generation; start a new run.
+- Data packs are validated as archives and for declared format compatibility, not for their
+  game behavior, dependencies or worldgen changes. Only `.zip` files are accepted; a folder
+  pack can be zipped by the user.
+- Backslash ZIP entry paths and symlink entries are refused; such archives are not portable
+  to the official Java server either.
+- The wizard exposes only `generate-structures` as an extra worldgen setting. Other
+  `server.properties` values are fixed by the isolation policy.
 - The server can still write its normal logs and `world/` inside the isolated run directory.
   It is not given access to the user's original world.
 - Minecraft's EULA text is not reproduced or accepted by FuryBuilder; only the official link

@@ -8,11 +8,12 @@ use asset_source::{
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use runtime_manager::{
-    GenerationRequest, GenerationRunsReport, GenerationSnapshot, GenerationStatusReport,
-    InstalledRuntime, InstalledServerJar, JavaRuntimeReport, ManagedCacheReport,
-    ManagedServerCacheReport, RuntimeDiscoveryReport, RuntimeManager, RuntimeProgress,
-    RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport, ServerJarReport, ServerManager,
-    ServerProgress, ServerReleaseInfo,
+    DatapackInspection, GenerationRequest, GenerationRunsReport, GenerationSnapshot,
+    GenerationStatusReport, InstalledRuntime, InstalledServerJar, JavaRuntimeReport,
+    ManagedCacheReport, ManagedServerCacheReport, RuntimeDiscoveryReport, RuntimeManager,
+    RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport, ServerJarReport,
+    ServerManager, ServerProgress, ServerReleaseInfo, TARGET_DATAPACK_FORMAT, TARGET_DATA_VERSION,
+    TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION,
 };
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
@@ -1782,12 +1783,117 @@ pub async fn server_clear_generation_runs(
     Ok(report)
 }
 
+#[tauri::command]
+pub async fn server_inspect_datapacks(
+    manager: State<'_, ServerManager>,
+    paths: Vec<String>,
+) -> Result<Vec<DatapackInspection>, AppError> {
+    if paths.len() > 16 {
+        return Err(AppError::new(
+            ErrorCode::LimitExceeded,
+            "At most 16 data packs can be inspected at once.",
+        ));
+    }
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.inspect_datapacks(&paths))
+        .await
+        .map_err(|error| AppError::internal(format!("data pack inspection task failed: {error}")))
+}
+
+/// Combined Vanilla World setup check for the wizard. It reads the already verified runtime
+/// and server selections; it never probes, downloads, accepts the EULA or starts anything.
+#[tauri::command]
+pub async fn vanilla_setup_check(
+    runtime: State<'_, RuntimeManager>,
+    manager: State<'_, ServerManager>,
+) -> Result<VanillaSetupReport, AppError> {
+    let runtime = runtime.inner().clone();
+    let java = tauri::async_runtime::spawn_blocking(move || runtime.saved())
+        .await
+        .map_err(|error| AppError::internal(format!("Java runtime task failed: {error}")))?;
+    let java_ready = java
+        .as_ref()
+        .map(JavaRuntimeReport::is_compatible)
+        .unwrap_or(false);
+    let discovery = manager.discover();
+    let server_ready = discovery
+        .selected
+        .as_ref()
+        .map(|server| server.ready)
+        .unwrap_or(false);
+    let eula_matches_selected = discovery.eula_matches_selected;
+    let eula_accepted_at = discovery.eula.as_ref().map(|eula| eula.accepted_at);
+    let mut blockers = Vec::new();
+    match java.as_ref() {
+        None => blockers.push(
+            "Select a compatible Java 21 runtime (Settings → Java runtime or this wizard)."
+                .to_owned(),
+        ),
+        Some(_) if !java_ready => blockers.push(
+            "The saved Java runtime is not compatible with Minecraft Java 1.21.4.".to_owned(),
+        ),
+        Some(_) => {}
+    }
+    match discovery.selected.as_ref() {
+        None => {
+            blockers.push("Select or download the official Minecraft 1.21.4 server.jar.".to_owned())
+        }
+        Some(server) if !server.ready => blockers.push(format!(
+            "The selected server JAR is not ready: {}",
+            server
+                .error
+                .as_deref()
+                .unwrap_or("it did not pass verification")
+        )),
+        Some(_) => {}
+    }
+    if !eula_matches_selected {
+        blockers.push(
+            "Read and accept the Minecraft EULA for the selected server.jar in this wizard."
+                .to_owned(),
+        );
+    }
+    let ready = java_ready && server_ready && eula_matches_selected;
+    Ok(VanillaSetupReport {
+        target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
+        target_data_version: TARGET_DATA_VERSION,
+        target_java_major: TARGET_JAVA_MAJOR,
+        server_datapack_format: TARGET_DATAPACK_FORMAT,
+        java,
+        java_ready,
+        server: discovery.selected,
+        server_ready,
+        eula_accepted_at,
+        eula_matches_selected,
+        blockers,
+        ready,
+    })
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VanillaSetupReport {
+    pub target_minecraft_version: String,
+    pub target_data_version: i32,
+    pub target_java_major: u32,
+    pub server_datapack_format: u32,
+    pub java: Option<JavaRuntimeReport>,
+    pub java_ready: bool,
+    pub server: Option<ServerJarReport>,
+    pub server_ready: bool,
+    pub eula_accepted_at: Option<u64>,
+    pub eula_matches_selected: bool,
+    pub blockers: Vec<String>,
+    pub ready: bool,
+}
+
 fn server_error(error: runtime_manager::ServerError) -> AppError {
     let code = match error.code() {
         "invalid_argument" => ErrorCode::InvalidArgument,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
         "unsupported_runtime" => ErrorCode::UnsupportedVersion,
         "eula_required" => ErrorCode::PermissionDenied,
+        "consent_required" => ErrorCode::PermissionDenied,
         "network_error" => ErrorCode::BackendUnavailable,
         "checksum_mismatch" => ErrorCode::Conflict,
         "archive_error" | "unsupported_format" => ErrorCode::UnsupportedFormat,

@@ -26,11 +26,12 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use super::datapack;
 use super::jar::ServerJarInfo;
 use super::process_tree::ProcessTree;
 use super::types::{
-    GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
-    GenerationSnapshot, GenerationStopReason, RunManifest, WorldPreset,
+    GenerationDatapack, GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo,
+    GenerationRunsReport, GenerationSnapshot, GenerationStopReason, RunManifest, WorldPreset,
     RUN_MANIFEST_SCHEMA_VERSION,
 };
 use crate::error::ServerError;
@@ -55,6 +56,20 @@ const MAX_TIME_LIMIT_SECONDS: u32 = 3600;
 const MAX_RADIUS_CHUNKS: u32 = 16;
 const MAX_WORLD_COORD: i32 = 29_999_968;
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GenerationRuntime<'a> {
+    pub java_exe: &'a Path,
+    pub java_version: &'a str,
+    pub server_jar: &'a Path,
+    pub server: &'a ServerJarInfo,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RunApproval {
+    pub eula_accepted_at: u64,
+    pub consent_at: u64,
+}
+
 #[derive(Debug)]
 pub(crate) struct GenerationPlan {
     pub run_id: String,
@@ -74,7 +89,10 @@ pub(crate) struct GenerationPlan {
     pub memory_mb: u32,
     pub view_distance: u8,
     pub cpu_threads: u8,
+    pub generate_structures: bool,
     pub eula_accepted_at: u64,
+    pub consent_at: u64,
+    pub datapacks: Vec<GenerationDatapack>,
     pub port: u16,
     pub expected_chunks: u64,
     pub idle_timeout: Duration,
@@ -263,6 +281,11 @@ pub(crate) fn expected_chunks(request: &GenerationRequest) -> u64 {
 }
 
 pub(crate) fn validate_request(request: &GenerationRequest) -> Result<(), ServerError> {
+    if !request.consent {
+        return Err(ServerError::ConsentRequired(
+            "confirm that the official server will be started locally for this run".to_owned(),
+        ));
+    }
     let seed = request.seed.trim();
     if seed.is_empty() || seed.len() > 64 {
         return Err(ServerError::Invalid(
@@ -302,6 +325,12 @@ pub(crate) fn validate_request(request: &GenerationRequest) -> Result<(), Server
             "CPU threads must be between 1 and 8".to_owned(),
         ));
     }
+    if request.datapacks.len() > datapack::MAX_DATAPACKS {
+        return Err(ServerError::Limit(format!(
+            "at most {} data packs can be used in one run",
+            datapack::MAX_DATAPACKS
+        )));
+    }
     let radius_blocks = request.radius_chunks as i64 * 16 + 16;
     for (axis, value) in [("x", request.center_x), ("z", request.center_z)] {
         let limit = MAX_WORLD_COORD as i64 - radius_blocks;
@@ -316,12 +345,10 @@ pub(crate) fn validate_request(request: &GenerationRequest) -> Result<(), Server
 
 pub(crate) fn prepare(
     runs_root: &Path,
-    java: &Path,
-    java_version: &str,
-    server_jar: &Path,
-    jar: &ServerJarInfo,
+    runtime: GenerationRuntime<'_>,
     request: &GenerationRequest,
-    eula_accepted_at: u64,
+    approval: RunApproval,
+    datapacks: &[GenerationDatapack],
 ) -> Result<GenerationPlan, ServerError> {
     validate_request(request)?;
     fs::create_dir_all(runs_root).map_err(|error| {
@@ -358,10 +385,10 @@ pub(crate) fn prepare(
         world_dir: run_dir.join("world"),
         log_path: run_dir.join("logs").join("furybuilder-console.log"),
         run_dir: run_dir.clone(),
-        java_exe: java.to_path_buf(),
-        java_version: java_version.to_owned(),
-        server_jar: server_jar.to_path_buf(),
-        server_sha1: jar.sha1.clone(),
+        java_exe: runtime.java_exe.to_path_buf(),
+        java_version: runtime.java_version.to_owned(),
+        server_jar: runtime.server_jar.to_path_buf(),
+        server_sha1: runtime.server.sha1.clone(),
         seed,
         preset: request.preset,
         center_x: request.center_x,
@@ -371,7 +398,10 @@ pub(crate) fn prepare(
         memory_mb: request.memory_mb,
         view_distance: request.view_distance,
         cpu_threads: request.cpu_threads,
-        eula_accepted_at,
+        generate_structures: request.generate_structures,
+        eula_accepted_at: approval.eula_accepted_at,
+        consent_at: approval.consent_at,
+        datapacks: datapacks.to_vec(),
         port,
         expected_chunks: expected_chunks(request),
         idle_timeout: DEFAULT_IDLE_TIMEOUT,
@@ -387,14 +417,23 @@ pub(crate) fn prepare(
         center_x: plan.center_x,
         center_z: plan.center_z,
         radius_chunks: plan.radius_chunks,
+        generate_structures: plan.generate_structures,
+        datapacks: plan.datapacks.clone(),
     };
     let result = (|| -> Result<(), ServerError> {
         write_json(&run_dir.join(RUN_MANIFEST_NAME), &manifest)?;
         fs::write(
             run_dir.join("server.properties"),
-            render_properties(&plan.seed, plan.preset, plan.view_distance, plan.port),
+            render_properties(
+                &plan.seed,
+                plan.preset,
+                plan.generate_structures,
+                plan.view_distance,
+                plan.port,
+            ),
         )
         .map_err(|error| ServerError::Io(format!("cannot write server.properties: {error}")))?;
+        datapack::install(&plan.world_dir, datapacks)?;
         // Only written inside this run directory, only after an explicit acceptance for
         // this exact server JAR. The acceptance itself lives in server.json.
         fs::write(run_dir.join("eula.txt"), b"eula=true\n")
@@ -481,11 +520,14 @@ pub(crate) fn execute(
         memory_mb: plan.memory_mb,
         view_distance: plan.view_distance,
         cpu_threads: plan.cpu_threads,
+        generate_structures: plan.generate_structures,
         java_path: jvm_path(&plan.java_exe).display().to_string(),
         java_version: plan.java_version,
         server_jar: jvm_path(&plan.server_jar).display().to_string(),
         server_sha1: plan.server_sha1,
         eula_accepted_at: plan.eula_accepted_at,
+        consent_at: plan.consent_at,
+        datapacks: plan.datapacks,
         bind_address: outcome.bind_address,
         process_tree_guarded: outcome.process_tree_guarded,
         run_dir: plan.run_dir.display().to_string(),
@@ -1056,7 +1098,13 @@ fn strip_ansi(line: &str) -> String {
     output
 }
 
-fn render_properties(seed: &str, preset: WorldPreset, view_distance: u8, port: u16) -> String {
+fn render_properties(
+    seed: &str,
+    preset: WorldPreset,
+    generate_structures: bool,
+    view_distance: u8,
+    port: u16,
+) -> String {
     format!(
         "# Generated by FuryBuilder for one isolated Vanilla World generation run.\n\
          # External listeners are disabled: loopback only, no RCON/query/status.\n\
@@ -1072,7 +1120,7 @@ fn render_properties(seed: &str, preset: WorldPreset, view_distance: u8, port: u
          level-seed={seed}\n\
          level-type={}\n\
          generator-settings=\n\
-         generate-structures=true\n\
+         generate-structures={generate_structures}\n\
          view-distance={view_distance}\n\
          simulation-distance={view_distance}\n\
          spawn-protection=0\n\
@@ -1436,6 +1484,9 @@ mod tests {
             memory_mb: 1024,
             view_distance: 2,
             cpu_threads: 1,
+            generate_structures: true,
+            consent: true,
+            datapacks: Vec::new(),
         }
     }
 
@@ -1447,6 +1498,21 @@ mod tests {
         assert!(validate_request(&request("with space")).is_err());
         assert!(validate_request(&request("")).is_err());
         assert!(validate_request(&request(&"a".repeat(65))).is_err());
+
+        let mut no_consent = request("seed");
+        no_consent.consent = false;
+        assert!(matches!(
+            validate_request(&no_consent),
+            Err(ServerError::ConsentRequired(_))
+        ));
+
+        let mut too_many_packs = request("seed");
+        too_many_packs.datapacks = (0..=datapack::MAX_DATAPACKS)
+            .map(|index| super::super::types::DatapackSelection {
+                path: format!("pack-{index}.zip"),
+            })
+            .collect();
+        assert!(validate_request(&too_many_packs).is_err());
 
         let mut too_large = request("seed");
         too_large.radius_chunks = 17;
@@ -1467,16 +1533,20 @@ mod tests {
 
     #[test]
     fn properties_are_loopback_only_and_use_the_requested_level_type() {
-        let properties = render_properties("FuryBuilder", WorldPreset::LargeBiomes, 4, 51234);
+        let properties = render_properties("FuryBuilder", WorldPreset::LargeBiomes, true, 4, 51234);
         assert!(properties.contains("server-ip=127.0.0.1\n"));
         assert!(properties.contains("server-port=51234\n"));
         assert!(properties.contains("level-seed=FuryBuilder\n"));
         assert!(properties.contains("level-type=minecraft:large_biomes\n"));
+        assert!(properties.contains("generate-structures=true\n"));
         assert!(properties.contains("enable-rcon=false\n"));
         assert!(properties.contains("enable-query=false\n"));
         assert!(properties.contains("enable-status=false\n"));
         assert!(properties.contains("online-mode=false\n"));
         assert!(!properties.contains("server-ip=0.0.0.0"));
+        let without = render_properties("seed", WorldPreset::Flat, false, 2, 1);
+        assert!(without.contains("generate-structures=false\n"));
+        assert!(without.contains("level-type=minecraft:flat\n"));
     }
 
     #[test]
@@ -1568,7 +1638,10 @@ mod tests {
             memory_mb: 512,
             view_distance: 2,
             cpu_threads: 1,
+            generate_structures: true,
             eula_accepted_at: 1,
+            consent_at: 2,
+            datapacks: Vec::new(),
             port: 25565,
             expected_chunks,
             idle_timeout,
@@ -1747,6 +1820,8 @@ public class FakeCrash {
                 center_x: 0,
                 center_z: 0,
                 radius_chunks: 1,
+                generate_structures: true,
+                datapacks: Vec::new(),
             },
         )
         .expect("manifest");

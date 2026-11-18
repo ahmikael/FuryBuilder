@@ -39,13 +39,14 @@ pub use managed::{sha256_file, ManagedRuntimeCache, RuntimeManifest, StagedRunti
 pub use manager::RuntimeManager;
 pub use probe::JavaProbe;
 pub use server::{
-    inspect_server_jar, sha1_file, GenerationPhase, GenerationReport, GenerationRequest,
-    GenerationRunInfo, GenerationRunsReport, GenerationSnapshot, GenerationStatusReport,
-    GenerationStopReason, InstalledServerJar, ManagedServerCacheReport, ManagedServerJar,
-    RunManifest, SavedEula, SavedServerJar, ServerDiscoveryReport, ServerJarInfo, ServerJarReport,
-    ServerManager, ServerProgress, ServerReleaseInfo, ServerSource, WorldPreset, EULA_URL,
-    MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
-    SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATA_VERSION,
+    inspect_server_jar, sha1_file, DatapackInspection, DatapackSelection, GenerationDatapack,
+    GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
+    GenerationSnapshot, GenerationStatusReport, GenerationStopReason, InstalledServerJar,
+    ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
+    ServerDiscoveryReport, ServerJarInfo, ServerJarReport, ServerManager, ServerProgress,
+    ServerReleaseInfo, ServerSource, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES,
+    MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION, SERVER_MANIFEST_SCHEMA_VERSION,
+    SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATAPACK_FORMAT, TARGET_DATA_VERSION,
     VERSION_MANIFEST_URL,
 };
 pub use settings::RuntimeSettingsStore;

@@ -127,6 +127,8 @@ pub fn run() {
             commands::server_cancel_generation,
             commands::server_generation_runs,
             commands::server_clear_generation_runs,
+            commands::server_inspect_datapacks,
+            commands::vanilla_setup_check,
             local_bridge::renderer_ready,
             local_bridge::set_mcp_access,
             local_bridge::mcp_access_status,

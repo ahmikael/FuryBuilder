@@ -32,6 +32,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
+import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
@@ -511,21 +512,23 @@ export function ProjectManager() {
               </TabsContent>
 
               <TabsContent value="create" className="m-0 space-y-2 pt-2">
-                <div className="space-y-1">
-                  <label
-                    className="text-[10px] font-medium text-muted-foreground"
-                    htmlFor="project-name"
-                  >
-                    Project name
-                  </label>
-                  <Input
-                    id="project-name"
-                    value={name}
-                    placeholder="My Castle"
-                    maxLength={64}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </div>
+                {mode !== "vanilla" ? (
+                  <div className="space-y-1">
+                    <label
+                      className="text-[10px] font-medium text-muted-foreground"
+                      htmlFor="project-name"
+                    >
+                      Project name
+                    </label>
+                    <Input
+                      id="project-name"
+                      value={name}
+                      placeholder="My Castle"
+                      maxLength={64}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                  </div>
+                ) : null}
 
                 <div className="grid grid-cols-2 gap-1.5">
                   {CREATION_MODES.map((entry) => (
@@ -559,6 +562,8 @@ export function ProjectManager() {
                     </button>
                   ))}
                 </div>
+
+                {mode === "vanilla" ? <VanillaWorldWizard /> : null}
 
                 {mode === "import" ? (
                   <div className="space-y-1.5 rounded border border-border bg-background/40 p-2">
@@ -745,9 +750,14 @@ export function ProjectManager() {
                   <Button
                     size="sm"
                     disabled={
-                      loading || analysisLoading || name.trim().length === 0 || !importReady
+                      mode === "vanilla" ||
+                      loading ||
+                      analysisLoading ||
+                      name.trim().length === 0 ||
+                      !importReady
                     }
                     onClick={() => void submitCreate()}
+                    className={mode === "vanilla" ? "hidden" : undefined}
                   >
                     {loading || analysisLoading ? (
                       <Loader2 className="mr-1 size-3 animate-spin" />
@@ -757,9 +767,11 @@ export function ProjectManager() {
                     {mode === "import" ? "Import world" : "Create project"}
                   </Button>
                   <span className="text-[9px] text-muted-foreground">
-                    {mode === "import"
-                      ? "Analyze a supported world first. The source folder is copied byte for byte and stays read-only."
-                      : "Folders get a unique suffix when the name already exists. Renaming changes the display name only."}
+                    {mode === "vanilla"
+                      ? "Generate an isolated official-world result above. Importing it into an editable project is the next roadmap task (M9.7)."
+                      : mode === "import"
+                        ? "Analyze a supported world first. The source folder is copied byte for byte and stays read-only."
+                        : "Folders get a unique suffix when the name already exists. Renaming changes the display name only."}
                   </span>
                 </div>
               </TabsContent>

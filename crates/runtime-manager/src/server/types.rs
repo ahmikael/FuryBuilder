@@ -190,7 +190,7 @@ impl WorldPreset {
 }
 
 /// User-requested isolated generation. Values are validated again on the backend; this is
-/// not a promise that every Minecraft world setting is exposed (M9.6 adds the full wizard).
+/// not a promise that every Minecraft world setting is exposed.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GenerationRequest {
@@ -204,6 +204,54 @@ pub struct GenerationRequest {
     pub memory_mb: u32,
     pub view_distance: u8,
     pub cpu_threads: u8,
+    /// Worldgen structures. This is a supported server setting, not a FuryBuilder generator.
+    #[serde(default = "default_true")]
+    pub generate_structures: bool,
+    /// Separate from the EULA: the user explicitly starts the local Java process for this run.
+    #[serde(default)]
+    pub consent: bool,
+    /// Locally selected `.zip` data packs, validated and copied into the isolated world.
+    #[serde(default)]
+    pub datapacks: Vec<DatapackSelection>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatapackSelection {
+    pub path: String,
+}
+
+/// A validated data pack recorded in the run manifest and terminal report.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationDatapack {
+    pub name: String,
+    pub path: String,
+    pub sha256: String,
+    pub size: u64,
+    pub pack_format: u32,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+}
+
+/// Per-path result for the wizard. Invalid entries are reported individually and never start
+/// a run; the backend re-validates the accepted selection when generation starts.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatapackInspection {
+    pub path: String,
+    pub name: String,
+    pub sha256: Option<String>,
+    pub size: Option<u64>,
+    pub pack_format: Option<u32>,
+    pub valid: bool,
+    pub error: Option<String>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -263,11 +311,17 @@ pub struct GenerationReport {
     pub memory_mb: u32,
     pub view_distance: u8,
     pub cpu_threads: u8,
+    #[serde(default)]
+    pub generate_structures: bool,
     pub java_path: String,
     pub java_version: String,
     pub server_jar: String,
     pub server_sha1: String,
     pub eula_accepted_at: u64,
+    #[serde(default)]
+    pub consent_at: u64,
+    #[serde(default)]
+    pub datapacks: Vec<GenerationDatapack>,
     pub bind_address: Option<String>,
     pub process_tree_guarded: bool,
     pub run_dir: String,
@@ -324,4 +378,8 @@ pub struct RunManifest {
     pub center_x: i32,
     pub center_z: i32,
     pub radius_chunks: u32,
+    #[serde(default = "default_true")]
+    pub generate_structures: bool,
+    #[serde(default)]
+    pub datapacks: Vec<GenerationDatapack>,
 }

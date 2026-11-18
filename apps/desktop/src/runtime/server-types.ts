@@ -1,3 +1,5 @@
+import type { JavaRuntimeReport } from "@/runtime/types";
+
 export type ServerSource = "managed" | "manual";
 
 export interface ServerJarReport {
@@ -86,6 +88,30 @@ export interface InstalledServerJar {
 
 export type WorldPreset = "normal" | "flat" | "large_biomes" | "amplified";
 
+export interface DatapackSelection {
+  path: string;
+}
+
+export interface GenerationDatapack {
+  name: string;
+  path: string;
+  sha256: string;
+  size: number;
+  packFormat: number;
+  warnings: string[];
+}
+
+export interface DatapackInspection {
+  path: string;
+  name: string;
+  sha256: string | null;
+  size: number | null;
+  packFormat: number | null;
+  valid: boolean;
+  error: string | null;
+  warnings: string[];
+}
+
 export interface GenerationRequest {
   seed: string;
   preset: WorldPreset;
@@ -96,6 +122,9 @@ export interface GenerationRequest {
   memoryMb: number;
   viewDistance: number;
   cpuThreads: number;
+  generateStructures: boolean;
+  consent: boolean;
+  datapacks: DatapackSelection[];
 }
 
 export type GenerationPhase =
@@ -145,11 +174,14 @@ export interface GenerationReport {
   memoryMb: number;
   viewDistance: number;
   cpuThreads: number;
+  generateStructures: boolean;
   javaPath: string;
   javaVersion: string;
   serverJar: string;
   serverSha1: string;
   eulaAcceptedAt: number;
+  consentAt: number;
+  datapacks: GenerationDatapack[];
   bindAddress: string | null;
   processTreeGuarded: boolean;
   runDir: string;
@@ -185,4 +217,20 @@ export interface GenerationRunsReport {
   runs: GenerationRunInfo[];
   totalBytes: number;
   problems: string[];
+}
+
+/** Combined setup state for the Vanilla World wizard; it never starts or downloads anything. */
+export interface VanillaSetupReport {
+  targetMinecraftVersion: string;
+  targetDataVersion: number;
+  targetJavaMajor: number;
+  serverDatapackFormat: number;
+  java: JavaRuntimeReport | null;
+  javaReady: boolean;
+  server: ServerJarReport | null;
+  serverReady: boolean;
+  eulaAcceptedAt: number | null;
+  eulaMatchesSelected: boolean;
+  blockers: string[];
+  ready: boolean;
 }

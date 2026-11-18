@@ -105,11 +105,14 @@ const last: GenerationReport = {
   memoryMb: 2048,
   viewDistance: 3,
   cpuThreads: 2,
+  generateStructures: true,
   javaPath: "C:\\java\\bin\\java.exe",
   javaVersion: "21.0.12",
   serverJar: discovery.selected?.path ?? "",
   serverSha1: sha1,
   eulaAcceptedAt: 1_763_500_000,
+  consentAt: 1_763_500_001,
+  datapacks: [],
   bindAddress: "127.0.0.1:51234",
   processTreeGuarded: true,
   runDir: "C:\\app\\server-runs\\run-0",
@@ -191,6 +194,9 @@ describe("ServerGenerationPanel", () => {
       memoryMb: 2048,
       viewDistance: 3,
       cpuThreads: 2,
+      generateStructures: true,
+      consent: true,
+      datapacks: [],
     });
     expect(await screen.findByText(/chunks 4\/9/)).toBeInTheDocument();
     expect(screen.getByText("generating")).toBeInTheDocument();

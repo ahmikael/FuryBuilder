@@ -100,7 +100,11 @@ isolated generation process: after the user confirms the official EULA for that 
 the original server generates a requested area in a temporary run directory. It listens on
 loopback only, has memory/time limits, is contained in a kill-on-close Windows Job Object,
 reports real region-header progress and always terminates the whole Java tree on
-cancel/crash.
+cancel/crash. M9.6 adds the `Vanilla World` project wizard: it shows the verified Java 21,
+server JAR and EULA state, lets the user choose a seed, preset, supported worldgen settings
+and validated local `.zip` data packs, and requires a separate explicit consent before
+starting the official generator. Generated worlds stay in isolated run directories until
+the M9.7 import into the Rust World Core.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -134,9 +138,9 @@ guarantee that its whole milestone is complete.
   download/checksum verification, managed cache cleanup and its evidence.
 - `docs/runtime/minecraft-server-jar.md` - official server JAR resolution through Mojang
   metadata, SHA-1/version verification, manual selection, cache cleanup and its evidence.
-- `docs/runtime/vanilla-generation.md` - explicit EULA confirmation, the isolated official
-  server process, loopback/resource/process-tree guarantees, progress, cancellation and
-  its real evidence.
+- `docs/runtime/vanilla-generation.md` - explicit EULA confirmation, the Vanilla World
+  wizard, validated data packs, the isolated official server process,
+  loopback/resource/process-tree guarantees, progress, cancellation and its real evidence.
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
