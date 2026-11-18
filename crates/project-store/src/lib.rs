@@ -31,6 +31,6 @@ pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION};
 pub use source::{SourceFile, SourceManifest};
 pub use store::{
     build_world, checksum, create_flat_base, migrate_manifest, snapshot_bytes, CheckpointMeta,
-    ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR, DATA_DIR, MAX_CHECKPOINTS,
-    MAX_SNAPSHOTS, SESSION_MARKER, SOURCE_DIR,
+    ExportOutcome, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR, DATA_DIR, EXPORTS_DIR,
+    MAX_CHECKPOINTS, MAX_SNAPSHOTS, SESSION_MARKER, SOURCE_DIR,
 };

@@ -23,6 +23,7 @@ pub const CHECKPOINT_DIR: &str = "changes";
 pub const DATA_DIR: &str = "data";
 pub const CACHE_DIR: &str = "cache";
 pub const SOURCE_DIR: &str = "source";
+pub const EXPORTS_DIR: &str = "exports";
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,6 +42,17 @@ pub struct CheckpointMeta {
     pub bytes: u64,
     pub saved_at_ms: u64,
     pub reason: String,
+}
+
+/// Result of publishing an interchange file under `exports/`.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportOutcome {
+    pub relative_path: String,
+    pub file_name: String,
+    pub bytes: u64,
+    pub checksum: String,
+    pub created_at_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -767,6 +779,19 @@ impl ProjectStore {
         source_path: &Path,
         relative_name: &str,
     ) -> Result<ProjectDetail, ProjectError> {
+        let bytes = fs::read(source_path)
+            .map_err(|error| io_error(format!("reading {}", source_path.display()), error))?;
+        self.attach_source_bytes(folder, relative_name, &bytes)
+    }
+
+    /// Same contract as `attach_source`, for import bytes that arrived through IPC rather
+    /// than a filesystem path.
+    pub fn attach_source_bytes(
+        &self,
+        folder: &str,
+        relative_name: &str,
+        bytes: &[u8],
+    ) -> Result<ProjectDetail, ProjectError> {
         let dir = self.project_dir(folder)?;
         let mut manifest = self.manifest(&dir)?;
         manifest.validate()?;
@@ -782,11 +807,9 @@ impl ProjectStore {
         let source_dir = dir.join(SOURCE_DIR).join("files");
         fs::create_dir_all(&source_dir)
             .map_err(|error| io_error(format!("creating {}", source_dir.display()), error))?;
-        let bytes = fs::read(source_path)
-            .map_err(|error| io_error(format!("reading {}", source_path.display()), error))?;
-        let checksum = sha256_hex(&bytes);
+        let checksum = sha256_hex(bytes);
         let destination = source_dir.join(relative_name);
-        write_atomic(&destination, &bytes)?;
+        write_atomic(&destination, bytes)?;
         let mut source = read_source_manifest(&dir.join(SOURCE_DIR).join("source.json"))?;
         source.immutable = true;
         source
@@ -809,6 +832,73 @@ impl ProjectStore {
         manifest.updated_at_ms = now_ms();
         write_json(&dir.join(PROJECT_FILE), &manifest)?;
         self.detail(folder)
+    }
+
+    /// Publishes an interchange file under `exports/` with an atomic write and a byte-level
+    /// read-back check. Existing names get a numeric suffix instead of being overwritten.
+    pub fn write_export(
+        &self,
+        folder: &str,
+        file_name: &str,
+        bytes: &[u8],
+    ) -> Result<ExportOutcome, ProjectError> {
+        let dir = self.project_dir(folder)?;
+        if !dir.join(PROJECT_FILE).exists() {
+            return Err(ProjectError::NotFound(folder.to_owned()));
+        }
+        let path = Path::new(file_name);
+        let extension = path
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(str::to_ascii_lowercase)
+            .unwrap_or_default();
+        if file_name.is_empty()
+            || file_name.len() > 120
+            || path.components().count() != 1
+            || file_name.contains("..")
+            || file_name.contains('/')
+            || file_name.contains('\\')
+            || !matches!(extension.as_str(), "nbt" | "schem")
+        {
+            return Err(ProjectError::InvalidPath(file_name.to_owned()));
+        }
+        let stem = path
+            .file_stem()
+            .and_then(|stem| stem.to_str())
+            .unwrap_or("structure")
+            .to_owned();
+        let exports = dir.join(EXPORTS_DIR);
+        fs::create_dir_all(&exports)
+            .map_err(|error| io_error(format!("creating {}", exports.display()), error))?;
+
+        let mut unique_name = file_name.to_owned();
+        let mut destination = exports.join(&unique_name);
+        let mut counter = 1;
+        while destination.exists() {
+            counter += 1;
+            if counter > 999 {
+                return Err(ProjectError::AlreadyExists(file_name.to_owned()));
+            }
+            unique_name = format!("{stem}-{counter}.{extension}");
+            destination = exports.join(&unique_name);
+        }
+
+        write_atomic(&destination, bytes)?;
+        let read_back = fs::read(&destination)
+            .map_err(|error| io_error(format!("reading {}", destination.display()), error))?;
+        if read_back != bytes {
+            let _ = fs::remove_file(&destination);
+            return Err(ProjectError::corrupt(
+                "export read-back did not match the written bytes",
+            ));
+        }
+        Ok(ExportOutcome {
+            relative_path: format!("{EXPORTS_DIR}/{unique_name}"),
+            file_name: unique_name,
+            bytes: bytes.len() as u64,
+            checksum: sha256_hex(bytes),
+            created_at_ms: now_ms(),
+        })
     }
 
     pub fn source_manifest(&self, folder: &str) -> Result<SourceManifest, ProjectError> {
