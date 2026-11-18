@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::ServerError;
 
-use super::types::{SavedServerJar, SERVER_SETTINGS_SCHEMA_VERSION};
+use super::types::{SavedEula, SavedServerJar, SERVER_SETTINGS_SCHEMA_VERSION};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +15,8 @@ struct ServerSettingsFile {
     schema_version: u32,
     #[serde(default)]
     selected: Option<SavedServerJar>,
+    #[serde(default)]
+    eula: Option<SavedEula>,
 }
 
 /// Stores only the explicit manual selection in `<app-data>/server.json`. The JAR itself is
@@ -36,6 +38,7 @@ impl ServerSettingsStore {
                 ServerSettingsFile {
                     schema_version: SERVER_SETTINGS_SCHEMA_VERSION,
                     selected: None,
+                    eula: None,
                 }
             }
         };
@@ -71,6 +74,30 @@ impl ServerSettingsStore {
         persist(&self.path, &state)
     }
 
+    pub fn eula(&self) -> Option<SavedEula> {
+        self.state.lock().ok().and_then(|state| state.eula.clone())
+    }
+
+    pub fn save_eula(&self, eula: SavedEula) -> Result<(), ServerError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ServerError::Busy("server settings lock poisoned".to_owned()))?;
+        state.eula = Some(eula);
+        state.schema_version = SERVER_SETTINGS_SCHEMA_VERSION;
+        persist(&self.path, &state)
+    }
+
+    pub fn clear_eula(&self) -> Result<(), ServerError> {
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ServerError::Busy("server settings lock poisoned".to_owned()))?;
+        state.eula = None;
+        state.schema_version = SERVER_SETTINGS_SCHEMA_VERSION;
+        persist(&self.path, &state)
+    }
+
     pub fn clear(&self) -> Result<(), ServerError> {
         let mut state = self
             .state
@@ -101,6 +128,7 @@ fn load(path: &Path) -> Result<ServerSettingsFile, String> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(ServerSettingsFile {
             schema_version: SERVER_SETTINGS_SCHEMA_VERSION,
             selected: None,
+            eula: None,
         }),
         Err(error) => Err(format!("cannot read {}: {error}", path.display())),
     }
@@ -155,6 +183,20 @@ mod tests {
         );
         store.clear().expect("clear");
         assert!(store.selected().is_none());
+
+        let eula = SavedEula {
+            accepted_at: 1_763_500_000,
+            minecraft_version: "1.21.4".to_owned(),
+            jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            eula_url: "https://aka.ms/MinecraftEULA".to_owned(),
+        };
+        store.save_eula(eula.clone()).expect("save eula");
+        assert_eq!(store.eula().expect("eula"), eula);
+        store.clear().expect("clear selection keeps eula");
+        assert!(store.selected().is_none());
+        assert!(store.eula().is_some());
+        store.clear_eula().expect("clear eula");
+        assert!(store.eula().is_none());
 
         fs::write(&path, br#"{"schemaVersion":99,"selected":null}"#).expect("bad settings");
         let store = ServerSettingsStore::new(&path);

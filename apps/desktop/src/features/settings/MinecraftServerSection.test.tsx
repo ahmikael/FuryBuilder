@@ -77,6 +77,13 @@ const discovery: ServerDiscoveryReport = {
   targetDataVersion: 4189,
   targetJavaMajor: 21,
   selected: report,
+  eula: {
+    acceptedAt: 1_763_500_000,
+    minecraftVersion: "1.21.4",
+    jarSha1: managed.sha1,
+    eulaUrl: "https://aka.ms/MinecraftEULA",
+  },
+  eulaMatchesSelected: true,
   managedRoot: "C:\\app\\servers",
   managed: [managed],
   managedBytes: managed.size,

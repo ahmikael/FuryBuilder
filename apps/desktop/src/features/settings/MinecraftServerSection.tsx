@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { displayRuntimePath, formatBytes } from "@/lib/runtime-api";
+import { ServerGenerationPanel } from "@/features/settings/ServerGenerationPanel";
 import {
   clearManagedMinecraftServers,
   clearMinecraftServerSelection,
@@ -416,6 +417,8 @@ export function MinecraftServerSection() {
           <p className="text-[10px] text-muted-foreground">{discovery.manualHint}</p>
         ) : null}
       </div>
+
+      <ServerGenerationPanel discovery={discovery} onDiscoveryChanged={reload} />
 
       {error ? (
         <p className="rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">

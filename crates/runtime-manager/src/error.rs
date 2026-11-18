@@ -66,6 +66,13 @@ pub enum ServerError {
     Limit(String),
     #[error("server JAR cache is busy: {0}")]
     Busy(String),
+    #[error("Minecraft EULA confirmation is required: {0}")]
+    EulaRequired(String),
+    #[error("Java runtime is not compatible with Minecraft {target}: {detail}")]
+    UnsupportedJava {
+        target: &'static str,
+        detail: String,
+    },
 }
 
 impl ServerError {
@@ -79,6 +86,8 @@ impl ServerError {
             ServerError::Archive(_) => "archive_error",
             ServerError::Limit(_) => "limit_exceeded",
             ServerError::Busy(_) => "busy",
+            ServerError::EulaRequired(_) => "eula_required",
+            ServerError::UnsupportedJava { .. } => "unsupported_runtime",
         }
     }
 }

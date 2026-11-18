@@ -44,11 +44,20 @@ export interface ServerReleaseInfo {
   source: string;
 }
 
+export interface SavedEula {
+  acceptedAt: number;
+  minecraftVersion: string;
+  jarSha1: string;
+  eulaUrl: string;
+}
+
 export interface ServerDiscoveryReport {
   targetMinecraftVersion: string;
   targetDataVersion: number;
   targetJavaMajor: number;
   selected: ServerJarReport | null;
+  eula: SavedEula | null;
+  eulaMatchesSelected: boolean;
   managedRoot: string;
   managed: ManagedServerJar[];
   managedBytes: number;
@@ -73,4 +82,107 @@ export interface InstalledServerJar {
   server: ManagedServerJar;
   report: ServerJarReport;
   selected: boolean;
+}
+
+export type WorldPreset = "normal" | "flat" | "large_biomes" | "amplified";
+
+export interface GenerationRequest {
+  seed: string;
+  preset: WorldPreset;
+  centerX: number;
+  centerZ: number;
+  radiusChunks: number;
+  timeLimitSeconds: number;
+  memoryMb: number;
+  viewDistance: number;
+  cpuThreads: number;
+}
+
+export type GenerationPhase =
+  | "preparing"
+  | "starting"
+  | "generating"
+  | "saving"
+  | "stopping"
+  | "completed"
+  | "cancelled"
+  | "failed";
+
+export type GenerationStopReason =
+  | "completed"
+  | "incomplete"
+  | "time_limit"
+  | "cancelled"
+  | "crashed"
+  | "startup_failed"
+  | "isolation_failed";
+
+export interface GenerationSnapshot {
+  runId: string;
+  running: boolean;
+  phase: GenerationPhase;
+  elapsedMs: number;
+  expectedChunks: number;
+  generatedChunks: number;
+  regionFiles: number;
+  worldBytes: number;
+  message: string;
+  error: string | null;
+}
+
+export interface GenerationReport {
+  snapshot: GenerationSnapshot;
+  stopReason: GenerationStopReason;
+  worldComplete: boolean;
+  exitCode: number | null;
+  serverPid: number | null;
+  seed: string;
+  preset: WorldPreset;
+  centerX: number;
+  centerZ: number;
+  radiusChunks: number;
+  timeLimitSeconds: number;
+  memoryMb: number;
+  viewDistance: number;
+  cpuThreads: number;
+  javaPath: string;
+  javaVersion: string;
+  serverJar: string;
+  serverSha1: string;
+  eulaAcceptedAt: number;
+  bindAddress: string | null;
+  processTreeGuarded: boolean;
+  runDir: string;
+  worldDir: string;
+  logPath: string;
+  startedAt: number;
+  finishedAt: number;
+  logTail: string[];
+}
+
+export interface GenerationStatusReport {
+  active: GenerationSnapshot | null;
+  last: GenerationReport | null;
+}
+
+export interface GenerationRunInfo {
+  runId: string;
+  path: string;
+  status: string;
+  createdAt: number;
+  finishedAt: number | null;
+  chunks: number;
+  expectedChunks: number;
+  regionFiles: number;
+  worldBytes: number;
+  worldComplete: boolean | null;
+  stopReason: GenerationStopReason | null;
+  error: string | null;
+}
+
+export interface GenerationRunsReport {
+  root: string;
+  runs: GenerationRunInfo[];
+  totalBytes: number;
+  problems: string[];
 }

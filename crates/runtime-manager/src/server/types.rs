@@ -89,6 +89,8 @@ pub struct ServerDiscoveryReport {
     pub target_data_version: i32,
     pub target_java_major: u32,
     pub selected: Option<ServerJarReport>,
+    pub eula: Option<SavedEula>,
+    pub eula_matches_selected: bool,
     pub managed_root: String,
     pub managed: Vec<ManagedServerJar>,
     pub managed_bytes: u64,
@@ -140,4 +142,186 @@ impl ServerDiscoveryReport {
             TARGET_JAVA_MAJOR,
         )
     }
+}
+
+/// Official Minecraft EULA text. FuryBuilder never accepts it on the user's behalf.
+pub const EULA_URL: &str = "https://aka.ms/MinecraftEULA";
+/// Version of the `.furybuilder-run.json` manifest in a generation run directory.
+pub const RUN_MANIFEST_SCHEMA_VERSION: u32 = 1;
+
+/// An explicit EULA acceptance tied to the exact server JAR that will be executed.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SavedEula {
+    pub accepted_at: u64,
+    pub minecraft_version: String,
+    pub jar_sha1: String,
+    pub eula_url: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorldPreset {
+    #[default]
+    Normal,
+    Flat,
+    LargeBiomes,
+    Amplified,
+}
+
+impl WorldPreset {
+    pub fn level_type(self) -> &'static str {
+        match self {
+            WorldPreset::Normal => "minecraft:normal",
+            WorldPreset::Flat => "minecraft:flat",
+            WorldPreset::LargeBiomes => "minecraft:large_biomes",
+            WorldPreset::Amplified => "minecraft:amplified",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            WorldPreset::Normal => "normal",
+            WorldPreset::Flat => "flat",
+            WorldPreset::LargeBiomes => "large_biomes",
+            WorldPreset::Amplified => "amplified",
+        }
+    }
+}
+
+/// User-requested isolated generation. Values are validated again on the backend; this is
+/// not a promise that every Minecraft world setting is exposed (M9.6 adds the full wizard).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationRequest {
+    pub seed: String,
+    #[serde(default)]
+    pub preset: WorldPreset,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius_chunks: u32,
+    pub time_limit_seconds: u32,
+    pub memory_mb: u32,
+    pub view_distance: u8,
+    pub cpu_threads: u8,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationPhase {
+    Preparing,
+    Starting,
+    Generating,
+    Saving,
+    Stopping,
+    Completed,
+    Cancelled,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GenerationStopReason {
+    Completed,
+    Incomplete,
+    TimeLimit,
+    Cancelled,
+    Crashed,
+    StartupFailed,
+    IsolationFailed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationSnapshot {
+    pub run_id: String,
+    pub running: bool,
+    pub phase: GenerationPhase,
+    pub elapsed_ms: u64,
+    pub expected_chunks: u64,
+    pub generated_chunks: u64,
+    pub region_files: u64,
+    pub world_bytes: u64,
+    pub message: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationReport {
+    pub snapshot: GenerationSnapshot,
+    pub stop_reason: GenerationStopReason,
+    pub world_complete: bool,
+    pub exit_code: Option<i32>,
+    pub server_pid: Option<u32>,
+    pub seed: String,
+    pub preset: WorldPreset,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius_chunks: u32,
+    pub time_limit_seconds: u32,
+    pub memory_mb: u32,
+    pub view_distance: u8,
+    pub cpu_threads: u8,
+    pub java_path: String,
+    pub java_version: String,
+    pub server_jar: String,
+    pub server_sha1: String,
+    pub eula_accepted_at: u64,
+    pub bind_address: Option<String>,
+    pub process_tree_guarded: bool,
+    pub run_dir: String,
+    pub world_dir: String,
+    pub log_path: String,
+    pub started_at: u64,
+    pub finished_at: u64,
+    pub log_tail: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationStatusReport {
+    pub active: Option<GenerationSnapshot>,
+    pub last: Option<GenerationReport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationRunInfo {
+    pub run_id: String,
+    pub path: String,
+    pub status: String,
+    pub created_at: u64,
+    pub finished_at: Option<u64>,
+    pub chunks: u64,
+    pub expected_chunks: u64,
+    pub region_files: u64,
+    pub world_bytes: u64,
+    pub world_complete: Option<bool>,
+    pub stop_reason: Option<GenerationStopReason>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationRunsReport {
+    pub root: String,
+    pub runs: Vec<GenerationRunInfo>,
+    pub total_bytes: u64,
+    pub problems: Vec<String>,
+}
+
+/// Marker written before any server process starts. Only directories carrying this manifest
+/// may be deleted by `Clear generation runs`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunManifest {
+    pub schema_version: u32,
+    pub run_id: String,
+    pub created_at: u64,
+    pub seed: String,
+    pub preset: WorldPreset,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius_chunks: u32,
 }

@@ -174,6 +174,44 @@ fn manual_selection_verifies_reports_and_detects_disk_changes() {
 }
 
 #[test]
+fn eula_acceptance_is_explicit_and_tied_to_the_selected_jar() {
+    let dir = TempDir::new("eula");
+    let jar = dir.path().join("server.jar");
+    write_jar(&jar, &version_json("1.21.4", 4189, 21), true);
+    let settings = dir.path().join("appdata").join("server.json");
+    fs::create_dir_all(settings.parent().expect("settings parent")).expect("settings dir");
+    let manager = ServerManager::new(&settings, dir.path().join("servers"));
+
+    assert!(manager.accept_eula(false).is_err());
+    assert!(manager.eula().is_none());
+    assert!(manager.accept_eula(true).is_err(), "no selected JAR yet");
+
+    let report = manager.select_manual(&jar).expect("select server jar");
+    let sha1 = report.sha1.clone().expect("sha1");
+    assert!(manager.discover().eula.is_none());
+    assert!(!manager.discover().eula_matches_selected);
+
+    let eula = manager.accept_eula(true).expect("explicit acceptance");
+    assert_eq!(eula.minecraft_version, "1.21.4");
+    assert_eq!(eula.jar_sha1, sha1);
+    assert_eq!(eula.eula_url, "https://aka.ms/MinecraftEULA");
+    let discovery = manager.discover();
+    assert!(discovery.eula_matches_selected);
+
+    manager.clear_selection().expect("clear selection");
+    let discovery = manager.discover();
+    assert!(discovery.selected.is_none());
+    assert!(discovery.eula.is_some(), "acceptance is a separate record");
+    assert!(!discovery.eula_matches_selected);
+
+    manager.select_manual(&jar).expect("reselect server jar");
+    assert!(manager.discover().eula_matches_selected);
+    manager.clear_eula().expect("withdraw eula");
+    assert!(manager.eula().is_none());
+    assert!(!manager.discover().eula_matches_selected);
+}
+
+#[test]
 fn missing_manual_jar_is_reported_not_hidden() {
     let dir = TempDir::new("missing");
     let settings = dir.path().join("server.json");

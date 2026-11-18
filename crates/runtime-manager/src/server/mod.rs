@@ -1,14 +1,23 @@
-//! Official Minecraft server JAR provisioning for the future Vanilla World flow.
+//! Official Minecraft server JAR provisioning and isolated Vanilla World generation.
 //!
 //! The JAR is resolved from Mojang's official `version_manifest_v2` → version JSON →
 //! `downloads.server`, verified by the announced SHA-1 and size, inspected for the exact
 //! 1.21.4 `world_version` 4189 and published into an offline, deletable cache. A user can
 //! also select an existing local JAR, which must pass the same internal-version and server
-//! entry-point checks. Nothing is executed here and no EULA is accepted.
+//! entry-point checks.
+//!
+//! Isolated generation requires an explicit EULA acceptance for that exact JAR. The server
+//! is bound to loopback only, runs in a temporary directory, is bounded by memory/time and
+//! is placed in a kill-on-close Windows Job Object (or Unix process group), so cancel, crash
+//! and normal completion all terminate the whole Java/bundler tree. M9.5 deliberately stops
+//! at this verified process boundary; the Vanilla World wizard, datapacks and world import
+//! belong to M9.6 and later tasks.
 
 mod cache;
+mod generation;
 mod jar;
 mod mojang;
+mod process_tree;
 mod settings;
 mod types;
 
@@ -17,30 +26,51 @@ use mojang::{remove_file_if_exists, MojangClient};
 use settings::ServerSettingsStore;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+use crate::probe::probe_java;
+use crate::types::RuntimeStatus;
 
 pub use jar::{inspect_server_jar, sha1_file, ServerJarInfo};
 pub use mojang::VERSION_MANIFEST_URL;
 pub use types::{
-    InstalledServerJar, ManagedServerCacheReport, ManagedServerJar, SavedServerJar,
+    GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
+    GenerationSnapshot, GenerationStatusReport, GenerationStopReason, InstalledServerJar,
+    ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
     ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource,
-    MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, SERVER_MANIFEST_SCHEMA_VERSION,
-    SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATA_VERSION,
+    WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
+    SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATA_VERSION,
 };
 
 use crate::error::ServerError;
 use crate::types::{TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION};
+
+struct ActiveGeneration {
+    run_id: String,
+    cancel: Arc<AtomicBool>,
+    snapshot: Arc<Mutex<GenerationSnapshot>>,
+}
+
+#[derive(Default)]
+struct GenerationState {
+    active: Option<ActiveGeneration>,
+    last: Option<GenerationReport>,
+}
 
 struct ServerManagerInner {
     settings: ServerSettingsStore,
     cache: ServerCache,
     mojang: MojangClient,
     install_lock: Mutex<()>,
+    generation_start_lock: Mutex<()>,
+    generation: Mutex<GenerationState>,
+    runs_root: PathBuf,
 }
 
-/// Application-facing facade. It never installs anything globally, never starts the server
-/// and never accepts the Minecraft EULA.
+/// Application-facing facade. It never installs anything globally; the isolated server
+/// process starts only after an explicit EULA acceptance for the exact selected JAR.
 #[derive(Clone)]
 pub struct ServerManager {
     inner: Arc<ServerManagerInner>,
@@ -48,12 +78,21 @@ pub struct ServerManager {
 
 impl ServerManager {
     pub fn new(settings_path: impl Into<PathBuf>, managed_root: impl Into<PathBuf>) -> Self {
+        let settings_path = settings_path.into();
+        let runs_root = settings_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join("server-runs");
+        let last = generation::load_last_report(&runs_root);
         Self {
             inner: Arc::new(ServerManagerInner {
                 settings: ServerSettingsStore::new(settings_path),
                 cache: ServerCache::new(managed_root),
                 mojang: MojangClient::new(),
                 install_lock: Mutex::new(()),
+                generation_start_lock: Mutex::new(()),
+                generation: Mutex::new(GenerationState { active: None, last }),
+                runs_root,
             }),
         }
     }
@@ -64,6 +103,10 @@ impl ServerManager {
 
     pub fn managed_root(&self) -> &Path {
         self.inner.cache.root()
+    }
+
+    pub fn runs_root(&self) -> &Path {
+        &self.inner.runs_root
     }
 
     pub fn discover(&self) -> ServerDiscoveryReport {
@@ -79,11 +122,23 @@ impl ServerManager {
             problems.push(warning.to_owned());
         }
         let selected = self.selected();
+        let eula = self.inner.settings.eula();
+        let eula_matches_selected = match (
+            eula.as_ref(),
+            selected
+                .as_ref()
+                .and_then(|selected| selected.sha1.as_deref()),
+        ) {
+            (Some(eula), Some(sha1)) => eula.jar_sha1.eq_ignore_ascii_case(sha1),
+            _ => false,
+        };
         ServerDiscoveryReport {
             target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
             target_data_version: types::TARGET_DATA_VERSION,
             target_java_major: TARGET_JAVA_MAJOR,
             selected,
+            eula,
+            eula_matches_selected,
             managed_root: self.inner.cache.root().display().to_string(),
             managed,
             managed_bytes,
@@ -290,6 +345,199 @@ impl ServerManager {
         self.managed_list()
     }
 
+    /// Records an explicit EULA acceptance for the exact selected 1.21.4 server JAR.
+    /// Passing `false` is rejected; this method never accepts the EULA implicitly.
+    pub fn accept_eula(&self, accepted: bool) -> Result<SavedEula, ServerError> {
+        if !accepted {
+            return Err(ServerError::EulaRequired(
+                "the Minecraft EULA must be accepted explicitly by the user".to_owned(),
+            ));
+        }
+        let saved = self.inner.settings.selected().ok_or_else(|| {
+            ServerError::Invalid("choose the Minecraft 1.21.4 server JAR first".to_owned())
+        })?;
+        let info = inspect_server_jar(Path::new(&saved.path))?;
+        if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
+            return Err(ServerError::Invalid(
+                "the selected server JAR changed on disk; choose it again before accepting the EULA"
+                    .to_owned(),
+            ));
+        }
+        let eula = SavedEula {
+            accepted_at: now_secs(),
+            minecraft_version: info.version,
+            jar_sha1: info.sha1,
+            eula_url: EULA_URL.to_owned(),
+        };
+        self.inner.settings.save_eula(eula.clone())?;
+        Ok(eula)
+    }
+
+    pub fn clear_eula(&self) -> Result<(), ServerError> {
+        self.inner.settings.clear_eula()
+    }
+
+    pub fn eula(&self) -> Option<SavedEula> {
+        self.inner.settings.eula()
+    }
+
+    /// Starts exactly one isolated generation run. The caller supplies a Java executable
+    /// that was selected in the runtime manager; it is probed again here before use.
+    pub fn start_generation(
+        &self,
+        java: &Path,
+        request: GenerationRequest,
+    ) -> Result<GenerationSnapshot, ServerError> {
+        let _start = self
+            .inner
+            .generation_start_lock
+            .try_lock()
+            .map_err(|_| ServerError::Busy("another generation run is starting".to_owned()))?;
+        {
+            let state = self
+                .inner
+                .generation
+                .lock()
+                .map_err(|_| ServerError::Busy("generation state lock poisoned".to_owned()))?;
+            if state.active.is_some() {
+                return Err(ServerError::Busy(
+                    "an isolated generation run is already active".to_owned(),
+                ));
+            }
+        }
+        generation::validate_request(&request)?;
+        let saved = self.inner.settings.selected().ok_or_else(|| {
+            ServerError::Invalid("choose the Minecraft 1.21.4 server JAR first".to_owned())
+        })?;
+        let server_path = Path::new(&saved.path);
+        let info = inspect_server_jar(server_path)?;
+        if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
+            return Err(ServerError::Invalid(
+                "the selected server JAR changed on disk; choose it again to re-verify".to_owned(),
+            ));
+        }
+        let eula = self.inner.settings.eula().ok_or_else(|| {
+            ServerError::EulaRequired(
+                "read and accept https://aka.ms/MinecraftEULA before generation".to_owned(),
+            )
+        })?;
+        if !eula.jar_sha1.eq_ignore_ascii_case(&info.sha1) {
+            return Err(ServerError::EulaRequired(
+                "the EULA was accepted for a different server JAR; confirm it for this file"
+                    .to_owned(),
+            ));
+        }
+        let probe = probe_java(java).map_err(|error| ServerError::UnsupportedJava {
+            target: TARGET_MINECRAFT_VERSION,
+            detail: error.to_string(),
+        })?;
+        let (status, warnings) = probe.classify();
+        if status != RuntimeStatus::Compatible {
+            return Err(ServerError::UnsupportedJava {
+                target: TARGET_MINECRAFT_VERSION,
+                detail: format!(
+                    "Java {} is not the required compatible Java {TARGET_JAVA_MAJOR}: {}",
+                    probe
+                        .version
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_owned()),
+                    warnings.join("; ")
+                ),
+            });
+        }
+        let java_version = probe.version.clone().unwrap_or_default();
+        let plan = generation::prepare(
+            &self.inner.runs_root,
+            java,
+            &java_version,
+            server_path,
+            &info,
+            &request,
+            eula.accepted_at,
+        )?;
+        let snapshot = generation::initial_snapshot(&plan);
+        let run_id = plan.run_id.clone();
+        let shared = Arc::new(Mutex::new(snapshot.clone()));
+        let cancel = Arc::new(AtomicBool::new(false));
+        {
+            let mut state = self
+                .inner
+                .generation
+                .lock()
+                .map_err(|_| ServerError::Busy("generation state lock poisoned".to_owned()))?;
+            state.active = Some(ActiveGeneration {
+                run_id: run_id.clone(),
+                cancel: Arc::clone(&cancel),
+                snapshot: Arc::clone(&shared),
+            });
+        }
+        let manager = self.clone();
+        std::thread::spawn(move || {
+            let report = generation::execute(plan, cancel, Arc::clone(&shared));
+            if let Ok(mut state) = manager.inner.generation.lock() {
+                let is_current = state
+                    .active
+                    .as_ref()
+                    .map(|active| active.run_id == report.snapshot.run_id)
+                    .unwrap_or(false);
+                if is_current {
+                    state.active = None;
+                    state.last = Some(report);
+                }
+            }
+        });
+        Ok(snapshot)
+    }
+
+    pub fn generation_status(&self) -> GenerationStatusReport {
+        let state = self.inner.generation.lock().ok();
+        let active = state.as_ref().and_then(|state| {
+            state
+                .active
+                .as_ref()
+                .and_then(|active| active.snapshot.lock().ok().map(|snapshot| snapshot.clone()))
+        });
+        let last = state.as_ref().and_then(|state| state.last.clone());
+        GenerationStatusReport { active, last }
+    }
+
+    pub fn cancel_generation(&self) -> bool {
+        let Ok(state) = self.inner.generation.lock() else {
+            return false;
+        };
+        let Some(active) = state.active.as_ref() else {
+            return false;
+        };
+        active.cancel.store(true, Ordering::SeqCst);
+        true
+    }
+
+    pub fn generation_runs(&self) -> GenerationRunsReport {
+        generation::scan_runs(&self.inner.runs_root)
+    }
+
+    pub fn clear_generation_runs(&self) -> Result<GenerationRunsReport, ServerError> {
+        let _start = self
+            .inner
+            .generation_start_lock
+            .try_lock()
+            .map_err(|_| ServerError::Busy("a generation run is starting".to_owned()))?;
+        {
+            let mut state = self
+                .inner
+                .generation
+                .lock()
+                .map_err(|_| ServerError::Busy("generation state lock poisoned".to_owned()))?;
+            if state.active.is_some() {
+                return Err(ServerError::Busy(
+                    "cancel the active generation before clearing its runs".to_owned(),
+                ));
+            }
+            state.last = None;
+        }
+        generation::clear_runs(&self.inner.runs_root)
+    }
+
     fn official_sha1_for(&self, path: &Path) -> Option<String> {
         let canonical = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         self.inner.cache.list().ok().and_then(|(servers, _, _)| {
@@ -367,6 +615,13 @@ impl ServerManager {
 fn manual_hint() -> String {
     "Choose the official Minecraft 1.21.4 server.jar, or download it explicitly from Mojang's version manifest. Client JARs and other versions are rejected."
         .to_owned()
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

@@ -8,10 +8,11 @@ use asset_source::{
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use runtime_manager::{
+    GenerationRequest, GenerationRunsReport, GenerationSnapshot, GenerationStatusReport,
     InstalledRuntime, InstalledServerJar, JavaRuntimeReport, ManagedCacheReport,
     ManagedServerCacheReport, RuntimeDiscoveryReport, RuntimeManager, RuntimeProgress,
-    RuntimeReleaseInfo, ServerDiscoveryReport, ServerJarReport, ServerManager, ServerProgress,
-    ServerReleaseInfo,
+    RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport, ServerJarReport, ServerManager,
+    ServerProgress, ServerReleaseInfo,
 };
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
@@ -1692,10 +1693,101 @@ pub async fn server_clear_managed(
     Ok(report)
 }
 
+#[tauri::command]
+pub fn server_accept_eula(
+    app: AppHandle,
+    manager: State<'_, ServerManager>,
+    accepted: bool,
+) -> Result<SavedEula, AppError> {
+    let eula = manager.accept_eula(accepted).map_err(server_error)?;
+    let _ = app.emit("furybuilder-server-changed", ());
+    Ok(eula)
+}
+
+#[tauri::command]
+pub fn server_clear_eula(
+    app: AppHandle,
+    manager: State<'_, ServerManager>,
+) -> Result<(), AppError> {
+    manager.clear_eula().map_err(server_error)?;
+    let _ = app.emit("furybuilder-server-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn server_start_generation(
+    app: AppHandle,
+    runtime: State<'_, RuntimeManager>,
+    manager: State<'_, ServerManager>,
+    request: GenerationRequest,
+) -> Result<GenerationSnapshot, AppError> {
+    let runtime = runtime.inner().clone();
+    let java = tauri::async_runtime::spawn_blocking(move || runtime.saved())
+        .await
+        .map_err(|error| AppError::internal(format!("Java runtime task failed: {error}")))?;
+    let Some(java) = java else {
+        return Err(AppError::new(
+            ErrorCode::InvalidArgument,
+            "Select a compatible Java 21 runtime before starting generation.",
+        ));
+    };
+    if !java.is_compatible() {
+        return Err(AppError::new(
+            ErrorCode::InvalidArgument,
+            "The saved Java runtime is no longer compatible with Minecraft 1.21.4.",
+        ));
+    }
+    let manager = manager.inner().clone();
+    let snapshot = tauri::async_runtime::spawn_blocking(move || {
+        manager.start_generation(std::path::Path::new(&java.path), request)
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("server generation task failed: {error}")))?;
+    let snapshot = snapshot.map_err(server_error)?;
+    let _ = app.emit("furybuilder-server-changed", ());
+    Ok(snapshot)
+}
+
+#[tauri::command]
+pub fn server_generation_status(manager: State<'_, ServerManager>) -> GenerationStatusReport {
+    manager.generation_status()
+}
+
+#[tauri::command]
+pub fn server_cancel_generation(manager: State<'_, ServerManager>) -> bool {
+    manager.cancel_generation()
+}
+
+#[tauri::command]
+pub async fn server_generation_runs(
+    manager: State<'_, ServerManager>,
+) -> Result<GenerationRunsReport, AppError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.generation_runs())
+        .await
+        .map_err(|error| AppError::internal(format!("generation runs task failed: {error}")))
+}
+
+#[tauri::command]
+pub async fn server_clear_generation_runs(
+    app: AppHandle,
+    manager: State<'_, ServerManager>,
+) -> Result<GenerationRunsReport, AppError> {
+    let manager = manager.inner().clone();
+    let report = tauri::async_runtime::spawn_blocking(move || manager.clear_generation_runs())
+        .await
+        .map_err(|error| AppError::internal(format!("generation runs task failed: {error}")))?;
+    let report = report.map_err(server_error)?;
+    let _ = app.emit("furybuilder-server-changed", ());
+    Ok(report)
+}
+
 fn server_error(error: runtime_manager::ServerError) -> AppError {
     let code = match error.code() {
         "invalid_argument" => ErrorCode::InvalidArgument,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "unsupported_runtime" => ErrorCode::UnsupportedVersion,
+        "eula_required" => ErrorCode::PermissionDenied,
         "network_error" => ErrorCode::BackendUnavailable,
         "checksum_mismatch" => ErrorCode::Conflict,
         "archive_error" | "unsupported_format" => ErrorCode::UnsupportedFormat,

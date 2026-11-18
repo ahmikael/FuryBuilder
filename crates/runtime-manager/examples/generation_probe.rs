@@ -1,0 +1,124 @@
+//! Reproducible M9.5 probe for the isolated Vanilla generation process.
+//!
+//! Examples:
+//!   cargo run -p furybuilder-runtime-manager --example generation_probe -- \
+//!     --root <dir> --java <java.exe> --jar <server.jar> --accept-eula
+//!
+//! The `--accept-eula` flag is this CLI's explicit user confirmation; the UI performs the
+//! same action through a checkbox and a separate button. No EULA is accepted implicitly.
+//! The probe starts the official server, generates a small area, saves it, stops and prints
+//! the final report. Use `--cancel-after <seconds>` to exercise cancellation.
+
+use std::path::PathBuf;
+use std::time::Duration;
+
+use furybuilder_runtime_manager::{GenerationRequest, ServerManager, WorldPreset};
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("generation probe failed: {error}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), Box<dyn std::error::Error>> {
+    let mut args = std::env::args().skip(1);
+    let mut root: Option<PathBuf> = None;
+    let mut java: Option<PathBuf> = None;
+    let mut jar: Option<PathBuf> = None;
+    let mut seed = "FuryBuilder".to_owned();
+    let mut preset = WorldPreset::Normal;
+    let mut center_x = 0i32;
+    let mut center_z = 0i32;
+    let mut radius_chunks = 1u32;
+    let mut time_limit_seconds = 180u32;
+    let mut memory_mb = 2048u32;
+    let mut view_distance = 3u8;
+    let mut cpu_threads = 2u8;
+    let mut accept_eula = false;
+    let mut cancel_after: Option<u64> = None;
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--root" => root = args.next().map(PathBuf::from),
+            "--java" => java = args.next().map(PathBuf::from),
+            "--jar" => jar = args.next().map(PathBuf::from),
+            "--seed" => seed = args.next().unwrap_or_default(),
+            "--preset" => {
+                preset = match args.next().as_deref() {
+                    Some("flat") => WorldPreset::Flat,
+                    Some("large_biomes") => WorldPreset::LargeBiomes,
+                    Some("amplified") => WorldPreset::Amplified,
+                    _ => WorldPreset::Normal,
+                }
+            }
+            "--center-x" => center_x = args.next().unwrap_or_default().parse()?,
+            "--center-z" => center_z = args.next().unwrap_or_default().parse()?,
+            "--radius" => radius_chunks = args.next().unwrap_or_default().parse()?,
+            "--time" => time_limit_seconds = args.next().unwrap_or_default().parse()?,
+            "--memory" => memory_mb = args.next().unwrap_or_default().parse()?,
+            "--view" => view_distance = args.next().unwrap_or_default().parse()?,
+            "--cpu" => cpu_threads = args.next().unwrap_or_default().parse()?,
+            "--cancel-after" => cancel_after = args.next().unwrap_or_default().parse().ok(),
+            "--accept-eula" => accept_eula = true,
+            other => {
+                eprintln!("unknown argument: {other}");
+                std::process::exit(2);
+            }
+        }
+    }
+    let root = root.ok_or("--root is required")?;
+    let java = java.ok_or("--java is required")?;
+    std::fs::create_dir_all(&root)?;
+    let manager = ServerManager::new(root.join("server.json"), root.join("servers"));
+    if let Some(jar) = jar {
+        let report = manager.select_manual(&jar)?;
+        eprintln!(
+            "selected server JAR: {} {} DV {:?}",
+            report.version.as_deref().unwrap_or("?"),
+            report.sha1.as_deref().unwrap_or("?"),
+            report.data_version
+        );
+    }
+    if accept_eula {
+        let eula = manager.accept_eula(true)?;
+        eprintln!(
+            "EULA explicitly accepted for {} sha1 {}",
+            eula.minecraft_version, eula.jar_sha1
+        );
+    }
+    let request = GenerationRequest {
+        seed,
+        preset,
+        center_x,
+        center_z,
+        radius_chunks,
+        time_limit_seconds,
+        memory_mb,
+        view_distance,
+        cpu_threads,
+    };
+    let snapshot = manager.start_generation(&java, request)?;
+    eprintln!("{}", serde_json::to_string_pretty(&snapshot)?);
+    if let Some(seconds) = cancel_after {
+        std::thread::sleep(Duration::from_secs(seconds));
+        eprintln!("cancel requested: {}", manager.cancel_generation());
+    }
+    loop {
+        let status = manager.generation_status();
+        if let Some(active) = &status.active {
+            eprintln!(
+                "{} {} chunks {}/{} elapsed {} ms",
+                active.phase as u8,
+                active.message,
+                active.generated_chunks,
+                active.expected_chunks,
+                active.elapsed_ms
+            );
+        } else {
+            let report = status.last.ok_or("generation ended without a report")?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+            return Ok(());
+        }
+        std::thread::sleep(Duration::from_secs(1));
+    }
+}
