@@ -20,6 +20,19 @@
 - Multi round-trip approval is expressed through tool results that request approval and
   the Core policy layer — an AI's textual "yes" is never treated as authorization.
 
+## Implementation note (2026-11-18)
+
+Verified `@modelcontextprotocol/server` **2.4.0** and its `serveStdio(factory)` entry.
+The package serves both protocol eras, but modern `2026-07-28` behaviour is an explicit
+choice: a hand-built server keeps the legacy `initialize` lifecycle, while modern peers
+open with `server/discover` and per-request `_meta`. The bridge must therefore select and
+record the negotiated era. The Tasks extension is no longer part of the core protocol;
+its 2025 wire vocabulary is deprecated, and the extension uses `tasks/get`,
+`tasks/update` and `tasks/cancel` with ordinary start/status/cancel tools as fallback.
+The installed OpenCode CLI `2.3.0` supports local stdio servers via
+`opencode mcp add <name> -- <command...>`. The real-client negotiation test is still
+outstanding and must not be claimed before it runs.
+
 ## Consequences
 
 - Tool handlers are pure request/response and safe to retry with idempotency keys.
