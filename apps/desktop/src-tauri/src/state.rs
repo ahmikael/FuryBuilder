@@ -10,6 +10,7 @@ use world_application::WorldService;
 #[derive(Debug, Clone)]
 pub struct CurrentProject {
     pub folder: String,
+    pub project_id: String,
     pub name: String,
     pub saved_revision: u64,
     pub autosaved_revision: Option<u64>,

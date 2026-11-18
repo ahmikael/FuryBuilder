@@ -47,7 +47,12 @@ pub fn run() {
             commands::project_checkpoints,
             commands::project_open_checkpoint,
             commands::project_close,
-            commands::project_rename
+            commands::project_rename,
+            commands::structure_import_preview,
+            commands::structure_import_project,
+            commands::structure_insert,
+            commands::structure_export_preview,
+            commands::structure_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running FuryBuilder");

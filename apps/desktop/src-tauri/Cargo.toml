@@ -17,6 +17,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+base64 = { workspace = true }
 project-store = { path = "../../../crates/project-store", package = "furybuilder-project-store" }
 world-application = { path = "../../../crates/world-application", package = "furybuilder-world-application" }
 world-domain = { path = "../../../crates/world-domain", package = "furybuilder-world-domain" }
+world-io = { path = "../../../crates/world-io", package = "furybuilder-world-io" }
