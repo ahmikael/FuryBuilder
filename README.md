@@ -106,7 +106,10 @@ and validated local `.zip` data packs, and requires a separate explicit consent 
 starting the official generator. M9.7 imports a completed run as a `Vanilla World` project:
 the generated folder is copied byte-for-byte as an immutable source, decoded into the Rust
 World Core, and its seed, preset, data packs, Java/server identity and requested area are
-recorded in `project.json`.
+recorded in `project.json`. M9.8 verifies the saved generated base against the original
+generator's reference chunks: settings and provenance must agree exactly, only an untouched
+revision-1 base is checked, and block differences are reported with coordinates. The check is
+bounded and refuses unsupported or incomplete references instead of claiming parity.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -142,7 +145,11 @@ guarantee that its whole milestone is complete.
   metadata, SHA-1/version verification, manual selection, cache cleanup and its evidence.
 - `docs/runtime/vanilla-generation.md` - explicit EULA confirmation, the Vanilla World
   wizard, validated data packs, the isolated official server process,
-  loopback/resource/process-tree guarantees, progress, cancellation and its real evidence.
+  loopback/resource/process-tree guarantees, progress, cancellation, generated-base
+  verification and real evidence.
+- `docs/testing/worldgen-parity.md` — the independent JSON parity oracle, the implemented
+  M9.8 reference-chunk check, its real evidence and remaining limitations (biomes are not
+  modelled by the editable world).
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.

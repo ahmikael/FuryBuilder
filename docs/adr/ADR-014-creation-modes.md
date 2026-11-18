@@ -36,13 +36,15 @@ Three modes only:
 
 ## Parity testing
 
-The test design and sample comparator are described in
-[`docs/testing/worldgen-parity.md`](../testing/worldgen-parity.md). It requires matching
-version, server identity, seed, preset, settings, ordered datapacks, dimension and
-generation order, then compares all block states and biomes in the sampled chunks.
-Only synthetic comparator tests have been run so far. Neither the original-server bridge
-nor the production snapshot exporter exists yet: **vanilla parity has not been tested or
-established**.
+The test design, the independent JSON comparator and the implemented reference-chunk check
+are described in [`docs/testing/worldgen-parity.md`](../testing/worldgen-parity.md).
+M9.8 compares the saved imported base with the original generator's requested overworld
+chunks after verifying seed, preset, center/radius, structures flag, ordered data-pack
+hashes, Java/server identity and generated counts. The real run compared 9 chunks,
+77 non-empty sections and 315,392 block positions with zero differences; a different run
+was refused. This is **block-state parity only**: biomes are preserved in the immutable
+source but are not modelled by the editable world, and the sample is not a general vanilla
+parity proof.
 
 ## Consequences
 

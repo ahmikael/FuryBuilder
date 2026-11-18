@@ -1,4 +1,4 @@
-# Isolated Vanilla World generation (M9.5–M9.7)
+# Isolated Vanilla World generation (M9.5–M9.8)
 
 Scope: explicitly accept the Minecraft EULA and run the **official** Minecraft Java 1.21.4
 server process in an isolated temporary directory. M9.5 adds the safe process boundary,
@@ -6,13 +6,15 @@ EULA flow, progress and termination. M9.6 adds the Vanilla World wizard: Java/ru
 check, seed, preset, supported worldgen settings, validated local data packs and a separate
 explicit consent for the local run. M9.7 imports a completed run into the Rust World Core as
 a Vanilla World project with a byte-preserving immutable source copy and full generator
-provenance.
+provenance. M9.8 compares the saved imported base with the original generator's reference
+chunks and refuses mismatched settings or unsupported references.
 
 Implementation: `crates/runtime-manager/src/server/generation.rs`,
-`process_tree.rs` and `datapack.rs`, the Tauri `server_*generation*`,
-`vanilla_setup_check` and `project_import_generated_world` commands,
-`Settings → Minecraft server JAR → Isolated
-vanilla generation`, and `Project → New project → Vanilla World`.
+`process_tree.rs` and `datapack.rs`, `crates/world-io/src/parity.rs`, the Tauri
+`server_*generation*`, `vanilla_setup_check`, `project_import_generated_world` and
+`project_verify_vanilla_parity` commands, `Settings → Minecraft server JAR → Isolated
+vanilla generation`, and `Project → New project → Vanilla World` plus the project's
+`Generated base verification` panel.
 
 ## Explicit EULA
 
@@ -145,6 +147,33 @@ Edits are stored in the project overlay/snapshot. The generated base stays read-
 later export can use passthrough for untouched files. Clearing the generation runs after a
 successful import does not delete the project's own source copy.
 
+## Reference-chunk parity (M9.8)
+
+`project_verify_vanilla_parity` compares the saved editable snapshot with the reference
+chunks that the original generator wrote. It is not a second world generator and it never
+rewrites either world.
+
+Preconditions, all enforced in Rust:
+
+- the project is a Vanilla World project with an immutable `source.kind = generated` tree;
+- the saved snapshot revision is exactly 1; an edited base is refused, because comparing
+  later revisions would report expected edits as generator differences;
+- when the original run is still available, seed, preset, center/radius, structures flag,
+  ordered data-pack name/SHA-256/size/format, Java version, official server SHA-1, generated
+  chunk/region counts and world bytes must match the project provenance exactly;
+- when the run was cleared, the project's immutable byte-for-byte source copy is used and the
+  report records that fallback;
+- `analyze_java_world` must accept the reference (1.21.4 classic layout, complete save);
+  missing requested chunks or chunks without `minecraft:full` status refuse the check;
+- the sample is capped at 64 requested chunks (all chunks when the area fits), and
+  `world_io::parity` compares every block position in sections that are non-empty on either
+  side, with a 50,000,000-position budget and up to 20 detailed differences.
+
+The comparison is **block-state only**. Biomes, heightmaps, lighting, block entities,
+entities and POI remain in the immutable source copy but are not modelled by the editable
+world, so the report never claims parity for them. A missing project chunk is a real
+difference; a missing reference chunk is an incomplete generator result and is refused.
+
 ## Run directory
 
 ```text
@@ -181,6 +210,7 @@ modified.
 | `server_generation_runs`         | Inventory of FuryBuilder-owned run directories            |
 | `server_clear_generation_runs`   | Delete only manifest-owned run directories                |
 | `project_import_generated_world` | Verify a completed run and import it as a Vanilla project |
+| `project_verify_vanilla_parity`  | Compare a saved Vanilla base with reference chunks        |
 
 The UI polls `server_generation_status` once per second while a run is active; no unbounded
 event stream is required.
@@ -243,6 +273,22 @@ WebView2 flow with the import step:
 - a second run with the validated data pack and `generateStructures=false` still completed
   after the import, and all prior loopback/process-tree guarantees held.
 
+### M9.8 reference-chunk parity
+
+`docs/testing/evidence/2026-11-19-vanilla-parity-ui.json`, `.png` and `-parity.png` record
+the same real flow with the parity step:
+
+- the saved revision-1 base matched the original run exactly: 9/9 sampled chunks, 77
+  non-empty sections, 315,392 block positions, 0 differences; the UI panel showed
+  `Block parity matched` and the same counts;
+- the comparison reported the explicit limitations (block states only, requested overworld
+  area only, not a general vanilla parity proof);
+- pointing the check at the second completed run was refused with concrete reasons: seed,
+  center X/Z, structures flag, data-pack count and generated bytes differed, and no
+  comparison was attempted;
+- native tests cover semantic palette equality, absolute mismatch coordinates,
+  missing/extra sections, bounded detail output and deterministic sampling.
+
 Reproduce:
 
 ```powershell
@@ -272,6 +318,12 @@ checkboxes and buttons above.
 - `incomplete` and `time limit reached` are valid terminal states; they are not silently
   retried and the user sees the shortfall.
 - No resume of an interrupted generation; start a new run.
+- Reference-chunk parity is only defined for the untouched imported base (revision 1) and
+  compares block states in a bounded sample. It is not a general vanilla parity claim and
+  does not verify biomes or derived data in the editable model.
+- An independent second generation with identical settings is not part of the parity check;
+  the check compares the imported project representation with the recorded generator
+  output.
 - Data packs are validated as archives and for declared format compatibility, not for their
   game behavior, dependencies or worldgen changes. Only `.zip` files are accepted; a folder
   pack can be zipped by the user.

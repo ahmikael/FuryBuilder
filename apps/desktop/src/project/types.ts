@@ -57,6 +57,59 @@ export interface ProjectSummary {
   recoverable: boolean;
 }
 
+export type VanillaParityStatus = "matched" | "mismatched" | "refused";
+
+export interface VanillaParityMismatch {
+  chunkX: number;
+  chunkZ: number;
+  sectionY: number;
+  x: number;
+  y: number;
+  z: number;
+  reference: string;
+  project: string;
+}
+
+export interface VanillaParityChunkRef {
+  x: number;
+  z: number;
+}
+
+export interface VanillaParityComparison {
+  status: VanillaParityStatus;
+  referenceRoot: string;
+  dimension: string;
+  requestedChunks: number;
+  sampledChunks: number;
+  checkedChunks: number;
+  checkedSections: number;
+  checkedBlocks: number;
+  mismatchCount: number;
+  mismatches: VanillaParityMismatch[];
+  missingReferenceChunks: VanillaParityChunkRef[];
+  missingProjectChunks: VanillaParityChunkRef[];
+  refusals: string[];
+  limitations: string[];
+}
+
+export interface VanillaParityReport {
+  status: VanillaParityStatus;
+  projectFolder: string;
+  projectName: string;
+  snapshotRevision: number;
+  fromAutosave: boolean;
+  referenceKind: "generatedRun" | "projectSource";
+  referenceRoot: string;
+  seed: string;
+  preset: string;
+  centerX: number;
+  centerZ: number;
+  radiusChunks: number;
+  refusals: string[];
+  comparison: VanillaParityComparison | null;
+  limitations: string[];
+}
+
 export interface ProjectDetail {
   summary: ProjectSummary;
   editorState: EditorState;

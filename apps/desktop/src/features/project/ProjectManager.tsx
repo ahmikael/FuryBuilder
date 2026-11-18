@@ -32,6 +32,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
+import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/tool-store";
@@ -422,6 +423,10 @@ export function ProjectManager() {
                     No project is open. Pick one below or create a new project.
                   </div>
                 )}
+
+                {current?.folder && currentProject?.creationMode === "vanilla" ? (
+                  <VanillaParityPanel folder={current.folder} />
+                ) : null}
 
                 {lastSave ? (
                   <div className="rounded border border-status-ok/30 bg-status-ok/5 px-2 py-1 font-mono text-[9px] text-muted-foreground">

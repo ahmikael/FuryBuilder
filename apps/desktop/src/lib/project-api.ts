@@ -9,6 +9,7 @@ import type {
   ProjectList,
   SaveOutcome,
   SessionStatus,
+  VanillaParityReport,
 } from "@/project/types";
 
 export function fetchProjects(): Promise<ProjectList> {
@@ -75,6 +76,17 @@ export function importJavaWorld(
     name,
     worldFolder,
     editorState,
+  });
+}
+
+/**
+ * Compares the saved Vanilla World base with the original generator's reference chunks.
+ * The backend refuses edited snapshots, mismatched settings and unsupported references.
+ */
+export function checkVanillaParity(folder: string, runId?: string): Promise<VanillaParityReport> {
+  return invokeCommand<VanillaParityReport>("project_verify_vanilla_parity", {
+    folder,
+    runId: runId ?? null,
   });
 }
 

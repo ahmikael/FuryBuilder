@@ -15,6 +15,7 @@ pub mod java_chunk;
 pub mod java_structure;
 pub mod nbt;
 pub mod overlay;
+pub mod parity;
 pub mod passthrough;
 pub mod region_write;
 pub mod structure;
@@ -54,6 +55,11 @@ pub use overlay::{
     ApplyReport, BlockChange, BlockEdit, ChunkKey, OverlayChunk, OverlayChunkDocument,
     OverlayDocument, OverlayError, OverlaySectionDocument, WorldOverlay, MAX_OVERLAY_CHUNKS,
     MAX_OVERLAY_JSON_BYTES, MAX_OVERLAY_SECTIONS, OVERLAY_SCHEMA_VERSION,
+};
+pub use parity::{
+    compare_java_world_to_world, reference_chunks, ParityChunkRef, ParityError, ParityMismatch,
+    ParityOptions, ParityReport, ParityStatus, MAX_PARITY_BLOCKS, MAX_PARITY_CHUNKS,
+    MAX_PARITY_MISMATCHES, PARITY_DIMENSION,
 };
 pub use passthrough::{
     passthrough_java_world, passthrough_java_world_with_options, CopiedFile, PassthroughError,

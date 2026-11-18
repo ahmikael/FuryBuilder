@@ -8,12 +8,12 @@ use asset_source::{
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use runtime_manager::{
-    DatapackInspection, GenerationRequest, GenerationRunsReport, GenerationSnapshot,
-    GenerationStatusReport, InstalledRuntime, InstalledServerJar, JavaRuntimeReport,
-    ManagedCacheReport, ManagedServerCacheReport, RuntimeDiscoveryReport, RuntimeManager,
-    RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport, ServerJarReport,
-    ServerManager, ServerProgress, ServerReleaseInfo, TARGET_DATAPACK_FORMAT, TARGET_DATA_VERSION,
-    TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION,
+    DatapackInspection, GeneratedWorld, GenerationRequest, GenerationRunsReport,
+    GenerationSnapshot, GenerationStatusReport, InstalledRuntime, InstalledServerJar,
+    JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport, RuntimeDiscoveryReport,
+    RuntimeManager, RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport,
+    ServerJarReport, ServerManager, ServerProgress, ServerReleaseInfo, TARGET_DATAPACK_FORMAT,
+    TARGET_DATA_VERSION, TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION,
 };
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
@@ -234,6 +234,19 @@ fn world_import_error(error: world_io::WorldImportError) -> AppError {
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
         "unsupported_format" | "verification_failed" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+fn parity_error(error: world_io::ParityError) -> AppError {
+    use world_application::ErrorCode;
+    let code = match error.code() {
+        "invalid_argument" | "unsafe_path" => ErrorCode::InvalidArgument,
+        "not_found" => ErrorCode::NotFound,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "unsupported_format" => ErrorCode::UnsupportedFormat,
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
@@ -844,6 +857,312 @@ fn import_world_project(
             Err(error)
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------
+// Generated-base parity (M9.8). The reference is the original generator output; the
+// candidate is the saved editable snapshot. Settings and provenance must agree exactly
+// before any chunk is compared, and an unsupported reference configuration is refused.
+// ---------------------------------------------------------------------------------------
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VanillaParityReport {
+    /// `matched`, `mismatched` or `refused`.
+    pub status: String,
+    pub project_folder: String,
+    pub project_name: String,
+    pub snapshot_revision: u64,
+    pub from_autosave: bool,
+    /// `generatedRun` or `projectSource`.
+    pub reference_kind: String,
+    pub reference_root: String,
+    pub seed: String,
+    pub preset: String,
+    pub center_x: i32,
+    pub center_z: i32,
+    pub radius_chunks: u32,
+    pub refusals: Vec<String>,
+    pub comparison: Option<world_io::ParityReport>,
+    pub limitations: Vec<String>,
+}
+
+fn reference_settings_mismatches(
+    provenance: &project_store::VanillaProvenance,
+    generated: &GeneratedWorld,
+) -> Vec<String> {
+    let mut mismatches = Vec::new();
+    if provenance.seed != generated.seed {
+        mismatches.push(format!(
+            "seed: project `{}` vs reference `{}`",
+            provenance.seed, generated.seed
+        ));
+    }
+    if provenance.preset != generated.preset.label() {
+        mismatches.push(format!(
+            "preset: project `{}` vs reference `{}`",
+            provenance.preset,
+            generated.preset.label()
+        ));
+    }
+    if provenance.center_x != generated.center_x {
+        mismatches.push(format!(
+            "center x: project {} vs reference {}",
+            provenance.center_x, generated.center_x
+        ));
+    }
+    if provenance.center_z != generated.center_z {
+        mismatches.push(format!(
+            "center z: project {} vs reference {}",
+            provenance.center_z, generated.center_z
+        ));
+    }
+    if provenance.radius_chunks != generated.radius_chunks {
+        mismatches.push(format!(
+            "radius: project {} vs reference {} chunk(s)",
+            provenance.radius_chunks, generated.radius_chunks
+        ));
+    }
+    if provenance.generate_structures != generated.generate_structures {
+        mismatches.push(format!(
+            "generate-structures: project {} vs reference {}",
+            provenance.generate_structures, generated.generate_structures
+        ));
+    }
+    if provenance.datapacks.len() != generated.datapacks.len() {
+        mismatches.push(format!(
+            "data packs: project has {} vs reference has {}",
+            provenance.datapacks.len(),
+            generated.datapacks.len()
+        ));
+    } else {
+        for (index, (expected, actual)) in provenance
+            .datapacks
+            .iter()
+            .zip(generated.datapacks.iter())
+            .enumerate()
+        {
+            if expected.name != actual.name
+                || expected.sha256 != actual.sha256
+                || expected.size != actual.size
+                || expected.pack_format != actual.pack_format
+            {
+                mismatches.push(format!(
+                    "data pack #{}: project `{}` ({} bytes) vs reference `{}` ({} bytes)",
+                    index + 1,
+                    expected.name,
+                    expected.size,
+                    actual.name,
+                    actual.size
+                ));
+            }
+        }
+    }
+    if provenance.java_version != generated.java_version {
+        mismatches.push(format!(
+            "Java version: project `{}` vs reference `{}`",
+            provenance.java_version, generated.java_version
+        ));
+    }
+    if provenance.server_jar_sha1 != generated.server_sha1 {
+        mismatches.push(format!(
+            "official server JAR SHA-1: project `{}` vs reference `{}`",
+            provenance.server_jar_sha1, generated.server_sha1
+        ));
+    }
+    if provenance.chunks != generated.chunks {
+        mismatches.push(format!(
+            "generated chunks: project {} vs reference {}",
+            provenance.chunks, generated.chunks
+        ));
+    }
+    if provenance.region_files != generated.region_files {
+        mismatches.push(format!(
+            "region files: project {} vs reference {}",
+            provenance.region_files, generated.region_files
+        ));
+    }
+    if provenance.world_bytes != generated.world_bytes {
+        mismatches.push(format!(
+            "generated world bytes: project {} vs reference {}",
+            provenance.world_bytes, generated.world_bytes
+        ));
+    }
+    mismatches
+}
+
+fn parity_refused(mut report: VanillaParityReport, reasons: Vec<String>) -> VanillaParityReport {
+    report.status = "refused".to_owned();
+    report.refusals = reasons;
+    report
+}
+
+/// Compares a saved Vanilla World base with the original generator's reference chunks.
+///
+/// The project must still be the untouched imported base (revision 1). The preferred
+/// reference is the completed generation run recorded in `project.json`; when that run has
+/// been cleared, the project's immutable byte-for-byte source copy is used and the report
+/// says so. Settings/provenance must agree exactly, and unsupported layouts or incomplete
+/// reference chunks are refused instead of producing a false match.
+#[tauri::command]
+pub fn project_verify_vanilla_parity(
+    state: State<'_, AppState>,
+    manager: State<'_, ServerManager>,
+    folder: String,
+    run_id: Option<String>,
+) -> Result<VanillaParityReport, AppError> {
+    let (detail, world, recovery, project_dir) = {
+        let projects = state
+            .projects
+            .lock()
+            .map_err(|_| AppError::internal("project state lock poisoned"))?;
+        let (detail, world, recovery) = projects.store.open(&folder).map_err(project_error)?;
+        let project_dir = projects.store.root().join(&folder);
+        (detail, world, recovery, project_dir)
+    };
+    let provenance = detail.vanilla.clone().ok_or_else(|| {
+        AppError::new(
+            ErrorCode::InvalidArgument,
+            "reference-chunk parity requires an imported Vanilla World project",
+        )
+    })?;
+    let mut report = VanillaParityReport {
+        status: "refused".to_owned(),
+        project_folder: folder.clone(),
+        project_name: detail.summary.name.clone(),
+        snapshot_revision: world.revision(),
+        from_autosave: recovery.is_some(),
+        reference_kind: "generatedRun".to_owned(),
+        reference_root: String::new(),
+        seed: provenance.seed.clone(),
+        preset: provenance.preset.clone(),
+        center_x: provenance.center_x,
+        center_z: provenance.center_z,
+        radius_chunks: provenance.radius_chunks,
+        refusals: Vec::new(),
+        comparison: None,
+        limitations: Vec::new(),
+    };
+
+    if detail.summary.creation_mode != project_store::CreationMode::Vanilla
+        || detail.source.kind != project_store::SourceKind::Generated
+        || !detail.source.immutable
+    {
+        return Ok(parity_refused(
+            report,
+            vec![
+                "the project source is not an immutable generated base; parity is only defined for Vanilla World projects"
+                    .to_owned(),
+            ],
+        ));
+    }
+    if world.revision() != 1 {
+        return Ok(parity_refused(
+            report,
+            vec![format!(
+                "the saved snapshot is revision {}; reference-chunk parity is only defined for the untouched imported base (revision 1). The immutable source copy is still preserved",
+                world.revision()
+            )],
+        ));
+    }
+    if report.from_autosave {
+        report.limitations.push(format!(
+            "the verified autosave at revision {} was checked instead of the last manual save",
+            world.revision()
+        ));
+    }
+
+    let source_reference = detail
+        .source
+        .reference
+        .clone()
+        .unwrap_or_else(|| "world".to_owned());
+    let source_world = project_dir
+        .join(project_store::SOURCE_DIR)
+        .join(&source_reference);
+    let explicit_run = run_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_owned);
+    let preferred_run = explicit_run
+        .clone()
+        .unwrap_or_else(|| provenance.run_id.clone());
+    let reference_root = match manager.generated_world(&preferred_run) {
+        Ok(generated) => {
+            report.reference_root = generated.world_dir.clone();
+            let mismatches = reference_settings_mismatches(&provenance, &generated);
+            if !mismatches.is_empty() {
+                return Ok(parity_refused(report, mismatches));
+            }
+            generated.world_dir
+        }
+        Err(error) => {
+            if explicit_run.is_some() {
+                return Ok(parity_refused(
+                    report,
+                    vec![format!(
+                        "the requested reference run `{preferred_run}` did not pass verification: {error}"
+                    )],
+                ));
+            }
+            report.reference_kind = "projectSource".to_owned();
+            report.reference_root = source_world.display().to_string();
+            report.limitations.push(format!(
+                "the original run `{preferred_run}` could not be reopened ({error}); the project's immutable source copy was checked instead"
+            ));
+            source_world.display().to_string()
+        }
+    };
+    report.reference_root = reference_root.clone();
+    if !std::path::Path::new(&reference_root).is_dir() {
+        return Ok(parity_refused(
+            report,
+            vec![format!(
+                "the reference world `{reference_root}` is missing or is not a directory"
+            )],
+        ));
+    }
+
+    // Analysis is read-only and returns blockers for unsupported versions/layouts or a
+    // malformed reference instead of letting the comparison make an unwarranted claim.
+    let analysis = world_io::analyze_java_world(&reference_root);
+    if !analysis.supported {
+        let reasons = if analysis.blockers.is_empty() {
+            vec!["the reference world is not a supported complete 1.21.4 save".to_owned()]
+        } else {
+            analysis.blockers
+        };
+        return Ok(parity_refused(report, reasons));
+    }
+
+    let chunks = world_io::reference_chunks(
+        provenance.center_x,
+        provenance.center_z,
+        provenance.radius_chunks,
+        world_io::MAX_PARITY_CHUNKS,
+    );
+    let comparison = world_io::compare_java_world_to_world(
+        &reference_root,
+        &chunks,
+        &world,
+        world_io::ParityOptions::default(),
+    )
+    .map_err(parity_error)?;
+    report.status = match comparison.status {
+        world_io::ParityStatus::Matched => "matched",
+        world_io::ParityStatus::Mismatched => "mismatched",
+        world_io::ParityStatus::Refused => "refused",
+    }
+    .to_owned();
+    report.refusals = comparison.refusals.clone();
+    for limitation in &comparison.limitations {
+        if !report.limitations.contains(limitation) {
+            report.limitations.push(limitation.clone());
+        }
+    }
+    report.comparison = Some(comparison);
+    Ok(report)
 }
 
 // ---------------------------------------------------------------------------------------

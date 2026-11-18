@@ -1,10 +1,13 @@
 /**
- * M9.6 desktop smoke: the Vanilla World wizard.
+ * M9.6-M9.8 desktop smoke: the Vanilla World wizard, World Core import and parity.
  *
  * Starts the real Tauri app with isolated app data, selects the provided verified Java 21
  * executable and official 1.21.4 server.jar, accepts the EULA through the wizard, confirms
- * the local run and generates a small real area. A second run is started through the same
- * backend contract with a validated local data pack and `generateStructures=false`.
+ * the local run and generates a small real area. The completed run is imported as an
+ * immutable Vanilla project, then the saved base is compared block-for-block with the
+ * original generator's reference chunks through the backend and the project panel. A second
+ * run with a validated data pack and `generateStructures=false` must be refused as a
+ * reference for the first project because its seed/settings differ.
  *
  * Usage (Vite dev server must already run at 127.0.0.1:1420):
  *   node scripts/vanilla-wizard-webview2-smoke.mjs <java.exe> <server.jar> <pack.zip> <out.json> <out.png>
@@ -631,6 +634,75 @@ try {
     );
   }
 
+  const parity = await invoke("project_verify_vanilla_parity", {
+    folder: projectSummary.folder,
+    runId: null,
+  });
+  if (
+    parity.status !== "matched" ||
+    parity.comparison?.status !== "matched" ||
+    parity.comparison?.mismatchCount !== 0 ||
+    parity.comparison?.checkedChunks !== 9 ||
+    parity.comparison?.checkedBlocks === 0
+  ) {
+    throw new Error(
+      `reference-chunk parity did not match: ${JSON.stringify(parity)}`,
+    );
+  }
+  if (
+    parity.referenceKind !== "generatedRun" ||
+    parity.comparison?.requestedChunks !== 9 ||
+    parity.comparison?.sampledChunks !== 9 ||
+    parity.comparison?.limitations.length === 0
+  ) {
+    throw new Error(
+      `reference-chunk parity reported an unexpected scope: ${JSON.stringify(parity)}`,
+    );
+  }
+
+  const managerReopened = await clickByText("Project");
+  if (!managerReopened) {
+    throw new Error("the project manager could not be reopened");
+  }
+  const projectsTabSelected = await clickTabByText("Projects");
+  if (!projectsTabSelected) {
+    throw new Error("the Projects tab could not be selected");
+  }
+  const parityButtonPresent = await waitFor(
+    "Boolean(document.querySelector('button[aria-label=\"Verify generated base\"]'))",
+    30_000,
+  );
+  if (!parityButtonPresent) {
+    throw new Error("the generated base verification panel did not render");
+  }
+  const parityUiClicked = await clickByAriaLabel("Verify generated base");
+  if (!parityUiClicked) {
+    throw new Error("the generated base verification button was not clickable");
+  }
+  const parityUiMatched = await waitFor(
+    'document.body.innerText.toLowerCase().includes("block parity matched")',
+    120_000,
+  );
+  if (!parityUiMatched) {
+    throw new Error("the parity panel did not show a matching result");
+  }
+  const parityUiCounts = await evaluate(
+    'document.querySelector(\'[data-testid="vanilla-parity-counts"]\')?.textContent ?? ""',
+  );
+  if (!parityUiCounts.includes("checked 9 of 9")) {
+    throw new Error(
+      `the parity panel did not show the checked chunk count: ${parityUiCounts}`,
+    );
+  }
+  const parityCapture = await send("Page.captureScreenshot", {
+    format: "png",
+    captureBeyondViewport: false,
+    fromSurface: true,
+  });
+  const parityScreenshot = Buffer.from(parityCapture.data, "base64");
+  const parityScreenshotPath = screenshotPath.replace(/\.png$/i, "-parity.png");
+  await writeFile(parityScreenshotPath, parityScreenshot, { flag: "wx" });
+
   const inspected = await invoke("server_inspect_datapacks", {
     paths: [datapackPath],
   });
@@ -704,16 +776,31 @@ try {
     throw new Error("the data pack run did not bind to loopback");
   }
 
+  const parityWrongReference = await invoke("project_verify_vanilla_parity", {
+    folder: projectSummary.folder,
+    runId: secondRunId,
+  });
+  if (
+    parityWrongReference.status !== "refused" ||
+    parityWrongReference.comparison !== null ||
+    parityWrongReference.refusals.length === 0 ||
+    !parityWrongReference.refusals.some((reason) => reason.includes("seed"))
+  ) {
+    throw new Error(
+      `a different generator configuration was not refused: ${JSON.stringify(parityWrongReference)}`,
+    );
+  }
+
   const runs = await invoke("server_generation_runs");
   const javaSha256After = createHash("sha256")
     .update(await readFile(javaPath))
     .digest("hex");
   const settings = await readJson(join(appData, "server.json"));
   const evidence = {
-    tool: { name: "furybuilder-vanilla-wizard-ui", version: 2 },
+    tool: { name: "furybuilder-vanilla-wizard-ui", version: 3 },
     generatedAt: new Date().toISOString(),
     target:
-      "Minecraft Java 1.21.4 / Vanilla World wizard and World Core import",
+      "Minecraft Java 1.21.4 / Vanilla World wizard, World Core import and reference-chunk parity",
     executableSha256,
     isolatedAppData: appData,
     java: {
@@ -782,6 +869,15 @@ try {
       eulaFile: second.eula,
       properties: second.properties,
     },
+    parity: {
+      matched: parity,
+      wrongReference: parityWrongReference,
+      uiCounts: parityUiCounts,
+      uiScreenshot: {
+        path: parityScreenshotPath,
+        bytes: parityScreenshot.length,
+      },
+    },
     cleanup: { runsReported: runs.runs.length },
     screenshot: { path: screenshotPath, bytes: screenshot.length },
     consoleErrors,
@@ -838,6 +934,20 @@ try {
       generatedWorldUnchanged: generatedWorldUnchanged,
       importedWorldNonEmpty:
         importedInfo.chunkCount > 0 && importedInfo.blockCount > 0,
+      referenceChunkParityMatched:
+        parity.status === "matched" &&
+        parity.comparison?.mismatchCount === 0 &&
+        parity.comparison?.checkedChunks === 9 &&
+        parity.comparison?.checkedBlocks > 0,
+      paritySettingsMismatchRefused:
+        parityWrongReference.status === "refused" &&
+        parityWrongReference.comparison === null &&
+        parityWrongReference.refusals.some((reason) => reason.includes("seed")),
+      parityUiRendered:
+        parityButtonPresent === true &&
+        parityUiMatched === true &&
+        parityUiCounts.includes("checked 9 of 9"),
+      parityScreenshotCaptured: parityScreenshot.length > 10_000,
       externalJavaUnchanged: javaSha256Before === javaSha256After,
       screenshotCaptured: screenshot.length > 10_000,
       noConsoleErrors: consoleErrors.length === 0,
@@ -847,6 +957,8 @@ try {
       "the data pack is a small local validation fixture, not a third-party pack",
       "only a completed run can be imported; incomplete runs stay in the run inventory until a new run is generated",
       "the imported project keeps a byte-for-byte immutable source copy; edits are stored in the project overlay and are not exported by this smoke",
+      "reference-chunk parity compares block states only; biomes remain in the immutable source copy and are not modelled by the editable world",
+      "parity covers the requested 9 overworld chunks and this exact seed/preset/data pack configuration, not general vanilla parity",
       "generation is a small verification area, not a full world",
     ],
   };
@@ -866,6 +978,15 @@ try {
       {
         output,
         screenshot: screenshotPath,
+        parityScreenshot: parityScreenshotPath,
+        parity: {
+          status: parity.status,
+          checkedChunks: parity.comparison?.checkedChunks,
+          checkedSections: parity.comparison?.checkedSections,
+          checkedBlocks: parity.comparison?.checkedBlocks,
+          mismatchCount: parity.comparison?.mismatchCount,
+          wrongReference: parityWrongReference.status,
+        },
         setup: {
           ready: setupReady.ready,
           java: setupReady.javaReady,

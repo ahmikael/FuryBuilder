@@ -91,6 +91,7 @@ pub fn run() {
             commands::world_import_preview,
             commands::project_import_world,
             commands::project_import_generated_world,
+            commands::project_verify_vanilla_parity,
             commands::structure_import_preview,
             commands::structure_import_project,
             commands::structure_insert,
