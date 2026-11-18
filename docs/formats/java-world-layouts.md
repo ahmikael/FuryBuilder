@@ -563,16 +563,37 @@ cargo run -p furybuilder-world-io --example world_selection_probe -- <world>/reg
 cargo run -p furybuilder-world-io --example world_selection_probe -- <world> --passthrough <new-folder>
 ```
 
+## Automated official-server fixture (M8.12)
+
+`scripts/verify_java_world_export.ps1` closes the loop between the reader, the
+writer and the real engine. It requires a user-provided Java 21 and official
+1.21.4 `server.jar`, an expected SHA-1 and an explicit `-AcceptMinecraftEula`
+switch. It never downloads or redistributes either dependency.
+
+The script lets the official server generate a fresh flat fixture, exports an
+edited complete world folder with `world_export_probe`, starts the same server on
+the exported folder, verifies the edited block and an untouched neighbor through
+`execute if block`, stops and saves, then decodes the saved block states again.
+The source fixture is hashed before and after and must stay byte-identical. See
+`docs/testing/minecraft-server-fixture.md`.
+
+```powershell
+pwsh -File scripts/verify_java_world_export.ps1 `
+  -Java <java.exe> -ServerJar <server.jar> `
+  -ExpectedSha1 4707d00eb834b446575d89a61a11b5d548d8c001 `
+  -AcceptMinecraftEula
+```
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                                                   | Overlay                                           | Write                                                                                                                                                     | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4); selection classified (M8.11) | in-memory edits + Import World wizard (M8.5-M8.6) | new region file, block states only (M8.7); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10); save-vs-region classification (M8.11) | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                                                            | no                                                | no                                                                                                                                                        | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                        | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                        | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                                                            | no                                                | no                                                                                                                                                        | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                                                            | no                                                | no                                                                                                                                                        | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                                                   | Overlay                                           | Write                                                                                                                                                                                                | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4); selection classified (M8.11) | in-memory edits + Import World wizard (M8.5-M8.6) | new region file, block states only (M8.7); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10); save-vs-region classification (M8.11); official server load/save fixture (M8.12) | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support. “Passthrough” means unchanged files
@@ -701,6 +722,13 @@ Recorded evidence:
   841 chunks without `session.lock`; the region-directory attempt returned
   `unsupported_format` and the split attempt `unsupported_version`, neither
   created a destination, and both source trees stayed byte-identical.
+- `docs/testing/evidence/2026-11-18-server-fixture-1.21.4.json` - the automated
+  official-server fixture: the server generated a fresh flat 1.21.4 world,
+  FuryBuilder exported an edited complete folder with `VanillaRebuild`, and the
+  same server loaded it. `execute if block` found the gold block, did not find
+  stale grass, and found the untouched dirt neighbor; the server exited 0,
+  rewrote 10 files, and FuryBuilder decoded the persisted gold block and dirt
+  neighbor again. The generated fixture stayed byte-identical.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` - a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
@@ -730,16 +758,18 @@ Sources checked on 2026-11-18:
 
 ## Consequences for the next M8 tasks
 
-1. The M8.3 reader covers `level.dat`, region containers, block-state palettes
-   and biomes for 1.21.4 classic. M8.4 adds a byte-preserving, validated copy of
-   unchanged files, including unknown metadata. M8.5 adds an in-memory
-   copy-on-write overlay and verified chunk NBT materialization. M8.6 connects
-   analysis, source copy and block import to the `Import World` wizard. M8.7 adds
-   the verified region writer for `sections[].block_states`. The next step is the
-   study of block entities, entities, ticks, heightmaps, lighting and POI.
+1. The M8 reader/writer chain now covers `level.dat`, region containers,
+   block-state palettes and biomes (M8.3), byte-preserving copy (M8.4), the
+   copy-on-write overlay (M8.5), the Import World wizard (M8.6), verified region
+   writing (M8.7), derived-data inventory and policies (M8.8–M8.9), complete
+   world-folder export (M8.10), save-vs-region classification (M8.11) and an
+   automated official-server fixture (M8.12). The remaining M8 item is the
+   consolidated read/edit/write/passthrough support matrix (M8.13).
 2. Keep layout detection explicit. Opening a 26.1+ folder must return a
    structured `unsupported_layout`/`unsupported_version`, not a partial world.
 3. Add a real 26.1+ fixture and adapter only when the game format and the
    importer can be tested together; do not promise it from the folder names.
 4. Never write in place. An export must copy the world first, replace only
    verified chunks, re-open the result, and publish a new folder atomically.
+5. The official server is verified. A licensed Minecraft client was not launched
+   in the automated fixture; client rendering remains a separate manual check.

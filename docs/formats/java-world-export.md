@@ -79,8 +79,9 @@ hashes and verification flags.
   manifest; file contents and paths are verified.
 - The destination must not exist. This is not an in-place update or a backup
   versioning system.
-- Opening the exported folder in a real Minecraft server is a separate integration
-  check (M8.12). This task reopens and validates it with FuryBuilder only.
+- A licensed Minecraft client was not launched in the automated test. The
+  official dedicated server is the real engine check in M8.12; client rendering
+  is still a separate manual check.
 
 ## Real 1.21.4 evidence
 
@@ -101,9 +102,38 @@ hashes and verification flags.
 | Copied files match manifest   | yes                                                |
 | Output re-decoded             | yes, all 841 chunks                                |
 
-The test used the same real 841-chunk flat world as the M8.6/M8.7 evidence. The
-exported world was not yet started with a Minecraft server in this task; see the
-limitations above.
+The test used the same real 841-chunk flat world as the M8.6/M8.7 evidence.
+
+## Official server verification (M8.12)
+
+`scripts/verify_java_world_export.ps1` turns the export into an automated
+end-to-end fixture:
+
+1. the official 1.21.4 server generates a fresh flat world and verifies its
+   grass/dirt layers;
+2. `world_export_probe` replaces `(0, -61, 0)` with `minecraft:gold_block` and
+   exports a complete folder with `VanillaRebuild`;
+3. the same server starts on the exported folder and checks
+   `execute if block 0 -61 0 minecraft:gold_block` and
+   `execute if block 0 -62 0 minecraft:dirt`;
+4. the server stops and saves; FuryBuilder decodes both blocks again.
+
+`docs/testing/evidence/2026-11-18-server-fixture-1.21.4.json` records:
+
+| Check              | Result                                             |
+| ------------------ | -------------------------------------------------- |
+| Server version     | 1.21.4                                             |
+| Export             | 4 regions / 841 chunks, 1 chunk replaced           |
+| Source tree        | unchanged before and after                         |
+| Verifier server    | exit 0, `Done (0.302s)`, no chunk/command issues   |
+| Edited block       | `FURY_EXPORT_EDIT_OK`; stale grass marker absent   |
+| Untouched neighbor | `FURY_EXPORT_NEIGHBOR_OK`                          |
+| Saved world        | 10 files rewritten by the server                   |
+| Post-save decode   | gold block at `(0, -61, 0)`, dirt at `(0, -62, 0)` |
+
+This is a real server load/save proof for one generated flat fixture, not a
+universal parity claim. The client was not launched. See
+`docs/testing/minecraft-server-fixture.md`.
 
 ## Reproduce
 

@@ -74,8 +74,11 @@ sidecars and unknown files byte for byte, rebuilds only dirty regions and
 publishes the staged folder after reopening and re-validating every chunk. The
 import/export boundary now classifies the selection first: a bare `.mca` file and
 a `region/` directory are explicitly not complete saves, while split, mixed and
-legacy layouts are detected and refused. Placing block-entity blocks and POI
-updates are still not semantically supported. Server integration testing is next.
+legacy layouts are detected and refused. An automated official-server fixture
+now generates a fresh 1.21.4 world, exports an edited complete folder, reloads it
+in the same server, verifies the edited and neighbor blocks and decodes the saved
+result again. Placing block-entity blocks and POI updates are still not
+semantically supported. Client rendering is still a manual check.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -100,6 +103,8 @@ guarantee that its whole milestone is complete.
   validation, preserved files and the real 841-chunk evidence.
 - `docs/formats/java-world-selection.md` — save vs region file vs region
   directory, layout matrix and passthrough refusal boundaries.
+- `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
+  server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
 - `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
 - `docs/adr/` — architecture decision records (format, MCP runtime, versions).
@@ -143,10 +148,12 @@ guarantee that its whole milestone is complete.
   rebuilt on the next load/save without changing the edited block states.
   M8.10 adds a complete world-folder export: every source file is copied byte for
   byte, only dirty regions are rebuilt, the staged folder is reopened and
-  re-validated, and the source tree is hashed before and after. Export of a
-  complete modified world folder is now available; opening the exported folder in
-  a real Minecraft server is still to be verified in M8.12, and the source world
+  re-validated, and the source tree is hashed before and after. The source world
   is never written. M8.11 classifies the selection before import or copy: a
   `.mca` region file and a bare `region/` directory are not complete saves, and
   split, mixed and legacy layouts are detected and refused before any destination
-  is created.
+  is created. M8.12 adds an automated official-server fixture: the server
+  generates a fresh 1.21.4 world, FuryBuilder exports an edited copy, the same
+  server loads it, verifies the edited and neighbor blocks and saves, and
+  FuryBuilder decodes the saved block states again. A licensed client was not
+  launched.
