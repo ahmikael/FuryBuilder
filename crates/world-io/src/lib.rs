@@ -1,17 +1,30 @@
-//! Versioned world formats.
+//! Versioned import/export adapters for Minecraft Java formats.
 //!
-//! Implemented in milestone M6 (NBT structure / Sponge) and M8 (Anvil).
-//! No format adapter silently drops unknown data.
+//! This crate converts between the authoritative `world_domain::World` and interchange
+//! formats. It owns a bounded NBT codec and a format-neutral structure model so adapters
+//! cannot bypass validation. The native FuryBuilder project format stays in
+//! `project_store`; interchange formats are never a storage backend for editor metadata.
+//!
+//! First adapter (ADR-007): Java structure `.nbt` for Minecraft Java 1.21.4
+//! (`DataVersion` 4189). Sponge `.schem` v3 is the planned second adapter.
 
-/// Placeholder proving the workspace link; replaced by real adapters in M6.
-pub fn crate_ready() -> bool {
-    true
-}
+pub mod exchange;
+pub mod java_structure;
+pub mod nbt;
+pub mod structure;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn io_crate_is_linked() {
-        assert!(super::crate_ready());
-    }
-}
+pub use exchange::{
+    content_bounds, import_preview, palette_counts, palette_usage, prepare_export,
+    preview_from_structure, read_verified_import, ExportBundle, PaletteCount,
+    StructureImportPreview, MAX_PALETTE_PREVIEW, MAX_SCAN_SECTIONS,
+};
+pub use java_structure::{
+    inspect_java_structure, read_java_structure, read_java_structure_unchecked,
+    write_java_structure, JavaStructure, JavaStructureError, StructureInspection,
+    JAVA_STRUCTURE_EXTENSION, JAVA_STRUCTURE_FORMAT,
+};
+pub use nbt::{NbtError, NbtFile, NbtValue};
+pub use structure::{
+    Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,
+    MAX_STRUCTURE_VOLUME,
+};
