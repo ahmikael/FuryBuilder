@@ -268,7 +268,7 @@ export function registerWriteTools(server: McpServer): void {
     {
       title: "Get operation status",
       description:
-        "Reads the authoritative status of one operation_id, or a bounded recent-operation summary. Jobs are not available yet, so the response says so instead of inventing progress.",
+        "Reads the authoritative status of one operation_id, or a bounded recent-operation summary. It also reports the job queue and, for a named operation, the retained job that produced it. Long-running work itself goes through the start_job/get_job_status/cancel_job tools.",
       inputSchema: z.object({
         project_id: project.project_id,
         operation_id: z.string().min(1).max(128).optional(),

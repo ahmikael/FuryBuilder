@@ -9,6 +9,7 @@ import { WorldTree } from "@/features/workspace/WorldTree";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import { McpAccessDialog } from "@/features/mcp/McpAccessDialog";
 import { McpConfirmationHost } from "@/features/mcp/McpConfirmationHost";
+import { McpWorldChangeHost } from "@/features/mcp/McpWorldChangeHost";
 import { ProjectManager, useProjectAutosave } from "@/features/project/ProjectManager";
 import { Toaster } from "@/components/ui/toaster";
 import { useBackendInfo } from "@/hooks/use-backend";
@@ -59,6 +60,7 @@ export function App() {
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} backend={backend} />
       <McpAccessDialog open={mcpAccessOpen} onOpenChange={setMcpAccessOpen} />
       <McpConfirmationHost />
+      <McpWorldChangeHost />
     </TooltipProvider>
   );
 }

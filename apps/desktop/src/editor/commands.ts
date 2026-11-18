@@ -20,7 +20,7 @@ import {
   redoOperation,
   undoOperation,
 } from "@/lib/world-api";
-import type { BlockState } from "@/renderer/types";
+import type { BlockState, ChunkPos } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
 import { useHistoryStore } from "@/state/history-store";
 import { useProjectStore } from "@/state/project-store";
@@ -70,6 +70,26 @@ function afterWrite(): void {
 
 async function reloadAfterConflict(): Promise<void> {
   reloadViewport();
+  afterWrite();
+}
+
+export interface ExternalWorldChange {
+  dirtyChunks?: ChunkPos[];
+  reload?: boolean;
+}
+
+/**
+ * Synchronizes the editor after a write that bypassed the UI command path (the MCP bridge
+ * or a completed MCP job). The Rust core is already authoritative; this refreshes the
+ * summary, history, session marker and the affected Three.js chunks. A job snapshot without
+ * dirty chunks falls back to a bounded full reload instead of showing a stale frame.
+ */
+export function applyExternalWorldChange(change: ExternalWorldChange): void {
+  if (change.reload || !change.dirtyChunks || change.dirtyChunks.length === 0) {
+    reloadViewport();
+  } else {
+    refreshViewportChunks(change.dirtyChunks);
+  }
   afterWrite();
 }
 

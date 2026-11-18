@@ -22,8 +22,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use world_application::{
     app_info, apply_job_operation, undo_job_operation_id, Actor, ActorSource, AppError, ErrorCode,
-    JobStartRequest, Operation, OperationRequest, PreviewResult, Query, UndoTarget, WorldService,
-    DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
+    JobStartRequest, JobState, Operation, OperationRequest, OperationResult, PreviewResult, Query,
+    UndoTarget, WorldService, DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
 };
 
 use crate::mcp_access::{McpAccessInput, McpAccessMode};
@@ -37,6 +37,9 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const DISCOVERY_SCHEMA_VERSION: u32 = 1;
 pub const RENDERER_REQUEST_EVENT: &str = "furybuilder-renderer-request";
 pub const MCP_CONFIRMATION_EVENT: &str = "furybuilder-mcp-confirmation-request";
+/// Tells the mounted editor that an MCP write committed. The payload carries the same
+/// revision and dirty chunks as a UI write so the viewport is not left on a stale frame.
+pub const WORLD_CHANGED_EVENT: &str = "furybuilder-world-changed";
 
 const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_REQUEST_ID_BYTES: usize = 128;
@@ -139,6 +142,10 @@ pub trait RendererRequester: Sync {
             "the editor confirmation UI is not attached; open FuryBuilder and retry",
         ))
     }
+
+    /// Notifies a mounted editor that the authoritative world advanced. Tests and headless
+    /// runs have no viewport, so the default is deliberately a no-op.
+    fn world_changed(&self, _payload: Value) {}
 }
 
 /// Used when the local endpoint runs without a connected viewport (tests and headless
@@ -220,6 +227,31 @@ impl RendererRequester for TauriRendererRequester {
             }
         }
     }
+
+    fn world_changed(&self, payload: Value) {
+        let _ = self.app.emit(WORLD_CHANGED_EVENT, payload);
+    }
+}
+
+/// Payload shared by synchronous MCP writes and completed MCP jobs. The UI treats it as
+/// an external write: refresh the summary/history and rebuild the named chunks.
+fn world_change_payload(
+    action: &str,
+    project_id: &str,
+    job_id: Option<&str>,
+    result: &OperationResult,
+) -> Value {
+    json!({
+        "source": "mcp",
+        "action": action,
+        "projectId": project_id,
+        "jobId": job_id,
+        "operationId": result.operation_id,
+        "worldRevision": result.world_revision,
+        "changedBlocks": result.changed_blocks,
+        "dirtyChunks": result.dirty_chunks,
+        "reload": false
+    })
 }
 
 /// The file the bridge reads to discover the endpoint. It contains a secret token and is
@@ -424,6 +456,30 @@ pub fn start(app: AppHandle) -> io::Result<LocalBridgeRuntime> {
         started_at_ms: now_ms(),
     };
     write_discovery_file(&discovery_path, &runtime)?;
+
+    // Completed MCP jobs commit outside the UI command path, so tell the mounted editor
+    // to rebuild the affected chunks. Failed and cancelled jobs wrote nothing.
+    {
+        let event_app = app.clone();
+        let state = app.state::<AppState>();
+        state.jobs.set_listener(move |snapshot| {
+            if snapshot.state != JobState::Succeeded {
+                return;
+            }
+            let Some(result) = &snapshot.result else {
+                return;
+            };
+            let action = if snapshot.kind == "undo_operation" {
+                "undo_job"
+            } else {
+                "apply_job"
+            };
+            let _ = event_app.emit(
+                WORLD_CHANGED_EVENT,
+                world_change_payload(action, &snapshot.project_id, Some(&snapshot.job_id), result),
+            );
+        });
+    }
 
     let spawned = std::thread::Builder::new()
         .name("furybuilder-mcp-listener".to_owned())
@@ -693,21 +749,27 @@ fn dispatch_inner(
                 state.mcp_access.authorize_operation(&params.operation)?;
                 require_revision(state, Some(revision))?;
             }
-            let mut service = state
-                .service
-                .lock()
-                .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            let mut value = to_value(service.execute(OperationRequest {
-                project_id: params.project_id,
-                operation: params.operation,
-                expected_revision: Some(revision),
-                idempotency_key: params.idempotency_key,
-                actor: Actor::mcp("mcp-bridge"),
-                linked_object_id: None,
-            })?)?;
+            let project_id = params.project_id.clone();
+            let (mut value, change) = {
+                let mut service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                let result = service.execute(OperationRequest {
+                    project_id: project_id.clone(),
+                    operation: params.operation,
+                    expected_revision: Some(revision),
+                    idempotency_key: params.idempotency_key,
+                    actor: Actor::mcp("mcp-bridge"),
+                    linked_object_id: None,
+                })?;
+                let change = world_change_payload("apply", &project_id, None, &result);
+                (to_value(result)?, change)
+            };
             if confirmed {
                 value["confirmation"] = json!({ "approved": true });
             }
+            requester.world_changed(change);
             Ok(value)
         }
         "undo_operation" => {
@@ -738,18 +800,24 @@ fn dispatch_inner(
                     .authorize_undo(&target.dimension, target.bounds)?;
                 require_revision(state, Some(revision))?;
             }
-            let mut service = state
-                .service
-                .lock()
-                .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            let mut value = to_value(service.undo(
-                &params.project_id,
-                Actor::mcp("mcp-bridge"),
-                Some(target.operation_id.as_str()),
-            )?)?;
+            let project_id = params.project_id.clone();
+            let (mut value, change) = {
+                let mut service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                let result = service.undo(
+                    &project_id,
+                    Actor::mcp("mcp-bridge"),
+                    Some(target.operation_id.as_str()),
+                )?;
+                let change = world_change_payload("undo", &project_id, None, &result);
+                (to_value(result)?, change)
+            };
             if confirmed {
                 value["confirmation"] = json!({ "approved": true });
             }
+            requester.world_changed(change);
             Ok(value)
         }
         "start_job" => {

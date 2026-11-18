@@ -1,4 +1,5 @@
 import type { McpServer } from "@modelcontextprotocol/server";
+import { createHash } from "node:crypto";
 import * as z from "zod/v4";
 
 import { requireProjectId } from "./capabilities.js";
@@ -239,11 +240,13 @@ export function registerReadTools(server: McpServer): void {
             ],
           };
         }
+        const base64 = dataUrl.slice(PNG_DATA_URL_PREFIX.length);
+        const imageBytes = Buffer.from(base64, "base64");
         return {
           content: [
             {
               type: "image",
-              data: dataUrl.slice(PNG_DATA_URL_PREFIX.length),
+              data: base64,
               mimeType: "image/png",
             },
             {
@@ -253,6 +256,15 @@ export function registerReadTools(server: McpServer): void {
                   metadata: result.metadata ?? null,
                   verification: result.verification ?? null,
                   capturedAtMs: result.capturedAtMs ?? null,
+                  // The image itself travels in the preceding content block. Publishing
+                  // its size and digest lets a text-only client verify what it received.
+                  image: {
+                    mimeType: "image/png",
+                    bytes: imageBytes.byteLength,
+                    sha256: createHash("sha256")
+                      .update(imageBytes)
+                      .digest("hex"),
+                  },
                 },
                 null,
                 2,

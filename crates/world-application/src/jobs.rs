@@ -181,9 +181,12 @@ struct JobStore {
     worker_running: bool,
 }
 
+type JobListener = Arc<dyn Fn(&JobSnapshot) + Send + Sync>;
+
 struct JobInner {
     service: Arc<Mutex<WorldService>>,
     state: Mutex<JobStore>,
+    listener: Mutex<Option<JobListener>>,
 }
 
 /// Shared handle to the single-worker job queue.
@@ -198,7 +201,20 @@ impl JobQueue {
             inner: Arc::new(JobInner {
                 service,
                 state: Mutex::new(JobStore::default()),
+                listener: Mutex::new(None),
             }),
+        }
+    }
+
+    /// Registers a completion callback for terminal job snapshots. The desktop uses this
+    /// to refresh the viewport after an MCP job commits; the queue itself stays free of UI
+    /// dependencies and runs the callback outside its state lock.
+    pub fn set_listener<F>(&self, listener: F)
+    where
+        F: Fn(&JobSnapshot) + Send + Sync + 'static,
+    {
+        if let Ok(mut slot) = self.inner.listener.lock() {
+            *slot = Some(Arc::new(listener));
         }
     }
 
@@ -792,6 +808,14 @@ fn run_worker(inner: Arc<JobInner>) {
             }
         }
         trim_retained(&mut store);
+        let finished = store.jobs.get(&job_id).map(live_snapshot);
+        drop(store);
+        if let Some(snapshot) = finished {
+            let listener = inner.listener.lock().ok().and_then(|slot| slot.clone());
+            if let Some(listener) = listener {
+                listener(&snapshot);
+            }
+        }
     }
 }
 
@@ -836,7 +860,7 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
     use world_domain::BlockPos;
 
     fn queue() -> (JobQueue, Arc<Mutex<WorldService>>) {
@@ -996,6 +1020,31 @@ mod tests {
         );
         assert_eq!(queue.list("project-1", 10).len(), 1);
         assert!(queue.list("project-2", 10).is_empty());
+    }
+
+    #[test]
+    fn completion_listener_sees_a_committed_job() {
+        let (queue, service) = queue();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let captured = seen.clone();
+        queue.set_listener(move |snapshot| {
+            captured.lock().expect("listener").push(snapshot.clone());
+        });
+        let started = queue
+            .start(apply_request("listener-key", BlockPos::new(3, 64, 3)))
+            .unwrap();
+        let finished = wait_terminal(&queue, &started.job_id);
+        assert_eq!(finished.state, JobState::Succeeded);
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while seen.lock().expect("listener").is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let seen = seen.lock().expect("listener");
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].state, JobState::Succeeded);
+        assert_eq!(seen[0].result.as_ref().expect("result").changed_blocks, 1);
+        assert_eq!(service.lock().expect("service").world().revision(), 1);
     }
 
     #[test]

@@ -88,8 +88,16 @@ The first transport slice is implemented and exercised against the real Tauri pr
   and `list_jobs` stayed empty; `mcp_activity` returned eight bounded records including both
   denied calls with `clientId=probe-local-bridge`, and an invalid limit returned
   `invalid_argument`; a wrong token returned `unauthorized` without leaking the secret. The
-  approval dialog itself is covered by Rust and frontend tests rather than an automated click
-  in the real window.
+  end-to-end loop below additionally clicks the real approval dialog in the running WebView.
+- MCP writes bypass the UI command path, so the Rust process emits
+  `furybuilder-world-changed` with the action, project, operation id, revision, changed blocks
+  and dirty chunks after every allowed synchronous apply/undo and after a job succeeds.
+  `McpWorldChangeHost` refreshes the summary, history, session marker and the named Three.js
+  chunks; a job snapshot without dirty chunks falls back to a bounded full reload. Without
+  this event the authoritative world advanced while the viewport kept rendering the old
+  revision, and the capture honestly reported `stale: true`. The capture metadata block now
+  also publishes the PNG `image.bytes` and `image.sha256` so a text-only client can verify
+  receipt without trusting a placeholder.
 - A real external client, OpenCode CLI 2.3.2, connected through the bridge's stdio server
   against a live `tauri dev` process. With `protocol: "auto"` it negotiated the modern
   `2026-07-28` era; with `protocol: "legacy"` it completed the initialize lifecycle. In both
@@ -97,6 +105,17 @@ The first transport slice is implemented and exercised against the real Tauri pr
   context, read-only access, a connected job backend and Minecraft 1.21.4/DataVersion 4189
   metadata, and made no modifications. Recorded in
   `docs/testing/evidence/2026-11-18-opencode-mcp-client.json`.
+- The end-to-end loop in `scripts/e2e-mcp-agent.mjs` used GPT-6 Luna Max first; the provider
+  refused that run with HTTP 403 `unsupported_country_region_territory`, so the loop ran with
+  `opencode/deepseek-v4.1-flash-free`. A real agent explored the empty scratch world,
+  previewed and applied 13 stone blocks, captured revision 1, replaced the centre with glass,
+  captured revision 2, verified the blocks, undid the glass and the platform, and left the
+  world at revision 4 with zero blocks. All four write confirmations were approved by clicking
+  the real `Approve and apply` button. The captures were taken at render revisions 1 and 2
+  with `stale=false`; their 524841/524755-byte PNGs had valid digests and the legend changed
+  from 13 stone to 12 stone + 1 glass. Five empty neighbour chunks stayed unloaded, so
+  `partial=true` was reported; the edited chunk itself was loaded. Evidence:
+  `docs/testing/evidence/2026-11-18-ai-edit-loop.json`.
 - Unix domain sockets are not exercised yet; Windows is the first target. The discovery
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.

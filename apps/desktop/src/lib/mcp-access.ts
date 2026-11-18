@@ -68,6 +68,19 @@ export interface McpAccessInput {
   requireConfirmation?: boolean;
 }
 
+/** A committed MCP write, or a completed MCP job, announced by the Rust core. */
+export interface McpWorldChange {
+  source: "mcp";
+  action: "apply" | "undo" | "apply_job" | "undo_job";
+  projectId: string;
+  jobId: string | null;
+  operationId: string;
+  worldRevision: number;
+  changedBlocks: number;
+  dirtyChunks: Array<{ x: number; z: number }>;
+  reload: boolean;
+}
+
 export interface McpConfirmationRequest {
   requestId: string;
   expiresAtMs: number;
@@ -101,6 +114,7 @@ export interface McpConfirmationRequest {
 }
 
 export const MCP_CONFIRMATION_EVENT = "furybuilder-mcp-confirmation-request";
+export const MCP_WORLD_CHANGED_EVENT = "furybuilder-world-changed";
 export const SET_MCP_ACCESS_COMMAND = "set_mcp_access";
 export const MCP_ACCESS_STATUS_COMMAND = "mcp_access_status";
 export const MCP_ACTIVITY_COMMAND = "mcp_activity";
@@ -148,6 +162,24 @@ export async function listenForMcpConfirmations(
     });
   } catch (error) {
     console.error("FuryBuilder could not subscribe to MCP confirmations", error);
+    return () => {};
+  }
+}
+
+/**
+ * Subscribes the editor to committed MCP writes. Without this listener the Rust world
+ * advances while the Three.js viewport keeps the previous revision and produces stale
+ * screenshots. Outside the Tauri runtime it returns a no-op.
+ */
+export async function listenForMcpWorldChanges(
+  handler: (change: McpWorldChange) => void,
+): Promise<() => void> {
+  try {
+    return await listen<McpWorldChange>(MCP_WORLD_CHANGED_EVENT, (event) => {
+      handler(event.payload);
+    });
+  } catch (error) {
+    console.error("FuryBuilder could not subscribe to MCP world changes", error);
     return () => {};
   }
 }

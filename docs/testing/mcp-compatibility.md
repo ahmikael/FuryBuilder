@@ -33,7 +33,8 @@ currently open in the editor and accept an optional `world_revision`. A supplied
 must equal the authoritative revision; otherwise the request fails with a structured
 `revision_mismatch` error carrying `expectedRevision` and `actualRevision`. A stale caller
 therefore never reads newer data silently. `query` reuses the same bounded `Query` enum as
-the UI. Write methods are deliberately not exposed yet.
+the UI. Write methods require an explicit access grant and per-request confirmation; they are
+described below.
 
 `get_camera` and `capture_viewport` are forwarded from the Tauri process to the mounted
 WebView over a local event and answered through the `submit_renderer_response` command.
@@ -60,13 +61,13 @@ claims that a partial frame is complete.
 
 ## Safe write tools
 
-| Tool                     | Maps to                      | Behavior                                                 |
-| ------------------------ | ---------------------------- | -------------------------------------------------------- |
-| `preview_operation`      | endpoint `preview_operation` | validates and counts changes; never mutates              |
-| `apply_operation`        | endpoint `apply_operation`   | one typed operation; requires user grant + idempotency   |
-| `apply_operations_batch` | endpoint `apply_operation`   | atomic `batch` of up to 8192 changes                     |
-| `undo_operation`         | endpoint `undo_operation`    | latest/named undo; requires user grant                   |
-| `get_operation_status`   | endpoint `operation_status`  | audit entry or recent history; jobs reported unavailable |
+| Tool                     | Maps to                      | Behavior                                               |
+| ------------------------ | ---------------------------- | ------------------------------------------------------ |
+| `preview_operation`      | endpoint `preview_operation` | validates and counts changes; never mutates            |
+| `apply_operation`        | endpoint `apply_operation`   | one typed operation; requires user grant + idempotency |
+| `apply_operations_batch` | endpoint `apply_operation`   | atomic `batch` of up to 8192 changes                   |
+| `undo_operation`         | endpoint `undo_operation`    | latest/named undo; requires user grant                 |
+| `get_operation_status`   | endpoint `operation_status`  | audit entry or recent history; queue and linked job    |
 
 MCP starts **read-only**. The bridge cannot change the policy: only the Tauri UI can call
 `set_mcp_access`. Three modes exist:
@@ -162,6 +163,22 @@ so work authorized against the previous world cannot commit into the next one.
 If the desktop app is absent, the job tools return the stable `job_api_unavailable` error
 instead of inventing a job, progress or result.
 
+## Write propagation into the viewport
+
+MCP writes bypass the UI command path, so the Rust process emits
+`furybuilder-world-changed` after every allowed synchronous apply/undo and after a job
+reaches `succeeded`. The payload carries `source: "mcp"`, the action, project, operation,
+world revision, changed blocks and dirty chunks. The mounted editor's
+`McpWorldChangeHost` refreshes the world summary, history and session marker and rebuilds
+the named chunks; a job snapshot without dirty chunks falls back to a bounded full reload.
+Without this event the authoritative world advanced while the Three.js viewport stayed on
+the revision it had loaded last, and a following capture reported `stale: true`. That is
+exactly what the first end-to-end run exposed, and the reason this event exists.
+
+`capture_viewport` keeps its image block and now also publishes `image.bytes` and
+`image.sha256` in the text metadata block, so a text-only client can verify that a
+non-empty PNG arrived even when it cannot inspect pixels.
+
 ## Tasks option and fallback
 
 Tasks remains an explicit option, never an assumption. The bridge evaluates three
@@ -188,9 +205,9 @@ pnpm --filter @furybuilder/mcp-bridge typecheck
 pnpm --filter @furybuilder/mcp-bridge build
 ```
 
-Observed: 25 tests passed, typecheck and build clean; the Rust desktop test binary runs
-32 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
-use `@modelcontextprotocol/client` 2.4.0:
+Observed: 25 bridge tests passed, typecheck and build clean; the Rust desktop test binary
+runs 32 tests, `world-application` 45, and the frontend 142. The TypeScript tests spawn the
+real bridge over stdio with `tsx src/main.ts` and use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
   and receives an explicit project/revision response;
@@ -310,8 +327,49 @@ Two runs were made against a real `tauri dev` process:
   `protocolEra: "legacy"`, the same ready context and a live read-only desktop.
 
 The agent was instructed to use only MCP tools and made no file or shell changes. Evidence:
-`docs/testing/evidence/2026-11-18-opencode-mcp-client.json`. A write/screenshot/undo AI
-loop is not claimed yet; it is the next M7 task.
+`docs/testing/evidence/2026-11-18-opencode-mcp-client.json`.
+
+## End-to-end AI edit loop
+
+`scripts/e2e-mcp-agent.mjs` drives a real external client through the complete loop:
+explore the empty scratch project, preview and apply a 13-block platform, capture the
+viewport, replace the centre with glass, capture again, verify both block states, undo the
+glass and then the platform, and inspect the final world. The script:
+
+- refuses a non-empty world, so it is not an editing tool for a user's project;
+- enables `full_project` with confirmation through the same `set_mcp_access` command the
+  access dialog uses, then restores `read_only`;
+- starts OpenCode with a temporary project configuration and instructs it to use only MCP
+  tools;
+- approves each real `McpConfirmationHost` dialog by clicking `Approve and apply` in the
+  live WebView (WebView2 CDP), never by calling `submit_mcp_confirmation` directly;
+- verifies the outcome through the authenticated local endpoint and writes the evidence
+  file.
+
+Run on Windows after starting the app with remote debugging enabled:
+
+```powershell
+$env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=9229"
+pnpm --filter @furybuilder/desktop tauri dev
+# in a second terminal
+$env:FURYBUILDER_E2E_MODEL = "opencode/deepseek-v4.1-flash-free"
+node scripts/e2e-mcp-agent.mjs
+```
+
+On 2026-11-18 the run passed all 19 checks: 17 MCP calls, four approved dialogs (apply,
+apply, undo, undo), revisions 0→1→2→3→4, two PNG captures at the authoritative revisions
+(524841 and 524755 bytes, `stale: false`), undo restored 1 and then 13 blocks, the final
+world had 0 blocks, and the activity journal recorded all four writes with approved
+confirmations. The screenshots reported `partial: true` because five empty neighbour chunks
+were not loaded; the edited chunk `(0,0)` was loaded and the legend changed from 13 stone to
+12 stone plus 1 glass, so the frame reflects the build and the fix rather than a stale
+revision. No job was queued: the synchronous tools were used. Evidence:
+`docs/testing/evidence/2026-11-18-ai-edit-loop.json`.
+
+The requested `openai/gpt-6-luna#max` run was refused by the provider with HTTP 403
+`unsupported_country_region_territory`; the loop was executed with
+`opencode/deepseek-v4.1-flash-free`. The model choice is therefore not evidence of a
+particular provider; the bridge, confirmation UI, Core and verification are.
 
 ## Client matrix
 
@@ -328,8 +386,8 @@ negotiated era; `opencode mcp list` does not show it.
 
 - `bridge_info` is a handshake diagnostic, not an editor tool.
 - Writes are disabled by default. Access modes, limits and per-request confirmation now
-  exist, but the live Tauri probe exercised only the read-only refusal; the approval dialog
-  itself is covered by Rust and frontend tests, not by an automated click in a real window.
+  exist. The end-to-end script clicks the real approval dialog in a live WebView; denial and
+  timeout are covered by Rust and frontend tests.
 - The policy and the MCP activity journal are process-wide, not per MCP connection. A future
   task should scope grants and audit records to a connection identity. The journal is
   in-memory and intentionally bounded, so it is not a durable audit trail across restarts;
@@ -342,11 +400,17 @@ negotiated era; `opencode mcp list` does not show it.
 - Camera and capture require a mounted viewport in the running editor. A hidden or
   unloaded WebView reports `backend_unavailable`; there is no headless capture path yet.
 - A capture reports `partial=true` when requested chunks are missing and `stale=true` when
-  the render revision is behind the world. It is a viewport image, not a full-world render.
+  the render revision is behind the world. The end-to-end frame was partial because empty
+  neighbour chunks were not loaded; the edited chunk and its legend were still correct. A
+  capture is a viewport image, not a full-world render.
+- The viewport refresh after an MCP write is asynchronous. The end-to-end agent's next tool
+  call arrived after the refresh, so the captures were current; a capture issued in the same
+  instant as the write can still report `stale=true` rather than pretending to be current.
 - Unix domain socket support exists only as unexercised code; Windows is the tested target.
 - The discovery token relies on the per-user application data directory ACL; stronger
   named-pipe ACLs are still a security review item.
 - OpenCode 2.3.2 is the only real external client exercised. Claude Desktop and other hosts
   remain untested, and the modern run used Code Mode disabled so tools were listed directly.
-- This evidence does not establish end-to-end AI editing, screenshots or undo through an
-  external client, or real-world compatibility.
+  Only one end-to-end model/client combination was exercised; GPT-6 Luna Max was blocked by
+  the provider's region policy, so the loop used a free DeepSeek model. This is not evidence
+  of parity with every model or with real Minecraft gameplay.
