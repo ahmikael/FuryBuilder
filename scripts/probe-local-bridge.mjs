@@ -162,6 +162,113 @@ console.log(
   ),
 );
 
+const dimension = world.result.dimensions[0].id;
+const worldRevision = world.result.revision;
+const observations = {};
+{
+  const block = await request(runtime, "probe-block", runtime.token, "query", {
+    projectId: ping.result.project.projectId,
+    worldRevision,
+    query: {
+      type: "get_block",
+      dimension,
+      pos: { x: 0, y: 64, z: 0 },
+    },
+  });
+  if (!block.ok) {
+    throw new Error(
+      `structured get_block failed: ${JSON.stringify(block.error)}`,
+    );
+  }
+  if (block.result.worldRevision !== worldRevision) {
+    throw new Error(
+      `get_block reported revision ${block.result.worldRevision}, expected ${worldRevision}`,
+    );
+  }
+  observations.block = {
+    type: block.result.type,
+    worldRevision: block.result.worldRevision,
+    state: block.result.data.state.name,
+    properties: Object.keys(block.result.data.state.properties ?? {}).length,
+  };
+
+  const summary = await request(
+    runtime,
+    "probe-region-summary",
+    runtime.token,
+    "query",
+    {
+      projectId: ping.result.project.projectId,
+      worldRevision,
+      query: {
+        type: "region_summary",
+        dimension,
+        bounds: {
+          min: { x: -1, y: 63, z: -1 },
+          max: { x: 1, y: 65, z: 1 },
+        },
+      },
+    },
+  );
+  if (!summary.ok) {
+    throw new Error(
+      `structured region_summary failed: ${JSON.stringify(summary.error)}`,
+    );
+  }
+  const palette = summary.result.data.palette;
+  const paletteTotal = palette.reduce((sum, entry) => sum + entry.count, 0);
+  if (summary.result.worldRevision !== worldRevision) {
+    throw new Error(
+      `region_summary reported revision ${summary.result.worldRevision}, expected ${worldRevision}`,
+    );
+  }
+  if (summary.result.data.blocks !== 27 || paletteTotal !== 27) {
+    throw new Error(
+      `region_summary palette does not cover the volume: blocks=${summary.result.data.blocks} palette=${paletteTotal}`,
+    );
+  }
+  observations.summary = {
+    type: summary.result.type,
+    worldRevision: summary.result.worldRevision,
+    blocks: summary.result.data.blocks,
+    nonAirBlocks: summary.result.data.nonAirBlocks,
+    paletteEntries: palette.length,
+    paletteTotal,
+  };
+
+  const stale = await request(
+    runtime,
+    "probe-stale-query",
+    runtime.token,
+    "query",
+    {
+      projectId: ping.result.project.projectId,
+      worldRevision: worldRevision + 1,
+      query: {
+        type: "get_block",
+        dimension,
+        pos: { x: 0, y: 64, z: 0 },
+      },
+    },
+  );
+  if (
+    stale.ok ||
+    stale.error?.code !== "revision_mismatch" ||
+    stale.error?.details?.expectedRevision !== worldRevision + 1 ||
+    stale.error?.details?.actualRevision !== worldRevision
+  ) {
+    throw new Error(
+      `stale observation was not rejected with a structured conflict: ${JSON.stringify(stale)}`,
+    );
+  }
+  observations.staleRejection = {
+    code: stale.error.code,
+    expectedRevision: stale.error.details.expectedRevision,
+    actualRevision: stale.error.details.actualRevision,
+  };
+}
+console.log(JSON.stringify({ observations }, null, 2));
+
 const camera = await request(
   runtime,
   "probe-camera",
@@ -220,6 +327,13 @@ console.log(
         bytes: captureBytes.length,
         partial: capture.result.verification.partial,
         stale: capture.result.verification.stale,
+        renderRevision: capture.result.verification.renderRevision,
+        authoritativeRevision:
+          capture.result.verification.authoritativeRevision,
+        missingChunks: capture.result.metadata.missingChunks.length,
+        loadedChunks: capture.result.metadata.loadedChunks.length,
+        legendEntries: capture.result.metadata.legend.length,
+        legendTruncated: capture.result.metadata.legendTruncated,
       },
     },
     null,
@@ -228,6 +342,28 @@ console.log(
 );
 if (captureBytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
   throw new Error("capture does not contain a PNG signature");
+}
+if (capture.result.verification.partial !== capture.result.metadata.partial) {
+  throw new Error(
+    "capture verification.partial disagrees with metadata.partial",
+  );
+}
+if (
+  capture.result.metadata.partial !==
+  capture.result.metadata.missingChunks.length > 0
+) {
+  throw new Error(
+    "capture metadata.partial disagrees with the missing chunk list",
+  );
+}
+if (
+  capture.result.verification.stale !==
+  (capture.result.verification.renderRevision !==
+    capture.result.verification.authoritativeRevision)
+) {
+  throw new Error(
+    "capture verification.stale disagrees with the render and authoritative revisions",
+  );
 }
 
 const previewOperation = {

@@ -355,8 +355,26 @@ describe("MCP bridge to the authoritative desktop API", () => {
         });
       }
       if (method === "query") {
+        const query = (request.params as { query?: { type?: string } }).query;
+        if (query?.type === "region_summary") {
+          return okResult(request, {
+            type: "region_summary",
+            worldRevision: 9,
+            data: {
+              dimension: "minecraft:overworld",
+              bounds: {
+                min: { x: -1, y: 63, z: -1 },
+                max: { x: 1, y: 65, z: 1 },
+              },
+              blocks: 27,
+              nonAirBlocks: 1,
+              palette: [{ state: "minecraft:stone", count: 1 }],
+            },
+          });
+        }
         return okResult(request, {
           type: "block",
+          worldRevision: 9,
           data: {
             dimension: "minecraft:overworld",
             pos: { x: 0, y: 64, z: 0 },
@@ -443,9 +461,48 @@ describe("MCP bridge to the authoritative desktop API", () => {
       },
     });
     const blockText = block.content.find((entry) => entry.type === "text");
-    expect(blockText?.type === "text" ? blockText.text : "").toContain(
-      '"name": "minecraft:stone"',
-    );
+    const blockResult = JSON.parse(
+      blockText?.type === "text" ? blockText.text : "{}",
+    ) as {
+      type: string;
+      worldRevision: number;
+      data: { state: { name: string } };
+    };
+    expect(blockResult.type).toBe("block");
+    expect(blockResult.worldRevision).toBe(9);
+    expect(blockResult.data.state.name).toBe("minecraft:stone");
+
+    const region = await client.callTool({
+      name: "inspect_region",
+      arguments: {
+        project_id: "project-live",
+        dimension: "minecraft:overworld",
+        bounds: {
+          min: { x: -1, y: 63, z: -1 },
+          max: { x: 1, y: 65, z: 1 },
+        },
+        world_revision: 9,
+      },
+    });
+    const regionText = region.content.find((entry) => entry.type === "text");
+    const regionResult = JSON.parse(
+      regionText?.type === "text" ? regionText.text : "{}",
+    ) as {
+      type: string;
+      worldRevision: number;
+      data: {
+        blocks: number;
+        nonAirBlocks: number;
+        palette: Array<{ state: string; count: number }>;
+      };
+    };
+    expect(regionResult.type).toBe("region_summary");
+    expect(regionResult.worldRevision).toBe(9);
+    expect(regionResult.data.blocks).toBe(27);
+    expect(regionResult.data.nonAirBlocks).toBe(1);
+    expect(regionResult.data.palette).toEqual([
+      { state: "minecraft:stone", count: 1 },
+    ]);
 
     const camera = await client.callTool({
       name: "get_camera",

@@ -179,6 +179,30 @@ exactly what the first end-to-end run exposed, and the reason this event exists.
 `image.sha256` in the text metadata block, so a text-only client can verify that a
 non-empty PNG arrived even when it cannot inspect pixels.
 
+## Structured observations
+
+The minimum observation set the plan requires is summary, block inspection and a bounded
+screenshot. Each answers with an explicit revision and never claims more than it knows:
+
+- `world_info` reports the authoritative `revision`, dimensions and block/chunk counts.
+- `get_block` returns `type: "block"`, the canonical state (name plus properties) and the
+  `worldRevision` the read was taken at.
+- `inspect_region` returns `type: "region_summary"` with the echoed dimension and bounds,
+  the inclusive volume (`blocks`), `nonAirBlocks`, the palette and the same
+  `worldRevision`. The palette counts always cover the volume.
+- `capture_viewport` returns a real PNG image plus a metadata block: schema version, mode,
+  dimension, world revision, camera pose, resolution, renderer schema, a legend capped at
+  16 states with `legendTruncated`, requested/loaded/missing chunks and `partial`. The Rust
+  endpoint adds `verification` with `renderRevision`, `authoritativeRevision`, `stale` and
+  `partial`; the bridge adds the PNG byte count and SHA-256.
+
+The revision is read under the same lock as the data, so a block or region observation is
+attributable to an exact world state. A caller that supplies a stale `world_revision`
+receives a structured `revision_mismatch` with `expectedRevision` and `actualRevision`
+instead of silently reading newer data. A capture never upgrades its claim: an empty
+project with no loaded chunks reports `partial: true`, names the nine missing chunks and an
+empty legend, even though the PNG itself is valid.
+
 ## Tasks option and fallback
 
 Tasks remains an explicit option, never an assumption. The bridge evaluates three
@@ -206,7 +230,7 @@ pnpm --filter @furybuilder/mcp-bridge build
 ```
 
 Observed: 25 bridge tests passed, typecheck and build clean; the Rust desktop test binary
-runs 32 tests, `world-application` 45, and the frontend 142. The TypeScript tests spawn the
+runs 33 tests, `world-application` 45, and the frontend 142. The TypeScript tests spawn the
 real bridge over stdio with `tsx src/main.ts` and use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
@@ -232,8 +256,9 @@ real bridge over stdio with `tsx src/main.ts` and use `@modelcontextprotocol/cli
   live project/revision when a local endpoint answers;
 - the same live endpoint yields `revision_mismatch` for a stale revision while keeping
   the active revision visible in the response;
-- live reads cover `world_info`, `get_block`, `get_camera` and `capture_viewport`; the
-  capture is returned as PNG image content plus metadata;
+- live reads cover `world_info`, `get_block`, `inspect_region`, `get_camera` and
+  `capture_viewport`; block and region responses carry `worldRevision`, and the capture is
+  returned as PNG image content plus metadata and a verification block;
 - the five write tools are listed: preview is read-only, apply/undo declare destructive
   writes and require `idempotency_key`, and every call fails honestly when the desktop
   app is absent;
@@ -266,17 +291,23 @@ request id and expiry so the dialog can be reconstructed.
 
 ```text
 discovery: schemaVersion 1, local_socket, protocol 1, named pipe, tokenLength 64
-ping: ok, projectId "local-project", worldRevision 0, app 0.1.0, rendererListening false
+ping: ok, projectId "local-project", worldRevision 0, app 0.1.0, rendererListening true
 ping access: read_only, maxBlocks 50000, requireConfirmation true
 renderer: listening true after the WebView mounted
 world_info: ok, target Minecraft 1.21.4, revision 0, 3 dimensions
+block observation: type block, worldRevision 0, state minecraft:air
+region summary: type region_summary, worldRevision 0, blocks 27, nonAirBlocks 0,
+                palette 1 entry covering all 27 blocks
+stale observation: revision_mismatch, expectedRevision 1, actualRevision 0
 camera: overworld, render revision 0 = authoritative revision 0, stale false
-capture: image/png, PNG signature valid, 492714 bytes, partial true, stale false
+capture: image/png, PNG signature valid, 492714 bytes, partial true, stale false,
+         render revision 0 = authoritative revision 0, 9 missing chunks, 0 loaded,
+         0 legend entries
 preview: affected 1, changed 1, world revision 0, access.allowed false (permission_denied)
 apply in read-only: permission_denied, accessMode read_only, operation apply_operation
 operation_status: revision 0, canUndo false, job.available true, queued 0, retained 0
 job start in read-only: permission_denied, accessMode read_only; list_jobs empty, available true
-activity: 8 entries, bounded true; denied apply -> status denied, error permission_denied,
+activity: 11 entries, bounded true; denied apply -> status denied, error permission_denied,
           clientId "probe-local-bridge", projectId "local-project"; denied start_job is
           recorded as start_job/denied/permission_denied
 activity limit 0: invalid_argument
@@ -288,7 +319,26 @@ The probe waits for `renderer.listening` before asking for the camera, so a star
 reported instead of being mistaken for a broken tool. `partial=true` is expected here: the
 default empty project has no loaded chunks, and the metadata names the missing chunks. The
 probe writes nothing and does not print the token. The app was force-stopped after the
-probe, so its stale discovery file was removed manually; a normal exit removes it.
+probe, so its stale discovery file was removed manually; a normal exit removes it. Raw
+output: `docs/testing/evidence/2026-11-18-structured-observation.txt`.
+
+## Live MCP observation probe
+
+`mcp/bridge/scripts/probe-live-observation.mjs` connects to the running app through a real
+stdio bridge and the modern MCP era. It calls `bridge_info`, `world_info`, `get_block`,
+`inspect_region`, a stale read and `capture_viewport`, then asserts:
+
+- block and region responses carry the exact `worldRevision` from `world_info`;
+- the region palette counts add up to the 27-block volume and `nonAirBlocks` stays within it;
+- a stale revision is rejected as `revision_mismatch`, not silently served;
+- the capture image is a real PNG whose byte count and SHA-256 match the published metadata;
+- `verification.partial` matches `metadata.partial`, `partial` matches the missing-chunk
+  list, and `stale` matches the comparison of render and authoritative revisions.
+
+Observed on 2026-11-18: modern era, revision 0, `minecraft:air` at `(0,64,0)`, region
+volume 27 with one palette entry, stale request rejected, and a 492714-byte PNG
+(`sha256 45b0044b…`) with `partial: true`, `stale: false`, 9 missing chunks and 0 loaded
+chunks. Evidence: `docs/testing/evidence/2026-11-18-mcp-observation.json`.
 
 ## Real external MCP client (OpenCode)
 

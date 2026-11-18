@@ -116,6 +116,15 @@ The first transport slice is implemented and exercised against the real Tauri pr
   from 13 stone to 12 stone + 1 glass. Five empty neighbour chunks stayed unloaded, so
   `partial=true` was reported; the edited chunk itself was loaded. Evidence:
   `docs/testing/evidence/2026-11-18-ai-edit-loop.json`.
+- Read observations are tied to an exact revision. `get_block`, `get_region` and
+  `inspect_region` now publish `worldRevision` taken under the same lock as the read, so a
+  caller never has to guess whether the response belongs to the revision it asked for. A
+  stale `world_revision` is refused with `revision_mismatch` and both expected/actual
+  revisions. Capture metadata stays bounded (16 legend entries) and always reports
+  requested/loaded/missing chunks, `partial`, render revision, authoritative revision and
+  `stale`; the live probes checked those flags against the actual chunk lists and revisions.
+  Evidence: `docs/testing/evidence/2026-11-18-mcp-observation.json` and
+  `2026-11-18-structured-observation.txt`.
 - Unix domain sockets are not exercised yet; Windows is the first target. The discovery
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.

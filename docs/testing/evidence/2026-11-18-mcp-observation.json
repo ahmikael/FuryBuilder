@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-18",
+  "result": "passed",
+  "protocolEra": "modern",
+  "projectId": "local-project",
+  "worldRevision": 0,
+  "observations": {
+    "block": {
+      "type": "block",
+      "worldRevision": 0,
+      "state": "minecraft:air",
+      "propertyCount": 0
+    },
+    "region": {
+      "type": "region_summary",
+      "worldRevision": 0,
+      "dimension": "minecraft:overworld",
+      "bounds": {
+        "max": {
+          "x": 1,
+          "y": 65,
+          "z": 1
+        },
+        "min": {
+          "x": -1,
+          "y": 63,
+          "z": -1
+        }
+      },
+      "blocks": 27,
+      "nonAirBlocks": 0,
+      "paletteEntries": 1,
+      "paletteTotal": 27
+    },
+    "staleRejection": {
+      "isError": true,
+      "code": "revision_mismatch",
+      "requestedRevision": 1,
+      "actualRevision": 0
+    },
+    "capture": {
+      "mimeType": "image/png",
+      "bytes": 492714,
+      "sha256": "45b0044ba60e439c56a6a8f5ddaa18b23322e5b329cade86989edd8fd1f7a4c7",
+      "imageMatchesMetadata": true,
+      "metadata": {
+        "dimension": "minecraft:overworld",
+        "worldRevision": 0,
+        "partial": true,
+        "missingChunks": 9,
+        "loadedChunks": 0,
+        "legendEntries": 0,
+        "legendTruncated": false
+      },
+      "verification": {
+        "authoritativeRevision": 0,
+        "partial": true,
+        "renderRevision": 0,
+        "stale": false
+      }
+    }
+  }
+}

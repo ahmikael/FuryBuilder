@@ -88,7 +88,7 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Get block",
       description:
-        "Reads the exact block state at one position, including a canonical state string.",
+        "Reads the exact block state at one position, including a canonical state string and the authoritative world revision it was read at.",
       inputSchema: z.object({
         ...project,
         dimension: z.string().min(1).max(128),
@@ -117,7 +117,7 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Inspect region",
       description:
-        "Summarizes an inclusive block region: volume, non-air count and the bounded palette. Use it before editing an area.",
+        "Summarizes an inclusive block region: volume, non-air count, palette and the authoritative world revision. Use it before editing an area.",
       inputSchema: z.object({
         ...project,
         dimension: z.string().min(1).max(128),
@@ -146,7 +146,7 @@ export function registerReadTools(server: McpServer): void {
     {
       title: "Get region blocks",
       description:
-        "Returns the non-air blocks of the requested inclusive region up to the Core read limit. The result reports the volume so callers can detect an empty box.",
+        "Returns the non-air blocks of the requested inclusive region up to the Core read limit, with the authoritative world revision. The result reports the volume so callers can detect an empty box.",
       inputSchema: z.object({
         ...project,
         dimension: z.string().min(1).max(128),

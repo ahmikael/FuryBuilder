@@ -680,7 +680,13 @@ fn dispatch_inner(
                 .service
                 .lock()
                 .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            to_value(service.query(params.query)?)
+            let revision = service.world().revision();
+            let mut value = to_value(service.query(params.query)?)?;
+            // The read and the revision are taken under one lock. Publishing it here means
+            // a block or region observation is always attributable to an exact revision
+            // instead of leaving the client to guess from an earlier call.
+            value["worldRevision"] = json!(revision);
+            Ok(value)
         }
         "project_status" => {
             let params: ProjectParams = parse_params(params)?;
@@ -1832,6 +1838,7 @@ mod tests {
         assert!(response.ok, "{:?}", response.error);
         let result = response.result.expect("result");
         assert_eq!(result["type"], "block");
+        assert_eq!(result["worldRevision"], 0);
         assert_eq!(result["data"]["state"]["name"], "minecraft:air");
     }
 
@@ -1871,6 +1878,121 @@ mod tests {
         let details = error.details.expect("details");
         assert_eq!(details["expectedRevision"], 99);
         assert_eq!(details["actualRevision"], 0);
+    }
+
+    #[test]
+    fn query_observations_report_the_revision_they_read() {
+        let state = AppState::new(temp_root("query-revision"));
+        enable_writes(&state, McpAccessMode::FullProject, None, 1_000, 10, true);
+        let approved = ScriptedConfirmation::new(true);
+        let apply = handle_request_with_renderer(
+            &state,
+            "token",
+            request(
+                "req-query-seed",
+                "token",
+                "apply_operation",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 0,
+                    "idempotencyKey": "query-revision-seed",
+                    "operation": {
+                        "type": "batch",
+                        "dimension": "minecraft:overworld",
+                        "changes": [
+                            { "pos": { "x": 0, "y": 64, "z": 0 }, "state": { "name": "minecraft:stone" } },
+                            { "pos": { "x": 1, "y": 64, "z": 0 }, "state": { "name": "minecraft:glass" } }
+                        ]
+                    }
+                }),
+            ),
+            &approved,
+        );
+        assert!(apply.ok, "{:?}", apply.error);
+
+        let block = handle_request(
+            &state,
+            "token",
+            request(
+                "req-query-block",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 1,
+                    "query": {
+                        "type": "get_block",
+                        "dimension": "minecraft:overworld",
+                        "pos": { "x": 1, "y": 64, "z": 0 }
+                    }
+                }),
+            ),
+        );
+        assert!(block.ok, "{:?}", block.error);
+        let block = block.result.expect("block");
+        assert_eq!(block["worldRevision"], 1);
+        assert_eq!(block["data"]["state"]["name"], "minecraft:glass");
+
+        let summary = handle_request(
+            &state,
+            "token",
+            request(
+                "req-query-summary",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": {
+                        "type": "region_summary",
+                        "dimension": "minecraft:overworld",
+                        "bounds": {
+                            "min": { "x": -1, "y": 63, "z": -1 },
+                            "max": { "x": 1, "y": 65, "z": 1 }
+                        }
+                    }
+                }),
+            ),
+        );
+        assert!(summary.ok, "{:?}", summary.error);
+        let summary = summary.result.expect("summary");
+        assert_eq!(summary["worldRevision"], 1);
+        assert_eq!(summary["data"]["blocks"], 27);
+        assert_eq!(summary["data"]["nonAirBlocks"], 2);
+        assert!(summary["data"]["palette"]
+            .as_array()
+            .expect("palette")
+            .iter()
+            .any(|entry| entry["state"] == "minecraft:stone" && entry["count"] == 1));
+        assert!(summary["data"]["palette"]
+            .as_array()
+            .expect("palette")
+            .iter()
+            .any(|entry| entry["state"] == "minecraft:glass" && entry["count"] == 1));
+
+        let stale = handle_request(
+            &state,
+            "token",
+            request(
+                "req-query-stale",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 0,
+                    "query": {
+                        "type": "get_block",
+                        "dimension": "minecraft:overworld",
+                        "pos": { "x": 1, "y": 64, "z": 0 }
+                    }
+                }),
+            ),
+        );
+        assert!(!stale.ok);
+        let error = stale.error.expect("stale error");
+        assert_eq!(error.code, ErrorCode::RevisionMismatch);
+        let details = error.details.expect("details");
+        assert_eq!(details["expectedRevision"], 0);
+        assert_eq!(details["actualRevision"], 1);
     }
 
     #[test]
