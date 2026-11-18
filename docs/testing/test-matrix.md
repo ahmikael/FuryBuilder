@@ -89,3 +89,28 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Schema migrations with backup and refusal of newer versions | `unsupported_newer_schema_is_refused` |
 | Crash recovery, reopen, checksum and semantic equality | `crash_recovery_uses_newer_verified_autosave`, `save_is_atomic_and_keeps_previous_snapshot`, `snapshot_round_trip_preserves_states_across_dimensions` |
 | IPC project contract | `lib/project-api.test.ts` |
+
+## Implemented coverage (M6, Java structure `.nbt`)
+
+Target version: Minecraft Java `1.21.4`, `DataVersion` `4189`. The format is an
+interchange format only; FuryBuilder project metadata is not claimed to be
+included.
+
+| Requirement | Automated / recorded evidence |
+|---|---|
+| Versioned adapter for one format | `world-io` `java_structure.rs`, `nbt.rs`, `structure.rs`, `exchange.rs`; `cargo test -p furybuilder-world-io` |
+| Real game-saved fixture parses | `crates/world-io/tests/game_fixtures.rs` uses `fixtures/java-1.21.4/structures/plain.nbt` saved by the official 1.21.4 server |
+| Block state properties and orientation | `official_plain_structure_round_trips_semantically`; Tauri IPC check for oak stairs facing east |
+| Unsupported block entity is refused | `official_structure_with_block_entity_is_refused_instead_of_dropped`; `chest_boundary.nbt` preview and insert rejection |
+| Import preview and new project/insertion | `features/project/StructureExchange.test.tsx`, `state/project-store.test.ts`, real Tauri IPC probe recorded in `docs/testing/minecraft-structure-check.md` |
+| Export preview with bounds/version/warnings/path | `features/project/StructureExchange.test.tsx`, `structure-api.test.ts`, Tauri IPC probe |
+| Binary and semantic verification after writing | `exchange::tests::prepare_export_is_verified_and_deterministic`, `export_verification_is_independent_of_world_iteration_order`; `project-store` `exports.rs` |
+| Corrupt/incompatible input is not silent success | `nbt::tests`, `java_structure::tests`, `game_fixtures.rs` |
+| Official server can load adapter output | `docs/testing/minecraft-structure-check.md`, evidence `docs/testing/evidence/2026-11-18-java-structure-interop.json` |
+| Build → export → load demonstration | `world-io` example `export_demo.rs`; six exact block checks on official 1.21.4 server |
+
+T-07 in the original matrix (preserve a chest block entity) is **not** green
+for this adapter: the current Java structure model refuses block entities
+rather than dropping them. Supporting passthrough is future work outside M6.
+Biomes, entities, ticks and full worlds remain M8 work. `.schem` remains the
+second format and is not enabled in the UI.

@@ -51,11 +51,14 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-The application shell, Rust world core, Three.js viewport, manual editor and initial
-project persistence are implemented. M0 still has outstanding research and reference
-fixture tasks, and the Java structure adapter (M6) is not yet verified for release.
-Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`; a checked implementation
-item is not by itself a guarantee that its whole milestone is complete.
+M0–M5 are complete. The first interchange format, Minecraft Java 1.21.4
+(`DataVersion` 4189) structure `.nbt`, is implemented and verified against real
+game-saved fixtures, a real Tauri IPC flow and an official 1.21.4 server load.
+Block states and orientations are preserved; entities and block entities are
+refused rather than silently dropped. Sponge `.schem` is the next format and is
+not enabled in the UI. Milestone progress is tracked in
+`FURYBUILDER_MASTER_PLAN.md`; a checked implementation item is not by itself a
+guarantee that its whole milestone is complete.
 
 ## Known limitations (early development)
 
@@ -63,7 +66,9 @@ item is not by itself a guarantee that its whole milestone is complete.
   and approximate shapes for slabs/stairs/torches.
 - Projects live in the app-data directory and store an Empty or flat-base world. Automatic
   vanilla world generation (`Vanilla World`) and world imports (`Import World`) are shown
-  as future modes until M7/M8.
+  as future modes until M9/M8.
+- Structure import/export is currently Java structure `.nbt` only. It refuses entities,
+  block entities and unknown tags; `.schem` support is not available yet.
 - Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
 - Autosave runs every 30 seconds while dirty (plus visibility change and window close), so
   a hard crash can lose up to half a minute of edits.
