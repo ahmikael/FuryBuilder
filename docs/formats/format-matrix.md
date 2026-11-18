@@ -48,5 +48,6 @@ official 1.21.4 server fixture: the server generates a fresh world, FuryBuilder
 exports an edited copy, the same server loads it and verifies the edited and
 neighbor blocks, and FuryBuilder decodes the saved result again. See
 `docs/formats/java-chunk-derived-data.md`, `docs/formats/java-world-export.md`,
-`docs/formats/java-world-selection.md` and
+`docs/formats/java-world-selection.md`,
+`docs/formats/support-matrix.md` and
 `docs/testing/minecraft-server-fixture.md`.

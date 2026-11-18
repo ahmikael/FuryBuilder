@@ -21,6 +21,7 @@ use world_domain::{ChunkPos, DimensionKind, World};
 
 use crate::anvil::{AnvilError, JavaWorld, LevelDat};
 use crate::passthrough::PassthroughError;
+use crate::support_matrix::{support_matrix, SupportMatrix};
 use crate::world_selection::{classify_world_selection, WorldSelectionKind};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
@@ -64,6 +65,7 @@ pub struct JavaWorldAnalysis {
     pub entities: usize,
     pub warnings: Vec<String>,
     pub blockers: Vec<String>,
+    pub support_matrix: SupportMatrix,
 }
 
 /// Counts produced while decoding an imported world into the editable model.
@@ -153,6 +155,7 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
         entities: 0,
         warnings: selection.warnings.clone(),
         blockers: Vec::new(),
+        support_matrix: support_matrix(),
     };
     for blocker in &selection.blockers {
         push_unique(&mut analysis.blockers, blocker.clone());

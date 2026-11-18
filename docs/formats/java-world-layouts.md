@@ -607,6 +607,11 @@ entities. M8.9 adds an opt-in policy that invalidates heightmaps, light,
 `isLightOn` and `PostProcessing`, and the official server did rebuild them on
 the next load/save.
 
+The detailed per-data-category matrix - block states, biomes, block entities,
+entities, ticks, heightmaps, lighting, POI, structures, unknown tags and unknown
+files - is in `docs/formats/support-matrix.md`. The same matrix is returned by
+`analyze_java_world` and shown in the Import World wizard.
+
 ## Safety rules for the M8 importer
 
 - Read `level.dat` with bounded NBT: size, nesting, collection length and

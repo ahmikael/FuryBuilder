@@ -18,6 +18,7 @@ pub mod overlay;
 pub mod passthrough;
 pub mod region_write;
 pub mod structure;
+pub mod support_matrix;
 pub mod world_export;
 pub mod world_import;
 pub mod world_selection;
@@ -68,6 +69,9 @@ pub use region_write::{
 pub use structure::{
     Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,
     MAX_STRUCTURE_VOLUME,
+};
+pub use support_matrix::{
+    support_matrix, CategorySupport, SupportMatrix, VersionSupport, SUPPORT_MATRIX_SCHEMA_VERSION,
 };
 pub use world_export::{
     export_java_world, export_java_world_with_options, ExportedRegion, WorldExportError,

@@ -77,8 +77,10 @@ a `region/` directory are explicitly not complete saves, while split, mixed and
 legacy layouts are detected and refused. An automated official-server fixture
 now generates a fresh 1.21.4 world, exports an edited complete folder, reloads it
 in the same server, verifies the edited and neighbor blocks and decodes the saved
-result again. Placing block-entity blocks and POI updates are still not
-semantically supported. Client rendering is still a manual check.
+result again. The Import World wizard now shows a machine-readable
+read/edit/write/passthrough support matrix by version and data category.
+Placing block-entity blocks and POI updates are still not semantically supported.
+Client rendering is still a manual check.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -103,6 +105,8 @@ guarantee that its whole milestone is complete.
   validation, preserved files and the real 841-chunk evidence.
 - `docs/formats/java-world-selection.md` — save vs region file vs region
   directory, layout matrix and passthrough refusal boundaries.
+- `docs/formats/support-matrix.md` — read/edit/write/passthrough/unsupported
+  status by version and data category, also shown in the Import World wizard.
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
@@ -156,4 +160,5 @@ guarantee that its whole milestone is complete.
   generates a fresh 1.21.4 world, FuryBuilder exports an edited copy, the same
   server loads it, verifies the edited and neighbor blocks and saves, and
   FuryBuilder decodes the saved block states again. A licensed client was not
-  launched.
+  launched. M8.13 adds a machine-readable support matrix by version and data
+  category; the same matrix is shown in the Import World wizard.

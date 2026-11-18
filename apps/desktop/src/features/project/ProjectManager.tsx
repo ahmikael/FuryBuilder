@@ -664,6 +664,57 @@ export function ProjectManager() {
                             ))}
                           </div>
                         ) : null}
+                        <details className="rounded border border-border bg-background/40 p-1.5">
+                          <summary className="cursor-pointer text-[9px] font-medium">
+                            Read / edit / write / passthrough support matrix
+                          </summary>
+                          <div className="mt-1.5 space-y-1.5">
+                            <div className="flex flex-wrap gap-1">
+                              {worldAnalysis.supportMatrix.versions.map((version) => (
+                                <span
+                                  key={version.id}
+                                  title={version.note}
+                                  className={cn(
+                                    "rounded px-1 py-0.5 text-[8px]",
+                                    version.status === "supported"
+                                      ? "bg-status-ok/15 text-status-ok"
+                                      : "bg-muted text-muted-foreground",
+                                  )}
+                                >
+                                  {version.minecraftVersions} · {version.status}
+                                </span>
+                              ))}
+                            </div>
+                            <div className="scrollbar-thin max-h-40 overflow-auto">
+                              <table className="w-full text-left text-[8px]">
+                                <thead className="text-muted-foreground">
+                                  <tr>
+                                    <th className="pr-1 font-medium">Data</th>
+                                    <th className="pr-1 font-medium">Read</th>
+                                    <th className="pr-1 font-medium">Edit</th>
+                                    <th className="pr-1 font-medium">Write</th>
+                                    <th className="font-medium">Pass</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {worldAnalysis.supportMatrix.categories.map((category) => (
+                                    <tr
+                                      key={category.id}
+                                      title={category.note}
+                                      className="border-t border-border/50"
+                                    >
+                                      <td className="pr-1">{category.label}</td>
+                                      <td className="pr-1 font-mono">{category.read}</td>
+                                      <td className="pr-1 font-mono">{category.edit}</td>
+                                      <td className="pr-1 font-mono">{category.write}</td>
+                                      <td className="font-mono">{category.passthrough}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </details>
                       </div>
                     ) : (
                       <p className="text-[9px] leading-relaxed text-muted-foreground">

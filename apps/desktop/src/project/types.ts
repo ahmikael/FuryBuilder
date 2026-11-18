@@ -95,6 +95,35 @@ export interface ImportDimensionAnalysis {
   chunks: number;
 }
 
+export interface SupportVersion {
+  id: string;
+  minecraftVersions: string;
+  dataVersions: string;
+  layout: string;
+  status: string;
+  read: string;
+  edit: string;
+  write: string;
+  passthrough: string;
+  note: string;
+}
+
+export interface SupportCategory {
+  id: string;
+  label: string;
+  read: string;
+  edit: string;
+  write: string;
+  passthrough: string;
+  note: string;
+}
+
+export interface SupportMatrix {
+  schemaVersion: number;
+  versions: SupportVersion[];
+  categories: SupportCategory[];
+}
+
 export interface JavaWorldAnalysis {
   root: string;
   layout: string;
@@ -113,6 +142,7 @@ export interface JavaWorldAnalysis {
   entities: number;
   warnings: string[];
   blockers: string[];
+  supportMatrix: SupportMatrix;
 }
 
 export const CREATION_MODES: Array<{

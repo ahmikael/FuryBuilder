@@ -117,6 +117,34 @@ const worldAnalysis: JavaWorldAnalysis = {
     "only block states become editable in this milestone",
   ],
   blockers: [],
+  supportMatrix: {
+    schemaVersion: 1,
+    versions: [
+      {
+        id: "java-1.21.4-classic",
+        minecraftVersions: "1.21.4",
+        dataVersions: "4189",
+        layout: "classic_anvil",
+        status: "supported",
+        read: "supported_subset",
+        edit: "block_states_only",
+        write: "verified_block_states",
+        passthrough: "byte_for_byte",
+        note: "supported target",
+      },
+    ],
+    categories: [
+      {
+        id: "block_states",
+        label: "Block states and palettes",
+        read: "supported",
+        edit: "supported",
+        write: "verified",
+        passthrough: "byte_for_byte",
+        note: "only block states",
+      },
+    ],
+  },
 };
 
 function opened(summary: ProjectSummary) {
@@ -347,6 +375,11 @@ describe("project manager", () => {
     expect(screen.getAllByText(/DataVersion 4189/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/4 region\(s\) · 841 chunk\(s\)/).length).toBeGreaterThan(0);
     expect(screen.getByText(/classic_anvil/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Read / edit / write / passthrough support matrix"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Block states and palettes")).toBeInTheDocument();
+    expect(screen.getByText("1.21.4 · supported")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Project name"), "Imported World");
     await user.click(screen.getByRole("button", { name: "Import world" }));
