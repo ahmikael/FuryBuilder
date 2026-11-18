@@ -8,11 +8,18 @@
 //! First adapter (ADR-007): Java structure `.nbt` for Minecraft Java 1.21.4
 //! (`DataVersion` 4189). Sponge `.schem` v3 is the planned second adapter.
 
+pub mod anvil;
 pub mod exchange;
 pub mod java_structure;
 pub mod nbt;
 pub mod structure;
 
+pub use anvil::{
+    region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LevelDat,
+    RegionChunk, RegionChunkSummary, RegionEntry, RegionFile, ANVIL_HEADER_BYTES,
+    ANVIL_LOCATION_ENTRIES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_REGION_EXTENSION, ANVIL_SECTOR_BYTES,
+    MAX_LEVEL_DAT_BYTES, MAX_REGION_FILE_BYTES,
+};
 pub use exchange::{
     content_bounds, import_preview, palette_counts, palette_usage, prepare_export,
     preview_from_structure, read_verified_import, ExportBundle, PaletteCount,

@@ -185,16 +185,69 @@ either as a supported import target.
 Java 25 is a real requirement for 26.3; it is not enough to reuse the Java 21
 runtime from the 1.21.4 target.
 
+## Read-only Rust reader (M8.2)
+
+`crates/world-io/src/anvil.rs` implements the read-only half of the 1.21.4
+adapter. It has no write path.
+
+| API                             | What it does                                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `LevelDat::read`                | bounded gzip/NBT read; requires `Data.DataVersion` and `Data.Version.Id` to agree                                |
+| `LevelDat::ensure_supported`    | refuses any version other than 4189                                                                              |
+| `JavaWorld::open`               | validates a classic layout, discovers the standard dimensions and counts their region files                      |
+| `JavaWorld::region_coordinates` | lists `r.<x>.<z>.mca` files after validating every name                                                          |
+| `RegionFile::open`              | validates the two 4 KiB header tables, allocation ranges and overlaps                                            |
+| `RegionFile::read_chunk`        | decodes one chunk, checks its position and returns the complete `NbtFile`                                        |
+| `RegionFile::summarize_all`     | decodes every allocated chunk, discards its NBT and returns structural summaries; peak memory stays at one chunk |
+
+Supported at this stage:
+
+- classic Anvil layout (1.13 through 1.21.11), with the Overworld at `region/`
+  and `DIM-1` / `DIM1` as the Nether and End;
+- compression ids 1 (gzip), 2 (zlib) and 3 (uncompressed);
+- negative chunk and region coordinates via floor division;
+- `level.dat` up to 8 MiB compressed, a region file up to 1 GiB, and one
+  decompressed chunk up to the shared 64 MiB NBT limit;
+- empty `sections`, `block_entities` and `entities` lists with either
+  `TAG_Compound` or `TAG_End` element type, as produced by the real game.
+
+Refused explicitly instead of guessed:
+
+- the 26.1+ split layout, and a folder that mixes classic and split markers;
+- external `.mcc` chunks (compression flag `0x80`), LZ4 (4), custom algorithms
+  (127) and unknown compression ids;
+- region files that are shorter than 8 KiB, not 4 KiB aligned, have partially
+  allocated entries, point into the header, overlap, or extend past the file;
+- a chunk length larger than its allocated sectors, an NBT `xPos`/`zPos`
+  mismatch, a chunk `DataVersion` other than 4189, a malformed section, or
+  trailing bytes after the chunk NBT root;
+- symlinked world files and region files.
+
+Block states, section palettes and biomes are **not decoded yet**; that is M8.3.
+Passthrough, overlay, import UI and any write path are later M8 stages.
+
+Probe and tests:
+
+```powershell
+cargo test -p furybuilder-world-io --test anvil
+cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder>
+cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --all-chunks
+```
+
+The default probe prints region-level aggregates and three sample chunks per
+region; `--all-chunks` prints every chunk summary. Both modes decode all chunks
+first, so a zero exit code means the whole region table was read.
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read | Write | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ---- | ----- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | M8.2 | no    | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no   | no    | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no   | no    | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no   | no    | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no   | no    | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no   | no    | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                                                                  | Write | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------------------------------------------- | ----- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | partial: `level.dat` + region/NBT structure (M8.2); block palettes and biomes pending | no    | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                                                    | no    | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                                                    | no    | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                                                    | no    | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                                                    | no    | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                                                    | no    | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support.
@@ -235,6 +288,13 @@ Recorded evidence:
 - `docs/testing/evidence/2026-11-18-world-layout-1.21.4.json` — a real
   official 1.21.4 server world: classic layout, `DataVersion` 4189,
   `Version.Id` 4189, 4 Overworld region files, `targetMatch: true`.
+- `docs/testing/evidence/2026-11-18-anvil-read-1.21.4.json` — the Rust reader
+  decoded the same real world: 4 regions and 841 allocated chunks, every chunk
+  `DataVersion` 4189, `yPos` -4 and 24 sections. The status breakdown is 672
+  `structure_starts`, 48 `biomes`, 40 `carvers`, 32 `initialize_light` and 49
+  `full`; the non-full chunks are proto-chunks, not import failures. The Nether
+  and End had no region files in this world. The probe exited 0 and wrote
+  nothing to the world.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
@@ -264,8 +324,9 @@ Sources checked on 2026-11-18:
 
 ## Consequences for the next M8 tasks
 
-1. Implement 1.21.4 classic read-only first: `level.dat` + one region at a
-   time, with both version values checked.
+1. The M8.2 reader now covers `level.dat` plus one region at a time, with both
+   version values checked. The next step is decoding section palettes, block
+   states and biomes inside the already-validated chunk NBT.
 2. Keep layout detection explicit. Opening a 26.1+ folder must return a
    structured `unsupported_layout`/`unsupported_version`, not a partial world.
 3. Add a real 26.1+ fixture and adapter only when the game format and the

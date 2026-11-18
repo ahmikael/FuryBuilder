@@ -51,16 +51,19 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-M0–M7 are complete. The first interchange format, Minecraft Java 1.21.4
-(`DataVersion` 4189) structure `.nbt`, is implemented and verified against real
-game-saved fixtures, a real Tauri IPC flow and an official 1.21.4 server load.
-Block states and orientations are preserved; entities and block entities are
-refused rather than silently dropped. Sponge `.schem` is the next format and is
-not enabled in the UI. External AI clients can read, build, screenshot, correct
-and undo through MCP, with read-only access by default and a real confirmation
-dialog for writes. Milestone progress is tracked in `FURYBUILDER_MASTER_PLAN.md`;
-a checked implementation item is not by itself a guarantee that its whole
-milestone is complete.
+M0–M7 are complete. M8 is in progress: the read-only 1.21.4 classic reader
+validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
+coordinates and proto-chunks, without writing to the source world. Block-state
+palettes and biomes are the next step. The first interchange format, Minecraft
+Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and verified
+against real game-saved fixtures, a real Tauri IPC flow and an official 1.21.4
+server load. Block states and orientations are preserved; entities and block
+entities are refused rather than silently dropped. Sponge `.schem` is the next
+format and is not enabled in the UI. External AI clients can read, build,
+screenshot, correct and undo through MCP, with read-only access by default and a
+real confirmation dialog for writes. Milestone progress is tracked in
+`FURYBUILDER_MASTER_PLAN.md`; a checked implementation item is not by itself a
+guarantee that its whole milestone is complete.
 
 ## Documentation
 
@@ -86,5 +89,6 @@ milestone is complete.
   a hard crash can lose up to half a minute of edits.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
-- Import of full Java world saves is read-only until the version/format matrix marks a
-  combination as write-verified.
+- Import of full Java world saves is read-only. M8 currently implements version/layout
+  validation plus region/NBT reading; block-state palettes, editing and export are not
+  available yet, and no write path is exposed.
