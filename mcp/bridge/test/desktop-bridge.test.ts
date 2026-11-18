@@ -66,7 +66,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
 
     const result = await client.callTool({
       name: "bridge_info",
-      arguments: { project_id: "project-live" },
+      arguments: { project_id: "project-live", world_revision: 9 },
     });
     const text = result.content.find((block) => block.type === "text");
     expect(text?.type).toBe("text");
@@ -76,6 +76,13 @@ describe("MCP bridge to the authoritative desktop API", () => {
           connected: boolean;
           project: { projectId: string; worldRevision: number };
         };
+        connection: { state: string; lifecycle: string };
+        context: {
+          state: string;
+          valid: boolean;
+          requested: { projectId: string; worldRevision: number | null };
+          active: { projectId: string; worldRevision: number } | null;
+        };
       };
     };
     expect(info.bridge.desktop.connected).toBe(true);
@@ -83,7 +90,41 @@ describe("MCP bridge to the authoritative desktop API", () => {
       projectId: "project-live",
       worldRevision: 9,
     });
+    expect(info.bridge.connection).toMatchObject({
+      state: "ready",
+      lifecycle: "ephemeral-stdio",
+    });
+    expect(info.bridge.context).toMatchObject({
+      state: "ready",
+      valid: true,
+      requested: { projectId: "project-live", worldRevision: 9 },
+      active: { projectId: "project-live", worldRevision: 9 },
+    });
     expect(observedToken).toBe(harness.token);
     expect(observedMethod).toBe("ping");
+
+    const stale = await client.callTool({
+      name: "bridge_info",
+      arguments: { project_id: "project-live", world_revision: 8 },
+    });
+    const staleText = stale.content.find((block) => block.type === "text");
+    const staleInfo = JSON.parse(
+      staleText?.type === "text" ? staleText.text : "{}",
+    ) as {
+      bridge: {
+        connection: { state: string };
+        context: {
+          state: string;
+          valid: boolean;
+          active: { projectId: string; worldRevision: number } | null;
+        };
+      };
+    };
+    expect(staleInfo.bridge.connection.state).toBe("revision_mismatch");
+    expect(staleInfo.bridge.context).toMatchObject({
+      state: "revision_mismatch",
+      valid: false,
+      active: { projectId: "project-live", worldRevision: 9 },
+    });
   });
 });

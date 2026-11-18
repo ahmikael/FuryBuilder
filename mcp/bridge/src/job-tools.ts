@@ -21,7 +21,22 @@ const startJobInput = z.object({
     .describe("Job kind understood by the Application API."),
   parameters: z.record(z.string(), z.unknown()).default({}),
   idempotency_key: z.string().min(1).max(128),
-  expected_revision: z.number().int().nonnegative().optional(),
+  expected_revision: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      "Deprecated alias for world_revision; accepted for clients written before the explicit context contract.",
+    ),
+  world_revision: z
+    .number()
+    .int()
+    .nonnegative()
+    .optional()
+    .describe(
+      "World revision the caller observed; omitted when the job is revision-agnostic.",
+    ),
 });
 
 const jobQueryInput = z.object({
@@ -73,6 +88,7 @@ export function registerJobTools(server: McpServer, jobs: JobApi): void {
       parameters,
       idempotency_key,
       expected_revision,
+      world_revision,
     }) => {
       try {
         const projectId = requireProjectId(project_id);
@@ -82,7 +98,7 @@ export function registerJobTools(server: McpServer, jobs: JobApi): void {
             kind,
             parameters,
             idempotencyKey: idempotency_key,
-            expectedRevision: expected_revision ?? null,
+            expectedRevision: world_revision ?? expected_revision ?? null,
           }),
         );
       } catch (error) {

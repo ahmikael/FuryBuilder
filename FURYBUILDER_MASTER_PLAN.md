@@ -957,7 +957,7 @@ furybuilder/
 - [x] Реализовать согласование возможностей клиента и совместимость: stateless-v2026 при поддержке клиента, legacy fallback, без неявного хранения проектного контекста в MCP-сессии.
 - [x] Определить поддержку MCP Tasks как **опцию** поверх внутреннего Job API; при отсутствии capability оставить совместимые start/status/cancel tools.
 - [x] Реализовать локальный stdio bridge к авторитетному Application API.
-- [ ] Ввести `project_id`, `world_revision`, `job_id` и явный жизненный цикл подключений.
+- [x] Ввести `project_id`, `world_revision`, `job_id` и явный жизненный цикл подключений.
 - [ ] Зарегистрировать read-only tools: world info, inspect, get block/region, camera, screenshot.
 - [ ] Зарегистрировать безопасные write tools: preview, apply batch, undo, status.
 - [ ] Добавить схему доступа read-only/edit-in-selection/full-project, лимиты и подтверждения.

@@ -4,6 +4,7 @@ import {
   PROTOCOL_VERSION_META_KEY,
 } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
+import { randomUUID } from "node:crypto";
 
 import {
   BRIDGE_IMPLEMENTS_TASKS,
@@ -16,9 +17,13 @@ import {
   resolveTasksSupport,
   type ProtocolEra,
 } from "./capabilities.js";
+import { evaluateContext } from "./context.js";
 import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
 import { createUnavailableJobApi, type JobApi } from "./jobs.js";
 import { probeDesktop } from "./desktop-client.js";
+
+const BRIDGE_INSTANCE_ID = randomUUID();
+const BRIDGE_STARTED_AT_MS = Date.now();
 
 const bridgeInfoInput = z.object({
   project_id: z
@@ -79,6 +84,19 @@ export function createFuryBuilderServer(
         jobBackendConnected: jobs.connected,
       });
       const desktop = await probeDesktop();
+      const activeContext = desktop.connected
+        ? {
+            projectId: desktop.project.projectId,
+            worldRevision: desktop.project.worldRevision,
+          }
+        : null;
+      const context = evaluateContext(
+        {
+          projectId,
+          worldRevision: world_revision ?? null,
+        },
+        activeContext,
+      );
 
       return {
         content: [
@@ -102,6 +120,16 @@ export function createFuryBuilderServer(
                     },
                   },
                   desktop,
+                  connection: {
+                    instanceId: BRIDGE_INSTANCE_ID,
+                    startedAtMs: BRIDGE_STARTED_AT_MS,
+                    transport: "stdio",
+                    lifecycle: "ephemeral-stdio",
+                    expiresWithProcess: true,
+                    contextPolicy: "explicit-per-request",
+                    state: context.state,
+                  },
+                  context,
                 },
                 request: {
                   projectId,

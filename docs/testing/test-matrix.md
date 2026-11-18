@@ -125,8 +125,10 @@ second format and is not enabled in the UI.
 | Authenticated local endpoint over the authoritative `WorldService` | `apps/desktop/src-tauri/src/local_bridge.rs` tests: token rejection, protocol mismatch, `world_info`, bounded `query`, project mismatch, real local-socket round-trip |
 | Discovery file and stale-endpoint handling                         | `local_bridge.rs` discovery test; `mcp/bridge/test/desktop-client.test.ts`                                                                                            |
 | Real bridge process reaching a live local endpoint                 | `mcp/bridge/test/desktop-bridge.test.ts` (`bridge_info.desktop.connected`)                                                                                            |
+| Explicit `project_id` / `world_revision` / `job_id` contract       | `mcp/bridge/test/context.test.ts`; `local_bridge.rs` stale-revision test; `job-tools.ts` schema exposes `job_id`, `world_revision`, `idempotency_key`                 |
+| Explicit connection lifecycle                                      | `bridge_info.connection` (`instanceId`, `startedAtMs`, `ephemeral-stdio`, `expiresWithProcess`, state); asserted in `protocol.test.ts` and `desktop-bridge.test.ts`   |
 | Real Tauri process                                                 | `scripts/probe-local-bridge.mjs`; recorded in `docs/testing/mcp-compatibility.md` — authorized ping/world info, wrong token `unauthorized`, no token echo             |
 
-Remaining M7 work: explicit `world_revision`/`job_id` lifecycle, the read-only and
-bounded write tool surface, the Core Job API, an external MCP client connection and
-the full AI build/verify/undo loop. No AI editing is claimed yet.
+Remaining M7 work: the read-only and bounded write MCP tool surface, the Core Job API,
+an external MCP client connection and the full AI build/verify/undo loop. No AI editing
+is claimed yet.

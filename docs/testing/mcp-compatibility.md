@@ -28,8 +28,27 @@ JSON with one authenticated request per connection, bounded message sizes and a 
 comparison that does not exit early. Errors never echo the token.
 
 Initial methods: `ping`, `world_info`, `query`, `project_status`. World methods require an
-explicit `project_id` matching the project currently open in the editor; `query` reuses the
-same bounded `Query` enum as the UI. Write methods are deliberately not exposed yet.
+explicit `project_id` matching the project currently open in the editor and accept an
+optional `world_revision`. A supplied revision must equal the authoritative revision;
+otherwise the request fails with a structured `revision_mismatch` error carrying
+`expectedRevision` and `actualRevision`. A stale caller therefore never reads newer data
+silently. `query` reuses the same bounded `Query` enum as the UI. Write methods are
+deliberately not exposed yet.
+
+## Explicit request context and connection lifecycle
+
+Every MCP tool call names its project. The bridge compares it with the live desktop project
+and, when the caller supplies `world_revision`, with the authoritative world revision. The
+possible states are `ready`, `desktop_unavailable`, `project_mismatch` and
+`revision_mismatch`; `bridge_info` reports the state together with the requested and active
+context. Nothing is inferred from the stdio session.
+
+The connection is explicitly ephemeral: `bridge_info.connection` publishes a random
+per-process `instanceId`, start time, `transport: "stdio"`,
+`lifecycle: "ephemeral-stdio"`, `expiresWithProcess: true` and the context state. A bridge
+process serves exactly one client and dies with it. Job calls carry a `job_id` for status
+and cancellation, and `start_job` requires an `idempotency_key` plus an optional
+`world_revision`.
 
 ## Tasks option and fallback
 
@@ -57,20 +76,25 @@ pnpm --filter @furybuilder/mcp-bridge typecheck
 pnpm --filter @furybuilder/mcp-bridge build
 ```
 
-Observed: 15 tests passed, typecheck and build clean. The tests spawn the real bridge
-over stdio with `tsx src/main.ts` and use `@modelcontextprotocol/client` 2.4.0:
+Observed: 20 tests passed, typecheck and build clean; the Rust local-bridge module runs
+8 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
+use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
   and receives an explicit project/revision response;
 - a default client connects through the legacy lifecycle and calls the same tool;
 - a call without `project_id` is rejected, and consecutive calls with different
   project IDs do not inherit one another's context;
-- the three fallback job tools are listed and return `job_api_unavailable` instead
-  of a fabricated job;
+- the context policy accepts a matching project/revision, accepts an omitted revision
+  for discovery, and rejects a different project or a stale revision;
+- the three fallback job tools are listed, publish `world_revision` and
+  `idempotency_key`, and return `job_api_unavailable` instead of a fabricated job;
 - the Tasks policy enables the extension only when client, bridge and Job API all
   support it;
 - `bridge_info` reports `runtime_file_missing` when the desktop app is absent and a
   live project/revision when a local endpoint answers;
+- the same live endpoint yields `revision_mismatch` for a stale revision while keeping
+  the active revision visible in the response;
 - the desktop client maps a wrong token to `authentication_failed`, a stale endpoint
   to `app_not_running`, malformed discovery files to `invalid_runtime_file`, and a
   silent endpoint to `timeout`.

@@ -112,12 +112,16 @@ impl WireResponse {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ProjectParams {
     project_id: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct QueryParams {
     project_id: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
     query: Query,
 }
 
@@ -281,6 +285,7 @@ fn dispatch(state: &AppState, method: &str, params: Value) -> Result<Value, AppE
         "world_info" => {
             let params: ProjectParams = parse_params(params)?;
             authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
             let service = state
                 .service
                 .lock()
@@ -290,6 +295,7 @@ fn dispatch(state: &AppState, method: &str, params: Value) -> Result<Value, AppE
         "query" => {
             let params: QueryParams = parse_params(params)?;
             authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
             let service = state
                 .service
                 .lock()
@@ -299,6 +305,7 @@ fn dispatch(state: &AppState, method: &str, params: Value) -> Result<Value, AppE
         "project_status" => {
             let params: ProjectParams = parse_params(params)?;
             authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
             to_value(session_status(state)?)
         }
         other => Err(AppError::invalid_argument(format!(
@@ -343,6 +350,26 @@ fn authorize_project(state: &AppState, requested: &str) -> Result<(), AppError> 
             ErrorCode::NotFound,
             "project_id does not match the project currently open in FuryBuilder",
         ));
+    }
+    Ok(())
+}
+
+/// A caller that acts on a snapshot must prove it is not looking at an older revision.
+/// Omitting the revision remains valid for discovery reads such as `world_info`.
+fn require_revision(state: &AppState, expected: Option<u64>) -> Result<(), AppError> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let actual = world_revision(state)?;
+    if expected != actual {
+        return Err(AppError::new(
+            ErrorCode::RevisionMismatch,
+            format!("requested world revision {expected}, but the open world is at {actual}"),
+        )
+        .with_details(json!({
+            "expectedRevision": expected,
+            "actualRevision": actual,
+        })));
     }
     Ok(())
 }
@@ -488,6 +515,44 @@ mod tests {
         let result = response.result.expect("result");
         assert_eq!(result["type"], "block");
         assert_eq!(result["data"]["state"]["name"], "minecraft:air");
+    }
+
+    #[test]
+    fn rejects_stale_world_revisions_with_a_structured_conflict() {
+        let state = AppState::new(temp_root("revision"));
+
+        let current = handle_request(
+            &state,
+            "token",
+            request(
+                "req-current",
+                "token",
+                "world_info",
+                json!({ "projectId": LOCAL_PROJECT_ID, "worldRevision": 0 }),
+            ),
+        );
+        assert!(current.ok, "{:?}", current.error);
+
+        let stale = handle_request(
+            &state,
+            "token",
+            request(
+                "req-stale",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 99,
+                    "query": { "type": "world_info" }
+                }),
+            ),
+        );
+        assert!(!stale.ok);
+        let error = stale.error.expect("error");
+        assert_eq!(error.code, ErrorCode::RevisionMismatch);
+        let details = error.details.expect("details");
+        assert_eq!(details["expectedRevision"], 99);
+        assert_eq!(details["actualRevision"], 0);
     }
 
     #[test]

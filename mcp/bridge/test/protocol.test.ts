@@ -93,6 +93,21 @@ describe("MCP protocol negotiation", () => {
           connected: boolean;
           reason?: string;
         };
+        connection: {
+          instanceId: string;
+          startedAtMs: number;
+          transport: string;
+          lifecycle: string;
+          expiresWithProcess: boolean;
+          contextPolicy: string;
+          state: string;
+        };
+        context: {
+          state: string;
+          valid: boolean;
+          requested: { projectId: string; worldRevision: number | null };
+          active: { projectId: string; worldRevision: number } | null;
+        };
       };
       request: {
         projectId: string;
@@ -119,6 +134,20 @@ describe("MCP protocol negotiation", () => {
     expect(info.bridge.desktop).toMatchObject({
       connected: false,
       reason: "runtime_file_missing",
+    });
+    expect(info.bridge.connection).toMatchObject({
+      transport: "stdio",
+      lifecycle: "ephemeral-stdio",
+      expiresWithProcess: true,
+      contextPolicy: "explicit-per-request",
+      state: "desktop_unavailable",
+    });
+    expect(info.bridge.connection.instanceId.length).toBeGreaterThan(0);
+    expect(info.bridge.context).toMatchObject({
+      state: "desktop_unavailable",
+      valid: false,
+      requested: { projectId: "project-modern", worldRevision: 12 },
+      active: null,
     });
     expect(info.request).toMatchObject({
       projectId: "project-modern",
@@ -183,6 +212,10 @@ describe("MCP protocol negotiation", () => {
     expect(names).toEqual(
       expect.arrayContaining(["start_job", "get_job_status", "cancel_job"]),
     );
+    const startJob = tools.find((tool) => tool.name === "start_job");
+    expect(startJob).toBeDefined();
+    expect(JSON.stringify(startJob?.inputSchema)).toContain("world_revision");
+    expect(JSON.stringify(startJob?.inputSchema)).toContain("idempotency_key");
 
     const started = await client.callTool({
       name: "start_job",
