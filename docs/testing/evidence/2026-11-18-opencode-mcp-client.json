@@ -1,0 +1,56 @@
+{
+  "date": "2026-11-18",
+  "client": {
+    "name": "OpenCode CLI",
+    "version": "2.3.2",
+    "model": "opencode/deepseek-v4.1-flash-free",
+    "agent": "plan",
+    "transport": "stdio",
+    "invocation": "opencode run --standalone --auto --agent plan --format json"
+  },
+  "target": {
+    "app": "FuryBuilder desktop (tauri dev)",
+    "bridge": "FuryBuilder MCP bridge 0.1.0",
+    "endpoint": "authenticated local_socket",
+    "accessMode": "read_only",
+    "confirmed": true,
+    "projectId": "local-project",
+    "worldRevision": 0
+  },
+  "modern": {
+    "protocolSetting": "auto",
+    "negotiatedEra": "modern",
+    "protocolVersion": "2026-07-28",
+    "toolsCalled": ["bridge_info", "world_info"],
+    "contextState": "ready",
+    "desktopConnected": true,
+    "jobsBackendConnected": true,
+    "rendererListening": true,
+    "world": {
+      "targetMinecraftVersion": "1.21.4",
+      "targetDataVersion": 4189,
+      "revision": 0,
+      "blockCount": 0,
+      "chunkCount": 0,
+      "dimensions": 3
+    },
+    "result": "passed"
+  },
+  "legacy": {
+    "protocolSetting": "legacy",
+    "negotiatedEra": "legacy",
+    "protocolVersion": null,
+    "toolsCalled": ["bridge_info"],
+    "contextState": "ready",
+    "desktopConnected": true,
+    "accessMode": "read_only",
+    "result": "passed"
+  },
+  "notes": [
+    "The test agent was instructed to use only MCP tools and no file or shell tools.",
+    "Both runs used the real bridge process spawned by OpenCode, not the in-process test client.",
+    "The modern run negotiated 2026-07-28 automatically with protocol: auto.",
+    "The legacy run exercised the initialize lifecycle fallback.",
+    "No write was attempted; the AI build/screenshot/undo loop remains M7.12."
+  ]
+}

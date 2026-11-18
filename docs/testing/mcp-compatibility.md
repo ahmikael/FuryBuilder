@@ -273,17 +273,56 @@ default empty project has no loaded chunks, and the metadata names the missing c
 probe writes nothing and does not print the token. The app was force-stopped after the
 probe, so its stale discovery file was removed manually; a normal exit removes it.
 
+## Real external MCP client (OpenCode)
+
+On 2026-11-18 **OpenCode CLI 2.3.2** connected to the bridge over stdio and drove it
+through a test agent with `--agent plan --auto`. The server was configured as a local MCP
+server with the bridge's own working directory, `codemode: false`, and an explicit runtime
+path:
+
+```jsonc
+{
+  "mcp": {
+    "servers": {
+      "furybuilder": {
+        "type": "local",
+        "command": ["<node>", "--import", "tsx", "src/main.ts"],
+        "cwd": "<repo>/mcp/bridge",
+        "environment": {
+          "FURYBUILDER_MCP_RUNTIME": "<appData>/com.furybuilder.desktop/mcp/runtime.json",
+        },
+        "codemode": false,
+        "protocol": "auto",
+      },
+    },
+  },
+}
+```
+
+Two runs were made against a real `tauri dev` process:
+
+- **Modern:** `protocol: "auto"` negotiated `protocolEra: "modern"` with
+  `protocolVersion: "2026-07-28"`. The agent called `furybuilder_bridge_info` and
+  `furybuilder_world_info`, reported `context.state: "ready"`, `desktop.connected: true`,
+  `access.mode: "read_only"`, `jobs.backendConnected: true`, renderer listening, and world
+  target Minecraft `1.21.4` / `DataVersion` `4189` at revision `0`.
+- **Legacy:** `protocol: "legacy"` completed the classic `initialize` lifecycle, reported
+  `protocolEra: "legacy"`, the same ready context and a live read-only desktop.
+
+The agent was instructed to use only MCP tools and made no file or shell changes. Evidence:
+`docs/testing/evidence/2026-11-18-opencode-mcp-client.json`. A write/screenshot/undo AI
+loop is not claimed yet; it is the next M7 task.
+
 ## Client matrix
 
-| Client                       | Transport                                                 | Status                                    |
-| ---------------------------- | --------------------------------------------------------- | ----------------------------------------- |
-| OpenCode CLI 2.3.0           | local stdio via `opencode mcp add <name> -- <command...>` | configurable; real connection not yet run |
-| MCP SDK test client 2.4.0    | stdio                                                     | modern and legacy tests passed            |
-| Claude Desktop / other hosts | stdio                                                     | documented target; untested               |
+| Client                       | Transport                                                 | Status                                                        |
+| ---------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| OpenCode CLI 2.3.2           | local stdio via `mcp.servers` (`protocol: auto`/`legacy`) | real agent passed both modern 2026-07-28 and legacy lifecycle |
+| MCP SDK test client 2.4.0    | stdio                                                     | modern and legacy tests passed                                |
+| Claude Desktop / other hosts | stdio                                                     | documented target; untested                                   |
 
-The OpenCode CLI does not currently expose the negotiated era in its `mcp list`
-output. The real-client check must inspect the bridge tool response rather than
-assume a protocol revision.
+`bridge_info.request.protocolEra`/`protocolVersion` is the authoritative record of the
+negotiated era; `opencode mcp list` does not show it.
 
 ## Limitations
 
@@ -307,5 +346,7 @@ assume a protocol revision.
 - Unix domain socket support exists only as unexercised code; Windows is the tested target.
 - The discovery token relies on the per-user application data directory ACL; stronger
   named-pipe ACLs are still a security review item.
-- No real external MCP client (OpenCode/Claude Desktop) has connected yet.
-- This evidence does not establish end-to-end AI editing or real-world compatibility.
+- OpenCode 2.3.2 is the only real external client exercised. Claude Desktop and other hosts
+  remain untested, and the modern run used Code Mode disabled so tools were listed directly.
+- This evidence does not establish end-to-end AI editing, screenshots or undo through an
+  external client, or real-world compatibility.

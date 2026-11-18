@@ -90,6 +90,13 @@ The first transport slice is implemented and exercised against the real Tauri pr
   `invalid_argument`; a wrong token returned `unauthorized` without leaking the secret. The
   approval dialog itself is covered by Rust and frontend tests rather than an automated click
   in the real window.
+- A real external client, OpenCode CLI 2.3.2, connected through the bridge's stdio server
+  against a live `tauri dev` process. With `protocol: "auto"` it negotiated the modern
+  `2026-07-28` era; with `protocol: "legacy"` it completed the initialize lifecycle. In both
+  runs a test agent called `bridge_info`/`world_info` through MCP only, received a ready
+  context, read-only access, a connected job backend and Minecraft 1.21.4/DataVersion 4189
+  metadata, and made no modifications. Recorded in
+  `docs/testing/evidence/2026-11-18-opencode-mcp-client.json`.
 - Unix domain sockets are not exercised yet; Windows is the first target. The discovery
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.
