@@ -1,0 +1,240 @@
+{
+  "tool": {
+    "name": "furybuilder-minecraft-assets",
+    "version": 1
+  },
+  "generatedAt": "2026-11-18T18:07:32.9077731+00:00",
+  "experiment": "discover the conventional .minecraft root, inspect an explicitly selected launcher root and client JAR, and validate synthetic resource packs read-only",
+  "target": {
+    "minecraftVersion": "1.21.4",
+    "dataVersion": 4189,
+    "resourcePackFormat": 46
+  },
+  "roots": {
+    "selected": "D:\\mitrium-launcher\\data",
+    "defaultRoots": [],
+    "defaultRootPresent": false,
+    "defaultProblems": [
+      "no Minecraft Java launcher folder at C:\\Users\\Mike\\AppData\\Roaming\\.minecraft"
+    ],
+    "manualHint": "If automatic detection finds nothing, choose the folder that contains versions/ (often .minecraft), a Minecraft 1.21.4 client JAR, or a resource pack. FuryBuilder only reads these files and never downloads or redistributes them."
+  },
+  "installation": {
+    "kind": "minecraft_root",
+    "valid": true,
+    "targetMatch": true,
+    "versions": 13,
+    "compatibleVersions": ["1.21.4"],
+    "assetIndexes": 5,
+    "resourcePacks": 0,
+    "warnings": [],
+    "targetVersion": {
+      "actualSha1": "a7e5a6024bfd3cd614625aa05629adf760020304",
+      "assetIndex": "19",
+      "assetIndexChecksumVerified": true,
+      "assetIndexPresent": true,
+      "checksumVerified": true,
+      "expectedSha1": "a7e5a6024bfd3cd614625aa05629adf760020304",
+      "id": "1.21.4",
+      "inheritsFrom": null,
+      "internalVersionId": "1.21.4",
+      "jarBytes": 28335587,
+      "jarPath": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.jar",
+      "jarPresent": true,
+      "javaMajor": 21,
+      "javaVersionFromJar": 21,
+      "metadataPath": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.json",
+      "metadataPresent": true,
+      "notes": [],
+      "releaseTime": "2024-12-03T10:12:57+00:00",
+      "resourcePackFormat": 46,
+      "status": "compatible",
+      "versionType": "release",
+      "worldVersion": 4189
+    },
+    "errors": []
+  },
+  "clientJar": {
+    "kind": "client_jar",
+    "valid": true,
+    "errors": [],
+    "version": {
+      "actualSha1": "a7e5a6024bfd3cd614625aa05629adf760020304",
+      "assetIndex": null,
+      "assetIndexChecksumVerified": false,
+      "assetIndexPresent": false,
+      "checksumVerified": true,
+      "expectedSha1": "a7e5a6024bfd3cd614625aa05629adf760020304",
+      "id": "1.21.4",
+      "inheritsFrom": null,
+      "internalVersionId": "1.21.4",
+      "jarBytes": 28335587,
+      "jarPath": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.jar",
+      "jarPresent": true,
+      "javaMajor": 21,
+      "javaVersionFromJar": 21,
+      "metadataPath": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.jar",
+      "metadataPresent": false,
+      "notes": [],
+      "releaseTime": null,
+      "resourcePackFormat": 46,
+      "status": "compatible",
+      "versionType": null,
+      "worldVersion": 4189
+    }
+  },
+  "syntheticResourcePacks": {
+    "note": "synthetic packs were generated only in the temporary work directory",
+    "valid": {
+      "errors": [],
+      "installation": null,
+      "kind": "resource_pack",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-minecraft-assets-1795025248393\\valid-pack.zip",
+      "resourcePack": {
+        "bytes": 511,
+        "compatible": true,
+        "description": "M9.1 synthetic valid pack",
+        "entryCount": 3,
+        "errors": [],
+        "hasBlockstates": true,
+        "hasTextures": true,
+        "kind": "zip",
+        "name": "valid-pack",
+        "packFormat": 46,
+        "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-minecraft-assets-1795025248393\\valid-pack.zip",
+        "status": "compatible",
+        "supportedFormats": null,
+        "warnings": []
+      },
+      "targetMatch": true,
+      "valid": true,
+      "version": null,
+      "warnings": []
+    },
+    "wrongFormat": {
+      "errors": [
+        "the resource pack does not declare support for resource pack format 46 (Minecraft 1.21.4)"
+      ],
+      "installation": null,
+      "kind": "resource_pack",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-minecraft-assets-1795025248393\\wrong-format.zip",
+      "resourcePack": {
+        "bytes": 182,
+        "compatible": false,
+        "description": "M9.1 synthetic old pack",
+        "entryCount": 1,
+        "errors": [],
+        "hasBlockstates": false,
+        "hasTextures": false,
+        "kind": "zip",
+        "name": "wrong-format",
+        "packFormat": 15,
+        "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-minecraft-assets-1795025248393\\wrong-format.zip",
+        "status": "incompatible_format",
+        "supportedFormats": null,
+        "warnings": [
+          "resource pack has no assets/minecraft/blockstates/*.json",
+          "resource pack has no assets/minecraft/textures/**"
+        ]
+      },
+      "targetMatch": false,
+      "valid": false,
+      "version": null,
+      "warnings": [
+        "resource pack has no assets/minecraft/blockstates/*.json",
+        "resource pack has no assets/minecraft/textures/**"
+      ]
+    },
+    "missingMetadata": {
+      "errors": [
+        "resource pack has no readable pack.mcmeta",
+        "the resource pack does not declare support for resource pack format 46 (Minecraft 1.21.4)"
+      ],
+      "installation": null,
+      "kind": "resource_pack",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-minecraft-assets-1795025248393\\missing-metadata",
+      "resourcePack": {
+        "bytes": 0,
+        "compatible": false,
+        "description": null,
+        "entryCount": 3,
+        "errors": ["resource pack has no readable pack.mcmeta"],
+        "hasBlockstates": false,
+        "hasTextures": false,
+        "kind": "folder",
+        "name": "missing-metadata",
+        "packFormat": null,
+        "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-minecraft-assets-1795025248393\\missing-metadata",
+        "status": "missing_metadata",
+        "supportedFormats": null,
+        "warnings": []
+      },
+      "targetMatch": false,
+      "valid": false,
+      "version": null,
+      "warnings": []
+    }
+  },
+  "sourceFiles": {
+    "before": [
+      {
+        "path": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.jar",
+        "bytes": 28335587,
+        "sha256": "c17c450c6e72cc51297daa57ce38f800aa01cf022b743daa21a0512d326d894e"
+      },
+      {
+        "path": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.json",
+        "bytes": 43714,
+        "sha256": "8180def1bdd0047ba6ac0fd5cde53330820acce9bdbae5f6609fc81399938136"
+      },
+      {
+        "path": "D:\\mitrium-launcher\\data\\assets\\indexes\\19.json",
+        "bytes": 464918,
+        "sha256": "3b7d6ccc7b9d4da31c99ec216389b18e5d3aef19b791f08094a9d2f9287704b3"
+      }
+    ],
+    "after": [
+      {
+        "path": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.jar",
+        "bytes": 28335587,
+        "sha256": "c17c450c6e72cc51297daa57ce38f800aa01cf022b743daa21a0512d326d894e"
+      },
+      {
+        "path": "D:\\mitrium-launcher\\data\\versions\\1.21.4\\1.21.4.json",
+        "bytes": 43714,
+        "sha256": "8180def1bdd0047ba6ac0fd5cde53330820acce9bdbae5f6609fc81399938136"
+      },
+      {
+        "path": "D:\\mitrium-launcher\\data\\assets\\indexes\\19.json",
+        "bytes": 464918,
+        "sha256": "3b7d6ccc7b9d4da31c99ec216389b18e5d3aef19b791f08094a9d2f9287704b3"
+      }
+    ],
+    "unchanged": true
+  },
+  "conclusions": {
+    "defaultRootAbsentReported": true,
+    "manualRootAccepted": true,
+    "targetVersionCompatible": true,
+    "clientJarSha1Verified": true,
+    "clientJarWorldVersion4189": true,
+    "clientJarPackFormat46": true,
+    "assetIndexVerified": true,
+    "manualClientJarAccepted": true,
+    "validResourcePackAccepted": true,
+    "wrongFormatRejected": true,
+    "missingMetadataRejected": true,
+    "sourceFilesUnchanged": true,
+    "moddedProfileCount": 3,
+    "compatibleVersionCount": 1
+  },
+  "sourceFileCount": 3,
+  "reproduce": "pwsh -File scripts/probe_minecraft_assets.ps1 -MinecraftRoot \u003croot\u003e",
+  "limitations": [
+    "the selected root is a third-party launcher layout under D:\\mitrium-launcher, inspected read-only as a manual path",
+    "no vanilla .minecraft folder existed in the default APPDATA location on this machine",
+    "synthetic resource packs validate parsing and format checks; no real resource pack was available",
+    "the client JAR is never launched in this task; renderer integration is M9.2",
+    "Mojang JARs and assets remain outside the FuryBuilder repository and distribution"
+  ]
+}

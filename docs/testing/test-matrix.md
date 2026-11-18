@@ -94,6 +94,10 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Real 1.21.4 server load/save fixture              | `docs/testing/evidence/2026-11-18-server-fixture-1.21.4.json` — 4 regions / 841 chunks, 1 chunk replaced; verifier exit 0, `Done (0.302s)`, 0 chunk/command issues; gold edit marker present, stale grass absent, dirt neighbor intact; 10 files rewritten; post-save decode confirms gold and dirt               |
 | Support matrix by version and data category       | `crates/world-io/src/support_matrix.rs` — one supported version (1.21.4/4189), no writes for unsupported versions, `block_states` is the only `verified` category, derived fields are `preserve_or_invalidate`, camelCase serialization                                                                           |
 | Support matrix in Import World UI                 | `apps/desktop/src/features/project/ProjectManager.tsx`; `ProjectManager.test.tsx` — version chips, category table and the supported 1.21.4 row render from `analysis.supportMatrix`                                                                                                                               |
+| Minecraft asset discovery and JAR validation      | `crates/asset-source/src/discovery.rs`, `jar.rs`; `crates/asset-source/tests/asset_source.rs` — target SHA-1/size, internal `version.json`/DV 4189, wrong version, modded `inheritsFrom`, checksum and world-version mismatch, missing metadata, version directories, missing roots                               |
+| Resource pack archive safety                      | `crates/asset-source/src/archive.rs`, `resource_pack.rs`; `asset_source.rs` tests — in-memory zip, traversal/absolute/backslash names, deflate, `pack.mcmeta` formats 46/range/wrong/missing                                                                                                                      |
+| Asset source settings and UI                      | `crates/asset-source/src/settings.rs`; settings round-trip test; `MinecraftAssetsSection.tsx` + test — saved source, invalid saved path, detect, empty automatic detection and manual fallback                                                                                                                    |
+| Real 1.21.4 asset discovery                       | `docs/testing/evidence/2026-11-18-minecraft-assets-1.21.4.json` — 13 versions, 1.21.4 client 28,335,587 bytes / SHA-1 verified / DV 4189 / pack 46, asset index 19 verified, 3 modded profiles, valid/wrong/missing packs, watched files unchanged                                                                |
 | Import World analysis and limits                  | `crates/world-io/src/world_import.rs`; `crates/world-io/tests/world_import.rs` — supported world counts, blockers for 26.1+ split and non-4189 versions, source immutability, chunk/section/block limits, empty world                                                                                             |
 | Import World project and source copy              | `crates/project-store/src/store.rs`; `crates/project-store/tests/source_overlay.rs` — `create_imported`, immutable tree manifest, traversal/missing-file refusal, generic creator still refuses `import`                                                                                                          |
 | Import World wizard UI                            | `apps/desktop/src/features/project/ProjectManager.tsx`; `ProjectManager.test.tsx` — folder input, Analyze, supported metrics, blockers disable import, `project_import_world` called with the selected folder                                                                                                     |
@@ -133,6 +137,12 @@ prints the selection/import classification and, optionally, the passthrough resu
 runs the automated official-server fixture; it never downloads the JAR or accepts the EULA for you.
 `cargo test -p furybuilder-world-io --lib support_matrix`
 checks the machine-readable support matrix.
+`cargo test -p furybuilder-asset-source`
+runs asset discovery, JAR and resource-pack validation tests.
+`cargo run -p furybuilder-asset-source --example asset_source_probe -- discover`
+prints conventional-root discovery; `-- inspect <path>` classifies a root, version JAR or pack.
+`pwsh -File scripts/probe_minecraft_assets.ps1 -MinecraftRoot <launcher-root>`
+reproduces the real JAR/index checksum evidence and the synthetic pack checks.
 `cargo run -p furybuilder-desktop --example import_world_probe -- <source> <empty-project-root> "Imported Flat"`
 reproduces the Import World evidence, and `--analysis-only` prints an analysis report.
 

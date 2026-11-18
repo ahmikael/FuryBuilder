@@ -1,0 +1,65 @@
+{
+  "tool": {
+    "name": "furybuilder-minecraft-assets-ui",
+    "version": 1
+  },
+  "generatedAt": "2026-11-18T18:13:37.618Z",
+  "target": "Minecraft Java 1.21.4",
+  "executableSha256": "0ddcc6ba41d22d6642fb6a70a746add1e197edc84486c5cbdc089eb936d7e5e6",
+  "launcherRoot": "D:\\mitrium-launcher\\data",
+  "discovery": {
+    "targetMinecraftVersion": "1.21.4",
+    "targetDataVersion": 4189,
+    "defaultRootPresent": false,
+    "installations": 0,
+    "problems": [
+      "no Minecraft Java launcher folder at C:\\Users\\Mike\\AppData\\Roaming\\.minecraft"
+    ]
+  },
+  "installation": {
+    "kind": "minecraft_root",
+    "valid": true,
+    "targetMatch": true,
+    "versions": 13,
+    "compatibleVersions": ["1.21.4"],
+    "version": {
+      "id": "1.21.4",
+      "status": "compatible",
+      "checksumVerified": true,
+      "worldVersion": 4189,
+      "resourcePackFormat": 46,
+      "jarBytes": 28335587,
+      "assetIndexChecksumVerified": true
+    },
+    "errors": []
+  },
+  "savedSourceBefore": null,
+  "dom": {
+    "settingsVisible": true,
+    "minecraftAssetsVisible": true,
+    "targetVisible": true,
+    "placeholderFallbackVisible": true,
+    "manualRootButton": true,
+    "clientJarButton": true,
+    "packZipButton": true,
+    "bodyText": "FuryBuilder\nALPHA\nProject\nView\nTools\nAI / MCP\nExport\nNo project open\nCore online\nstone_bricks\nWORLD\nUntitled Project\nDemo\nOverworld\n0 chunks\nThe Nether\n—\nThe End\n—\nY range -64 … 319\nMODES\nVanilla World\nM9\nImport World\nM8\n1.21.4 · DV 4189 · rev 0 · 0 blocks\nNo project open\n\nCreate an Empty Project or a flat base, or open an existing .furybuilder folder. Edits are saved atomically with checksums and autosave.\n\nNew project\nOpen project\nOverworld · 26, 84, 34\nrev 0\nRust core\nNo project open — create or open a project to edit blocks\nPERFORMANCE\n103 fps\nFrame\n18.5 ms\nDraw calls\n1\nTriangles\n0\nMeshes\n0\nGeometries\n1\nTextures\n0\nChunks\n0\nSections\n0\nView distance\n3×3\n5×5\n7×7\n9×9\nSave\nno project\nWASD fly · RMB look · open a project to edit · Ctrl+S save\nINSPECTOR\nBLOCK STATE\nminecraft:air\nNo block selected\nProperties\n—\nPosition\n—, —, —\nChunk\n—\nFace\n—\nSELECTION\nUse the Box select tool (5) and click two corners\nCopy\nPaste\nEDIT TARGET\nstone_bricks\nbrush\nUse picked as brush\nUse picked as source\nReplace source\nnot set\nPROJECT\nName\nNo project open\nFolder\n—\nMode\n—\nMinecraft\n1.21.4\nDataVersion\n4189\nSchema\n—\nDimension\nminecraft:overworld\nSource\nRuntime core only\nRevision\n0\nSaved revision\n—\nAutosave\n—\nState\nno project\nChunks\n0\nBlocks\n0\nAI ACTIONS\n\nThe same Operation API will be exposed to MCP tools after the bridge milestone. Every edit is revisioned, audited and undoable.\n\nValues shown here are read from the Rust world core and the versioned project manifest.\nPalette\nTools\nConsole\nHistory\nWarnings\nactive tool · Place\nair\namethyst_block\nandesite\nazalea_leaves\nbarrel\nbedrock\nbirch_log\nbirch_planks\nblack_wool\nblue_concrete\nblue_ice\nblue_wool\nbookshelf\nbricks\ncalcite\ncampfire\nchest\nclay\ncoal_block\ncobbled_deepslate\ncobblestone\ncopper_block\ncrafting_table\ndark_oak_log\ndark_oak_planks\ndeepslate\ndeepslate_bricks\ndiamond_block\ndiorite\ndirt\nemerald_block\nflowering_azalea_leaves\nfurnace\nglass\nglass_pane\nglowstone\ngold_block\ngranite\ngrass_block\ngravel\ngreen_wool\nice\niron_block\nlantern\nlava\nmoss_block\nmoss_carpet\nmossy_stone_bricks\nmycelium\nnetherrack\noak_door\noak_fence\noak_leaves\noak_log\noak_planks\noak_slab\noak_stairs\noak_trapdoor\nobsidian\npacked_ice\npodzol\npolished_andesite\nquartz_block\nred_concrete\nred_sand\nred_terracotta\nred_wool\nredstone_block\nsand\nsandstone\nsea_lantern\nsmooth_stone\nsnow\nsnow_block\nsoul_sand\nspruce_leaves\nspruce_log\nspruce_planks\nstone\nstone_bricks\nstone_slab\nstone_stairs\nterracotta\ntorch\ntuff\nwall_torch\nwater\nwhite_concrete\nwhite_terracotta\nwhite_wool\nyellow_wool\nminecraft:stone_bricks\nCurated state · brush/paste target\nNo state properties.\nDefaults\nUse as replace source\nReplace source: not set\nUnknown property values are rejected by the Rust registry, never silently coerced.\nJobs queue idle\n0 jobs · Place · core\nCore connected\n|\nNo project\n|\nEmpty core\n|\noverworld\n|\nno project open\nno project\n|\nrev 0\n|\n0 chunks\n|\n0 blocks\n|\nradius 1\n|\n103 fps · 1 draws\n|\nMinecraft 1.21.4\n|\nDV 4189\nSettings\n\nUI preferences are stored locally. World data is never stored in the browser.\n\nAPPEARANCE\nDark\nLight\nSystem\nUI scale\n100%\nBACKEND\nStatus\nonline\nApplication\nFuryBuilder\nVersion\n0.1.0\nMinecraft target\n1.21.4 · DV 4189\nMINECRAFT ASSETS\nMinecraft 1.21.4 · DV 4189 · pack format 46\n\nRead-only discovery of an installed Java Edition. FuryBuilder never downloads, extracts or redistributes Mojang files; Empty Project keeps using placeholder textures when nothing is found.\n\nNo Minecraft asset source is selected. Placeholder textures remain active.\nAutomatic detection found no Java Edition.\nno Minecraft Java launcher folder at C:\\Users\\Mike\\AppData\\Roaming\\.minecraft\nIf automatic detection finds nothing, choose the folder that contains versions/ (often .minecraft), a Minecraft 1.21.4 client JAR, or a resource pack. FuryBuilder only reads these files and never downloads or redistributes them.\nDetect again\n.minecraft\nclient.jar\nPack .zip\nPack folder\n\nJARs are pinned to the client SHA-1 declared by the launcher metadata. Archive entries are validated in memory; tra"
+  },
+  "conclusions": {
+    "realTauriCommandWorks": true,
+    "manualRootAccepted": true,
+    "targetVersionCompatible": true,
+    "clientJarSha1Verified": true,
+    "worldVersion4189": true,
+    "resourcePackFormat46": true,
+    "assetIndexVerified": true,
+    "settingsSectionRendered": true,
+    "targetLabelRendered": true,
+    "manualFallbackRendered": true,
+    "noAssetSourceWasWritten": true
+  },
+  "limitations": [
+    "the app was started with an isolated WebView2 profile and closed after the read-only probe",
+    "no native file dialog was opened; manual selection is covered by UI tests and Rust tests",
+    "the launcher root is read-only and is never modified"
+  ]
+}

@@ -17,6 +17,9 @@ pub fn run() {
             let projects_root = data_dir.join("projects");
             std::fs::create_dir_all(&projects_root)?;
             app.manage(state::AppState::new(projects_root));
+            app.manage(asset_source::AssetSettingsStore::new(
+                data_dir.join("assets.json"),
+            ));
             match local_bridge::start(app.handle().clone()) {
                 Ok(runtime) => {
                     app.manage(runtime);
@@ -69,6 +72,11 @@ pub fn run() {
             commands::structure_insert,
             commands::structure_export_preview,
             commands::structure_export,
+            commands::assets_discover,
+            commands::assets_inspect_path,
+            commands::assets_saved_source,
+            commands::assets_save_source,
+            commands::assets_clear_source,
             local_bridge::renderer_ready,
             local_bridge::set_mcp_access,
             local_bridge::mcp_access_status,

@@ -1,6 +1,10 @@
 //! Typed Tauri IPC commands. Each command validates its own input and delegates to the
 //! application facade, returning structured `AppError` values.
 
+use asset_source::{
+    AssetDiscoveryReport, AssetPathReport, AssetSelectionKind, AssetSettingsStore,
+    AssetSourceSetting, SavedAssetSource,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use tauri::State;
@@ -1325,4 +1329,73 @@ pub fn structure_export(
         target_data_version: world_domain::TARGET_DATA_VERSION,
         target_minecraft_version: world_domain::TARGET_MINECRAFT_VERSION.to_owned(),
     })
+}
+
+#[tauri::command]
+pub fn assets_discover() -> AssetDiscoveryReport {
+    asset_source::discover_assets()
+}
+
+#[tauri::command]
+pub fn assets_inspect_path(path: String) -> AssetPathReport {
+    asset_source::inspect_asset_path(path)
+}
+
+#[tauri::command]
+pub fn assets_saved_source(store: State<'_, AssetSettingsStore>) -> SavedAssetSource {
+    store.saved_source()
+}
+
+#[tauri::command]
+pub fn assets_save_source(
+    store: State<'_, AssetSettingsStore>,
+    kind: String,
+    path: String,
+) -> Result<SavedAssetSource, AppError> {
+    let expected = match kind.as_str() {
+        "minecraft_root" => AssetSelectionKind::MinecraftRoot,
+        "client_jar" => AssetSelectionKind::ClientJar,
+        "resource_pack" => AssetSelectionKind::ResourcePack,
+        other => {
+            return Err(AppError::invalid_argument(format!(
+                "unknown asset source kind: {other}"
+            )))
+        }
+    };
+    let report = asset_source::inspect_asset_path(&path);
+    let details = || serde_json::to_value(&report).unwrap_or(serde_json::Value::Null);
+    if report.kind != expected {
+        return Err(AppError::invalid_argument(format!(
+            "the selected path is not a {}",
+            kind.replace('_', " ")
+        ))
+        .with_details(details()));
+    }
+    if !report.valid {
+        let message = report
+            .errors
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "the selected asset source is not usable".to_owned());
+        return Err(AppError::invalid_argument(message).with_details(details()));
+    }
+    if expected != AssetSelectionKind::ResourcePack && !report.target_match {
+        return Err(AppError::invalid_argument(format!(
+            "the selection does not provide a compatible Minecraft {} client",
+            asset_source::TARGET_MINECRAFT_VERSION
+        ))
+        .with_details(details()));
+    }
+    store
+        .save(AssetSourceSetting { kind, path })
+        .map_err(|error| AppError::new(ErrorCode::Internal, error.to_string()))
+}
+
+#[tauri::command]
+pub fn assets_clear_source(
+    store: State<'_, AssetSettingsStore>,
+) -> Result<SavedAssetSource, AppError> {
+    store
+        .clear()
+        .map_err(|error| AppError::new(ErrorCode::Internal, error.to_string()))
 }

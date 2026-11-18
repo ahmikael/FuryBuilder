@@ -25,7 +25,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText("Minecraft assets (M9)")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Minecraft assets" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Light" }));
     expect(useEditorStore.getState().theme).toBe("light");

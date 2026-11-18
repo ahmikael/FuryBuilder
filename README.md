@@ -51,7 +51,7 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-M0–M7 are complete. M8 is in progress: the read-only 1.21.4 classic reader
+M0–M8 are complete. M9 is in progress: the read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
 coordinates and proto-chunks, then decodes block-state palettes, sections and
 biomes without writing to the source world. A byte-preserving, fail-closed copy
@@ -80,7 +80,13 @@ in the same server, verifies the edited and neighbor blocks and decodes the save
 result again. The Import World wizard now shows a machine-readable
 read/edit/write/passthrough support matrix by version and data category.
 Placing block-entity blocks and POI updates are still not semantically supported.
-Client rendering is still a manual check.
+Client rendering is still a manual check. M9.1 adds read-only Minecraft asset
+discovery: conventional launcher roots and launcher profiles are scanned for
+installed versions, `settings → Minecraft assets` accepts a manual `.minecraft`
+folder, client JAR or resource pack, and a 1.21.4 client is accepted only after
+its declared SHA-1, internal `version.json` and `DataVersion` 4189 agree.
+Resource packs are validated as untrusted archives. They are not rendered yet;
+the renderer still ships placeholder textures until M9.2.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -107,6 +113,8 @@ guarantee that its whole milestone is complete.
   directory, layout matrix and passthrough refusal boundaries.
 - `docs/formats/support-matrix.md` — read/edit/write/passthrough/unsupported
   status by version and data category, also shown in the Import World wizard.
+- `docs/assets/minecraft-assets.md` — launcher discovery, JAR checksum/version
+  verification, manual selection and resource pack validation.
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
@@ -116,10 +124,12 @@ guarantee that its whole milestone is complete.
 ## Known limitations (early development)
 
 - Minecraft game assets are not bundled. The renderer ships original placeholder textures
-  and approximate shapes for slabs/stairs/torches.
+  and approximate shapes for slabs/stairs/torches. `Settings → Minecraft assets` can
+  detect and validate an installed 1.21.4 client and resource packs, but M9.2 has not
+  connected them to the renderer yet.
 - Projects live in the app-data directory. `Empty Project`, a flat base and `Import World`
   (classic Java 1.21.4) are available. Automatic vanilla world generation
-  (`Vanilla World`) is a future mode until M9.
+  (`Vanilla World`) is a later M9 task and is not enabled.
 - Imported worlds are analyzed read-only and copied byte for byte into the project source
   layer. Only block states are editable yet; biomes, block entities, entities, ticks,
   heightmaps, lighting and POI are preserved as raw source data by default and are not
@@ -131,6 +141,10 @@ guarantee that its whole milestone is complete.
 - A single region `.mca` file or a bare `region/` directory is reported as an incomplete
   selection, not as a world. Import, copy and export require `level.dat` plus the world
   folder. Split 26.1+, mixed and legacy `.mcr` layouts are detected but not supported.
+- Minecraft asset discovery targets conventional launcher roots plus launcher profile
+  `gameDir` entries. Custom launchers are handled through manual selection. Modded
+  client profiles are reported but never used as vanilla assets, and resource packs are
+  validated but not yet applied by the renderer.
 - Structure import/export is currently Java structure `.nbt` only. It refuses entities,
   block entities and unknown tags; `.schem` support is not available yet.
 - Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
