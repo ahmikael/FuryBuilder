@@ -1,0 +1,231 @@
+{
+  "tool": {
+    "name": "furybuilder-world-export",
+    "version": 1
+  },
+  "experiment": "complete Java 1.21.4 world-folder export from a real 841-chunk world with one edited block",
+  "generatedAt": "2026-11-18T16:55:42.2240633+00:00",
+  "source": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+  "destination": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-world-export-evidence-1795020936892\\world",
+  "sourceFiles": {
+    "data/chunks.dat": "f83a0efda6893606b6360384d62ffeda8048bc8047a338deb091069ea4c21148",
+    "session.lock": "51643361c79ecaef25a8de802de24f570ba25d9c2df1d22d94fade11b4f466cc",
+    "level.dat": "a6004d204bb461e392c70824648f7258563bca47a21313cb584c18ceb9f792c8",
+    "region/r.-1.0.mca": "3cc97e70395dbee5cdaaeaf46a64d496e1399ce90eebf2def885ad65a0c20045",
+    "entities/r.0.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "region/r.-1.-1.mca": "c2bea93a97479c38a91cdb97b3fd11f38d8cb0cc4f0c4825015b2404b945cd50",
+    "DIM-1/data/raids.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+    "region/r.0.0.mca": "91ee70753c08b8f30be4c7aa3a7f8bb65a77b7afd3c7d076921bf33ceafad727",
+    "poi/r.0.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entities/r.-1.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "poi/r.0.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entities/r.0.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "region/r.0.-1.mca": "f6f6fd7500219cf830fea6a01d2149c4fa187cefd56147296ca6d4314d96c266",
+    "level.dat_old": "84a94da6133d4f7859c38e2768c05cab258edf5eccd40814233204cf13aaa559",
+    "poi/r.-1.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "entities/r.-1.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "data/raids.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+    "DIM1/data/raids_end.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+    "data/scoreboard.dat": "75e55e2261e5ddf47d5e73cef2c2715d605ec77aebce2c9adb664329e3bc8fa6",
+    "data/random_sequences.dat": "58768a0de7a7bc656476251c7f737ede081ac9a44e307ac9eea45f4b97b3a442",
+    "poi/r.-1.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sourceFilesHashedBeforeAndAfter": 21,
+  "sourceTreeUnchanged": true,
+  "sessionLock": {
+    "sourceHasLock": true,
+    "exportedHasLock": false,
+    "note": "session.lock is a transient game lock and is the only skipped file"
+  },
+  "exportedFiles": [
+    {
+      "relativePath": "level.dat",
+      "bytes": 1614,
+      "sha256": "a6004d204bb461e392c70824648f7258563bca47a21313cb584c18ceb9f792c8",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "data/chunks.dat",
+      "bytes": 72,
+      "sha256": "f83a0efda6893606b6360384d62ffeda8048bc8047a338deb091069ea4c21148",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "region/r.-1.0.mca",
+      "bytes": 868352,
+      "sha256": "3cc97e70395dbee5cdaaeaf46a64d496e1399ce90eebf2def885ad65a0c20045",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "entities/r.0.-1.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "region/r.-1.-1.mca",
+      "bytes": 811008,
+      "sha256": "c2bea93a97479c38a91cdb97b3fd11f38d8cb0cc4f0c4825015b2404b945cd50",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "DIM-1/data/raids.dat",
+      "bytes": 90,
+      "sha256": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "region/r.0.0.mca",
+      "bytes": 929792,
+      "sha256": "36444992587dfd42a6fc59fd304e9386a24c01028f9a598ee7773745891174ec",
+      "matchesSource": false
+    },
+    {
+      "relativePath": "poi/r.0.0.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "entities/r.-1.0.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "poi/r.0.-1.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "entities/r.0.0.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "region/r.0.-1.mca",
+      "bytes": 868352,
+      "sha256": "f6f6fd7500219cf830fea6a01d2149c4fa187cefd56147296ca6d4314d96c266",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "level.dat_old",
+      "bytes": 1613,
+      "sha256": "84a94da6133d4f7859c38e2768c05cab258edf5eccd40814233204cf13aaa559",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "poi/r.-1.0.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "entities/r.-1.-1.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "data/raids.dat",
+      "bytes": 90,
+      "sha256": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "DIM1/data/raids_end.dat",
+      "bytes": 90,
+      "sha256": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "data/scoreboard.dat",
+      "bytes": 86,
+      "sha256": "75e55e2261e5ddf47d5e73cef2c2715d605ec77aebce2c9adb664329e3bc8fa6",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "data/random_sequences.dat",
+      "bytes": 101,
+      "sha256": "58768a0de7a7bc656476251c7f737ede081ac9a44e307ac9eea45f4b97b3a442",
+      "matchesSource": true
+    },
+    {
+      "relativePath": "poi/r.-1.-1.mca",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "matchesSource": true
+    }
+  ],
+  "exportedFileCount": 20,
+  "exportedBytes": 3481260,
+  "nonRegionFilesMatchSource": true,
+  "replacedRegionRelativePath": "region/r.0.0.mca",
+  "replacedRegionDiffers": true,
+  "probe": {
+    "changes": [
+      {
+        "current": "minecraft:gold_block",
+        "dimension": "minecraft:overworld",
+        "previous": "minecraft:grass_block[snowy=false]",
+        "x": 0,
+        "y": -61,
+        "z": 0
+      }
+    ],
+    "derivedDataPolicy": "preserve",
+    "destination": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-world-export-evidence-1795020936892\\world",
+    "ok": true,
+    "report": {
+      "bytes": 3481260,
+      "chunks": 841,
+      "copiedFilesMatchSource": true,
+      "derivedDataPolicy": "preserve",
+      "destination": "\\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-world-export-evidence-1795020936892\\world",
+      "exportedRegions": [
+        {
+          "bytes": 929792,
+          "dimension": "minecraft:overworld",
+          "regionX": 0,
+          "regionZ": 0,
+          "replacedChunks": 1,
+          "sha256": "36444992587dfd42a6fc59fd304e9386a24c01028f9a598ee7773745891174ec"
+        }
+      ],
+      "files": 20,
+      "invalidatedFields": [],
+      "outputRevalidated": true,
+      "regions": 4,
+      "replacedChunks": 1,
+      "replacedRegions": 1,
+      "skippedFiles": ["session.lock"],
+      "source": "\\\\?\\C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+      "sourceTreeSha256After": "b9a77b529e9618e38f66dfed32d51860b111dd2c3d52c1f6260c9f31f5af6497",
+      "sourceTreeSha256Before": "b9a77b529e9618e38f66dfed32d51860b111dd2c3d52c1f6260c9f31f5af6497",
+      "sourceTreeVerified": true,
+      "sourceUnchanged": true
+    },
+    "source": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+    "tool": {
+      "name": "furybuilder-world-export-probe",
+      "version": 1
+    },
+    "verified": [
+      {
+        "biome": "minecraft:plains",
+        "dimension": "minecraft:overworld",
+        "state": "minecraft:gold_block",
+        "x": 0,
+        "y": -61,
+        "z": 0
+      }
+    ]
+  },
+  "limitations": [
+    "the exported folder was reopened and structurally validated by FuryBuilder, but this task did not yet start a Minecraft server on it; that is M8.12",
+    "one flat 1.21.4 world with one edited block was used; this is evidence, not a universal compatibility proof",
+    "the source world has empty poi/ and entities/ sidecars; non-empty sidecar contents are covered by passthrough tests but not by this real-world export"
+  ]
+}

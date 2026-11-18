@@ -69,8 +69,11 @@ inventory and two official 1.21.4 server round-trips document the boundary:
 the default `preserve` policy copies stale heightmaps/light raw, while the
 opt-in `vanillaRebuild` policy invalidates them and the vanilla engine rebuilt
 all four heightmaps, both light arrays, `isLightOn` and `PostProcessing` on the
-next load. Placing block-entity blocks and POI updates are still not
-semantically supported. Full world-folder export is next.
+next load. A complete new world-folder export now copies `level.dat`, dimensions,
+sidecars and unknown files byte for byte, rebuilds only dirty regions and
+publishes the staged folder after reopening and re-validating every chunk.
+Placing block-entity blocks and POI updates are still not semantically supported.
+Server integration testing is next.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -91,6 +94,8 @@ guarantee that its whole milestone is complete.
 - `docs/formats/java-chunk-derived-data.md` — 1.21.4 heightmaps, light, ticks,
   block entities, entity/POI sidecars and the preserve/vanilla-rebuild server
   round-trips.
+- `docs/formats/java-world-export.md` — complete new world-folder export, staged
+  validation, preserved files and the real 841-chunk evidence.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
 - `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
 - `docs/adr/` — architecture decision records (format, MCP runtime, versions).
@@ -129,5 +134,9 @@ guarantee that its whole milestone is complete.
   M8.9 adds the explicit `vanillaRebuild` policy and verifies with the official
   server that invalidated heightmaps, light, `isLightOn` and `PostProcessing` are
   rebuilt on the next load/save without changing the edited block states.
-  Export of a complete modified world folder is not available yet, and the source
-  world is never written.
+  M8.10 adds a complete world-folder export: every source file is copied byte for
+  byte, only dirty regions are rebuilt, the staged folder is reopened and
+  re-validated, and the source tree is hashed before and after. Export of a
+  complete modified world folder is now available; opening the exported folder in
+  a real Minecraft server is still to be verified in M8.12, and the source world
+  is never written.

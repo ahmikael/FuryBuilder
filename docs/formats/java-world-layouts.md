@@ -520,16 +520,37 @@ cargo run -p furybuilder-world-io --example derived_probe -- <world> --blocks 0 
 cargo run -p furybuilder-world-io --example region_write_probe -- <world> <new-region-file> minecraft:overworld 0 -61 0 minecraft:air 3 -60 3 minecraft:torch --rebuild-derived
 ```
 
+## Full world-folder export (M8.10)
+
+`crates/world-io/src/world_export.rs` combines the byte-preserving passthrough copy
+with the verified region writer. It exports a complete save folder: `level.dat`,
+all dimensions, sidecars, unknown files and untouched regions are copied byte for
+byte, while only dirty regions are rebuilt. The destination must be a new folder;
+the source is never written. The staged folder is reopened, every chunk is
+decoded again, every staged file is compared with the passthrough manifest or the
+rebuilt-region SHA-256, and the source tree hash is rechecked before an atomic
+rename publishes the result.
+
+`DerivedDataPolicy::Preserve` keeps derived fields raw; `VanillaRebuild` performs
+the M8.9 hand-off for replaced chunks. A single `.mca` is not a world, and this
+module does not treat it as one. See `docs/formats/java-world-export.md`.
+
+```powershell
+cargo test -p furybuilder-world-io --test world_export
+cargo run -p furybuilder-world-io --example world_export_probe -- <world> <new-world-folder> minecraft:overworld 0 -61 0 minecraft:gold_block
+cargo run -p furybuilder-world-io --example world_export_probe -- <world> <new-world-folder>
+```
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                                           | Write                                                                                                               | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory edits + Import World wizard (M8.5–M8.6) | new region file, block states only (M8.7); derived data inventoried, preserve or vanilla-rebuild policy (M8.8–M8.9) | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                                                | no                                                                                                                  | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                                                | no                                                                                                                  | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                                                | no                                                                                                                  | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                                                | no                                                                                                                  | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                                                | no                                                                                                                  | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                                           | Write                                                                                                              | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory edits + Import World wizard (M8.5-M8.6) | new region file, block states only (M8.7); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10) | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                                                | no                                                                                                                 | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                                                | no                                                                                                                 | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                                                | no                                                                                                                 | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                                                | no                                                                                                                 | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                                                | no                                                                                                                 | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support. “Passthrough” means unchanged files
@@ -643,6 +664,12 @@ Recorded evidence:
   words each), both light arrays, `isLightOn = 1` and 24 `PostProcessing`
   entries; the edited block states were preserved, `blockEntities` stayed 0 and
   the source world stayed byte-identical.
+- `docs/testing/evidence/2026-11-18-world-export-1.21.4.json` - a complete
+  world-folder export of the same 841-chunk world with one edited block:
+  20 files / 3,481,260 bytes exported, only `session.lock` skipped; 4 regions /
+  841 chunks, 1 region / 1 chunk replaced; all non-region files matched source
+  SHA-256; the source tree stayed byte-identical; the exported chunk re-decoded to
+  `minecraft:gold_block` with `minecraft:plains`.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` - a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under

@@ -18,6 +18,7 @@ pub mod overlay;
 pub mod passthrough;
 pub mod region_write;
 pub mod structure;
+pub mod world_export;
 pub mod world_import;
 
 pub use anvil::{
@@ -66,6 +67,10 @@ pub use region_write::{
 pub use structure::{
     Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,
     MAX_STRUCTURE_VOLUME,
+};
+pub use world_export::{
+    export_java_world, export_java_world_with_options, ExportedRegion, WorldExportError,
+    WorldExportOptions, WorldExportReport, MAX_EXPORT_REGIONS,
 };
 pub use world_import::{
     analyze_java_world, load_java_world, load_java_world_with_options, ImportDimensionAnalysis,
