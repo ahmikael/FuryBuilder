@@ -90,6 +90,8 @@ const second: ProjectSummary = {
 const worldAnalysis: JavaWorldAnalysis = {
   root: "C:\\saves\\World",
   layout: "classic_anvil",
+  selectionKind: "world_folder",
+  completeSave: true,
   supported: true,
   dataVersion: 4189,
   versionId: 4189,

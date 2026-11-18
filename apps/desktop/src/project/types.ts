@@ -98,6 +98,8 @@ export interface ImportDimensionAnalysis {
 export interface JavaWorldAnalysis {
   root: string;
   layout: string;
+  selectionKind: string;
+  completeSave: boolean;
   supported: boolean;
   dataVersion: number | null;
   versionId: number | null;

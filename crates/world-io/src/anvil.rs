@@ -260,6 +260,15 @@ impl JavaWorld {
                 "classic Overworld region/ folder is missing".to_owned(),
             ));
         }
+        let region_dir = root.join("region");
+        if !has_file_with_extension(&region_dir, "mca")
+            && has_file_with_extension(&region_dir, "mcr")
+        {
+            return Err(AnvilError::UnsupportedLayout(
+                "legacy McRegion (.mcr) region files are not supported; only Anvil .mca files are readable"
+                    .to_owned(),
+            ));
+        }
 
         let custom_dimensions = classic_custom_dimensions(root)?;
         if !custom_dimensions.is_empty() {
@@ -895,7 +904,7 @@ fn list_region_coordinates(folder: &Path) -> Result<Vec<(i32, i32)>, AnvilError>
     Ok(coordinates)
 }
 
-fn parse_region_file_name(path: &Path) -> Result<(i32, i32), AnvilError> {
+pub(crate) fn parse_region_file_name(path: &Path) -> Result<(i32, i32), AnvilError> {
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
@@ -956,6 +965,22 @@ fn require_directory(path: &Path) -> Result<bool, AnvilError> {
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
         Err(error) => Err(io_error(path, &error)),
     }
+}
+
+fn has_file_with_extension(folder: &Path, extension: &str) -> bool {
+    let Ok(entries) = fs::read_dir(folder) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        fs::symlink_metadata(entry.path())
+            .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+            .unwrap_or(false)
+            && entry
+                .path()
+                .extension()
+                .and_then(|value| value.to_str())
+                .is_some_and(|value| value.eq_ignore_ascii_case(extension))
+    })
 }
 
 fn classic_custom_dimensions(root: &Path) -> Result<Vec<String>, AnvilError> {

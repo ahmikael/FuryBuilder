@@ -71,9 +71,11 @@ opt-in `vanillaRebuild` policy invalidates them and the vanilla engine rebuilt
 all four heightmaps, both light arrays, `isLightOn` and `PostProcessing` on the
 next load. A complete new world-folder export now copies `level.dat`, dimensions,
 sidecars and unknown files byte for byte, rebuilds only dirty regions and
-publishes the staged folder after reopening and re-validating every chunk.
-Placing block-entity blocks and POI updates are still not semantically supported.
-Server integration testing is next.
+publishes the staged folder after reopening and re-validating every chunk. The
+import/export boundary now classifies the selection first: a bare `.mca` file and
+a `region/` directory are explicitly not complete saves, while split, mixed and
+legacy layouts are detected and refused. Placing block-entity blocks and POI
+updates are still not semantically supported. Server integration testing is next.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -96,6 +98,8 @@ guarantee that its whole milestone is complete.
   round-trips.
 - `docs/formats/java-world-export.md` — complete new world-folder export, staged
   validation, preserved files and the real 841-chunk evidence.
+- `docs/formats/java-world-selection.md` — save vs region file vs region
+  directory, layout matrix and passthrough refusal boundaries.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
 - `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
 - `docs/adr/` — architecture decision records (format, MCP runtime, versions).
@@ -115,6 +119,9 @@ guarantee that its whole milestone is complete.
   vanilla engine rebuilds them; this was verified with an official 1.21.4 server.
   Placing or removing block-entity blocks and updating POI are still not semantically
   supported: the server did not synthesize a missing block entity on load.
+- A single region `.mca` file or a bare `region/` directory is reported as an incomplete
+  selection, not as a world. Import, copy and export require `level.dat` plus the world
+  folder. Split 26.1+, mixed and legacy `.mcr` layouts are detected but not supported.
 - Structure import/export is currently Java structure `.nbt` only. It refuses entities,
   block entities and unknown tags; `.schem` support is not available yet.
 - Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
@@ -139,4 +146,7 @@ guarantee that its whole milestone is complete.
   re-validated, and the source tree is hashed before and after. Export of a
   complete modified world folder is now available; opening the exported folder in
   a real Minecraft server is still to be verified in M8.12, and the source world
-  is never written.
+  is never written. M8.11 classifies the selection before import or copy: a
+  `.mca` region file and a bare `region/` directory are not complete saves, and
+  split, mixed and legacy layouts are detected and refused before any destination
+  is created.

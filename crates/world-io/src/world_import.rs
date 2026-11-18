@@ -21,6 +21,7 @@ use world_domain::{ChunkPos, DimensionKind, World};
 
 use crate::anvil::{AnvilError, JavaWorld, LevelDat};
 use crate::passthrough::PassthroughError;
+use crate::world_selection::{classify_world_selection, WorldSelectionKind};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
 pub const MAX_IMPORT_CHUNKS: usize = 20_000;
@@ -29,7 +30,7 @@ pub const MAX_IMPORT_NON_AIR_BLOCKS: usize = 50_000_000;
 /// Maximum non-empty sections accepted into the editable project snapshot.
 pub const MAX_IMPORT_SECTIONS: usize = 2_000_000;
 /// Layout identifier used by the supported classic Anvil reader.
-pub const SUPPORTED_LAYOUT: &str = "classic_anvil";
+pub const SUPPORTED_LAYOUT: &str = crate::world_selection::CLASSIC_ANVIL_LAYOUT;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -48,6 +49,8 @@ pub struct ImportDimensionAnalysis {
 pub struct JavaWorldAnalysis {
     pub root: String,
     pub layout: String,
+    pub selection_kind: String,
+    pub complete_save: bool,
     pub supported: bool,
     pub data_version: Option<i32>,
     pub version_id: Option<i32>,
@@ -131,23 +134,36 @@ impl WorldImportError {
 /// modifies the world.
 pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
     let root = root.as_ref();
+    let selection = classify_world_selection(root);
     let mut analysis = JavaWorldAnalysis {
         root: root.display().to_string(),
-        layout: detect_layout(root).to_owned(),
+        layout: selection.layout.clone(),
+        selection_kind: selection.kind.as_str().to_owned(),
+        complete_save: selection.complete_save,
         supported: false,
-        data_version: None,
+        data_version: selection.data_version,
         version_id: None,
-        version_name: None,
-        level_name: None,
+        version_name: selection.version_name.clone(),
+        level_name: selection.level_name.clone(),
         declared_dimensions: Vec::new(),
         dimensions: Vec::new(),
         regions: 0,
         chunks: 0,
         block_entities: 0,
         entities: 0,
-        warnings: Vec::new(),
+        warnings: selection.warnings.clone(),
         blockers: Vec::new(),
     };
+    for blocker in &selection.blockers {
+        push_unique(&mut analysis.blockers, blocker.clone());
+    }
+
+    // A region file, a region directory or an unknown folder is not a complete save.
+    // Stop before trying to decode `level.dat` inside a file path.
+    if !matches!(selection.kind, WorldSelectionKind::WorldFolder) {
+        finish_analysis(&mut analysis);
+        return analysis;
+    }
 
     let level = LevelDat::read(root.join("level.dat"));
     match &level {
@@ -157,9 +173,10 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
             analysis.version_name = level.version_name.clone();
             analysis.level_name = level.level_name.clone();
         }
-        Err(error) => analysis
-            .blockers
-            .push(format!("level.dat is missing or unreadable: {error}")),
+        Err(error) => push_unique(
+            &mut analysis.blockers,
+            format!("level.dat is missing or unreadable: {error}"),
+        ),
     }
 
     match JavaWorld::open(root) {
@@ -172,14 +189,16 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
         }
         Err(error) => {
             if analysis.layout == "mixed" {
-                analysis.blockers.push(
+                push_unique(
+                    &mut analysis.blockers,
                     "the world mixes classic region/ files with 26.1+ split layout markers"
                         .to_owned(),
                 );
             } else if analysis.layout == "split_26_1_plus" {
-                analysis
-                    .blockers
-                    .push("26.1+ split world layout is not supported".to_owned());
+                push_unique(
+                    &mut analysis.blockers,
+                    "26.1+ split world layout is not supported".to_owned(),
+                );
             }
             analysis.blockers.push(match &error {
                 AnvilError::UnsupportedDataVersion { found, supported } => format!(
@@ -202,6 +221,17 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
             .push("the world contains no allocated chunks".to_owned());
     }
 
+    finish_analysis(&mut analysis);
+    analysis
+}
+
+fn push_unique(blockers: &mut Vec<String>, blocker: String) {
+    if !blockers.contains(&blocker) {
+        blockers.push(blocker);
+    }
+}
+
+fn finish_analysis(analysis: &mut JavaWorldAnalysis) {
     analysis.warnings.push(
         "the selected world is opened read-only and is never modified; importing copies it byte for byte into the project source layer"
             .to_owned(),
@@ -226,9 +256,9 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
     analysis.warnings.push(format!(
         "editable import limits: {MAX_IMPORT_CHUNKS} chunks, {MAX_IMPORT_SECTIONS} sections, {MAX_IMPORT_NON_AIR_BLOCKS} non-air blocks"
     ));
-
-    analysis.supported = analysis.blockers.is_empty();
-    analysis
+    analysis.supported = analysis.blockers.is_empty()
+        && analysis.complete_save
+        && analysis.layout == SUPPORTED_LAYOUT;
 }
 
 fn inspect_world(world: &JavaWorld, analysis: &mut JavaWorldAnalysis) -> Result<(), AnvilError> {
@@ -261,56 +291,6 @@ fn inspect_world(world: &JavaWorld, analysis: &mut JavaWorldAnalysis) -> Result<
         });
     }
     Ok(())
-}
-
-fn detect_layout(root: &Path) -> &'static str {
-    let classic = is_dir(&root.join("region"));
-    let split_overworld = is_dir(&root.join("dimensions").join("minecraft").join("overworld"));
-    let split_players = is_dir(&root.join("players"));
-    let split_data = is_file(
-        &root
-            .join("data")
-            .join("minecraft")
-            .join("world_gen_settings.dat"),
-    );
-    let split = split_overworld || (split_players && split_data);
-    let legacy = has_legacy_region_file(&root.join("region"));
-    if classic && split {
-        "mixed"
-    } else if split {
-        "split_26_1_plus"
-    } else if classic {
-        SUPPORTED_LAYOUT
-    } else if legacy {
-        "legacy_mcr"
-    } else {
-        "unknown"
-    }
-}
-
-fn is_dir(path: &Path) -> bool {
-    std::fs::symlink_metadata(path)
-        .map(|metadata| metadata.is_dir())
-        .unwrap_or(false)
-}
-
-fn is_file(path: &Path) -> bool {
-    std::fs::symlink_metadata(path)
-        .map(|metadata| metadata.is_file())
-        .unwrap_or(false)
-}
-
-fn has_legacy_region_file(region_dir: &Path) -> bool {
-    let Ok(entries) = std::fs::read_dir(region_dir) else {
-        return false;
-    };
-    entries.flatten().any(|entry| {
-        entry
-            .path()
-            .extension()
-            .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("mcr"))
-    })
 }
 
 /// Decodes every allocated chunk into the editable sparse world.

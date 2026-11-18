@@ -23,6 +23,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::anvil::{AnvilError, JavaWorld};
+use crate::world_selection::classify_world_selection;
 
 pub const MAX_PASSTHROUGH_FILES: usize = 100_000;
 pub const MAX_PASSTHROUGH_FILE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
@@ -90,6 +91,8 @@ pub enum PassthroughError {
     DestinationInsideSource(String),
     #[error("destination must include a final directory name: {0}")]
     InvalidDestination(String),
+    #[error("selection is not a complete world save: {0}")]
+    NotAWorldSave(String),
     #[error("refusing to follow symlink, junction or reparse point: {0}")]
     Symlink(String),
     #[error("unsupported file type in world: {0}")]
@@ -115,6 +118,7 @@ impl PassthroughError {
             PassthroughError::DestinationExists(_) => "already_exists",
             PassthroughError::DestinationInsideSource(_)
             | PassthroughError::InvalidDestination(_) => "invalid_argument",
+            PassthroughError::NotAWorldSave(_) => "unsupported_format",
             PassthroughError::Symlink(_) => "unsafe_path",
             PassthroughError::NotRegularFile(_) => "unsupported_format",
             PassthroughError::LimitExceeded(_) => "limit_exceeded",
@@ -143,6 +147,16 @@ pub fn passthrough_java_world_with_options(
         fs::symlink_metadata(source_path).map_err(|error| io_error(source_path, &error))?;
     if is_link_like(&source_metadata) {
         return Err(PassthroughError::Symlink(source_path.display().to_string()));
+    }
+    let selection = classify_world_selection(source_path);
+    if !selection.complete_save {
+        return Err(PassthroughError::NotAWorldSave(
+            if selection.blockers.is_empty() {
+                source_path.display().to_string()
+            } else {
+                selection.blockers.join("; ")
+            },
+        ));
     }
     if !source_metadata.is_dir() {
         return Err(PassthroughError::Anvil(AnvilError::NotDirectory(

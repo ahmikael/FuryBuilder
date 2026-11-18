@@ -20,6 +20,7 @@ pub mod region_write;
 pub mod structure;
 pub mod world_export;
 pub mod world_import;
+pub mod world_selection;
 
 pub use anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LevelDat,
@@ -76,4 +77,8 @@ pub use world_import::{
     analyze_java_world, load_java_world, load_java_world_with_options, ImportDimensionAnalysis,
     JavaWorldAnalysis, JavaWorldLoadReport, WorldImportError, WorldImportOptions,
     MAX_IMPORT_CHUNKS, MAX_IMPORT_NON_AIR_BLOCKS, MAX_IMPORT_SECTIONS, SUPPORTED_LAYOUT,
+};
+pub use world_selection::{
+    classify_world_selection, SelectionDimension, SelectionRegionFile, WorldSelectionKind,
+    WorldSelectionReport, CLASSIC_ANVIL_LAYOUT,
 };

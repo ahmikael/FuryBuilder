@@ -88,6 +88,8 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Real 1.21.4 vanilla rebuild                       | `docs/testing/evidence/2026-11-18-derived-rebuild-1.21.4.json` — two edits, server exit 0; after load/save all four heightmaps, sky/block light, `isLightOn` and 24 `PostProcessing` entries were rebuilt; edited block states preserved; block entities still 0; source unchanged   |
 | Complete world-folder export                      | `crates/world-io/src/world_export.rs`; `crates/world-io/tests/world_export.rs` — all three dimensions, sidecars, unknown files and `session.lock`; only dirty regions rebuilt; destination/source path refusal; non-full chunk fails without publishing; source tree verified        |
 | Real 1.21.4 world-folder export                   | `docs/testing/evidence/2026-11-18-world-export-1.21.4.json` — 20 files / 3,481,260 bytes, 4 regions / 841 chunks, 1 region / 1 chunk replaced; all non-region files matched source SHA-256; source unchanged; exported block re-decoded to gold block with plains biome              |
+| Selection: save vs region vs region directory     | `crates/world-io/src/world_selection.rs`; `crates/world-io/tests/world_selection.rs` — bare `.mca`, `region/` directory, complete classic save, split/mixed/legacy/`level.dat`-only layouts and unknown folders; passthrough refuses incomplete selections without a destination     |
+| Real 1.21.4 / 26.3 selection classification       | `docs/testing/evidence/2026-11-18-world-selection-1.21.4.json` — classic save supported (841 chunks); its `r.0.0.mca` and `region/` not complete saves; real 26.3 split save complete but unsupported (529 chunks); both source trees unchanged; no refusal destination created      |
 | Import World analysis and limits                  | `crates/world-io/src/world_import.rs`; `crates/world-io/tests/world_import.rs` — supported world counts, blockers for 26.1+ split and non-4189 versions, source immutability, chunk/section/block limits, empty world                                                                |
 | Import World project and source copy              | `crates/project-store/src/store.rs`; `crates/project-store/tests/source_overlay.rs` — `create_imported`, immutable tree manifest, traversal/missing-file refusal, generic creator still refuses `import`                                                                             |
 | Import World wizard UI                            | `apps/desktop/src/features/project/ProjectManager.tsx`; `ProjectManager.test.tsx` — folder input, Analyze, supported metrics, blockers disable import, `project_import_world` called with the selected folder                                                                        |
@@ -100,10 +102,13 @@ decoder; `crates/world-io/src/passthrough.rs` is the byte-preserving copy,
 `crates/world-io/src/overlay.rs` is the in-memory edit overlay,
 `crates/world-io/src/region_write.rs` writes verified new region files,
 `crates/world-io/src/world_export.rs` exports a complete new world folder and
+`crates/world-io/src/world_selection.rs` classifies a selection as a complete save,
+a bare region file, a region directory or an unsupported layout;
 `crates/world-io/src/derived.rs` inventories chunk-derived data and
 `crates/world-io/src/world_import.rs` is the analysis/editable-import layer used by the
 `Import World` wizard. None of them writes in place. `cargo test -p furybuilder-world-io`
-runs the anvil, java_chunk, passthrough, overlay, region_write, derived, world_export and world_import suites, and
+runs the anvil, java_chunk, passthrough, overlay, region_write, derived, world_export,
+world_selection and world_import suites, and
 `cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --decode`
 reproduces the real-world read evidence without modifying the world.
 `cargo run -p furybuilder-world-io --example passthrough_world -- <source> <destination>`
@@ -118,6 +123,8 @@ reproduces the derived-data inventory, and `--chunk <cx> <cz>` or
 `--blocks <x> <y> <z> ...` reports one chunk or decoded block states.
 `cargo run -p furybuilder-world-io --example world_export_probe -- <source> <new-world-folder> [--rebuild-derived] [<dimension> <x> <y> <z> <state> ...]`
 reproduces the complete world-folder export and re-reads the edited blocks.
+`cargo run -p furybuilder-world-io --example world_selection_probe -- <path> [--passthrough <new-folder>]`
+prints the selection/import classification and, optionally, the passthrough result.
 `cargo run -p furybuilder-desktop --example import_world_probe -- <source> <empty-project-root> "Imported Flat"`
 reproduces the Import World evidence, and `--analysis-only` prints an analysis report.
 

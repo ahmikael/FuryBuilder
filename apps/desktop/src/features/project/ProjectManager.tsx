@@ -621,6 +621,10 @@ export function ProjectManager() {
                             {worldAnalysis.versionName ? ` · ${worldAnalysis.versionName}` : ""}
                           </span>
                           <span className="text-muted-foreground">{worldAnalysis.layout}</span>
+                          <span className="text-muted-foreground">
+                            {worldAnalysis.selectionKind}
+                            {worldAnalysis.completeSave ? " · complete save" : " · incomplete"}
+                          </span>
                           <span className="ml-auto font-mono text-muted-foreground">
                             {worldAnalysis.regions} region(s) · {worldAnalysis.chunks} chunk(s)
                           </span>

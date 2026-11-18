@@ -1,0 +1,252 @@
+{
+  "tool": {
+    "name": "furybuilder-world-selection",
+    "version": 1
+  },
+  "experiment": "classify a complete classic save, a bare region file, a region directory and a real 26.1+ split save, then attempt passthrough on each category",
+  "generatedAt": "2026-11-18T17:27:48.1087621+00:00",
+  "classicWorld": {
+    "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+    "files": 21,
+    "treeUnchanged": true,
+    "selection": {
+      "blockers": [],
+      "chunks": 841,
+      "completeSave": true,
+      "dataVersion": 4189,
+      "dimensions": [
+        {
+          "chunks": 841,
+          "folder": ".",
+          "id": "minecraft:overworld",
+          "regionFiles": 4
+        },
+        {
+          "chunks": 0,
+          "folder": "DIM-1",
+          "id": "minecraft:the_nether",
+          "regionFiles": 0
+        },
+        {
+          "chunks": 0,
+          "folder": "DIM1",
+          "id": "minecraft:the_end",
+          "regionFiles": 0
+        }
+      ],
+      "hasLevelDat": true,
+      "kind": "world_folder",
+      "layout": "classic_anvil",
+      "levelName": "world",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+      "regionFile": null,
+      "regionFiles": 4,
+      "relatedFolders": [
+        "region",
+        "DIM-1",
+        "DIM1",
+        "poi",
+        "entities",
+        "data",
+        "playerdata",
+        "datapacks"
+      ],
+      "supported": true,
+      "versionName": "1.21.4",
+      "warnings": [
+        "the selection is a complete classic 1.21.4 save; full chunk validation runs before import"
+      ]
+    },
+    "analysis": {
+      "blockers": [],
+      "chunks": 841,
+      "completeSave": true,
+      "dataVersion": 4189,
+      "layout": "classic_anvil",
+      "regions": 4,
+      "selectionKind": "world_folder",
+      "supported": true,
+      "versionName": "1.21.4"
+    },
+    "passthrough": {
+      "bytes": 3481260,
+      "chunks": 841,
+      "destination": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-world-selection-1795022861113\\classic-copy",
+      "files": 20,
+      "ok": true,
+      "regions": 4
+    },
+    "copiedFilesOnDisk": 20,
+    "copiedBytesOnDisk": 3481260,
+    "copiedSessionLockPresent": false
+  },
+  "regionFile": {
+    "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world\\region\\r.0.0.mca",
+    "selection": {
+      "blockers": [
+        "r.0.0.mca is a single region container, not a complete world save: it has no level.dat, dimensions or sidecar folders. Select the world folder that contains it."
+      ],
+      "chunks": 225,
+      "completeSave": false,
+      "dataVersion": null,
+      "dimensions": [],
+      "hasLevelDat": false,
+      "kind": "region_file",
+      "layout": "region_file",
+      "levelName": null,
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world\\region\\r.0.0.mca",
+      "regionFile": {
+        "bytes": 929792,
+        "chunks": 225,
+        "fileName": "r.0.0.mca",
+        "regionX": 0,
+        "regionZ": 0
+      },
+      "regionFiles": 1,
+      "relatedFolders": [],
+      "supported": false,
+      "versionName": null,
+      "warnings": [
+        "a region file can be inspected as a container, but it cannot be opened as a project"
+      ]
+    },
+    "analysis": {
+      "blockers": [
+        "r.0.0.mca is a single region container, not a complete world save: it has no level.dat, dimensions or sidecar folders. Select the world folder that contains it."
+      ],
+      "chunks": 0,
+      "completeSave": false,
+      "dataVersion": null,
+      "layout": "region_file",
+      "regions": 0,
+      "selectionKind": "region_file",
+      "supported": false,
+      "versionName": null
+    }
+  },
+  "regionDirectory": {
+    "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world\\region",
+    "selection": {
+      "blockers": [
+        "the selected folder contains 4 region file(s) but no level.dat; it looks like a region/ directory. Select its parent world folder instead."
+      ],
+      "chunks": 0,
+      "completeSave": false,
+      "dataVersion": null,
+      "dimensions": [],
+      "hasLevelDat": false,
+      "kind": "region_directory",
+      "layout": "region_directory",
+      "levelName": null,
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world\\region",
+      "regionFile": null,
+      "regionFiles": 4,
+      "relatedFolders": [],
+      "supported": false,
+      "versionName": null,
+      "warnings": [
+        "a region directory is only a part of a save; metadata, dimensions and sidecars live next to it"
+      ]
+    },
+    "analysis": {
+      "blockers": [
+        "the selected folder contains 4 region file(s) but no level.dat; it looks like a region/ directory. Select its parent world folder instead."
+      ],
+      "chunks": 0,
+      "completeSave": false,
+      "dataVersion": null,
+      "layout": "region_directory",
+      "regions": 0,
+      "selectionKind": "region_directory",
+      "supported": false,
+      "versionName": null
+    },
+    "passthrough": {
+      "code": "unsupported_format",
+      "destination": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-world-selection-1795022861113\\from-region-dir",
+      "error": "selection is not a complete world save: the selected folder contains 4 region file(s) but no level.dat; it looks like a region/ directory. Select its parent world folder instead.",
+      "ok": false
+    },
+    "destinationCreated": false
+  },
+  "splitWorld": {
+    "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-26.3-world\\world",
+    "files": 26,
+    "treeUnchanged": true,
+    "selection": {
+      "blockers": ["26.1+ split world layout is not supported"],
+      "chunks": 529,
+      "completeSave": true,
+      "dataVersion": 5023,
+      "dimensions": [
+        {
+          "chunks": 529,
+          "folder": "dimensions/minecraft/overworld/region",
+          "id": "minecraft:overworld",
+          "regionFiles": 4
+        }
+      ],
+      "hasLevelDat": true,
+      "kind": "world_folder",
+      "layout": "split_26_1_plus",
+      "levelName": "world",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-26.3-world\\world",
+      "regionFile": null,
+      "regionFiles": 4,
+      "relatedFolders": ["dimensions", "data", "players", "datapacks"],
+      "supported": false,
+      "versionName": "26.3",
+      "warnings": []
+    },
+    "analysis": {
+      "blockers": [
+        "26.1+ split world layout is not supported",
+        "DataVersion 5023 is not supported; this build edits 4189 (Minecraft Java 1.21.4)"
+      ],
+      "chunks": 0,
+      "completeSave": true,
+      "dataVersion": 5023,
+      "layout": "split_26_1_plus",
+      "regions": 0,
+      "selectionKind": "world_folder",
+      "supported": false,
+      "versionName": "26.3"
+    },
+    "passthrough": {
+      "code": "unsupported_version",
+      "destination": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-world-selection-1795022861113\\from-split",
+      "error": "world DataVersion 5023 is not supported; supported version is 4189",
+      "ok": false
+    },
+    "destinationCreated": false
+  },
+  "conclusions": {
+    "regionFileIsCompleteSave": false,
+    "regionDirectoryIsCompleteSave": false,
+    "classicWorldIsCompleteSave": true,
+    "classicWorldSupported": true,
+    "splitWorldIsCompleteSave": true,
+    "splitWorldSupported": false,
+    "classicPassthroughOk": true,
+    "classicPassthroughFiles": 20,
+    "classicPassthroughRegions": 4,
+    "classicPassthroughChunks": 841,
+    "regionDirectoryPassthroughCode": "unsupported_format",
+    "splitPassthroughCode": "unsupported_version",
+    "bothSourceTreesUnchanged": true,
+    "noUnsupportedDestinationCreated": true
+  },
+  "commands": [
+    "cargo test -p furybuilder-world-io --test world_selection",
+    "cargo run -p furybuilder-world-io --example world_selection_probe -- \u003cworld\u003e",
+    "cargo run -p furybuilder-world-io --example world_selection_probe -- \u003cworld\u003e/region/r.0.0.mca",
+    "cargo run -p furybuilder-world-io --example world_selection_probe -- \u003cworld\u003e/region",
+    "cargo run -p furybuilder-world-io --example world_selection_probe -- \u003cworld\u003e --passthrough \u003cnew-folder\u003e"
+  ],
+  "limitations": [
+    "two real worlds were tested: one flat 1.21.4 classic save and one 26.3 split save",
+    "the classic passthrough copy was deleted after recording its file and byte counts",
+    "the classifier validates level.dat, layout markers and region headers only; full chunk validation still runs in analyze_java_world before import",
+    "the split world identifies its layout and regions but no split-layout chunk decoding or writing is claimed"
+  ]
+}

@@ -541,25 +541,47 @@ cargo run -p furybuilder-world-io --example world_export_probe -- <world> <new-w
 cargo run -p furybuilder-world-io --example world_export_probe -- <world> <new-world-folder>
 ```
 
+## World selection and layout boundary (M8.11)
+
+`crates/world-io/src/world_selection.rs` classifies the selected path before any
+import or copy starts. A single `r.<x>.<z>.mca` file and a bare `region/`
+directory are explicitly reported as **not a complete save**; `level.dat`,
+dimensions and sidecars are part of the boundary. The same classifier separates a
+complete classic 1.21.4 save from a complete-but-unsupported 26.1+ split save, a
+mixed-layout folder, legacy `.mcr` worlds and a `level.dat`-only folder.
+
+`analyze_java_world` includes `selectionKind` and `completeSave`, and the Import
+World wizard shows both. Passthrough now refuses an incomplete selection with
+`unsupported_format` before constructing any destination; split, mixed and legacy
+layouts fail with `unsupported_version`. See
+`docs/formats/java-world-selection.md`.
+
+```powershell
+cargo test -p furybuilder-world-io --test world_selection
+cargo run -p furybuilder-world-io --example world_selection_probe -- <world>
+cargo run -p furybuilder-world-io --example world_selection_probe -- <world>/region/r.0.0.mca
+cargo run -p furybuilder-world-io --example world_selection_probe -- <world> --passthrough <new-folder>
+```
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                                           | Write                                                                                                              | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory edits + Import World wizard (M8.5-M8.6) | new region file, block states only (M8.7); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10) | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                                                | no                                                                                                                 | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                                                | no                                                                                                                 | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                                                | no                                                                                                                 | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                                                | no                                                                                                                 | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                                                | no                                                                                                                 | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                                                   | Overlay                                           | Write                                                                                                                                                     | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4); selection classified (M8.11) | in-memory edits + Import World wizard (M8.5-M8.6) | new region file, block states only (M8.7); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10); save-vs-region classification (M8.11) | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                                                            | no                                                | no                                                                                                                                                        | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                        | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                        | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                                                            | no                                                | no                                                                                                                                                        | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                                                            | no                                                | no                                                                                                                                                        | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support. “Passthrough” means unchanged files
 are copied byte for byte. “Overlay/wizard” means block edits are kept in memory,
 the desktop wizard can create an imported project, and edits can be materialized
 to chunk NBT. “Write” means a new verified region file for the listed fields; it
-is never an in-place write and a full world-folder export is still pending.
-Derived data is preserved raw by default; M8.8 showed that an official server
-does not automatically rebuild stale heightmaps, light or missing block
+is never an in-place write. A full world-folder export exists for classic 1.21.4
+(M8.10). Derived data is preserved raw by default; M8.8 showed that an official
+server does not automatically rebuild stale heightmaps, light or missing block
 entities. M8.9 adds an opt-in policy that invalidates heightmaps, light,
 `isLightOn` and `PostProcessing`, and the official server did rebuild them on
 the next load/save.
@@ -670,6 +692,15 @@ Recorded evidence:
   841 chunks, 1 region / 1 chunk replaced; all non-region files matched source
   SHA-256; the source tree stayed byte-identical; the exported chunk re-decoded to
   `minecraft:gold_block` with `minecraft:plains`.
+- `docs/testing/evidence/2026-11-18-world-selection-1.21.4.json` - selection
+  classification over a real classic 1.21.4 save and a real 26.3 split save:
+  the full save was a supported `world_folder` (841 chunks), its bare
+  `region/r.0.0.mca` was a `region_file` (225 header records) and its `region/`
+  folder was a `region_directory`; neither is a complete save. The split save was
+  complete but unsupported. Classic passthrough copied 20 files / 4 regions /
+  841 chunks without `session.lock`; the region-directory attempt returned
+  `unsupported_format` and the split attempt `unsupported_version`, neither
+  created a destination, and both source trees stayed byte-identical.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` - a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
