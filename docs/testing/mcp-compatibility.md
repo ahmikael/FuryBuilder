@@ -1,7 +1,8 @@
 # MCP compatibility
 
-Status: protocol negotiation and the authenticated local desktop endpoint are implemented
-and tested locally; a real external MCP client connection is still outstanding.
+Status: implemented and verified against a real external MCP client (OpenCode CLI 2.3.2),
+including a complete AI explore/build/screenshot/fix/undo loop with real confirmation
+dialogs. Setup, access modes and revocation: `docs/mcp-setup.md`.
 
 ## Bridge baseline
 

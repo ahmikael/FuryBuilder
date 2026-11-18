@@ -141,9 +141,10 @@ second format and is not enabled in the UI.
 | MCP write propagation into the live viewport                        | Rust `WORLD_CHANGED_EVENT` after sync apply/undo and completed jobs; `McpWorldChangeHost.test.tsx`; E2E captures at render revision = authoritative revision, `stale=false`, legend 13 stone → 12 stone + 1 glass                                                                            |
 | Structured observations with an explicit revision                   | Rust `local_bridge` test `query_observations_report_the_revision_they_read` (block, region summary, stale conflict); `desktop-bridge.test.ts` asserts `get_block` and `inspect_region`; live MCP probe `mcp/bridge/scripts/probe-live-observation.mjs`                                       |
 | Truthful screenshot completeness and stale detection                | `finalize_renderer_response` + Rust camera/capture tests; bounded legend in `apps/desktop/src/renderer/observation.ts`; both probes check `partial`/`missingChunks`/`stale` consistency; `docs/testing/evidence/2026-11-18-mcp-observation.json` and `2026-11-18-structured-observation.txt` |
+| MCP setup, mistakes and disabling access                            | `docs/mcp-setup.md` — OpenCode configuration, tool catalog, modes/limits, error table, revocation steps; numbers matched against `mcp_access.rs`, `local_bridge.rs` and `job-tools.ts`                                                                                                       |
 
-Remaining M7 work: user-facing MCP setup documentation (M7.14). The full AI
-build/screenshot/fix/undo loop is verified through a real external client and the real
-confirmation dialog; the model used was DeepSeek free because GPT-6 Luna Max was refused by
-its provider for this region. Structured observations now carry the exact revision and do
-not claim a complete frame when chunks are missing.
+M7 is complete. The full AI build/screenshot/fix/undo loop is verified through a real
+external client and the real confirmation dialog; the model used was DeepSeek free because
+GPT-6 Luna Max was refused by its provider for this region. Structured observations carry the
+exact revision and do not claim a complete frame when chunks are missing. The setup guide
+documents the client configuration and the fail-closed behaviour.
