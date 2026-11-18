@@ -8,6 +8,7 @@ use world_application::{AppError, WorldService};
 
 use crate::local_bridge::RendererBridge;
 use crate::mcp_access::{McpAccessState, McpConfirmationBridge};
+use crate::mcp_activity::McpActivityLog;
 
 /// Project namespace used by the local editor until a project is opened. The MCP bridge
 /// must supply this identifier explicitly instead of inferring context from a session.
@@ -72,6 +73,7 @@ pub struct AppState {
     pub renderer: RendererBridge,
     pub mcp_access: McpAccessState,
     pub mcp_confirmations: McpConfirmationBridge,
+    pub mcp_activity: McpActivityLog,
 }
 
 impl AppState {
@@ -82,6 +84,7 @@ impl AppState {
             renderer: RendererBridge::default(),
             mcp_access: McpAccessState::default(),
             mcp_confirmations: McpConfirmationBridge::default(),
+            mcp_activity: McpActivityLog::default(),
         }
     }
 }

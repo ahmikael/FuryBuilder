@@ -3,8 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invokeCommand } from "@/lib/ipc";
 import {
   describeAccessPolicy,
+  fetchMcpActivity,
   getMcpAccessStatus,
   MCP_ACCESS_STATUS_COMMAND,
+  MCP_ACTIVITY_COMMAND,
   SET_MCP_ACCESS_COMMAND,
   setMcpAccess,
   SUBMIT_MCP_CONFIRMATION_COMMAND,
@@ -85,6 +87,21 @@ describe("MCP access client", () => {
     expect(invoke).toHaveBeenCalledWith(SUBMIT_MCP_CONFIRMATION_COMMAND, {
       requestId: "request-1",
       approved: true,
+    });
+  });
+
+  it("reads bounded MCP activity for the open project", async () => {
+    invoke.mockResolvedValueOnce({
+      projectId: "project-1",
+      entries: [],
+      limit: 20,
+      stored: 0,
+      bounded: true,
+    });
+    await fetchMcpActivity(20, "op-1");
+    expect(invoke).toHaveBeenCalledWith(MCP_ACTIVITY_COMMAND, {
+      limit: 20,
+      operationId: "op-1",
     });
   });
 

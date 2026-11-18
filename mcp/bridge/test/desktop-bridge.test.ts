@@ -33,10 +33,13 @@ describe("MCP bridge to the authoritative desktop API", () => {
   it("reports a live local endpoint instead of inventing a connection", async () => {
     let observedToken: string | null = null;
     let observedMethod: string | null = null;
+    let observedClientId: string | null = null;
     const harness = await startMockDesktop((request) => {
       observedToken = typeof request.token === "string" ? request.token : null;
       observedMethod =
         typeof request.method === "string" ? request.method : null;
+      observedClientId =
+        typeof request.clientId === "string" ? request.clientId : null;
       return okResult(request, {
         app: { name: "FuryBuilder", version: "0.1.0" },
         project: {
@@ -93,7 +96,12 @@ describe("MCP bridge to the authoritative desktop API", () => {
           renderer: { listening: boolean } | null;
           pendingConfirmations: number;
         };
-        connection: { state: string; lifecycle: string };
+        connection: {
+          state: string;
+          lifecycle: string;
+          instanceId: string;
+          startedAtMs: number;
+        };
         context: {
           state: string;
           valid: boolean;
@@ -119,6 +127,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
       state: "ready",
       lifecycle: "ephemeral-stdio",
     });
+    expect(observedClientId).toBe(info.bridge.connection.instanceId);
     expect(info.bridge.context).toMatchObject({
       state: "ready",
       valid: true,

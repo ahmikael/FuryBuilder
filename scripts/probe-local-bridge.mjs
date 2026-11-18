@@ -50,6 +50,7 @@ function request(runtime, id, token, method, params = {}) {
           protocol: 1,
           id,
           token,
+          clientId: "probe-local-bridge",
           method,
           params,
         })}\n`,
@@ -337,6 +338,82 @@ console.log(
     2,
   ),
 );
+
+const activity = await request(
+  runtime,
+  "probe-activity",
+  runtime.token,
+  "mcp_activity",
+  { projectId: ping.result.project.projectId, limit: 20 },
+);
+if (!activity.ok) {
+  throw new Error(
+    `authorized mcp_activity failed: ${JSON.stringify(activity.error)}`,
+  );
+}
+const activityEntries = activity.result.entries;
+if (!Array.isArray(activityEntries) || activityEntries.length < 5) {
+  throw new Error(
+    `expected authenticated calls in the activity journal, got ${JSON.stringify(activity.result)}`,
+  );
+}
+const deniedEntry = activityEntries.find(
+  (entry) => entry.requestId === "probe-apply-denied",
+);
+if (
+  !deniedEntry ||
+  deniedEntry.status !== "denied" ||
+  deniedEntry.errorCode !== "permission_denied"
+) {
+  throw new Error(
+    `denied write was not linked to the journal: ${JSON.stringify(deniedEntry)}`,
+  );
+}
+if (
+  activityEntries.some((entry) =>
+    ["ping", "mcp_activity"].includes(entry.method),
+  )
+) {
+  throw new Error("health checks must not flood the activity journal");
+}
+if (activityEntries.some((entry) => entry.clientId !== "probe-local-bridge")) {
+  throw new Error("journal entries must keep the authenticated client label");
+}
+console.log(
+  JSON.stringify(
+    {
+      activity: {
+        stored: activity.result.stored,
+        returned: activityEntries.length,
+        bounded: activity.result.bounded,
+        deniedRequest: {
+          requestId: deniedEntry.requestId,
+          method: deniedEntry.method,
+          status: deniedEntry.status,
+          errorCode: deniedEntry.errorCode,
+          clientId: deniedEntry.clientId,
+          projectId: deniedEntry.projectId,
+          durationMs: deniedEntry.durationMs,
+        },
+      },
+    },
+    null,
+    2,
+  ),
+);
+
+const invalidActivity = await request(
+  runtime,
+  "probe-activity-invalid",
+  runtime.token,
+  "mcp_activity",
+  { projectId: ping.result.project.projectId, limit: 0 },
+);
+if (invalidActivity.ok || invalidActivity.error?.code !== "invalid_argument") {
+  throw new Error(
+    `activity limit was not rejected: ${JSON.stringify(invalidActivity)}`,
+  );
+}
 
 const denied = await request(
   runtime,

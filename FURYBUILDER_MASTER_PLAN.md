@@ -961,7 +961,7 @@ furybuilder/
 - [x] Зарегистрировать read-only tools: world info, inspect, get block/region, camera, screenshot.
 - [x] Зарегистрировать безопасные write tools: preview, apply batch, undo, status.
 - [x] Добавить схему доступа read-only/edit-in-selection/full-project, лимиты и подтверждения.
-- [ ] Привязать tool calls к истории операций и журналу действий.
+- [x] Привязать tool calls к истории операций и журналу действий.
 - [ ] Добавить очередь долгих задач, progress/cancel и защиту от повторного вызова.
 - [ ] Проверить подключение минимум с **одним** реальным внешним MCP-клиентом и тестовым агентом.
 - [ ] Провести end-to-end тест: ИИ изучает область → строит → снимает скриншот → исправляет → undo.

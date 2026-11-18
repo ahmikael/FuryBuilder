@@ -11,7 +11,7 @@ use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{GenericNamespaced, Listener, ListenerOptions, Stream};
@@ -26,6 +26,10 @@ use world_application::{
 };
 
 use crate::mcp_access::{McpAccessInput, McpAccessMode};
+use crate::mcp_activity::{
+    clean_activity_text, McpActivityEntry, McpActivityStatus, DEFAULT_MCP_ACTIVITY_QUERY,
+    MAX_MCP_ACTIVITY_QUERY,
+};
 use crate::state::{session_status, AppState, LOCAL_PROJECT_ID};
 
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -258,6 +262,8 @@ struct WireRequest {
     token: String,
     method: String,
     #[serde(default)]
+    client_id: Option<String>,
+    #[serde(default)]
     params: Value,
 }
 
@@ -349,6 +355,16 @@ struct StatusParams {
     project_id: String,
     #[serde(default)]
     operation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ActivityParams {
+    project_id: String,
+    #[serde(default)]
+    operation_id: Option<String>,
+    #[serde(default)]
+    limit: Option<usize>,
 }
 
 /// Starts the local endpoint. Failure is reported to the caller instead of panicking so a
@@ -501,13 +517,40 @@ fn handle_request_with_renderer(
         );
     }
 
-    match dispatch(state, &request.method, request.params, requester) {
+    let method = request.method.clone();
+    match dispatch(
+        state,
+        &id,
+        request.client_id.as_deref(),
+        &method,
+        request.params,
+        requester,
+    ) {
         Ok(result) => WireResponse::ok(id, result),
         Err(error) => WireResponse::error(id, error),
     }
 }
 
+/// Records one authenticated request and then delegates to the authoritative handler.
+/// `ping` and the activity query itself are excluded so health checks cannot flood the
+/// journal.
 fn dispatch(
+    state: &AppState,
+    request_id: &str,
+    client_id: Option<&str>,
+    method: &str,
+    params: Value,
+    requester: &dyn RendererRequester,
+) -> Result<Value, AppError> {
+    let activity = ActivityMeta::new(request_id, client_id, method, &params);
+    let outcome = dispatch_inner(state, method, params, requester);
+    if method != "ping" && method != "mcp_activity" {
+        state.mcp_activity.record(activity.finish(&outcome));
+    }
+    outcome
+}
+
+fn dispatch_inner(
     state: &AppState,
     method: &str,
     params: Value,
@@ -607,6 +650,7 @@ fn dispatch(
                     .map_err(|_| AppError::internal("world state lock poisoned"))?;
                 service.preview(&params.project_id, &params.operation)?
             };
+            let mut confirmed = false;
             if state.mcp_access.require_confirmation() {
                 let summary = apply_confirmation_summary(
                     &params,
@@ -615,6 +659,7 @@ fn dispatch(
                     state.mcp_access.mode(),
                 );
                 confirm_write(state, requester, summary)?;
+                confirmed = true;
                 // The user may have changed the policy while the dialog was open.
                 state.mcp_access.authorize_operation(&params.operation)?;
                 require_revision(state, Some(revision))?;
@@ -623,14 +668,18 @@ fn dispatch(
                 .service
                 .lock()
                 .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            to_value(service.execute(OperationRequest {
+            let mut value = to_value(service.execute(OperationRequest {
                 project_id: params.project_id,
                 operation: params.operation,
                 expected_revision: Some(revision),
                 idempotency_key: params.idempotency_key,
                 actor: Actor::mcp("mcp-bridge"),
                 linked_object_id: None,
-            })?)
+            })?)?;
+            if confirmed {
+                value["confirmation"] = json!({ "approved": true });
+            }
+            Ok(value)
         }
         "undo_operation" => {
             let params: UndoParams = parse_params(params)?;
@@ -651,8 +700,10 @@ fn dispatch(
                     undo_confirmation_summary(&params, revision, &target, state.mcp_access.mode());
                 (target, summary)
             };
+            let mut confirmed = false;
             if state.mcp_access.require_confirmation() {
                 confirm_write(state, requester, summary)?;
+                confirmed = true;
                 state
                     .mcp_access
                     .authorize_undo(&target.dimension, target.bounds)?;
@@ -662,11 +713,15 @@ fn dispatch(
                 .service
                 .lock()
                 .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            to_value(service.undo(
+            let mut value = to_value(service.undo(
                 &params.project_id,
                 Actor::mcp("mcp-bridge"),
                 Some(target.operation_id.as_str()),
-            )?)
+            )?)?;
+            if confirmed {
+                value["confirmation"] = json!({ "approved": true });
+            }
+            Ok(value)
         }
         "operation_status" => {
             let params: StatusParams = parse_params(params)?;
@@ -675,7 +730,22 @@ fn dispatch(
                 .service
                 .lock()
                 .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            operation_status(&service, params.operation_id.as_deref())
+            operation_status(
+                state,
+                &service,
+                &params.project_id,
+                params.operation_id.as_deref(),
+            )
+        }
+        "mcp_activity" => {
+            let params: ActivityParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            activity_response(
+                state,
+                &params.project_id,
+                params.operation_id.as_deref(),
+                params.limit,
+            )
         }
         other => Err(AppError::invalid_argument(format!(
             "unknown bridge method `{other}`"
@@ -783,8 +853,15 @@ fn operation_summary(operation: &Operation) -> Value {
 }
 
 /// Operations are synchronous, so their authoritative status lives in the audit log.
-/// Jobs/progress are explicitly unavailable rather than simulated.
-fn operation_status(service: &WorldService, operation_id: Option<&str>) -> Result<Value, AppError> {
+/// Jobs/progress are explicitly unavailable rather than simulated. The status also names
+/// the MCP requests that produced the operation, so a tool call and a history entry share
+/// the same `operation_id`.
+fn operation_status(
+    state: &AppState,
+    service: &WorldService,
+    project_id: &str,
+    operation_id: Option<&str>,
+) -> Result<Value, AppError> {
     let revision = service.world().revision();
     if let Some(id) = operation_id {
         let entry = service
@@ -810,6 +887,7 @@ fn operation_status(service: &WorldService, operation_id: Option<&str>) -> Resul
             "currentRevision": revision,
             "canUndo": service.can_undo(),
             "canRedo": service.can_redo(),
+            "mcpActivity": state.mcp_activity.linked_operation(project_id, id),
             "job": {
                 "available": false,
                 "progress": null,
@@ -825,11 +903,41 @@ fn operation_status(service: &WorldService, operation_id: Option<&str>) -> Resul
         "canUndo": service.can_undo(),
         "canRedo": service.can_redo(),
         "recentOperations": recent,
+        "mcpActivity": state.mcp_activity.query(project_id, None, 10),
         "job": {
             "available": false,
             "progress": null,
             "reason": "job_api_unavailable"
         },
+    }))
+}
+
+fn activity_response(
+    state: &AppState,
+    project_id: &str,
+    operation_id: Option<&str>,
+    limit: Option<usize>,
+) -> Result<Value, AppError> {
+    let limit = limit.unwrap_or(DEFAULT_MCP_ACTIVITY_QUERY);
+    if !(1..=MAX_MCP_ACTIVITY_QUERY).contains(&limit) {
+        return Err(AppError::invalid_argument(format!(
+            "activity limit must be between 1 and {MAX_MCP_ACTIVITY_QUERY}"
+        )));
+    }
+    if let Some(id) = operation_id {
+        if id.trim().is_empty() || id.len() > MAX_REQUEST_ID_BYTES {
+            return Err(AppError::invalid_argument(
+                "operation id must be 1..=128 characters",
+            ));
+        }
+    }
+    let entries = state.mcp_activity.query(project_id, operation_id, limit);
+    Ok(json!({
+        "projectId": project_id,
+        "entries": entries,
+        "limit": limit,
+        "stored": state.mcp_activity.len(),
+        "bounded": true,
     }))
 }
 
@@ -1036,6 +1144,18 @@ pub fn mcp_access_status(state: tauri::State<'_, AppState>) -> Value {
     })
 }
 
+/// Recent authenticated MCP calls for the open project. The UI never selects another
+/// project and sees only metadata, not tool payloads.
+#[tauri::command]
+pub fn mcp_activity(
+    state: tauri::State<'_, AppState>,
+    operation_id: Option<String>,
+    limit: Option<usize>,
+) -> Result<Value, AppError> {
+    let (project_id, _) = active_project_identity(&state)?;
+    activity_response(&state, &project_id, operation_id.as_deref(), limit)
+}
+
 /// Answers a pending MCP write confirmation. Only the Tauri UI can call this; an MCP
 /// client has no local-socket method that completes its own request.
 #[tauri::command]
@@ -1087,6 +1207,96 @@ pub fn submit_renderer_response(
         ));
     }
     Ok(())
+}
+
+struct ActivityMeta {
+    request_id: String,
+    client_id: Option<String>,
+    method: String,
+    project_id: Option<String>,
+    requested_revision: Option<u64>,
+    timestamp_ms: u64,
+    started: Instant,
+}
+
+impl ActivityMeta {
+    fn new(request_id: &str, client_id: Option<&str>, method: &str, params: &Value) -> Self {
+        let request_id = clean_activity_text(request_id, MAX_REQUEST_ID_BYTES);
+        let client_id = client_id
+            .map(|value| clean_activity_text(value, MAX_REQUEST_ID_BYTES))
+            .filter(|value| !value.is_empty());
+        let method = clean_activity_text(method, 64);
+        let project_id = params
+            .get("projectId")
+            .and_then(Value::as_str)
+            .map(|value| clean_activity_text(value, 128))
+            .filter(|value| !value.is_empty());
+        let requested_revision = params.get("worldRevision").and_then(Value::as_u64);
+        Self {
+            request_id,
+            client_id,
+            method,
+            project_id,
+            requested_revision,
+            timestamp_ms: now_ms(),
+            started: Instant::now(),
+        }
+    }
+
+    fn finish(self, outcome: &Result<Value, AppError>) -> McpActivityEntry {
+        let (status, error_code, operation_id, changed_blocks, confirmation) = match outcome {
+            Ok(value) => (
+                McpActivityStatus::Ok,
+                None,
+                value
+                    .get("operationId")
+                    .and_then(Value::as_str)
+                    .map(|id| clean_activity_text(id, 128)),
+                value.get("changedBlocks").and_then(Value::as_u64),
+                confirmation_label(value),
+            ),
+            Err(error) => (
+                if matches!(
+                    error.code,
+                    ErrorCode::PermissionDenied | ErrorCode::Unauthorized
+                ) {
+                    McpActivityStatus::Denied
+                } else {
+                    McpActivityStatus::Error
+                },
+                Some(error.code),
+                None,
+                None,
+                error.details.as_ref().and_then(confirmation_label),
+            ),
+        };
+        McpActivityEntry {
+            sequence: 0,
+            request_id: self.request_id,
+            client_id: self.client_id,
+            method: self.method,
+            status,
+            error_code,
+            project_id: self.project_id,
+            requested_revision: self.requested_revision,
+            operation_id,
+            changed_blocks,
+            confirmation,
+            timestamp_ms: self.timestamp_ms,
+            duration_ms: self.started.elapsed().as_millis() as u64,
+        }
+    }
+}
+
+fn confirmation_label(value: &Value) -> Option<String> {
+    match value.get("confirmation")? {
+        Value::String(label) => Some(clean_activity_text(label, 32)),
+        Value::Object(details) => details
+            .get("approved")
+            .and_then(Value::as_bool)
+            .map(|approved| if approved { "approved" } else { "denied" }.to_owned()),
+        _ => None,
+    }
 }
 
 fn parse_params<T: for<'de> Deserialize<'de>>(params: Value) -> Result<T, AppError> {
@@ -1277,6 +1487,7 @@ mod tests {
             id: id.to_owned(),
             token: token.to_owned(),
             method: method.to_owned(),
+            client_id: None,
             params,
         }
     }
@@ -1993,6 +2204,122 @@ mod tests {
         assert_eq!(result["changedBlocks"], 2);
         assert_eq!(result["worldRevision"], 2);
         assert_eq!(approved.calls.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn activity_log_links_tool_calls_to_operations_and_errors() {
+        let state = AppState::new(temp_root("activity"));
+        let operation = single_set(BlockPos::new(3, 64, 3));
+
+        let mut denied_request = request(
+            "req-denied-activity",
+            "token",
+            "apply_operation",
+            json!({
+                "projectId": LOCAL_PROJECT_ID,
+                "worldRevision": 0,
+                "operation": operation.clone(),
+                "idempotencyKey": "activity-denied"
+            }),
+        );
+        denied_request.client_id = Some("bridge-test".to_owned());
+        let denied = handle_request(&state, "token", denied_request);
+        assert!(!denied.ok);
+
+        enable_writes(&state, McpAccessMode::FullProject, None, 1_000, 10, false);
+        let mut applied_request = request(
+            "req-applied-activity",
+            "token",
+            "apply_operation",
+            json!({
+                "projectId": LOCAL_PROJECT_ID,
+                "worldRevision": 0,
+                "operation": operation,
+                "idempotencyKey": "activity-applied"
+            }),
+        );
+        applied_request.client_id = Some("bridge-test".to_owned());
+        let applied = handle_request(&state, "token", applied_request);
+        assert!(applied.ok, "{:?}", applied.error);
+        let operation_id = applied.result.expect("apply")["operationId"]
+            .as_str()
+            .expect("operation id")
+            .to_owned();
+
+        let activity = handle_request(
+            &state,
+            "token",
+            request(
+                "req-activity",
+                "token",
+                "mcp_activity",
+                json!({ "projectId": LOCAL_PROJECT_ID, "limit": 10 }),
+            ),
+        );
+        assert!(activity.ok, "{:?}", activity.error);
+        let activity = activity.result.expect("activity");
+        let entries = activity["entries"].as_array().expect("entries");
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["requestId"], "req-applied-activity");
+        assert_eq!(entries[0]["status"], "ok");
+        assert_eq!(entries[0]["clientId"], "bridge-test");
+        assert_eq!(entries[0]["operationId"], operation_id);
+        assert_eq!(entries[0]["changedBlocks"], 1);
+        assert_eq!(entries[1]["requestId"], "req-denied-activity");
+        assert_eq!(entries[1]["status"], "denied");
+        assert_eq!(entries[1]["errorCode"], "permission_denied");
+        assert_eq!(activity["stored"], 2);
+
+        let status = handle_request(
+            &state,
+            "token",
+            request(
+                "req-activity-status",
+                "token",
+                "operation_status",
+                json!({ "projectId": LOCAL_PROJECT_ID, "operationId": operation_id }),
+            ),
+        );
+        assert!(status.ok, "{:?}", status.error);
+        let status = status.result.expect("status");
+        let linked = status["mcpActivity"].as_array().expect("linked activity");
+        assert_eq!(linked.len(), 1);
+        assert_eq!(linked[0]["requestId"], "req-applied-activity");
+
+        let filtered = handle_request(
+            &state,
+            "token",
+            request(
+                "req-activity-filter",
+                "token",
+                "mcp_activity",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "operationId": operation_id
+                }),
+            ),
+        );
+        let filtered = filtered.result.expect("filtered activity");
+        let filtered = filtered["entries"].as_array().expect("entries");
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0]["method"], "operation_status");
+        assert_eq!(filtered[1]["requestId"], "req-applied-activity");
+
+        let invalid = handle_request(
+            &state,
+            "token",
+            request(
+                "req-activity-limit",
+                "token",
+                "mcp_activity",
+                json!({ "projectId": LOCAL_PROJECT_ID, "limit": 0 }),
+            ),
+        );
+        assert!(!invalid.ok);
+        assert_eq!(
+            invalid.error.expect("limit error").code,
+            ErrorCode::InvalidArgument
+        );
     }
 
     #[test]

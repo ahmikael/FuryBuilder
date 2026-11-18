@@ -4,7 +4,6 @@ import {
   PROTOCOL_VERSION_META_KEY,
 } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
-import { randomUUID } from "node:crypto";
 
 import {
   BRIDGE_IMPLEMENTS_TASKS,
@@ -18,14 +17,12 @@ import {
   type ProtocolEra,
 } from "./capabilities.js";
 import { evaluateContext } from "./context.js";
+import { BRIDGE_INSTANCE_ID, BRIDGE_STARTED_AT_MS } from "./instance.js";
 import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
 import { createUnavailableJobApi, type JobApi } from "./jobs.js";
 import { probeDesktop } from "./desktop-client.js";
 import { registerReadTools } from "./read-tools.js";
 import { registerWriteTools } from "./write-tools.js";
-
-const BRIDGE_INSTANCE_ID = randomUUID();
-const BRIDGE_STARTED_AT_MS = Date.now();
 
 const bridgeInfoInput = z.object({
   project_id: z

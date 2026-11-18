@@ -34,6 +34,32 @@ export interface McpAccessStatus {
   pendingConfirmations: McpConfirmationRequest[];
 }
 
+export type McpActivityStatus = "ok" | "denied" | "error";
+
+export interface McpActivityEntry {
+  sequence: number;
+  requestId: string;
+  clientId: string | null;
+  method: string;
+  status: McpActivityStatus;
+  errorCode: string | null;
+  projectId: string | null;
+  requestedRevision: number | null;
+  operationId: string | null;
+  changedBlocks: number | null;
+  confirmation: string | null;
+  timestampMs: number;
+  durationMs: number;
+}
+
+export interface McpActivityResponse {
+  projectId: string;
+  entries: McpActivityEntry[];
+  limit: number;
+  stored: number;
+  bounded: boolean;
+}
+
 export interface McpAccessInput {
   mode: McpAccessMode;
   selection?: McpSelection | null;
@@ -77,6 +103,7 @@ export interface McpConfirmationRequest {
 export const MCP_CONFIRMATION_EVENT = "furybuilder-mcp-confirmation-request";
 export const SET_MCP_ACCESS_COMMAND = "set_mcp_access";
 export const MCP_ACCESS_STATUS_COMMAND = "mcp_access_status";
+export const MCP_ACTIVITY_COMMAND = "mcp_activity";
 export const SUBMIT_MCP_CONFIRMATION_COMMAND = "submit_mcp_confirmation";
 
 export const ACCESS_MODE_LABELS: Record<McpAccessMode, string> = {
@@ -87,6 +114,16 @@ export const ACCESS_MODE_LABELS: Record<McpAccessMode, string> = {
 
 export async function getMcpAccessStatus(): Promise<McpAccessStatus> {
   return invokeCommand<McpAccessStatus>(MCP_ACCESS_STATUS_COMMAND);
+}
+
+export async function fetchMcpActivity(
+  limit = 20,
+  operationId?: string,
+): Promise<McpActivityResponse> {
+  return invokeCommand<McpActivityResponse>(MCP_ACTIVITY_COMMAND, {
+    limit,
+    ...(operationId ? { operationId } : {}),
+  });
 }
 
 export async function setMcpAccess(input: McpAccessInput): Promise<McpAccessPolicy> {

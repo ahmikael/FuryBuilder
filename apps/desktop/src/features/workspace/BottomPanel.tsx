@@ -20,10 +20,12 @@ import type { BlockDefinition } from "@/editor/types";
 import { TOOL_LABELS, TOOL_SHORTCUTS } from "@/editor/session";
 import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor/commands";
 import { isTauriRuntime } from "@/lib/ipc";
+import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
 import { blockColor } from "@/renderer/assets";
 import type { EditorTool } from "@/editor/types";
 import { useHistoryStore } from "@/state/history-store";
+import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
@@ -369,7 +371,43 @@ function HistoryPanel() {
   const loading = useHistoryStore((state) => state.loading);
   const error = useHistoryStore((state) => state.error);
   const job = useToolStore((state) => state.job);
+  const project = useProjectStore((state) => state.current);
+  const revision = useWorldStore((state) => state.revision);
   const editing = isTauriRuntime();
+  const [mcpActivity, setMcpActivity] = useState<McpActivityEntry[]>([]);
+  const [mcpActivityError, setMcpActivityError] = useState<string | null>(null);
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    if (!editing || !project?.folder) return;
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const response = await fetchMcpActivity(20);
+        if (!cancelled) {
+          setMcpActivity(response.entries);
+          setMcpActivityError(null);
+        }
+      } catch (activityError) {
+        if (!cancelled) {
+          setMcpActivityError(
+            activityError instanceof Error ? activityError.message : String(activityError),
+          );
+        }
+      }
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [editing, project?.folder, revision, refreshNonce]);
+
+  const refreshAll = () => {
+    void useHistoryStore.getState().refresh();
+    setRefreshNonce((current) => current + 1);
+  };
 
   return (
     <div className="flex h-full flex-col gap-1.5">
@@ -392,12 +430,7 @@ function HistoryPanel() {
         >
           <Redo2 className="mr-1 size-3" /> Redo
         </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-6 px-2 text-[10px]"
-          onClick={() => void useHistoryStore.getState().refresh()}
-        >
+        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={refreshAll}>
           <RotateCcw className="mr-1 size-3" /> Refresh
         </Button>
         <span className="ml-auto font-mono text-[9px] text-muted-foreground">
@@ -441,6 +474,71 @@ function HistoryPanel() {
           </table>
         </div>
       )}
+
+      {project?.folder ? (
+        <div className="shrink-0 rounded border border-border bg-background/40">
+          <div className="flex items-center gap-1.5 border-b border-border/60 px-2 py-0.5 text-[9px] text-muted-foreground">
+            <Terminal className="size-2.5" />
+            <span>MCP activity</span>
+            <span className="font-mono">
+              {mcpActivityError ? "unavailable" : `${mcpActivity.length} recent call(s)`}
+            </span>
+          </div>
+          {mcpActivityError ? (
+            <div className="px-2 py-1 text-[9px] text-status-warn">{mcpActivityError}</div>
+          ) : mcpActivity.length === 0 ? (
+            <div className="px-2 py-1 text-[9px] text-muted-foreground">
+              No authenticated MCP calls for this project yet.
+            </div>
+          ) : (
+            <div className="scrollbar-thin max-h-20 overflow-y-auto">
+              <table className="w-full font-mono text-[9px]">
+                <thead className="sticky top-0 bg-card text-left text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-0.5 font-normal">time</th>
+                    <th className="px-2 py-0.5 font-normal">call</th>
+                    <th className="px-2 py-0.5 font-normal">status</th>
+                    <th className="px-2 py-0.5 font-normal">operation</th>
+                    <th className="px-2 py-0.5 font-normal">blocks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {mcpActivity.map((entry) => (
+                    <tr key={entry.sequence} className="border-t border-border/60">
+                      <td className="px-2 py-0.5">
+                        {new Date(entry.timestampMs).toLocaleTimeString()}
+                      </td>
+                      <td className="px-2 py-0.5">
+                        {entry.method.replace(/_operation$/, "")}
+                        {entry.confirmation ? ` · ${entry.confirmation}` : ""}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-2 py-0.5",
+                          entry.status === "ok"
+                            ? "text-status-ok"
+                            : entry.status === "denied"
+                              ? "text-status-warn"
+                              : "text-status-error",
+                        )}
+                        title={entry.errorCode ?? undefined}
+                      >
+                        {entry.status}
+                      </td>
+                      <td className="px-2 py-0.5">
+                        {entry.operationId ? entry.operationId.slice(0, 12) : "—"}
+                      </td>
+                      <td className="px-2 py-0.5">
+                        {entry.changedBlocks !== null ? entry.changedBlocks.toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

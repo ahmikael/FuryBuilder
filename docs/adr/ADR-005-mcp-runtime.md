@@ -32,8 +32,8 @@ The first transport slice is implemented and exercised against the real Tauri pr
 - The protocol is newline-delimited JSON with one authenticated request per connection.
   Messages are size-limited; the token is compared without an early exit; errors never echo
   it. The methods are `ping`, `world_info`, `query`, `project_status`, `get_camera`,
-  `capture_viewport`, `preview_operation`, `apply_operation`, `undo_operation` and
-  `operation_status`.
+  `capture_viewport`, `preview_operation`, `apply_operation`, `undo_operation`,
+  `operation_status` and `mcp_activity`.
 - `query`/`world_info` require an explicit `project_id` matching the project currently open
   in the editor. The handler calls the same `WorldService` as the UI; writes are gated (see
   below).
@@ -49,6 +49,15 @@ The first transport slice is implemented and exercised against the real Tauri pr
   after approval. Tool writes are recorded as `actor: mcp-bridge`, `source: mcp` in the
   same history and audit log as UI operations, and `operation_status` reads that audit
   trail.
+- Every authenticated bridge request also appends a bounded in-memory journal entry with
+  its request id, bridge `clientId`, method, project, requested revision, status/error code,
+  `operationId` and changed block count. `ping` and `mcp_activity` are excluded; denied and
+  failed calls are retained. `operation_status` returns the matching journal entries, and
+  the editor History panel reads `mcp_activity` for the open project. The journal is
+  metadata only: it does not duplicate world payloads, and journaling failure cannot fail a
+  completed write. `bridge_info.connection.instanceId` is the same value the bridge sends as
+  `clientId`, so calls can be attributed to a specific stdio process even though the MCP
+  layer does not expose the human-facing client name.
 - Camera and capture requests go from the Tauri process to the mounted viewport over a local
   event and come back through `submit_renderer_response`. `ping.renderer.listening` reports
   readiness. The endpoint validates the response size and PNG format, refuses a different
@@ -59,9 +68,11 @@ The first transport slice is implemented and exercised against the real Tauri pr
 - Verified with a real `tauri dev` process: authorized `ping`, `world_info`, `get_camera` and
   `capture_viewport` succeeded (a valid 492714-byte PNG); `ping` reported `read_only` access
   with confirmation enabled; preview reported `access.allowed=false`; apply returned
-  `permission_denied` with `mcpAccessMode=read_only`; and a wrong token returned
-  `unauthorized` without leaking the secret. The approval dialog itself is covered by Rust
-  and frontend tests rather than an automated click in the real window.
+  `permission_denied` with `mcpAccessMode=read_only`; `mcp_activity` returned six bounded
+  records including that denied call with `clientId=probe-local-bridge`, and an invalid
+  limit returned `invalid_argument`; a wrong token returned `unauthorized` without leaking
+  the secret. The approval dialog itself is covered by Rust and frontend tests rather than
+  an automated click in the real window.
 - Unix domain sockets are not exercised yet; Windows is the first target. The discovery
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.

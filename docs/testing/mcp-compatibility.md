@@ -96,6 +96,27 @@ history and audit log. `preview_operation` remains read-only and now reports
 `access.allowed`, the denial code and details so a client knows whether an apply would be
 permitted without guessing. Preview and status remain available in every mode.
 
+## MCP activity journal
+
+Every authenticated request is appended to a bounded in-memory journal (1,000 entries,
+oldest evicted first). The record contains the request id, the bridge `clientId`, method,
+status (`ok`/`denied`/`error`), structured error code, project, requested revision,
+`operationId`, changed blocks, confirmation result, timestamp and duration. `ping` and the
+journal query itself are excluded so health checks and UI polling cannot flush useful
+records.
+
+Successful apply/undo responses are linked through the same `operationId` that appears in
+the authoritative history and audit log. `get_operation_status` returns
+`mcpActivity` for that operation; without an operation id it returns the latest operations
+plus recent MCP calls. The endpoint method `mcp_activity` exposes the same metadata to the
+editor and to MCP clients, bounded by `limit` (1–100) and scoped to the explicitly named
+open project. Denied and failed calls are recorded too, which makes a refused write
+auditable instead of invisible.
+
+The editor's History panel shows the journal alongside transactions and polls it every five
+seconds for the open project. The journal never duplicates full operation payloads, and a
+journal failure cannot turn a completed world write into a failed tool call.
+
 ## Explicit request context and connection lifecycle
 
 Every MCP tool call names its project. The bridge compares it with the live desktop project
@@ -137,8 +158,8 @@ pnpm --filter @furybuilder/mcp-bridge typecheck
 pnpm --filter @furybuilder/mcp-bridge build
 ```
 
-Observed: 24 tests passed, typecheck and build clean; the Rust local-bridge module runs
-25 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
+Observed: 24 tests passed, typecheck and build clean; the Rust desktop test binary runs
+29 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
 use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
@@ -167,6 +188,8 @@ use `@modelcontextprotocol/client` 2.4.0:
   `undo_operation` to the expected endpoint payloads;
 - `bridge_info` exposes the live access mode, write flags, limits, renderer readiness and
   pending confirmation count from `ping`;
+- every bridge request carries the same `clientId` that `bridge_info.connection.instanceId`
+  publishes, so the desktop journal can attribute calls to one bridge process;
 - the desktop client maps a wrong token to `authentication_failed`, a stale endpoint
   to `app_not_running`, malformed discovery files to `invalid_runtime_file`, and a
   silent endpoint to `timeout`.
@@ -175,10 +198,12 @@ The Rust tests cover camera/capture revision verification, dimension mismatch, i
 image rejection, renderer timeout without a viewport, one-answer-per-request bridge
 semantics, read-only preview/status, policy enforcement for both edit modes, block and
 batch limits, missing revision rejection, approval/denial of apply and undo, undo extent
-tracking, and granted batch apply/undo with audit entries. The frontend tests cover the
-policy command payloads, confirmation submission, dialog rendering and restoring a pending
-confirmation after the UI reloads; the Rust bridge keeps the request id and expiry so the
-dialog can be reconstructed.
+tracking, granted batch apply/undo with audit entries, the bounded activity journal, and
+the endpoint link between an authenticated request and its `operationId` (including denied
+calls and one-entry-per-request ordering). The frontend tests cover the policy command
+payloads, confirmation submission, dialog rendering, restoring a pending confirmation after
+the UI reloads, and the activity query payload; the Rust bridge keeps the request id and
+expiry so the dialog can be reconstructed.
 
 ### Real Tauri process
 
@@ -195,6 +220,9 @@ capture: image/png, PNG signature valid, 492714 bytes, partial true, stale false
 preview: affected 1, changed 1, world revision 0, access.allowed false (permission_denied)
 apply in read-only: permission_denied, accessMode read_only, operation apply_operation
 operation_status: revision 0, canUndo false, job.available false
+activity: 6 entries, bounded true; denied apply -> status denied, error permission_denied,
+          clientId "probe-local-bridge", projectId "local-project"
+activity limit 0: invalid_argument
 wrong token: unauthorized, responseContainsToken false
 LOCAL_BRIDGE_PROBE_OK
 ```
@@ -223,8 +251,10 @@ assume a protocol revision.
 - Writes are disabled by default. Access modes, limits and per-request confirmation now
   exist, but the live Tauri probe exercised only the read-only refusal; the approval dialog
   itself is covered by Rust and frontend tests, not by an automated click in a real window.
-- The policy is process-wide, not per MCP connection. A future task should scope grants to a
-  connection and add a visible activity log for pending and completed AI edits.
+- The policy and the MCP activity journal are process-wide, not per MCP connection. A future
+  task should scope grants and audit records to a connection identity. The journal is
+  in-memory and intentionally bounded, so it is not a durable audit trail across restarts;
+  accepted operations still live in the authoritative history.
 - The Job API is still absent: long operations are synchronous, and status reports
   `job.available=false` instead of inventing progress.
 - Camera and capture require a mounted viewport in the running editor. A hidden or

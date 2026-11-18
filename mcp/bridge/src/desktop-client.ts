@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { BRIDGE_INSTANCE_ID } from "./instance.js";
 
 /**
  * Client for the authenticated local IPC endpoint owned by the running FuryBuilder
@@ -225,6 +226,7 @@ export async function callDesktop(
     protocol: DESKTOP_PROTOCOL_VERSION,
     id,
     token: runtime.token,
+    clientId: BRIDGE_INSTANCE_ID,
     method,
     params,
   });

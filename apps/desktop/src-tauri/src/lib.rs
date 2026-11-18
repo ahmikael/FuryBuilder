@@ -1,6 +1,7 @@
 mod commands;
 mod local_bridge;
 mod mcp_access;
+mod mcp_activity;
 mod state;
 
 use tauri::Manager;
@@ -68,6 +69,7 @@ pub fn run() {
             local_bridge::renderer_ready,
             local_bridge::set_mcp_access,
             local_bridge::mcp_access_status,
+            local_bridge::mcp_activity,
             local_bridge::submit_mcp_confirmation,
             local_bridge::submit_renderer_response
         ])
