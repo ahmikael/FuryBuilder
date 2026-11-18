@@ -1,14 +1,15 @@
-//! Reproducible probe for the verified region writer (M8.7).
+//! Reproducible probe for the verified region writer (M8.7/M8.9).
 //!
 //! Usage:
 //!   cargo run -p furybuilder-world-io --example region_write_probe -- \
 //!     <source-world> <destination-region-file> <dimension> <x> <y> <z> <block-state> \
-//!     [<x> <y> <z> <block-state> ...]
+//!     [<x> <y> <z> <block-state> ...] [--rebuild-derived]
 //!
 //! The probe opens the source read-only, applies one or more block edits to the overlay,
 //! writes a new region file, re-reads every written block with the strict decoder, and
 //! confirms that the source region file is byte-identical before and after the run.
-//! All edits must belong to the same region file.
+//! All edits must belong to the same region file. `--rebuild-derived` selects the
+//! `DerivedDataPolicy::VanillaRebuild` hand-off instead of raw preservation.
 
 use std::path::Path;
 
@@ -16,8 +17,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use world_domain::BlockState;
 use world_io::{
-    region_file_name, write_region_from_overlay, JavaWorld, RegionFile, WorldOverlay,
-    ANVIL_REGION_AXIS_CHUNKS, VERIFIED_WRITE_SUPPORT,
+    region_file_name, write_region_from_overlay_with_policy, DerivedDataPolicy, JavaWorld,
+    RegionFile, WorldOverlay, ANVIL_REGION_AXIS_CHUNKS, VERIFIED_WRITE_SUPPORT,
 };
 
 struct Edit {
@@ -28,25 +29,37 @@ struct Edit {
 }
 
 fn main() {
-    let mut args = std::env::args().skip(1);
-    let source = args.next().unwrap_or_else(usage);
-    let destination = args.next().unwrap_or_else(usage);
-    let dimension = args.next().unwrap_or_else(usage);
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let policy = if args.iter().any(|arg| arg == "--rebuild-derived") {
+        args.retain(|arg| arg != "--rebuild-derived");
+        DerivedDataPolicy::VanillaRebuild
+    } else {
+        DerivedDataPolicy::Preserve
+    };
+    if args.len() < 7 {
+        usage();
+    }
+    let source = args[0].clone();
+    let destination = args[1].clone();
+    let dimension = args[2].clone();
     let mut edits = Vec::new();
-    while let Some(x) = args.next() {
-        let y = args.next().unwrap_or_else(usage);
-        let z = args.next().unwrap_or_else(usage);
-        let state = args.next().unwrap_or_else(usage);
+    let mut index = 3;
+    while index < args.len() {
+        let coords = args.get(index..index + 3).unwrap_or_else(|| usage());
+        let Some(state) = args.get(index + 3) else {
+            usage();
+        };
         let state = state.parse::<BlockState>().unwrap_or_else(|error| {
             eprintln!("invalid block state {state}: {error}");
             std::process::exit(2);
         });
         edits.push(Edit {
-            x: parse_i32(Some(x), "x"),
-            y: parse_i32(Some(y), "y"),
-            z: parse_i32(Some(z), "z"),
+            x: parse_i32(Some(coords[0].clone()), "x"),
+            y: parse_i32(Some(coords[1].clone()), "y"),
+            z: parse_i32(Some(coords[2].clone()), "z"),
             state,
         });
+        index += 4;
     }
     if edits.is_empty() {
         usage();
@@ -56,24 +69,28 @@ fn main() {
         Path::new(&destination),
         &dimension,
         &edits,
+        policy,
     ) {
         eprintln!("region write probe failed: {error}");
         std::process::exit(1);
     }
 }
 
-fn usage() -> String {
+fn usage() -> ! {
     eprintln!(
-        "usage: region_write_probe <source-world> <destination-region-file> <dimension> <x> <y> <z> <block-state> [<x> <y> <z> <block-state> ...]"
+        "usage: region_write_probe <source-world> <destination-region-file> <dimension> <x> <y> <z> <block-state> [<x> <y> <z> <block-state> ...] [--rebuild-derived]"
     );
     std::process::exit(2);
 }
 
 fn parse_i32(value: Option<String>, name: &str) -> i32 {
-    value.unwrap_or_else(usage).parse().unwrap_or_else(|_| {
-        eprintln!("{name} must be an integer");
-        std::process::exit(2);
-    })
+    value
+        .unwrap_or_else(|| usage())
+        .parse()
+        .unwrap_or_else(|_| {
+            eprintln!("{name} must be an integer");
+            std::process::exit(2);
+        })
 }
 
 fn run(
@@ -81,6 +98,7 @@ fn run(
     destination: &Path,
     dimension: &str,
     edits: &[Edit],
+    policy: DerivedDataPolicy,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let first = edits.first().ok_or("no edits")?;
     let chunk_x = first.x.div_euclid(16);
@@ -134,7 +152,14 @@ fn run(
             "current": change.current.to_string(),
         }));
     }
-    let report = write_region_from_overlay(&overlay, dimension, region_x, region_z, destination)?;
+    let report = write_region_from_overlay_with_policy(
+        &overlay,
+        dimension,
+        region_x,
+        region_z,
+        destination,
+        policy,
+    )?;
 
     let after = sha256_file(&source_region)?;
     if before != after {
@@ -188,6 +213,7 @@ fn run(
         "sourceUnchanged": true,
         "destination": destination.display().to_string(),
         "dimension": dimension,
+        "derivedDataPolicy": policy,
         "target": { "x": first.x, "y": first.y, "z": first.z, "chunkX": chunk_x, "chunkZ": chunk_z, "regionX": region_x, "regionZ": region_z },
         "previousBlock": changes.first().map(|change| change["previous"].clone()),
         "currentBlock": changes.first().map(|change| change["current"].clone()),

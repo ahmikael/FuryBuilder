@@ -58,7 +58,8 @@ pub use passthrough::{
     MAX_PASSTHROUGH_FILE_BYTES, MAX_PASSTHROUGH_TOTAL_BYTES,
 };
 pub use region_write::{
-    write_region_from_overlay, write_verified_region, RegionWriteError, RegionWriteReport,
+    write_region_from_overlay, write_region_from_overlay_with_policy, write_verified_region,
+    write_verified_region_with_policy, DerivedDataPolicy, RegionWriteError, RegionWriteReport,
     VerifiedChunkReplacement, VerifiedWriteSupport, VERIFIED_WRITE_DATA_VERSION,
     VERIFIED_WRITE_FIELDS, VERIFIED_WRITE_LAYOUT, VERIFIED_WRITE_SUPPORT, VERIFIED_WRITE_VERSION,
 };

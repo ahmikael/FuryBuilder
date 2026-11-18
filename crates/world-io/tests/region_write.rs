@@ -14,8 +14,9 @@ use flate2::Compression;
 use world_domain::BlockState;
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::{
-    region_file_name, write_region_from_overlay, write_verified_region, JavaWorld, RegionFile,
-    RegionWriteError, VerifiedChunkReplacement, WorldOverlay,
+    region_file_name, write_region_from_overlay, write_region_from_overlay_with_policy,
+    write_verified_region, DerivedDataPolicy, JavaWorld, RegionFile, RegionWriteError,
+    VerifiedChunkReplacement, WorldOverlay,
 };
 
 const TARGET: i32 = 4189;
@@ -103,6 +104,8 @@ fn section(y: i8, block: &str, biome: &str) -> NbtValue {
         ("Y", NbtValue::Byte(y)),
         ("block_states", block_palette(block)),
         ("biomes", biome_palette(biome)),
+        ("SkyLight", NbtValue::ByteArray(vec![0x11; 2048])),
+        ("BlockLight", NbtValue::ByteArray(vec![0x22; 2048])),
         (
             "UnknownSectionTag",
             NbtValue::compound([("value", NbtValue::Long(99))]),
@@ -119,6 +122,24 @@ fn chunk_nbt(x: i32, z: i32, status: &str, blocks: &str, biome: &str) -> NbtFile
             ("zPos", NbtValue::Int(z)),
             ("yPos", NbtValue::Int(-4)),
             ("Status", NbtValue::String(status.to_owned())),
+            ("isLightOn", NbtValue::Byte(1)),
+            (
+                "Heightmaps",
+                NbtValue::compound([
+                    ("MOTION_BLOCKING", NbtValue::LongArray(vec![1, 2, 3])),
+                    ("WORLD_SURFACE", NbtValue::LongArray(vec![4])),
+                ]),
+            ),
+            (
+                "PostProcessing",
+                NbtValue::List {
+                    kind: TAG_COMPOUND,
+                    items: vec![NbtValue::compound([(
+                        "pos",
+                        NbtValue::IntArray(vec![0, -60, 0]),
+                    )])],
+                },
+            ),
             (
                 "sections",
                 NbtValue::List {
@@ -508,14 +529,119 @@ fn refuses_an_identical_replacement() {
 }
 
 #[test]
-fn unknown_dimension_is_reported_without_creating_a_file() {
-    let dir = TempDir::new("unknown-dimension");
+fn vanilla_rebuild_policy_invalidates_only_derived_fields() {
+    let dir = TempDir::new("vanilla-rebuild");
     let root = dir.path().join("world");
     write_world(&root, "minecraft:full");
-    let overlay = WorldOverlay::open(&root).expect("open overlay");
+    let before = read_tree(&root);
+
+    let mut overlay = WorldOverlay::open(&root).expect("open overlay");
+    overlay
+        .set_block(
+            OVERWORLD,
+            0,
+            -64,
+            0,
+            &"minecraft:gold_block".parse::<BlockState>().unwrap(),
+        )
+        .expect("set block");
     let destination = output_dir(dir.path()).join(region_file_name(0, 0));
-    let error = write_region_from_overlay(&overlay, "minecraft:the_end", 0, 0, &destination)
-        .expect_err("dimension has no region");
-    assert_eq!(error.code(), "invalid_argument");
-    assert!(!destination.exists());
+    let report = write_region_from_overlay_with_policy(
+        &overlay,
+        OVERWORLD,
+        0,
+        0,
+        &destination,
+        DerivedDataPolicy::VanillaRebuild,
+    )
+    .expect("write region with vanilla rebuild policy");
+
+    assert_eq!(
+        report.derived_data_policy,
+        DerivedDataPolicy::VanillaRebuild
+    );
+    assert_eq!(
+        report.derived_data_action,
+        "invalidated_for_vanilla_rebuild"
+    );
+    assert_eq!(
+        report.invalidated_fields,
+        [
+            "Heightmaps",
+            "isLightOn",
+            "PostProcessing",
+            "sections[].SkyLight",
+            "sections[].BlockLight"
+        ]
+    );
+    assert_eq!(report.replaced, 1);
+    assert_eq!(report.preserved, 1);
+    assert!(report.untouched_records_byte_identical);
+    assert_eq!(read_tree(&root), before, "the source world must not change");
+
+    let source_region = root.join("region").join(region_file_name(0, 0));
+    let source = RegionFile::open(&source_region)
+        .expect("open source region")
+        .read_chunk(0, 0)
+        .expect("source chunk");
+    let source_root = source.nbt.root.as_compound().expect("source root");
+    assert!(source_root.contains_key("Heightmaps"));
+    assert_eq!(source_root.get("isLightOn"), Some(&NbtValue::Byte(1)));
+
+    let written = RegionFile::open(&destination).expect("open written region");
+    let edited = written.read_chunk(0, 0).expect("edited chunk");
+    let edited_root = edited.nbt.root.as_compound().expect("edited root");
+    assert!(!edited_root.contains_key("Heightmaps"));
+    assert!(!edited_root.contains_key("PostProcessing"));
+    assert_eq!(edited_root.get("isLightOn"), Some(&NbtValue::Byte(0)));
+    assert_eq!(
+        edited_root.get("block_entities"),
+        source_root.get("block_entities"),
+        "block entities are outside the invalidation policy"
+    );
+    assert_eq!(
+        edited_root.get("entities"),
+        source_root.get("entities"),
+        "entities are outside the invalidation policy"
+    );
+    assert_eq!(
+        edited_root.get("UnknownChunkTag"),
+        source_root.get("UnknownChunkTag"),
+        "unknown tags must stay untouched"
+    );
+    let edited_sections = match edited_root.get("sections") {
+        Some(NbtValue::List { items, .. }) => items,
+        other => panic!("unexpected sections: {other:?}"),
+    };
+    let edited_section = edited_sections[0].as_compound().expect("section");
+    assert!(!edited_section.contains_key("SkyLight"));
+    assert!(!edited_section.contains_key("BlockLight"));
+    assert_eq!(
+        edited_section.get("UnknownSectionTag"),
+        Some(&NbtValue::compound([("value", NbtValue::Long(99))])),
+        "unknown section tags must stay untouched"
+    );
+
+    let world = JavaWorld::open(&root).expect("reopen source world read-only");
+    let dimension = world.dimension(OVERWORLD).expect("overworld");
+    let decoded = edited.decode(dimension).expect("decode edited chunk");
+    assert_eq!(
+        decoded
+            .block_at(0, -64, 0)
+            .expect("block at 0,-64,0")
+            .to_string(),
+        "minecraft:gold_block"
+    );
+    assert_eq!(
+        decoded.biome_at(0, -64, 0).expect("biome"),
+        "minecraft:plains"
+    );
+
+    let untouched = written.read_chunk(1, 0).expect("untouched chunk");
+    let untouched_root = untouched.nbt.root.as_compound().expect("untouched root");
+    assert!(
+        untouched_root.contains_key("Heightmaps"),
+        "untouched chunks must not be invalidated"
+    );
+    assert_eq!(untouched_root.get("isLightOn"), Some(&NbtValue::Byte(1)));
 }

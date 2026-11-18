@@ -176,6 +176,67 @@ block only; the writer itself never edits `poi/`, and the behavior is not a
 general guarantee for beds, portals, workstations or other POI blocks. The
 `entities/` sidecar stayed at 0 bytes because the fixture had no entities.
 
+## Vanilla rebuild policy (M8.9)
+
+The M8.8 round-trip above used the default `DerivedDataPolicy::Preserve`: every
+derived field was copied raw, including stale heightmaps and stale light. The
+server trusted them and did not rebuild them.
+
+M8.9 adds an explicit second policy, `DerivedDataPolicy::VanillaRebuild`, to the
+verified region writer. It is still a block-state-only writer and still does not
+recompute anything in Rust. For every replaced full chunk it instead performs a
+bounded hand-off to the target vanilla engine:
+
+| Field                   | Action under `VanillaRebuild`                                   |
+| ----------------------- | --------------------------------------------------------------- |
+| `Heightmaps`            | removed so the engine re-primes the four heightmaps on load     |
+| `sections[].SkyLight`   | removed                                                         |
+| `sections[].BlockLight` | removed                                                         |
+| `isLightOn`             | set to `0` when present, marking serialized light untrustworthy |
+| `PostProcessing`        | removed; queued positions describe the pre-edit geometry        |
+| everything else         | preserved and compared against an identically invalidated clone |
+
+The source chunk is never modified. The writer invalidates a clone, verifies that
+the replacement differs from that clone only in `sections[].block_states`, writes
+the region, re-reads it and re-decodes the edited chunk. The report carries
+`derivedDataPolicy`, `derivedDataAction` and `invalidatedFields` so a caller
+cannot mistake the hand-off for a raw-preserve export.
+
+### Controlled rebuild round-trip
+
+The same official 1.21.4 server and fixture were used. Two edits were written
+with `--rebuild-derived`:
+
+| Position      | Before                  | After write       | After server load/save |
+| ------------- | ----------------------- | ----------------- | ---------------------- |
+| `(0, -61, 0)` | `minecraft:grass_block` | `minecraft:air`   | `minecraft:air`        |
+| `(3, -60, 3)` | air                     | `minecraft:torch` | `minecraft:torch`      |
+
+Before the server run the written chunk had no `Heightmaps`, no
+`PostProcessing`, no `SkyLight`/`BlockLight`, and `isLightOn = 0`. The server
+loaded the world, reached `Done (0.363s)`, received `stop`, saved all dimensions
+and exited with code 0. It logged no chunk or light errors.
+
+After the round-trip the same chunk had:
+
+| Field               | Result                                                                                                 |
+| ------------------- | ------------------------------------------------------------------------------------------------------ |
+| `Heightmaps`        | rebuilt: `MOTION_BLOCKING`, `MOTION_BLOCKING_NO_LEAVES`, `OCEAN_FLOOR`, `WORLD_SURFACE`, 37 words each |
+| `SkyLight`          | rebuilt (non-null fingerprint)                                                                         |
+| `BlockLight`        | rebuilt (non-null fingerprint)                                                                         |
+| `isLightOn`         | `1` again                                                                                              |
+| `PostProcessing`    | rebuilt to 24 queued positions                                                                         |
+| edited block states | preserved exactly                                                                                      |
+| `block_entities`    | still `0`; no missing block entity was synthesized                                                     |
+| source world        | all files byte-identical                                                                               |
+
+Fingerprints changed exactly for `heightmaps`, `sections`, `skyLight`,
+`blockLight` and `postProcessing`; `blockEntities`, `entities`, `blockTicks`,
+`fluidTicks` and `structures` stayed untouched. This is a real engine rebuild,
+not a FuryBuilder recomputation: heightmap values and light values are now the
+engine's answers for the edited terrain. The evidence is
+`docs/testing/evidence/2026-11-18-derived-rebuild-1.21.4.json`.
+
 ## Consequences for block edits
 
 | Data            | Consequence of a block-state-only edit                                                                         | Current status                                                |
@@ -185,41 +246,46 @@ general guarantee for beds, portals, workstations or other POI blocks. The
 | Block entities  | Existing records stay raw; missing records are **not** created; removed blocks can leave orphan records        | **Unsupported semantically**; avoid adding/removing BE blocks |
 | Entities        | `entities/` sidecars are copied byte for byte; an entity is not moved or removed when a block appears under it | Preserved, not edited                                         |
 | Scheduled ticks | Existing lists stay raw; new blocks are not scheduled; stale entries may be discarded by the game              | Preserved, not recomputed                                     |
-| Heightmaps      | Stale after surface changes; the server did not fix them on load/save                                          | **Not recalculated**; target of M8.9                          |
-| Lighting        | Stale after block removal/placement; `isLightOn` stays trusted                                                 | **Not recalculated**; target of M8.9                          |
-| POI             | Writer does not update `poi/`; one barrel POI was added by the server, not by FuryBuilder                      | Not guaranteed; target of M8.9                                |
+| Heightmaps      | Stale if preserved raw; rebuilt by the vanilla engine when explicitly invalidated                              | `VanillaRebuild` verified on 1.21.4                           |
+| Lighting        | Stale if preserved raw; rebuilt by the vanilla engine when `isLightOn = 0` and light arrays are removed        | `VanillaRebuild` verified on 1.21.4                           |
+| POI             | Writer does not update `poi/`; one barrel POI was added by the server, not by FuryBuilder                      | Not guaranteed; remains M8.10 work                            |
 | Structures      | Raw starts/references are preserved; block edits do not update them                                            | Preserved; non-empty fixture not tested                       |
 | Unknown tags    | Preserved and compared with the source                                                                         | Supported                                                     |
 
-## Decisions for M8.9 and M8.10
+## M8.9 decision and M8.10 boundary
 
-Do not call a block-state-only export "fully updated" or "vanilla-parity". The
-following choices are deliberately left to M8.9:
+M8.9 is resolved by the explicit engine hand-off, not by a Rust-side heightmap or
+light simulator:
 
-1. **Heightmaps** — implement a deterministic recalculation for edited sections,
-   or explicitly document that the game must rebuild them. The experiment shows
-   the game does not rebuild them on a normal load/save.
-2. **Lighting** — implement a relight, or test a bounded way to make the game
-   rebuild it (for example clearing light state). Do not silently keep stale
-   arrays and claim correct lighting.
-3. **Block entities** — either synthesize/remove the corresponding compounds for
-   supported blocks, or refuse edits that add/remove block-entity blocks. The
-   current writer must not imply that a chest placed this way has an inventory.
-4. **POI** — rebuild `poi/` records for edited sections, or rely on the server
-   only with an explicit warning. The barrel observation is not a general proof.
-5. **Ticks** — decide whether to clear stale ticks for changed positions and
-   whether any supported block needs a newly scheduled tick.
+1. **Heightmaps** — `VanillaRebuild` removes them; the official server rebuilt all
+   four kinds on the next load/save. This is documented behavior with evidence,
+   not a claim of independent parity.
+2. **Lighting** — `VanillaRebuild` clears the light arrays and sets `isLightOn = 0`;
+   the official server rebuilt both `SkyLight` and `BlockLight` and restored
+   `isLightOn = 1`.
+3. **Block entities** — still outside the supported edit set. The server did not
+   synthesize a missing chest/sign/barrel block entity in M8.8. Block-entity
+   blocks must not be added or removed through the block-state writer yet.
+4. **POI** — still not written by FuryBuilder. The barrel observation is not a
+   general proof; M8.10 must either rebuild POI or warn explicitly.
+5. **Ticks** — preserved raw; stale ticks are not cleared.
 6. **Full-world export** — copy `level.dat`, sidecars and untouched regions,
-   replace only changed region files, then re-read and validate the whole folder.
-   A single `.mca` is not a world.
+   replace only changed region files, apply a chosen policy, then re-read and
+   validate the whole folder. A single `.mca` is not a world.
+
+A caller that wants raw preservation must choose `Preserve` explicitly (the
+default). A caller that wants the engine to rebuild derived data must choose
+`VanillaRebuild` and must accept that the engine, not FuryBuilder, owns the
+resulting heightmap/light values.
 
 ## Reproduce
 
 ```powershell
-cargo test -p furybuilder-world-io --test derived
+cargo test -p furybuilder-world-io --test derived --test region_write
 cargo run -p furybuilder-world-io --example derived_probe -- <world> --world
 cargo run -p furybuilder-world-io --example derived_probe -- <world> --chunk 0 0
 cargo run -p furybuilder-world-io --example derived_probe -- <world> --blocks 0 -61 0 2 -60 2
+cargo run -p furybuilder-world-io --example region_write_probe -- <world> <new-region-file> minecraft:overworld 0 -61 0 minecraft:air 3 -60 3 minecraft:torch --rebuild-derived
 ```
 
 Evidence:
@@ -228,19 +294,25 @@ Evidence:
   inventory of 841 chunks and the sidecar scan; the source tree is hashed before
   and after.
 - `docs/testing/evidence/2026-11-18-derived-data-1.21.4.json` — the controlled
-  server round-trip, before/after chunk fingerprints, block states, sidecar
-  inventory, source hashes and the server log summary.
+  preserve-policy server round-trip, before/after chunk fingerprints, block
+  states, sidecar inventory, source hashes and the server log summary.
+- `docs/testing/evidence/2026-11-18-derived-rebuild-1.21.4.json` — the controlled
+  `VanillaRebuild` server round-trip: heightmaps, sky/block light,
+  `isLightOn` and `PostProcessing` were rebuilt; block states were preserved;
+  source files stayed byte-identical.
 
 ## Limits of this research
 
-- One flat 1.21.4 world, one full chunk, five block edits, one server run. It is
-  evidence, not a universal compatibility proof.
+- One flat 1.21.4 world, one full chunk, a small number of edits and one server
+  run per policy. It is evidence, not a universal compatibility proof.
 - The fixture had no entities, non-empty block entities, scheduled ticks or
   structure starts, so those paths were inventoried as empty fields but not
   exercised with live records.
 - The server was run offline on loopback; the authlib public-key fetch timed out,
   which is unrelated to chunk loading. The server still reached `Done`, saved all
   dimensions and exited with code 0.
-- No claim is made that the Minecraft client renders the stale light identically
-  to a fully relit chunk. That is exactly why M8.9 must resolve lighting before
-  the export is called verified for gameplay.
+- `VanillaRebuild` delegates heightmap and light correctness to the target
+  vanilla engine. FuryBuilder validates the hand-off shape and the block states;
+  it does not independently prove that every light value is minimal or that
+  heightmaps match a freshly generated chunk.
+- POI and block-entity semantics are not solved by this policy.

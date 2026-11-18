@@ -84,6 +84,8 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Derived-data inventory and sidecars               | `crates/world-io/src/derived.rs`; `crates/world-io/tests/derived.rs` — full/proto chunks, heightmaps, light, ticks, `PostProcessing`, block entities, POI compound shape, entity sidecars, missing folders; source tree unchanged                                                    |
 | Real 1.21.4 derived-data inventory                | `docs/testing/evidence/2026-11-18-derived-inventory-1.21.4.json` — 841 chunks, 49 full, 20,184 sections, 49 chunks with `SkyLight`, no `BlockLight`, 24 `PostProcessing` entries per chunk, empty block entities/ticks, 0-byte sidecar placeholders                                  |
 | Official 1.21.4 server round-trip                 | `docs/testing/evidence/2026-11-18-derived-data-1.21.4.json` — five edits, server exit 0; only `sections` changed; heightmaps/light/BEs/ticks/`PostProcessing` unchanged; chest/sign/barrel survived without block entities; barrel got a `minecraft:fisherman` POI; source unchanged |
+| Derived-data policy and rebuild hand-off          | `crates/world-io/tests/region_write.rs` — `VanillaRebuild` removes `Heightmaps`, `PostProcessing`, `SkyLight`/`BlockLight` and sets `isLightOn = 0` only for replaced chunks; unknown tags, block entities, entities and untouched chunks stay identical; source unchanged           |
+| Real 1.21.4 vanilla rebuild                       | `docs/testing/evidence/2026-11-18-derived-rebuild-1.21.4.json` — two edits, server exit 0; after load/save all four heightmaps, sky/block light, `isLightOn` and 24 `PostProcessing` entries were rebuilt; edited block states preserved; block entities still 0; source unchanged   |
 | Import World analysis and limits                  | `crates/world-io/src/world_import.rs`; `crates/world-io/tests/world_import.rs` — supported world counts, blockers for 26.1+ split and non-4189 versions, source immutability, chunk/section/block limits, empty world                                                                |
 | Import World project and source copy              | `crates/project-store/src/store.rs`; `crates/project-store/tests/source_overlay.rs` — `create_imported`, immutable tree manifest, traversal/missing-file refusal, generic creator still refuses `import`                                                                             |
 | Import World wizard UI                            | `apps/desktop/src/features/project/ProjectManager.tsx`; `ProjectManager.test.tsx` — folder input, Analyze, supported metrics, blockers disable import, `project_import_world` called with the selected folder                                                                        |
@@ -105,8 +107,9 @@ reproduces the real-world read evidence without modifying the world.
 reproduces the copy evidence.
 `cargo run -p furybuilder-world-io --example overlay_probe -- <source> <dimension> <x> <y> <z> <state>`
 reproduces the overlay evidence.
-`cargo run -p furybuilder-world-io --example region_write_probe -- <source> <new-region-file> <dimension> <x> <y> <z> <state>`
-reproduces the verified region write evidence without modifying the source world.
+`cargo run -p furybuilder-world-io --example region_write_probe -- <source> <new-region-file> <dimension> <x> <y> <z> <state> [--rebuild-derived]`
+reproduces the verified region write evidence without modifying the source world;
+`--rebuild-derived` selects the `VanillaRebuild` hand-off.
 `cargo run -p furybuilder-world-io --example derived_probe -- <source> --world`
 reproduces the derived-data inventory, and `--chunk <cx> <cz>` or
 `--blocks <x> <y> <z> ...` reports one chunk or decoded block states.

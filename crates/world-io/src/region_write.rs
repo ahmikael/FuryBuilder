@@ -44,8 +44,47 @@ use crate::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
 pub const VERIFIED_WRITE_LAYOUT: &str = "classic_anvil";
 pub const VERIFIED_WRITE_VERSION: &str = TARGET_MINECRAFT_VERSION;
 pub const VERIFIED_WRITE_DATA_VERSION: i32 = TARGET_DATA_VERSION;
-/// The complete set of chunk fields this writer is allowed to change.
+/// The complete set of chunk fields this writer fills from the overlay.
+///
+/// `DerivedDataPolicy::VanillaRebuild` may additionally invalidate the fields listed
+/// by [`DerivedDataPolicy::invalidated_fields`]; it never writes block data into them.
 pub const VERIFIED_WRITE_FIELDS: &[&str] = &["sections[].block_states"];
+
+/// What to do with derived fields that a block-state-only write cannot recalculate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum DerivedDataPolicy {
+    /// Copy every non-block-state field unchanged. This is the backward-compatible default.
+    #[default]
+    Preserve,
+    /// Remove or invalidate heightmaps and light so the vanilla engine rebuilds them on load.
+    ///
+    /// This does not recompute anything in Rust. It is an explicit hand-off to the
+    /// target Minecraft engine and is only valid for a full chunk of the pinned version.
+    VanillaRebuild,
+}
+
+impl DerivedDataPolicy {
+    pub fn action(self) -> &'static str {
+        match self {
+            DerivedDataPolicy::Preserve => "preserved",
+            DerivedDataPolicy::VanillaRebuild => "invalidated_for_vanilla_rebuild",
+        }
+    }
+
+    pub fn invalidated_fields(self) -> &'static [&'static str] {
+        match self {
+            DerivedDataPolicy::Preserve => &[],
+            DerivedDataPolicy::VanillaRebuild => &[
+                "Heightmaps",
+                "isLightOn",
+                "PostProcessing",
+                "sections[].SkyLight",
+                "sections[].BlockLight",
+            ],
+        }
+    }
+}
 
 /// Published support claim for the write path. It is deliberately small and explicit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -55,6 +94,7 @@ pub struct VerifiedWriteSupport {
     pub data_version: i32,
     pub layout: &'static str,
     pub fields: &'static [&'static str],
+    pub derived_data_policies: &'static [&'static str],
     pub recomputes_derived_metadata: bool,
 }
 
@@ -63,6 +103,7 @@ pub const VERIFIED_WRITE_SUPPORT: VerifiedWriteSupport = VerifiedWriteSupport {
     data_version: VERIFIED_WRITE_DATA_VERSION,
     layout: VERIFIED_WRITE_LAYOUT,
     fields: VERIFIED_WRITE_FIELDS,
+    derived_data_policies: &["preserve", "vanillaRebuild"],
     recomputes_derived_metadata: false,
 };
 
@@ -96,6 +137,9 @@ pub struct RegionWriteReport {
     pub source_unchanged: bool,
     pub untouched_records_byte_identical: bool,
     pub output_redecoded: bool,
+    pub derived_data_policy: DerivedDataPolicy,
+    pub derived_data_action: &'static str,
+    pub invalidated_fields: &'static [&'static str],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -155,6 +199,31 @@ pub fn write_verified_region(
     region_z: i32,
     replacements: &[VerifiedChunkReplacement],
     destination: impl AsRef<Path>,
+) -> Result<RegionWriteReport, RegionWriteError> {
+    write_verified_region_with_policy(
+        world,
+        dimension_id,
+        region_x,
+        region_z,
+        replacements,
+        destination,
+        DerivedDataPolicy::Preserve,
+    )
+}
+
+/// Writes a new region file with an explicit derived-data policy.
+///
+/// `DerivedDataPolicy::Preserve` is the M8.7 behaviour. `VanillaRebuild` invalidates
+/// heightmaps and light only for replaced chunks and leaves every other field checked
+/// against an identically invalidated source clone.
+pub fn write_verified_region_with_policy(
+    world: &JavaWorld,
+    dimension_id: &str,
+    region_x: i32,
+    region_z: i32,
+    replacements: &[VerifiedChunkReplacement],
+    destination: impl AsRef<Path>,
+    policy: DerivedDataPolicy,
 ) -> Result<RegionWriteReport, RegionWriteError> {
     world.level.ensure_supported()?;
     if world.level.data_version != VERIFIED_WRITE_DATA_VERSION {
@@ -232,14 +301,18 @@ pub fn write_verified_region(
     for entry in &source_entries {
         let source = region.read_chunk(entry.x, entry.z)?;
         if let Some(replacement) = pending.get(&(entry.x, entry.z)) {
-            verify_replacement(world, dimension_id, &source, &replacement.nbt)?;
             if source.summary.status.as_deref() != Some("minecraft:full") {
                 return Err(RegionWriteError::UnsupportedCombination(format!(
                     "chunk ({}, {}) has status {:?}; editing requires a fully generated chunk",
                     entry.x, entry.z, source.summary.status
                 )));
             }
-            verified.insert((entry.x, entry.z), replacement.nbt.clone());
+            let mut nbt = replacement.nbt.clone();
+            if policy == DerivedDataPolicy::VanillaRebuild {
+                invalidate_derived_fields(&mut nbt)?;
+            }
+            verify_replacement(world, dimension_id, &source, &nbt, policy)?;
+            verified.insert((entry.x, entry.z), nbt);
         }
     }
 
@@ -259,6 +332,7 @@ pub fn write_verified_region(
         staging.path(),
         &verified,
         &source_entries,
+        policy,
     )?;
     if sha256_file(region.path())? != source_region_sha256 {
         return Err(RegionWriteError::VerificationFailed(
@@ -281,6 +355,9 @@ pub fn write_verified_region(
         source_unchanged: true,
         untouched_records_byte_identical: true,
         output_redecoded: true,
+        derived_data_policy: policy,
+        derived_data_action: policy.action(),
+        invalidated_fields: policy.invalidated_fields(),
     })
 }
 
@@ -291,6 +368,25 @@ pub fn write_region_from_overlay(
     region_x: i32,
     region_z: i32,
     destination: impl AsRef<Path>,
+) -> Result<RegionWriteReport, RegionWriteError> {
+    write_region_from_overlay_with_policy(
+        overlay,
+        dimension_id,
+        region_x,
+        region_z,
+        destination,
+        DerivedDataPolicy::Preserve,
+    )
+}
+
+/// Writes one region from the overlay with an explicit derived-data policy.
+pub fn write_region_from_overlay_with_policy(
+    overlay: &WorldOverlay,
+    dimension_id: &str,
+    region_x: i32,
+    region_z: i32,
+    destination: impl AsRef<Path>,
+    policy: DerivedDataPolicy,
 ) -> Result<RegionWriteReport, RegionWriteError> {
     let mut replacements = Vec::new();
     let mut dirty = 0usize;
@@ -317,14 +413,77 @@ pub fn write_region_from_overlay(
             "not every dirty chunk was materialized".to_owned(),
         ));
     }
-    write_verified_region(
+    write_verified_region_with_policy(
         overlay.world(),
         dimension_id,
         region_x,
         region_z,
         &replacements,
         destination,
+        policy,
     )
+}
+
+fn source_with_policy(
+    source: &RegionChunk,
+    policy: DerivedDataPolicy,
+) -> Result<NbtFile, RegionWriteError> {
+    let mut nbt = source.nbt.clone();
+    if policy == DerivedDataPolicy::VanillaRebuild {
+        invalidate_derived_fields(&mut nbt)?;
+    }
+    Ok(nbt)
+}
+
+/// Invalidates derived fields so the vanilla engine rebuilds them on the next load.
+///
+/// This is an explicit hand-off, not a Rust-side recomputation. It is limited to a
+/// fully generated 1.21.4 chunk: `isLightOn = 0` marks the serialized light as not
+/// trustworthy, missing `Heightmaps` are re-primed from section data, and queued
+/// `PostProcessing` positions refer to the pre-edit geometry.
+fn invalidate_derived_fields(nbt: &mut NbtFile) -> Result<(), RegionWriteError> {
+    let root = match &mut nbt.root {
+        NbtValue::Compound(root) => root,
+        _ => {
+            return Err(RegionWriteError::VerificationFailed(
+                "chunk root is not a compound".to_owned(),
+            ))
+        }
+    };
+    root.remove("Heightmaps");
+    root.remove("PostProcessing");
+    if root.contains_key("isLightOn") {
+        root.insert("isLightOn".to_owned(), NbtValue::Byte(0));
+    }
+    let sections = root.get_mut("sections").ok_or_else(|| {
+        RegionWriteError::VerificationFailed("chunk has no sections list".to_owned())
+    })?;
+    let (kind, items) = match sections {
+        NbtValue::List { kind, items } => (*kind, items),
+        _ => {
+            return Err(RegionWriteError::VerificationFailed(
+                "chunk sections is not a list".to_owned(),
+            ))
+        }
+    };
+    if kind != crate::nbt::TAG_COMPOUND && !items.is_empty() {
+        return Err(RegionWriteError::VerificationFailed(
+            "chunk sections is not a list of compounds".to_owned(),
+        ));
+    }
+    for item in items {
+        let section = match item {
+            NbtValue::Compound(section) => section,
+            _ => {
+                return Err(RegionWriteError::VerificationFailed(
+                    "chunk has a non-compound section".to_owned(),
+                ))
+            }
+        };
+        section.remove("SkyLight");
+        section.remove("BlockLight");
+    }
+    Ok(())
 }
 
 fn verify_replacement(
@@ -332,6 +491,7 @@ fn verify_replacement(
     dimension_id: &str,
     source: &RegionChunk,
     replacement: &NbtFile,
+    policy: DerivedDataPolicy,
 ) -> Result<(), RegionWriteError> {
     let root = replacement.root.as_compound().ok_or_else(|| {
         RegionWriteError::VerificationFailed(format!(
@@ -363,8 +523,9 @@ fn verify_replacement(
             )))
         }
     }
-    verify_preserved_fields(&source.nbt, replacement)?;
-    if replacement == &source.nbt {
+    let expected_source = source_with_policy(source, policy)?;
+    verify_preserved_fields(&expected_source, replacement)?;
+    if replacement == &expected_source {
         return Err(RegionWriteError::InvalidArgument(format!(
             "chunk ({}, {}) replacement is identical to the source chunk",
             source.x, source.z
@@ -599,6 +760,7 @@ fn verify_written_region(
     written_path: &Path,
     replacements: &BTreeMap<(i32, i32), NbtFile>,
     source_entries: &[RegionEntry],
+    policy: DerivedDataPolicy,
 ) -> Result<(), RegionWriteError> {
     let written = RegionFile::open(written_path)?;
     if written.region_coordinates() != source.region_coordinates() {
@@ -643,7 +805,8 @@ fn verify_written_region(
                     )));
                 }
                 let source_chunk = source.read_chunk(source_entry.x, source_entry.z)?;
-                verify_preserved_fields(&source_chunk.nbt, &chunk.nbt)?;
+                let expected_source = source_with_policy(&source_chunk, policy)?;
+                verify_preserved_fields(&expected_source, &chunk.nbt)?;
                 world.decode_chunk_nbt(dimension_id, source_entry.x, source_entry.z, &chunk.nbt)?;
             }
             None => {

@@ -411,13 +411,15 @@ anything outside this explicit combination:
 | Game version          | Minecraft Java 1.21.4, `DataVersion` 4189                              |
 | Layout                | classic Anvil (`region/`, `DIM-1/`, `DIM1/`), standard dimensions only |
 | Editable chunk fields | `sections[].block_states` only                                         |
+| Derived-data policy   | `preserve` (raw) or `vanillaRebuild` (explicit engine hand-off, M8.9)  |
 | Chunk status          | edited chunks must have `Status = minecraft:full`                      |
 | Source compression    | gzip, zlib or uncompressed; the writer emits zlib                      |
 | Destination           | a new standalone `r.<x>.<z>.mca`, never the source region directory    |
 
 Every replacement is checked against the source NBT before a byte is written:
 root tags, section `Y` values, biomes, block entities, entities, ticks, heightmaps,
-lighting, POI and unknown tags must be unchanged. The patched chunk is then
+lighting, POI and unknown tags must be unchanged unless the selected policy
+explicitly invalidates its documented derived fields. The patched chunk is then
 re-decoded with the same strict decoder used for import. An identical replacement,
 an unknown field change, a non-full chunk, an external `.mcc` chunk or a
 destination that already exists is refused with a structured error.
@@ -435,17 +437,22 @@ Publication is staged and verified:
 - a failure removes the staging directory and leaves no destination file.
 
 Known limitations, recorded in the report as `recomputesDerivedMetadata: false`:
-block edits do **not** recalculate heightmaps, lighting, block entities, ticks, POI
-or other derived data. Those fields are preserved as raw data, not semantically
-updated. M8.8 inventoried them on the real world and ran an official 1.21.4
-server load/save round-trip; the server did not rebuild stale heightmaps or
-light and did not create missing block entities. See
-`docs/formats/java-chunk-derived-data.md`. Recomputation or an explicit engine
-policy is M8.9; a full world-folder export is still M8.10.
+block edits do **not** recompute anything in Rust. The default `preserve` policy
+copies heightmaps, lighting, block entities, ticks, POI and other derived data as
+raw bytes. The opt-in `vanillaRebuild` policy removes `Heightmaps`, `SkyLight`,
+`BlockLight` and `PostProcessing`, and sets `isLightOn` to `0`, so the target
+vanilla engine rebuilds them on the next load; the report lists the invalidated
+fields. An official 1.21.4 server was verified to rebuild all four heightmaps,
+both light arrays, `isLightOn` and `PostProcessing` while preserving the edited
+block states. Block entities and POI are still not synthesized or rewritten. See
+`docs/formats/java-chunk-derived-data.md` and
+`docs/testing/evidence/2026-11-18-derived-rebuild-1.21.4.json`. A full world-folder
+export is still M8.10.
 
 ```powershell
 cargo test -p furybuilder-world-io --test region_write
 cargo run -p furybuilder-world-io --example region_write_probe -- <world> <new-region-file> minecraft:overworld -15 -61 -15 minecraft:gold_block
+cargo run -p furybuilder-world-io --example region_write_probe -- <world> <new-region-file> minecraft:overworld 0 -61 0 minecraft:air 3 -60 3 minecraft:torch --rebuild-derived
 ```
 
 ## Chunk-derived data (M8.8)
@@ -473,29 +480,56 @@ server round-trip over five edits found:
 | `poi/`                 | one `minecraft:fisherman` record for the placed barrel, written by the server, not by FuryBuilder |
 | source world           | all files byte-identical; server exited 0                                                         |
 
-This is evidence, not a universal parity proof. The current writer is therefore
-block-state-only: do not place or remove block-entity blocks, and do not claim
-that heightmaps or light are correct after an edit. M8.9 must implement
-recalculation or an explicit vanilla-engine policy before such an export is
-called gameplay-verified.
+This is evidence, not a universal parity proof. The default writer policy is
+therefore block-state-only: do not place or remove block-entity blocks, and do
+not claim that heightmaps or light are correct when the raw `preserve` policy is
+used. M8.9 adds an explicit `vanillaRebuild` policy; see below.
+
+## Vanilla rebuild policy (M8.9)
+
+`DerivedDataPolicy::VanillaRebuild` is a documented hand-off to the target
+vanilla engine, not a Rust-side recomputation. For replaced full chunks the
+writer removes `Heightmaps`, `SkyLight`, `BlockLight` and `PostProcessing`, sets
+`isLightOn` to `0`, and keeps every other field byte-equivalent to an identically
+invalidated source clone. The report exposes `derivedDataPolicy`,
+`derivedDataAction` and `invalidatedFields`.
+
+The official 1.21.4 server round-trip over two edits confirmed that the engine
+rebuilds what the policy invalidates:
+
+| Finding             | Result                                                          |
+| ------------------- | --------------------------------------------------------------- |
+| heightmaps          | rebuilt: all four kinds, 37 words each                          |
+| sky light           | rebuilt (non-null fingerprint)                                  |
+| block light         | rebuilt (non-null fingerprint)                                  |
+| `isLightOn`         | restored to `1`                                                 |
+| `PostProcessing`    | rebuilt to 24 entries                                           |
+| edited block states | preserved exactly                                               |
+| block entities      | still `0`; the engine did not synthesize missing block entities |
+| source world        | byte-identical; server exited 0                                 |
+
+The default remains `preserve`; the caller must choose the engine hand-off
+explicitly and must accept that heightmap/light correctness is then owned by the
+vanilla engine. POI and block-entity semantics remain outside both policies.
 
 ```powershell
-cargo test -p furybuilder-world-io --test derived
+cargo test -p furybuilder-world-io --test derived --test region_write
 cargo run -p furybuilder-world-io --example derived_probe -- <world> --world
 cargo run -p furybuilder-world-io --example derived_probe -- <world> --chunk 0 0
 cargo run -p furybuilder-world-io --example derived_probe -- <world> --blocks 0 -61 0 2 -60 2
+cargo run -p furybuilder-world-io --example region_write_probe -- <world> <new-region-file> minecraft:overworld 0 -61 0 minecraft:air 3 -60 3 minecraft:torch --rebuild-derived
 ```
 
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                                           | Write                                                                                      | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory edits + Import World wizard (M8.5–M8.6) | new region file, block states only (M8.7); derived data inventoried, not recomputed (M8.8) | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                                                | no                                                                                         | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                                                | no                                                                                         | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                                                | no                                                                                         | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                                                | no                                                                                         | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                                                | no                                                                                         | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                                           | Write                                                                                                               | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory edits + Import World wizard (M8.5–M8.6) | new region file, block states only (M8.7); derived data inventoried, preserve or vanilla-rebuild policy (M8.8–M8.9) | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                                                | no                                                                                                                  | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                                                | no                                                                                                                  | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                                                | no                                                                                                                  | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                                                | no                                                                                                                  | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                                                | no                                                                                                                  | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support. “Passthrough” means unchanged files
@@ -503,8 +537,11 @@ are copied byte for byte. “Overlay/wizard” means block edits are kept in mem
 the desktop wizard can create an imported project, and edits can be materialized
 to chunk NBT. “Write” means a new verified region file for the listed fields; it
 is never an in-place write and a full world-folder export is still pending.
-Derived data is preserved raw; M8.8 showed that an official server does not
-automatically rebuild stale heightmaps, light or missing block entities.
+Derived data is preserved raw by default; M8.8 showed that an official server
+does not automatically rebuild stale heightmaps, light or missing block
+entities. M8.9 adds an opt-in policy that invalidates heightmaps, light,
+`isLightOn` and `PostProcessing`, and the official server did rebuild them on
+the next load/save.
 
 ## Safety rules for the M8 importer
 
@@ -599,6 +636,13 @@ Recorded evidence:
   structures stayed unchanged; a chest, sign and barrel survived without block
   entities; the server added one `minecraft:fisherman` POI record for the barrel;
   the source world stayed byte-identical and the server exited 0.
+- `docs/testing/evidence/2026-11-18-derived-rebuild-1.21.4.json` - the official
+  1.21.4 server round-trip with `DerivedDataPolicy::VanillaRebuild` over two
+  edits: the written chunk had no heightmaps/light/`PostProcessing` and
+  `isLightOn = 0`; after load/save the server rebuilt all four heightmaps (37
+  words each), both light arrays, `isLightOn = 1` and 24 `PostProcessing`
+  entries; the edited block states were preserved, `blockEntities` stayed 0 and
+  the source world stayed byte-identical.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` - a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
