@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenedProjectPayload, ProjectSummary, SessionStatus } from "@/project/types";
+import type { StructureInsertOutcome } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
 import { useToastStore, useToolStore } from "@/state/tool-store";
@@ -25,6 +26,11 @@ const worldApi = vi.hoisted(() => ({
   history: vi.fn(),
 }));
 
+const structureApi = vi.hoisted(() => ({
+  importProject: vi.fn(),
+  insert: vi.fn(),
+}));
+
 vi.mock("@/lib/project-api", () => ({
   fetchProjects: api.list,
   fetchProjectStatus: api.status,
@@ -42,6 +48,11 @@ vi.mock("@/lib/project-api", () => ({
 vi.mock("@/lib/world-api", () => ({
   fetchWorldInfo: worldApi.info,
   fetchHistoryState: worldApi.history,
+}));
+
+vi.mock("@/lib/structure-api", () => ({
+  importStructureProject: structureApi.importProject,
+  insertStructure: structureApi.insert,
 }));
 
 const { currentEditorState, projectIsDirty, useProjectStore } =
@@ -98,6 +109,38 @@ function payload(overrides: Partial<OpenedProjectPayload> = {}): OpenedProjectPa
     recovery: null,
     session: session(),
     ...overrides,
+  };
+}
+
+function insertOutcome(): StructureInsertOutcome {
+  return {
+    preview: {
+      format: "java_structure",
+      dataVersion: 4189,
+      targetDataVersion: 4189,
+      targetMinecraftVersion: "1.21.4",
+      size: [2, 2, 2],
+      volume: 8,
+      paletteSize: 2,
+      palette: [{ state: "minecraft:stone", count: 2 }],
+      storedBlocks: 2,
+      nonAirBlocks: 2,
+      entities: 0,
+      blockEntities: 0,
+      unknownTags: [],
+      warnings: [],
+      compatible: true,
+    },
+    operation: {
+      operationId: "op-structure",
+      worldRevision: 5,
+      changedBlocks: 2,
+      dirtyChunks: [{ x: 0, z: 0 }],
+      warnings: [],
+      replayed: false,
+    },
+    info: { ...payload().info, revision: 5, blockCount: 4098 },
+    session: session({ savedRevision: 4, revision: 5, dirty: true }),
   };
 }
 
@@ -167,6 +210,8 @@ beforeEach(() => {
     revision: 0,
     entries: [],
   });
+  structureApi.importProject.mockReset().mockResolvedValue(payload());
+  structureApi.insert.mockReset().mockResolvedValue(insertOutcome());
   resetStores();
 });
 
@@ -339,5 +384,78 @@ describe("close, checkpoints and rename", () => {
     expect(renamed).toBe(true);
     expect(useProjectStore.getState().current?.name).toBe("Renamed");
     expect(useProjectStore.getState().projects[0]?.name).toBe("Renamed");
+  });
+});
+
+describe("structure exchange actions", () => {
+  it("imports a structure as a new project and adopts its editor state", async () => {
+    const reload = vi.fn();
+    viewportBus.addEventListener("reload-world", reload);
+    try {
+      structureApi.importProject.mockResolvedValue({
+        ...payload(),
+        detail: {
+          ...payload().detail,
+          source: { kind: "imported", immutable: true, reference: "castle.nbt" },
+          editorState: { selectedDimension: "minecraft:the_nether", loadRadius: 3 },
+        },
+        session: session({
+          editorState: { selectedDimension: "minecraft:the_nether", loadRadius: 3 },
+        }),
+      });
+      const args = {
+        name: "Imported",
+        sourceFileName: "castle.nbt",
+        payload: "cGF5bG9hZA==",
+        dimension: "minecraft:the_nether",
+        origin: [0, 40, 0] as [number, number, number],
+        includeAir: false,
+        editorState: { selectedDimension: "minecraft:the_nether", loadRadius: 3 },
+      };
+      const imported = await useProjectStore.getState().importStructure(args);
+      expect(imported).toBe(true);
+      expect(structureApi.importProject).toHaveBeenCalledWith(args);
+      expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
+      expect(useProjectStore.getState().managerOpen).toBe(false);
+      expect(useEditorStore.getState().selectedDimension).toBe("minecraft:the_nether");
+      expect(useWorldStore.getState().revision).toBe(4);
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(useToastStore.getState().toasts.at(-1)?.title).toContain("Imported");
+      expect(api.list).toHaveBeenCalled();
+    } finally {
+      viewportBus.removeEventListener("reload-world", reload);
+    }
+  });
+
+  it("inserts a structure into the open project as unsaved work", async () => {
+    useProjectStore.setState({ current: session(), projects: [summary], managerOpen: true });
+    const reload = vi.fn();
+    viewportBus.addEventListener("reload-world", reload);
+    try {
+      const inserted = await useProjectStore.getState().insertStructure({
+        payload: "cGF5bG9hZA==",
+        dimension: "minecraft:overworld",
+        origin: [0, 64, 0],
+        includeAir: true,
+      });
+      expect(inserted).toBe(true);
+      expect(structureApi.insert).toHaveBeenCalledWith({
+        payload: "cGF5bG9hZA==",
+        dimension: "minecraft:overworld",
+        origin: [0, 64, 0],
+        includeAir: true,
+      });
+      expect(useWorldStore.getState().revision).toBe(5);
+      expect(useWorldStore.getState().blockCount).toBe(4098);
+      expect(useProjectStore.getState().current?.revision).toBe(5);
+      expect(useProjectStore.getState().current?.savedRevision).toBe(4);
+      expect(useProjectStore.getState().current?.dirty).toBe(true);
+      expect(useProjectStore.getState().managerOpen).toBe(false);
+      expect(useToolStore.getState().syncState).toBe("modified");
+      expect(reload).toHaveBeenCalledTimes(1);
+      expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Structure inserted");
+    } finally {
+      viewportBus.removeEventListener("reload-world", reload);
+    }
   });
 });

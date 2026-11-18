@@ -13,6 +13,10 @@ import {
   renameProject,
   saveProject,
 } from "@/lib/project-api";
+import {
+  importStructureProject as importStructureProjectApi,
+  insertStructure as insertStructureApi,
+} from "@/lib/structure-api";
 import { fetchWorldInfo as fetchProjectWorldInfo } from "@/lib/world-api";
 import type {
   CheckpointMeta,
@@ -24,6 +28,7 @@ import type {
   SaveOutcome,
   SessionStatus,
 } from "@/project/types";
+import type { StructureImportProjectArgs, StructureInsertArgs } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
 import { pushToast, useToolStore } from "@/state/tool-store";
@@ -46,6 +51,8 @@ interface ProjectUiState {
   refreshSession: () => Promise<void>;
   resume: () => Promise<void>;
   create: (name: string, mode: CreationMode) => Promise<boolean>;
+  importStructure: (args: StructureImportProjectArgs) => Promise<boolean>;
+  insertStructure: (args: StructureInsertArgs) => Promise<boolean>;
   open: (folder: string, options?: { discardCurrent?: boolean }) => Promise<boolean>;
   save: () => Promise<boolean>;
   autosave: (reason?: string) => Promise<boolean>;
@@ -190,6 +197,59 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     } catch (error) {
       set({ loading: false });
       reportError(error, "Project creation failed");
+      return false;
+    }
+  },
+
+  importStructure: async (args) => {
+    set({ loading: true });
+    try {
+      const payload = await importStructureProjectApi(args);
+      applyPayload(payload);
+      set({ managerOpen: false });
+      pushToast({
+        kind: "success",
+        title: `Imported “${payload.detail.summary.name}”`,
+        description: `${args.sourceFileName} · rev ${payload.detail.summary.worldRevision} · ${payload.info.blockCount.toLocaleString()} blocks`,
+      });
+      void get().refreshList();
+      return true;
+    } catch (error) {
+      set({ loading: false });
+      reportError(error, "Structure import failed");
+      return false;
+    }
+  },
+
+  insertStructure: async (args) => {
+    set({ loading: true });
+    try {
+      const result = await insertStructureApi(args);
+      useEditorStore.getState().setSelectedDimension(args.dimension);
+      useWorldStore.getState().applySummary({
+        source: "core",
+        dimension: args.dimension,
+        revision: result.info.revision,
+        blockCount: result.info.blockCount,
+        sectionCount: result.info.sectionCount,
+        chunkCount: result.info.chunkCount,
+      });
+      set({ current: result.session, loading: false, managerOpen: false });
+      useToolStore.getState().markModified();
+      useToolStore.getState().setSelection(null);
+      void useHistoryStore.getState().refresh();
+      reloadViewport();
+      pushToast({
+        kind: "success",
+        title: "Structure inserted",
+        description: result.operation
+          ? `${result.operation.changedBlocks.toLocaleString()} block(s) changed · rev ${result.operation.worldRevision}`
+          : "The structure contained no non-empty positions.",
+      });
+      return true;
+    } catch (error) {
+      set({ loading: false });
+      reportError(error, "Structure insertion failed");
       return false;
     }
   },

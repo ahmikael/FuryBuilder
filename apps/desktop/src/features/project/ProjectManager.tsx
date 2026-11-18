@@ -12,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Save,
+  ArrowLeftRight,
   ShieldAlert,
   Sparkles,
   Trash2,
@@ -29,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauriRuntime } from "@/lib/ipc";
+import { StructureExchange } from "@/features/project/StructureExchange";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { useWorldStore } from "@/state/world-store";
 import {
@@ -316,6 +318,9 @@ export function ProjectManager() {
                 </TabsTrigger>
                 <TabsTrigger value="checkpoints">
                   <History className="size-3" /> Checkpoints
+                </TabsTrigger>
+                <TabsTrigger value="exchange">
+                  <ArrowLeftRight className="size-3" /> Import / Export
                 </TabsTrigger>
               </TabsList>
 
@@ -627,6 +632,10 @@ export function ProjectManager() {
                     ))}
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="exchange" className="m-0 space-y-2 pt-2">
+                <StructureExchange />
               </TabsContent>
             </Tabs>
 
