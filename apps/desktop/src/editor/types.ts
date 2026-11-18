@@ -14,11 +14,27 @@ export interface BoxBounds {
   min: BlockPosition;
   max: BlockPosition;
 }
+
+/** Deterministic terrain surface brushes. They never generate a whole world. */
+export type TerrainBrushKind =
+  "raise" | "lower" | "smooth" | "flatten" | "noise" | "erode" | "terrace";
+
 export type EditorOperation =
   | { type: "set_block"; dimension: string; pos: BlockPosition; state: BlockState }
   | { type: "batch"; dimension: string; changes: BlockChange[] }
   | { type: "fill_cuboid"; dimension: string; bounds: BoxBounds; state: BlockState }
-  | { type: "replace"; dimension: string; bounds: BoxBounds; from: BlockState; to: BlockState };
+  | { type: "replace"; dimension: string; bounds: BoxBounds; from: BlockState; to: BlockState }
+  | {
+      type: "terrain_brush";
+      dimension: string;
+      bounds: BoxBounds;
+      kind: TerrainBrushKind;
+      material: BlockState;
+      amount: number;
+      seed: number;
+      step: number;
+      targetY?: number | null;
+    };
 
 export interface PreviewResult {
   affectedBlocks: number;

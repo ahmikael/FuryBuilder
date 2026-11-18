@@ -109,7 +109,12 @@ World Core, and its seed, preset, data packs, Java/server identity and requested
 recorded in `project.json`. M9.8 verifies the saved generated base against the original
 generator's reference chunks: settings and provenance must agree exactly, only an untouched
 revision-1 base is checked, and block differences are reported with coordinates. The check is
-bounded and refuses unsupported or incomplete references instead of claiming parity.
+bounded and refuses unsupported or incomplete references instead of claiming parity. M9.9
+adds deterministic terrain brushes - raise, lower, smooth, flatten, noise, erode and terrace -
+over the box selection. They adjust the topmost non-air block of each column in one reversible
+operation, read heights before writing, use a stable SplitMix64 noise seed, and are previewed
+by the Rust core. They are local surface tools, not a whole-world generator; heightmaps are
+still preserved raw and are not recalculated after a brush.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

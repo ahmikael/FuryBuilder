@@ -1112,6 +1112,25 @@ fn operation_summary(operation: &Operation) -> Value {
             "from": from.to_string(),
             "to": to.to_string(),
         }),
+        Operation::TerrainBrush {
+            kind,
+            material,
+            amount,
+            seed,
+            step,
+            target_y,
+            ..
+        } => json!({
+            "type": "terrain_brush",
+            "dimension": dimension,
+            "bounds": bounds,
+            "kind": kind.label(),
+            "material": material.to_string(),
+            "amount": amount,
+            "seed": seed,
+            "step": step,
+            "targetY": target_y,
+        }),
     }
 }
 

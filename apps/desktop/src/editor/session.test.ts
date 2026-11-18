@@ -8,9 +8,12 @@ import {
   ghostForContext,
   linePoints,
   normalizeBounds,
+  operationLabel,
   pasteChanges,
   planBlockTool,
+  planTerrainBrush,
   spherePositions,
+  terrainBrushBounds,
   translateBounds,
 } from "@/editor/session";
 import type { BlockChange, ClipboardPayload } from "@/editor/types";
@@ -321,5 +324,82 @@ describe("clipboard shape", () => {
       y: 22,
       z: 33,
     });
+  });
+});
+
+describe("terrain brush planning", () => {
+  const bounds = { min: { x: 0, y: 60, z: 0 }, max: { x: 3, y: 70, z: 3 } };
+  const brushBounds = { min: { x: 0, y: 44, z: 0 }, max: { x: 3, y: 86, z: 3 } };
+
+  it("expands the selected footprint by a bounded vertical air margin", () => {
+    expect(terrainBrushBounds(bounds)).toEqual(brushBounds);
+  });
+
+  it("requires a box selection", () => {
+    expect(
+      planTerrainBrush({
+        dimension: "minecraft:overworld",
+        selection: null,
+        kind: "raise",
+        material: stone,
+        amount: 1,
+        seed: 0,
+        step: 4,
+        targetY: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("normalizes numeric limits and only sends targetY for flatten", () => {
+    expect(
+      planTerrainBrush({
+        dimension: "minecraft:overworld",
+        selection: bounds,
+        kind: "noise",
+        material: stone,
+        amount: 99,
+        seed: -5,
+        step: 1,
+        targetY: 64,
+      }),
+    ).toEqual({
+      type: "terrain_brush",
+      dimension: "minecraft:overworld",
+      bounds: brushBounds,
+      kind: "noise",
+      material: stone,
+      amount: 16,
+      seed: 0,
+      step: 2,
+      targetY: null,
+    });
+
+    expect(
+      planTerrainBrush({
+        dimension: "minecraft:overworld",
+        selection: bounds,
+        kind: "flatten",
+        material: stone,
+        amount: 0,
+        seed: 0,
+        step: 99,
+        targetY: 66,
+      }),
+    ).toMatchObject({ kind: "flatten", amount: 1, step: 16, targetY: 66 });
+  });
+
+  it("labels the reversible operation for jobs and history", () => {
+    const operation = planTerrainBrush({
+      dimension: "minecraft:overworld",
+      selection: { min: { x: 0, y: 60, z: 0 }, max: { x: 2, y: 70, z: 2 } },
+      kind: "terrace",
+      material: bricks,
+      amount: 1,
+      seed: 0,
+      step: 4,
+      targetY: null,
+    });
+    expect(operation).not.toBeNull();
+    expect(operationLabel(operation!)).toBe("Terrace terrain in 387 blocks");
   });
 });

@@ -20,6 +20,10 @@ Operation =
   | { type: "batch", dimension, changes: [{pos, state}] }
   | { type: "fill_cuboid", dimension, bounds: {min,max}, state }
   | { type: "replace", dimension, bounds, from, to }
+  | {
+      type: "terrain_brush", dimension, bounds, kind, material:
+        BlockState, amount: 1..16, seed: u64, step: 2..16, targetY?
+    }
 
 OperationResult {
   operationId: string,

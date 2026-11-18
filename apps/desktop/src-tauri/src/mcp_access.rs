@@ -237,7 +237,9 @@ impl McpAccessState {
                         ));
                     }
                 }
-                Operation::FillCuboid { bounds, .. } | Operation::Replace { bounds, .. } => {
+                Operation::FillCuboid { bounds, .. }
+                | Operation::Replace { bounds, .. }
+                | Operation::TerrainBrush { bounds, .. } => {
                     if !box_contains(&selection.bounds, bounds) {
                         return Err(AppError::new(
                             ErrorCode::PermissionDenied,

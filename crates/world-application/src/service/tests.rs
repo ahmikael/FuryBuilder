@@ -413,3 +413,85 @@ fn region_blocks_limit_is_enforced_before_reading() {
         .unwrap_err();
     assert_eq!(error.code, ErrorCode::LimitExceeded);
 }
+
+#[test]
+fn terrain_brush_is_revisioned_audited_and_reversible() {
+    let mut service = WorldService::new();
+    let base = service
+        .execute(request(Operation::FillCuboid {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 64, 1)).unwrap(),
+            state: state("minecraft:stone"),
+        }))
+        .unwrap();
+    assert_eq!(base.world_revision, 1);
+
+    let applied = service
+        .execute(request(Operation::TerrainBrush {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 70, 1)).unwrap(),
+            kind: world_operations::TerrainBrushKind::Raise,
+            material: state("minecraft:dirt"),
+            amount: 2,
+            seed: 0,
+            step: 4,
+            target_y: None,
+        }))
+        .unwrap();
+    assert_eq!(applied.changed_blocks, 8);
+    assert_eq!(applied.world_revision, 2);
+    let summary = &service
+        .audit_log()
+        .last()
+        .expect("audit entry")
+        .parameter_summary;
+    assert_eq!(summary["type"], "terrain_brush");
+    assert_eq!(summary["kind"], "raise");
+    assert_eq!(summary["seed"], 0);
+
+    match service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 65, 0),
+        })
+        .unwrap()
+    {
+        QueryResult::Block { state, .. } => assert_eq!(state, self::state("minecraft:dirt")),
+        other => panic!("unexpected query result: {other:?}"),
+    }
+
+    let undo = service
+        .undo("project-1", actor(), Some(&applied.operation_id))
+        .unwrap();
+    assert_eq!(undo.changed_blocks, 8);
+    match service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 65, 0),
+        })
+        .unwrap()
+    {
+        QueryResult::Block { state, .. } => assert_eq!(state, self::state("minecraft:air")),
+        other => panic!("unexpected query result: {other:?}"),
+    }
+}
+
+#[test]
+fn invalid_terrain_brush_is_rejected_without_history_or_revision() {
+    let mut service = WorldService::new();
+    let error = service
+        .execute(request(Operation::TerrainBrush {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 70, 1)).unwrap(),
+            kind: world_operations::TerrainBrushKind::Raise,
+            material: state("minecraft:air"),
+            amount: 1,
+            seed: 0,
+            step: 4,
+            target_y: None,
+        }))
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArgument);
+    assert_eq!(service.world_info().revision, 0);
+    assert!(service.history().is_empty());
+}

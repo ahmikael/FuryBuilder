@@ -22,7 +22,7 @@ pub use service::{
     WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_READ_BLOCKS,
     MAX_REGION_SUMMARY_BLOCKS, MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,
 };
-pub use world_operations::{BlockChange, Operation, Selection};
+pub use world_operations::{BlockChange, Operation, Selection, TerrainBrushKind};
 
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};

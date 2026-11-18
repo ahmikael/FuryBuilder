@@ -21,6 +21,34 @@ Alt+click picks a world block as the brush state. Right-click without dragging o
 context menu (place, remove, pick, replace source, box corner, copy/paste, fill, delete,
 focus). Right-drag stays reserved for the fly camera.
 
+## Terrain brushes (M9.9)
+
+The `Terrain` tab edits the topmost non-air block of every column in the current box
+selection. It requires a selection; the footprint keeps the selected X/Z extent and adds a
+bounded 16-block vertical air margin so raise and lower can write above or below the
+surface without escaping the operation bounds.
+
+| Brush | Behaviour |
+|---|---|
+| Raise | Adds `amount` layers of the palette material above each surface. |
+| Lower | Removes up to `amount` blocks above each surface. |
+| Smooth | Moves each surface toward the rounded 8-neighbour average, at most `amount`. |
+| Flatten | Moves each surface to an explicit target Y or the median surface height. |
+| Noise | Adds stable SplitMix64 noise in `-amount..=amount` from the entered seed. |
+| Erode | Lowers peaks toward the rounded 4-neighbour average, at most `amount`. |
+| Terrace | Snaps each surface to the nearest multiple of `step` (2..16). |
+
+- Amount is 1..16, terrace steps are 2..16, material must not be air, and `targetY` is only
+  valid for flatten and must be inside the selection.
+- Heights are read before any write, so smoothing and erosion do not depend on iteration
+  order.
+- Empty columns are skipped and reported in operation warnings; a brush never builds a
+  pillar from the selection floor.
+- The panel previews the exact Rust operation and applies it through the same revisioned
+  pipeline as other edits, so it is one undoable history entry.
+- Brushes adjust block states only. Heightmaps, light, biomes and other derived data are
+  not recalculated yet; that is a separate M9 task.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

@@ -64,6 +64,30 @@ const operation = z.discriminatedUnion("type", [
     from: blockState,
     to: blockState,
   }),
+  z.object({
+    type: z.literal("terrain_brush"),
+    dimension,
+    bounds,
+    kind: z.enum([
+      "raise",
+      "lower",
+      "smooth",
+      "flatten",
+      "noise",
+      "erode",
+      "terrace",
+    ]),
+    material: blockState,
+    amount: z.number().int().min(1).max(16).default(1),
+    seed: z
+      .number()
+      .int()
+      .nonnegative()
+      .max(Number.MAX_SAFE_INTEGER)
+      .default(0),
+    step: z.number().int().min(2).max(16).default(4),
+    targetY: z.number().int().optional(),
+  }),
 ]);
 
 const project = {

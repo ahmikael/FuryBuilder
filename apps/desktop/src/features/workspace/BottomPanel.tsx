@@ -4,6 +4,7 @@ import {
   Blocks,
   History,
   Loader2,
+  Mountain,
   Redo2,
   RotateCcw,
   Search,
@@ -19,6 +20,7 @@ import type { BackendState } from "@/hooks/use-backend";
 import type { BlockDefinition } from "@/editor/types";
 import { TOOL_LABELS, TOOL_SHORTCUTS } from "@/editor/session";
 import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor/commands";
+import { TerrainPanel } from "@/features/workspace/TerrainPanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -620,6 +622,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="tools">
               <Wrench className="size-3" /> Tools
             </TabsTrigger>
+            <TabsTrigger value="terrain">
+              <Mountain className="size-3" /> Terrain
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -641,6 +646,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="tools" className="m-0 p-2">
           <ToolsPanel />
+        </TabsContent>
+
+        <TabsContent value="terrain" className="m-0 p-2">
+          <TerrainPanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

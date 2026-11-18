@@ -4,6 +4,7 @@ import type {
   ClipboardPayload,
   EditorOperation,
   EditorTool,
+  TerrainBrushKind,
 } from "@/editor/types";
 import type { BlockPosition, BlockState } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
@@ -34,6 +35,26 @@ export const TOOL_LABELS: Record<EditorTool, string> = {
   line: "Line",
   replace: "Replace",
 };
+
+export const TERRAIN_BRUSH_LABELS: Record<TerrainBrushKind, string> = {
+  raise: "Raise",
+  lower: "Lower",
+  smooth: "Smooth",
+  flatten: "Flatten",
+  noise: "Noise",
+  erode: "Erode",
+  terrace: "Terrace",
+};
+
+export const TERRAIN_BRUSH_ORDER: TerrainBrushKind[] = [
+  "raise",
+  "lower",
+  "smooth",
+  "flatten",
+  "noise",
+  "erode",
+  "terrace",
+];
 
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -176,6 +197,10 @@ export function operationLabel(operation: EditorOperation): string {
       return `Fill ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
     case "replace":
       return `Replace in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+    case "terrain_brush":
+      return `${TERRAIN_BRUSH_LABELS[operation.kind]} terrain in ${boundsVolume(
+        operation.bounds,
+      ).toLocaleString()} blocks`;
   }
 }
 
@@ -329,6 +354,69 @@ export function planBlockTool(context: BlockToolContext): EditorOperation | null
   }
 
   return null;
+}
+
+export const MAX_TERRAIN_BRUSH_AMOUNT = 16;
+export const MIN_TERRACE_STEP = 2;
+export const MAX_TERRACE_STEP = 16;
+/** Vertical air margin so a flat surface selection can both raise and lower terrain. */
+export const TERRAIN_BRUSH_VERTICAL_MARGIN = 16;
+
+export interface TerrainBrushContext {
+  dimension: string;
+  selection: BoxBounds | null;
+  kind: TerrainBrushKind;
+  material: BlockState;
+  amount: number;
+  seed: number;
+  step: number;
+  targetY: number | null;
+}
+
+export function clampTerrainAmount(amount: number): number {
+  if (!Number.isFinite(amount)) return 1;
+  return Math.min(MAX_TERRAIN_BRUSH_AMOUNT, Math.max(1, Math.round(amount)));
+}
+
+export function clampTerraceStep(step: number): number {
+  if (!Number.isFinite(step)) return 4;
+  return Math.min(MAX_TERRACE_STEP, Math.max(MIN_TERRACE_STEP, Math.round(step)));
+}
+
+export function clampTerrainSeed(seed: number): number {
+  if (!Number.isFinite(seed)) return 0;
+  return Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.trunc(seed)));
+}
+
+/**
+ * Terrain brushes need air above (and below) the selected surface. The UI selection is a
+ * horizontal footprint; the operation box adds a bounded vertical margin so raise, lower,
+ * smooth and noise can write without escaping the recorded extent.
+ */
+export function terrainBrushBounds(selection: BoxBounds): BoxBounds {
+  return {
+    min: { ...selection.min, y: selection.min.y - TERRAIN_BRUSH_VERTICAL_MARGIN },
+    max: { ...selection.max, y: selection.max.y + TERRAIN_BRUSH_VERTICAL_MARGIN },
+  };
+}
+
+/**
+ * Builds the typed terrain operation. The Rust core re-validates every parameter and the
+ * bounds; this helper only normalizes UI numbers so the request is well-formed.
+ */
+export function planTerrainBrush(context: TerrainBrushContext): EditorOperation | null {
+  if (!context.selection) return null;
+  return {
+    type: "terrain_brush",
+    dimension: context.dimension,
+    bounds: terrainBrushBounds(context.selection),
+    kind: context.kind,
+    material: context.material,
+    amount: clampTerrainAmount(context.amount),
+    seed: clampTerrainSeed(context.seed),
+    step: clampTerraceStep(context.step),
+    targetY: context.kind === "flatten" ? context.targetY : null,
+  };
 }
 
 export type ShortcutAction =

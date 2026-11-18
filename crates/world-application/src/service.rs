@@ -763,6 +763,7 @@ impl WorldService {
                 // `from` is a predicate; accept any syntactically valid state, including
                 // imported unknown block states.
             }
+            Operation::TerrainBrush { material, .. } => self.registry.validate(material)?,
         }
         Ok(())
     }
@@ -834,6 +835,26 @@ fn summarize_operation(operation: &Operation) -> serde_json::Value {
             "bounds": bounds,
             "from": from.to_string(),
             "to": to.to_string()
+        }),
+        Operation::TerrainBrush {
+            dimension,
+            bounds,
+            kind,
+            material,
+            amount,
+            seed,
+            step,
+            target_y,
+        } => json!({
+            "type": "terrain_brush",
+            "dimension": dimension,
+            "bounds": bounds,
+            "kind": kind.label(),
+            "material": material.to_string(),
+            "amount": amount,
+            "seed": seed,
+            "step": step,
+            "targetY": target_y
         }),
     }
 }
