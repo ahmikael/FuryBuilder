@@ -182,6 +182,18 @@ impl Section {
         self.palette.get(palette_index)
     }
 
+    /// Returns the canonical palette index for a local block.
+    ///
+    /// This is used by external encoders that need the exact palette entry, for example
+    /// when writing a modified Minecraft paletted container back to NBT.
+    pub fn palette_index(&self, x: u8, y: u8, z: u8) -> Option<u16> {
+        let index = Self::local_index(x, y, z)?;
+        if self.palette.len() == 1 {
+            return Some(0);
+        }
+        Some(self.read_index(index))
+    }
+
     /// Sets a local block. Returns true when the state actually changed.
     pub fn set(&mut self, x: u8, y: u8, z: u8, state: &BlockState) -> Option<bool> {
         let index = Self::local_index(x, y, z)?;
@@ -412,6 +424,36 @@ mod tests {
                 assert_eq!(read_packed(&data, bits, index), (index as u16) & mask);
             }
         }
+    }
+
+    #[test]
+    fn palette_index_matches_get_for_every_cell() {
+        let mut section = Section::empty();
+        for (value, name) in [
+            "minecraft:air",
+            "minecraft:stone",
+            "minecraft:dirt",
+            "minecraft:grass_block",
+            "minecraft:oak_stairs[facing=north,half=bottom]",
+        ]
+        .iter()
+        .enumerate()
+        {
+            let state: BlockState = name.parse().unwrap();
+            section.set(value as u8, value as u8, value as u8, &state);
+        }
+        for index in 0..SECTION_VOLUME {
+            let x = (index % 16) as u8;
+            let y = ((index / 16) % 16) as u8;
+            let z = ((index / 256) % 16) as u8;
+            let palette_index = section.palette_index(x, y, z).expect("in range");
+            assert_eq!(
+                section.palette().get(palette_index as usize),
+                section.get(x, y, z)
+            );
+        }
+        assert_eq!(Section::single(stone()).palette_index(4, 5, 6), Some(0));
+        assert_eq!(Section::empty().palette_index(16, 0, 0), None);
     }
 
     #[test]

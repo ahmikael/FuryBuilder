@@ -13,6 +13,7 @@ pub mod exchange;
 pub mod java_chunk;
 pub mod java_structure;
 pub mod nbt;
+pub mod overlay;
 pub mod passthrough;
 pub mod structure;
 
@@ -37,6 +38,11 @@ pub use java_structure::{
     JAVA_STRUCTURE_EXTENSION, JAVA_STRUCTURE_FORMAT,
 };
 pub use nbt::{NbtError, NbtFile, NbtValue};
+pub use overlay::{
+    ApplyReport, BlockChange, BlockEdit, ChunkKey, OverlayChunk, OverlayChunkDocument,
+    OverlayDocument, OverlayError, OverlaySectionDocument, WorldOverlay, MAX_OVERLAY_CHUNKS,
+    MAX_OVERLAY_JSON_BYTES, MAX_OVERLAY_SECTIONS, OVERLAY_SCHEMA_VERSION,
+};
 pub use passthrough::{
     passthrough_java_world, passthrough_java_world_with_options, CopiedFile, PassthroughError,
     PassthroughOptions, PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES,

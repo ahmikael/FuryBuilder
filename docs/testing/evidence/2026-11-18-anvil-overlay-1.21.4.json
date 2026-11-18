@@ -1,0 +1,80 @@
+{
+  "changeCount": 1,
+  "changed": true,
+  "current": "minecraft:gold_block",
+  "dataVersion": 4189,
+  "dimension": "minecraft:overworld",
+  "dirtyChunkCount": 1,
+  "dirtyChunks": [
+    {
+      "dimension": "minecraft:overworld",
+      "x": -1,
+      "z": -1
+    }
+  ],
+  "dirtySectionCount": 1,
+  "document": {
+    "chunks": 1,
+    "dataVersion": 4189,
+    "jsonBytes": 6634,
+    "schemaVersion": 1,
+    "sections": 1,
+    "sha256": "ab613eee26182ce96965b77af34cf396a50ab84f2573d3d34667b474ee770a0d"
+  },
+  "materialized": {
+    "nbtBytes": 16671,
+    "present": true,
+    "roundTripBlock": "minecraft:gold_block",
+    "roundTripOk": true
+  },
+  "merged": {
+    "biomeAtPosition": "minecraft:plains",
+    "blockEntities": 0,
+    "changes": 1,
+    "chunkX": -1,
+    "chunkZ": -1,
+    "dirtySections": [-4],
+    "entities": 0,
+    "overridden": true
+  },
+  "position": {
+    "x": -15,
+    "y": -61,
+    "z": -15
+  },
+  "previous": "minecraft:grass_block[snowy=false]",
+  "readOnly": true,
+  "tool": {
+    "name": "furybuilder-overlay-probe",
+    "version": 1
+  },
+  "worldFolder": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+  "independentVerification": {
+    "sourceFilesHashedBeforeAndAfter": 21,
+    "sourceUnchanged": true,
+    "probeExitCode": 0,
+    "sourceFiles": {
+      "data/chunks.dat": "f83a0efda6893606b6360384d62ffeda8048bc8047a338deb091069ea4c21148",
+      "session.lock": "51643361c79ecaef25a8de802de24f570ba25d9c2df1d22d94fade11b4f466cc",
+      "level.dat": "a6004d204bb461e392c70824648f7258563bca47a21313cb584c18ceb9f792c8",
+      "region/r.-1.0.mca": "3cc97e70395dbee5cdaaeaf46a64d496e1399ce90eebf2def885ad65a0c20045",
+      "entities/r.0.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "region/r.-1.-1.mca": "c2bea93a97479c38a91cdb97b3fd11f38d8cb0cc4f0c4825015b2404b945cd50",
+      "DIM-1/data/raids.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "region/r.0.0.mca": "91ee70753c08b8f30be4c7aa3a7f8bb65a77b7afd3c7d076921bf33ceafad727",
+      "poi/r.0.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entities/r.-1.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "poi/r.0.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entities/r.0.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "region/r.0.-1.mca": "f6f6fd7500219cf830fea6a01d2149c4fa187cefd56147296ca6d4314d96c266",
+      "level.dat_old": "84a94da6133d4f7859c38e2768c05cab258edf5eccd40814233204cf13aaa559",
+      "poi/r.-1.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entities/r.-1.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "data/raids.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "DIM1/data/raids_end.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "data/scoreboard.dat": "75e55e2261e5ddf47d5e73cef2c2715d605ec77aebce2c9adb664329e3bc8fa6",
+      "data/random_sequences.dat": "58768a0de7a7bc656476251c7f737ede081ac9a44e307ac9eea45f4b97b3a442",
+      "poi/r.-1.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  }
+}

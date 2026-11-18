@@ -55,14 +55,17 @@ M0–M7 are complete. M8 is in progress: the read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
 coordinates and proto-chunks, then decodes block-state palettes, sections and
 biomes without writing to the source world. A byte-preserving, fail-closed copy
-of an unchanged world — including unknown files and region containers — is
-implemented and verified against a real 841-chunk world. Overlay and the
-`Import World` wizard are next. The first interchange format, Minecraft Java
-1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and verified
-against real game-saved fixtures, a real Tauri IPC flow and an official 1.21.4
-server load. Block states and orientations are preserved; entities and block
-entities are refused rather than silently dropped. Sponge `.schem` is the next
-format and is not enabled in the UI. External AI clients can read, build,
+of an unchanged world - including unknown files and region containers - is
+implemented and verified against a real 841-chunk world. A copy-on-write overlay
+now keeps block edits in memory, persists them as a versioned document and
+materialises a patched chunk NBT while preserving unknown tags, biomes, block
+entities and entities; the source stays byte-identical. The `Import World`
+wizard and export of a new world copy are next. The first interchange format,
+Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
+verified against real game-saved fixtures, a real Tauri IPC flow and an official
+1.21.4 server load. Block states and orientations are preserved; entities and
+block entities are refused rather than silently dropped. Sponge `.schem` is the
+next format and is not enabled in the UI. External AI clients can read, build,
 screenshot, correct and undo through MCP, with read-only access by default and a
 real confirmation dialog for writes. Milestone progress is tracked in
 `FURYBUILDER_MASTER_PLAN.md`; a checked implementation item is not by itself a
@@ -93,6 +96,8 @@ guarantee that its whole milestone is complete.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
 - Import of full Java world saves is read-only. M8 implements version/layout
-  validation, region/NBT reading, block states and biomes, and a byte-preserving copy
-  of unchanged worlds. Overlay, editing and export of modified worlds are not available
-  yet, and the source world is never written.
+  validation, region/NBT reading, block states and biomes, a byte-preserving copy
+  of unchanged worlds, and an in-memory block-edit overlay with a versioned JSON
+  document and verified chunk NBT materialization. The `Import World` wizard,
+  region-file writing and export of modified worlds are not available yet, and the
+  source world is never written.

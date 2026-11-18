@@ -16,7 +16,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
-use crate::nbt::{NbtValue, TAG_COMPOUND, TAG_STRING};
+use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
 pub const BIOME_SECTION_VOLUME: usize = 64;
@@ -140,7 +140,7 @@ impl DecodedChunk {
 impl RegionChunk {
     /// Decodes block states and biomes for the given dimension.
     pub fn decode(&self, dimension: &JavaWorldDimension) -> Result<DecodedChunk, AnvilError> {
-        decode_chunk(self, dimension)
+        decode_chunk(&self.nbt, self.x, self.z, dimension)
     }
 }
 
@@ -155,15 +155,32 @@ impl JavaWorld {
             .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
         chunk.decode(dimension)
     }
+
+    /// Decodes a chunk NBT that is not backed by a region file.
+    ///
+    /// This is used to verify a re-encoded chunk before it is published, so the same
+    /// validation runs on freshly written data as on imported data.
+    pub fn decode_chunk_nbt(
+        &self,
+        dimension_id: &str,
+        x: i32,
+        z: i32,
+        nbt: &NbtFile,
+    ) -> Result<DecodedChunk, AnvilError> {
+        let dimension = self
+            .dimension(dimension_id)
+            .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
+        decode_chunk(nbt, x, z, dimension)
+    }
 }
 
 fn decode_chunk(
-    chunk: &RegionChunk,
+    nbt: &NbtFile,
+    x: i32,
+    z: i32,
     dimension: &JavaWorldDimension,
 ) -> Result<DecodedChunk, AnvilError> {
-    let (x, z) = (chunk.x, chunk.z);
-    let root = chunk
-        .nbt
+    let root = nbt
         .root
         .as_compound()
         .ok_or_else(|| invalid(x, z, "root tag is not a compound"))?;
@@ -275,9 +292,27 @@ fn decode_chunk(
         y_pos,
         sections,
         missing_sections,
-        block_entities: chunk.summary.block_entities,
-        entities: chunk.summary.entities,
+        block_entities: compound_list_len(root, "block_entities", x, z)?,
+        entities: compound_list_len(root, "entities", x, z)?,
     })
+}
+
+fn compound_list_len(
+    root: &BTreeMap<String, NbtValue>,
+    key: &str,
+    x: i32,
+    z: i32,
+) -> Result<usize, AnvilError> {
+    match root.get(key) {
+        None => Ok(0),
+        Some(NbtValue::List { kind, items }) => {
+            if *kind != TAG_COMPOUND && !items.is_empty() {
+                return Err(invalid(x, z, format!("{key} is not a list of compounds")));
+            }
+            Ok(items.len())
+        }
+        Some(_) => Err(invalid(x, z, format!("{key} is not a list"))),
+    }
 }
 
 fn decode_block_states(

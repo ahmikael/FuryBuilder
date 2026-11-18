@@ -247,8 +247,9 @@ Refused explicitly instead of guessed:
 
 Biomes are decoded but not yet persisted in `world-domain`; they remain on
 `DecodedChunk`, and `to_chunk()` copies blocks only. Raw chunk NBT is also kept
-on `RegionChunk` for the passthrough work. The byte-preserving copy is described
-below; overlay, import UI and any in-place write path are later M8 stages.
+on `RegionChunk` for passthrough and overlay work. The byte-preserving copy and
+the in-memory block overlay are described below; import UI and any write path
+are later M8 stages.
 
 Probe and tests:
 
@@ -300,30 +301,79 @@ count. Errors have stable codes such as `unsupported_format`,
 `verification_failed`, `unsafe_path`, `already_exists` and `limit_exceeded`.
 
 Unknown fields inside a region are preserved because the whole region file is
-copied. Re-encoding a _modified_ chunk while carrying unknown tags is **not**
-implemented yet; that belongs to the overlay/write stages and must be proven by
-round-trip tests before use.
+copied. Re-encoding a _modified_ chunk while carrying unknown tags is handled by
+the in-memory overlay below; writing a new region file is a later export stage.
 
 ```powershell
 cargo test -p furybuilder-world-io --test passthrough
 cargo run -p furybuilder-world-io --example passthrough_world -- <source> <new-destination> --all-files
 ```
 
+## Block-edit overlay (M8.5)
+
+`crates/world-io/src/overlay.rs` implements copy-on-write block edits over an
+imported classic world. The source stays read-only; edits are stored as complete
+replacement sections per chunk and merged at read time.
+
+| API                                         | What it does                                                                    |
+| ------------------------------------------- | ------------------------------------------------------------------------------- |
+| `WorldOverlay::open`                        | validates the source world and starts with no edits                             |
+| `get_block`                                 | reads a source block or an edited block with the same call                      |
+| `set_block` / `apply`                       | edits one block or a validated atomic batch; duplicate positions are refused    |
+| `read_chunk`                                | returns a decoded chunk with edited sections merged and source biomes untouched |
+| `dirty_chunks` / `dirty_section_count`      | reports exactly which chunks/sections differ from the source                    |
+| `clear_chunk` / `clear`                     | drops edits without touching source files                                       |
+| `materialize_chunk_nbt`                     | re-encodes one dirty chunk to NBT in memory                                     |
+| `document` / `to_json_pretty` / `from_json` | persists and reloads the edits as a small versioned JSON document               |
+
+Guarantees and checks:
+
+- the source world passes `JavaWorld::open` and the fixed `DataVersion` 4189
+  check; the source is opened read-only and is never written;
+- blocks outside the dimension's `min_y`/`height` are refused, as are unknown
+  dimensions, unallocated chunks and sections that do not exist in the source;
+- a batch is all-or-nothing: every edit is validated before any overlay state is
+  staged, and a failure leaves the previous overlay untouched;
+- edits use the same validated `BlockState` and canonical section model as the
+  rest of the editor;
+- `materialize_chunk_nbt` replaces only `sections[].block_states` for edited
+  sections, uses Minecraft 1.21.4's non-spanning packing with the 4-bit minimum,
+  keeps properties and preserves every other root tag, section tag (including
+  biomes), block entity and entity;
+- the patched NBT is re-decoded with the strict import decoder and every
+  non-block-state field is compared with the source before the value is returned;
+- overlay JSON has a schema version, the source `DataVersion`, palette strings
+  and canonical packed words as hexadecimal strings (exact above 2^53);
+- loading revalidates chunk existence, section existence, palette syntax, packed
+  word size and canonical section layout, then prunes sections equal to source;
+- limits are 100,000 dirty chunks, 1,000,000 dirty sections and 64 MiB of JSON.
+
+No region file is written in M8.5. The overlay document and the materialized NBT
+are the inputs for the later export stage, which must still publish a new world
+copy atomically.
+
+```powershell
+cargo test -p furybuilder-world-io --test overlay
+cargo run -p furybuilder-world-io --example overlay_probe -- <world> <dimension> <x> <y> <z> <block-state>
+cargo run -p furybuilder-world-io --example overlay_probe -- <world> <dimension> <x> <y> <z> <block-state> --document
+```
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Write | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ----- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | no    | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no    | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no    | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no    | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no    | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no    | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                      | Write | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ---------------------------- | ----- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory block edits (M8.5) | no    | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                           | no    | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                           | no    | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                           | no    | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                           | no    | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                           | no    | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support. “Passthrough” means unchanged files
-are copied byte for byte; it does not mean modified chunks can be re-encoded
-without loss.
+are copied byte for byte. “Overlay” means block edits are kept in memory and can
+be materialized to chunk NBT; it does not mean modified region files can already
+be exported.
 
 ## Safety rules for the M8 importer
 
@@ -388,7 +438,13 @@ Recorded evidence:
   source had 21 files; only `session.lock` was skipped. An independent
   PowerShell SHA-256 comparison confirmed that all 20 destination files match
   the source and that all 21 source files were unchanged after the copy.
-- `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — a real official
+- `docs/testing/evidence/2026-11-18-anvil-overlay-1.21.4.json` - a real block
+  edit over the same world: `minecraft:grass_block[snowy=false]` at
+  (-15, -61, -15) was replaced by `minecraft:gold_block`; one chunk and one
+  section became dirty, the biome stayed `minecraft:plains`, the patched chunk
+  re-decoded to the new block, the overlay document was 6,634 bytes, and all 21
+  source files were byte-identical before and after the probe.
+- `docs/testing/evidence/2026-11-18-world-layout-26.3.json` - a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
   `dimensions/minecraft/`, `targetMatch: false`.
@@ -419,11 +475,12 @@ Sources checked on 2026-11-18:
 
 1. The M8.3 reader covers `level.dat`, region containers, block-state palettes
    and biomes for 1.21.4 classic. M8.4 adds a byte-preserving, validated copy of
-   unchanged files, including unknown metadata. The next step is the overlay for
-   edits on top of imported data.
+   unchanged files, including unknown metadata. M8.5 adds an in-memory
+   copy-on-write overlay and verified chunk NBT materialization. The next step is
+   connecting that overlay to the project wizard.
 2. Keep layout detection explicit. Opening a 26.1+ folder must return a
    structured `unsupported_layout`/`unsupported_version`, not a partial world.
 3. Add a real 26.1+ fixture and adapter only when the game format and the
    importer can be tested together; do not promise it from the folder names.
-4. Never write in place. Build the overlay first and export a new world copy
-   only after the read and passthrough paths are verified.
+4. Never write in place. An export must copy the world first, replace only
+   verified chunks, re-open the result, and publish a new folder atomically.
