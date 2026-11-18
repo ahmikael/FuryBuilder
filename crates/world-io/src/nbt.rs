@@ -614,9 +614,7 @@ mod tests {
             raw.extend_from_slice(&1u16.to_be_bytes());
             raw.push(b'n');
         }
-        for _ in 0..(MAX_NBT_DEPTH + 2) {
-            raw.push(TAG_END);
-        }
+        raw.resize(raw.len() + MAX_NBT_DEPTH + 2, TAG_END);
         raw.push(TAG_END);
         assert_eq!(read_uncompressed(&raw), Err(NbtError::DepthExceeded));
     }
