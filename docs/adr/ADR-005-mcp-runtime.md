@@ -33,7 +33,8 @@ The first transport slice is implemented and exercised against the real Tauri pr
   Messages are size-limited; the token is compared without an early exit; errors never echo
   it. The methods are `ping`, `world_info`, `query`, `project_status`, `get_camera`,
   `capture_viewport`, `preview_operation`, `apply_operation`, `undo_operation`,
-  `operation_status` and `mcp_activity`.
+  `start_job`, `job_status`, `cancel_job`, `list_jobs`, `operation_status` and
+  `mcp_activity`.
 - `query`/`world_info` require an explicit `project_id` matching the project currently open
   in the editor. The handler calls the same `WorldService` as the UI; writes are gated (see
   below).
@@ -49,6 +50,20 @@ The first transport slice is implemented and exercised against the real Tauri pr
   after approval. Tool writes are recorded as `actor: mcp-bridge`, `source: mcp` in the
   same history and audit log as UI operations, and `operation_status` reads that audit
   trail.
+- Long-running work goes through a bounded single-worker queue in
+  `world-application::jobs`, never through bridge-owned state. `start_job` accepts only
+  `apply_operation` and `undo_operation`, applies the same project, revision, access, limit
+  and confirmation checks as the synchronous endpoints, and returns a queued/running
+  snapshot. The operation observer reports validating/planning/applying phases as progress;
+  cancellation before writing touches nothing, and cancellation during writing restores all
+  touched sections. `start_job` is idempotent on `(project_id, idempotency_key)` with a
+  payload fingerprint: a retry returns the existing job without a second confirmation, and a
+  changed payload is a conflict. `job_status`/`cancel_job` are project-scoped, `list_jobs`
+  exposes what the editor may show, and `operation_status` links a committed job back to its
+  `operationId`. Changing the MCP access policy cancels active MCP jobs so an approval cannot
+  outlive its policy; opening/closing a project or restoring a checkpoint cancels all active
+  jobs before the world is replaced. The queue is in-memory (16 active, 256 retained) and is
+  not a durable scheduler.
 - Every authenticated bridge request also appends a bounded in-memory journal entry with
   its request id, bridge `clientId`, method, project, requested revision, status/error code,
   `operationId` and changed block count. `ping` and `mcp_activity` are excluded; denied and
@@ -68,11 +83,13 @@ The first transport slice is implemented and exercised against the real Tauri pr
 - Verified with a real `tauri dev` process: authorized `ping`, `world_info`, `get_camera` and
   `capture_viewport` succeeded (a valid 492714-byte PNG); `ping` reported `read_only` access
   with confirmation enabled; preview reported `access.allowed=false`; apply returned
-  `permission_denied` with `mcpAccessMode=read_only`; `mcp_activity` returned six bounded
-  records including that denied call with `clientId=probe-local-bridge`, and an invalid
-  limit returned `invalid_argument`; a wrong token returned `unauthorized` without leaking
-  the secret. The approval dialog itself is covered by Rust and frontend tests rather than
-  an automated click in the real window.
+  `permission_denied` with `mcpAccessMode=read_only`; `operation_status` reported
+  `job.available=true` with an empty queue; `start_job` returned the same `permission_denied`
+  and `list_jobs` stayed empty; `mcp_activity` returned eight bounded records including both
+  denied calls with `clientId=probe-local-bridge`, and an invalid limit returned
+  `invalid_argument`; a wrong token returned `unauthorized` without leaking the secret. The
+  approval dialog itself is covered by Rust and frontend tests rather than an automated click
+  in the real window.
 - Unix domain sockets are not exercised yet; Windows is the first target. The discovery
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.

@@ -21,8 +21,9 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use world_application::{
-    app_info, Actor, AppError, ErrorCode, Operation, OperationRequest, PreviewResult, Query,
-    UndoTarget, WorldService,
+    app_info, apply_job_operation, undo_job_operation_id, Actor, ActorSource, AppError, ErrorCode,
+    JobStartRequest, Operation, OperationRequest, PreviewResult, Query, UndoTarget, WorldService,
+    DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
 };
 
 use crate::mcp_access::{McpAccessInput, McpAccessMode};
@@ -367,6 +368,33 @@ struct ActivityParams {
     limit: Option<usize>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StartJobParams {
+    project_id: String,
+    kind: String,
+    #[serde(default)]
+    parameters: Value,
+    idempotency_key: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct JobParams {
+    project_id: String,
+    job_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct JobListParams {
+    project_id: String,
+    #[serde(default)]
+    limit: Option<usize>,
+}
+
 /// Starts the local endpoint. Failure is reported to the caller instead of panicking so a
 /// missing pipe cannot stop the editor from opening; the UI remains fully usable.
 pub fn start(app: AppHandle) -> io::Result<LocalBridgeRuntime> {
@@ -574,6 +602,7 @@ fn dispatch_inner(
                 },
                 "renderer": state.renderer.readiness(),
                 "mcp": state.mcp_access.summary(),
+                "jobs": state.jobs.summary(),
                 "pendingConfirmations": state.mcp_confirmations.count(),
             }))
         }
@@ -723,6 +752,37 @@ fn dispatch_inner(
             }
             Ok(value)
         }
+        "start_job" => {
+            let params: StartJobParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            start_job(state, requester, params)
+        }
+        "job_status" => {
+            let params: JobParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            to_value(state.jobs.status(&params.project_id, &params.job_id)?)
+        }
+        "cancel_job" => {
+            let params: JobParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            to_value(state.jobs.cancel(&params.project_id, &params.job_id)?)
+        }
+        "list_jobs" => {
+            let params: JobListParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            let limit = params.limit.unwrap_or(DEFAULT_JOB_LIST_LIMIT);
+            if !(1..=MAX_JOB_LIST_LIMIT).contains(&limit) {
+                return Err(AppError::invalid_argument(format!(
+                    "job limit must be between 1 and {MAX_JOB_LIST_LIMIT}"
+                )));
+            }
+            Ok(json!({
+                "projectId": params.project_id,
+                "jobs": state.jobs.list(&params.project_id, limit),
+                "limit": limit,
+                "summary": state.jobs.summary(),
+            }))
+        }
         "operation_status" => {
             let params: StatusParams = parse_params(params)?;
             authorize_project(state, &params.project_id)?;
@@ -751,6 +811,139 @@ fn dispatch_inner(
             "unknown bridge method `{other}`"
         ))),
     }
+}
+
+fn start_job(
+    state: &AppState,
+    requester: &dyn RendererRequester,
+    params: StartJobParams,
+) -> Result<Value, AppError> {
+    let kind = params.kind.as_str();
+    if !matches!(kind, "apply_operation" | "undo_operation") {
+        return Err(AppError::invalid_argument(format!(
+            "unsupported job kind `{}`; only apply_operation and undo_operation are exposed over MCP",
+            params.kind
+        ))
+        .with_details(json!({
+            "supportedKinds": ["apply_operation", "undo_operation"]
+        })));
+    }
+
+    let revision = require_write_revision(params.world_revision)?;
+    let request = JobStartRequest {
+        project_id: params.project_id.clone(),
+        kind: params.kind.clone(),
+        parameters: params.parameters.clone(),
+        idempotency_key: params.idempotency_key.clone(),
+        expected_revision: Some(revision),
+        actor: Actor::mcp("mcp-bridge"),
+    };
+
+    // A retried tool call returns the existing job without asking for approval again,
+    // queueing a second world edit, or failing on the revision the job itself produced.
+    // A different payload under the same key is still a conflict.
+    if let Some(existing) = state.jobs.replay(&request)? {
+        return to_value(existing);
+    }
+    require_revision(state, Some(revision))?;
+
+    let confirmed = match kind {
+        "apply_operation" => {
+            let operation = apply_job_operation(&params.parameters)?;
+            state.mcp_access.authorize_operation(&operation)?;
+            let preview = {
+                let service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                service.preview(&params.project_id, &operation)?
+            };
+            if state.mcp_access.require_confirmation() {
+                let summary_params = OperationParams {
+                    project_id: params.project_id.clone(),
+                    operation,
+                    world_revision: Some(revision),
+                    idempotency_key: Some(params.idempotency_key.clone()),
+                };
+                confirm_write(
+                    state,
+                    requester,
+                    apply_confirmation_summary(
+                        &summary_params,
+                        revision,
+                        &preview,
+                        state.mcp_access.mode(),
+                    ),
+                )?;
+                state
+                    .mcp_access
+                    .authorize_operation(&summary_params.operation)?;
+                require_revision(state, Some(revision))?;
+                true
+            } else {
+                false
+            }
+        }
+        "undo_operation" => {
+            state.mcp_access.require_editing("undo_operation")?;
+            let operation_id = undo_job_operation_id(&params.parameters)?;
+            let summary = {
+                let service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                let target = service.undo_target(operation_id.as_deref())?;
+                state
+                    .mcp_access
+                    .authorize_undo(&target.dimension, target.bounds)?;
+                undo_confirmation_summary(
+                    &UndoParams {
+                        project_id: params.project_id.clone(),
+                        world_revision: Some(revision),
+                        operation_id: operation_id.clone(),
+                    },
+                    revision,
+                    &target,
+                    state.mcp_access.mode(),
+                )
+            };
+            if state.mcp_access.require_confirmation() {
+                confirm_write(state, requester, summary)?;
+                state.mcp_access.require_editing("undo_operation")?;
+                require_revision(state, Some(revision))?;
+                true
+            } else {
+                false
+            }
+        }
+        _ => unreachable!("kind was validated above"),
+    };
+
+    let mut value = to_value(state.jobs.start(request)?)?;
+
+    // The policy may have been narrowed after the approval while this request was being
+    // queued. Cancel before returning the error; `set_mcp_access` also cancels active MCP
+    // jobs, so an already-running job is rolled back instead of committing.
+    let job_state = value.get("state").and_then(Value::as_str);
+    if matches!(job_state, Some("queued" | "running")) {
+        let recheck = if kind == "apply_operation" {
+            apply_job_operation(&params.parameters)
+                .and_then(|operation| state.mcp_access.authorize_operation(&operation))
+        } else {
+            state.mcp_access.require_editing("undo_operation")
+        };
+        if let Err(error) = recheck {
+            if let Some(job_id) = value.get("jobId").and_then(Value::as_str) {
+                let _ = state.jobs.cancel(&params.project_id, job_id);
+            }
+            return Err(error);
+        }
+    }
+
+    if confirmed {
+        value["confirmation"] = json!({ "approved": true, "deferred": true });
+    }
+    Ok(value)
 }
 
 fn require_write_revision(revision: Option<u64>) -> Result<u64, AppError> {
@@ -888,11 +1081,7 @@ fn operation_status(
             "canUndo": service.can_undo(),
             "canRedo": service.can_redo(),
             "mcpActivity": state.mcp_activity.linked_operation(project_id, id),
-            "job": {
-                "available": false,
-                "progress": null,
-                "reason": "job_api_unavailable"
-            },
+            "job": job_status_value(state, project_id, Some(id)),
         }));
     }
 
@@ -904,12 +1093,20 @@ fn operation_status(
         "canRedo": service.can_redo(),
         "recentOperations": recent,
         "mcpActivity": state.mcp_activity.query(project_id, None, 10),
-        "job": {
-            "available": false,
-            "progress": null,
-            "reason": "job_api_unavailable"
-        },
+        "job": job_status_value(state, project_id, None),
     }))
+}
+
+/// Job metadata for `operation_status`. The authoritative operation history remains the
+/// source of truth; a retained job record is an additional link, not a replacement.
+fn job_status_value(state: &AppState, project_id: &str, operation_id: Option<&str>) -> Value {
+    let operation_job = operation_id.and_then(|id| state.jobs.find_by_operation(project_id, id));
+    json!({
+        "available": true,
+        "summary": state.jobs.summary(),
+        "recent": state.jobs.list(project_id, 5),
+        "operationJob": operation_job,
+    })
 }
 
 fn activity_response(
@@ -1131,7 +1328,14 @@ pub fn set_mcp_access(
     state: tauri::State<'_, AppState>,
     input: McpAccessInput,
 ) -> Result<Value, AppError> {
-    state.mcp_access.update(input)
+    let mut summary = state.mcp_access.update(input)?;
+    // An approval belongs to the policy that produced it. Narrowing (or even changing)
+    // the policy must not let an already queued AI job commit under stale permissions.
+    let cancelled = state
+        .jobs
+        .cancel_source(ActorSource::Mcp, "MCP access policy changed");
+    summary["cancelledMcpJobs"] = json!(cancelled);
+    Ok(summary)
 }
 
 /// Current policy plus any pending write approvals. The UI uses this to render its
@@ -1406,7 +1610,7 @@ fn now_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use super::*;
     use crate::state::AppState;
@@ -1878,8 +2082,263 @@ mod tests {
         let status = status.result.expect("status");
         assert_eq!(status["currentRevision"], 0);
         assert_eq!(status["canUndo"], false);
-        assert_eq!(status["job"]["available"], false);
-        assert_eq!(status["job"]["reason"], "job_api_unavailable");
+        assert_eq!(status["job"]["available"], true);
+        assert_eq!(status["job"]["summary"]["queued"], 0);
+        assert!(status["job"]["recent"]
+            .as_array()
+            .expect("recent jobs")
+            .is_empty());
+    }
+
+    fn wait_for_job(state: &AppState, job_id: &str) -> Value {
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let response = handle_request(
+                state,
+                "token",
+                request(
+                    "req-job-poll",
+                    "token",
+                    "job_status",
+                    json!({ "projectId": LOCAL_PROJECT_ID, "jobId": job_id }),
+                ),
+            );
+            assert!(response.ok, "{:?}", response.error);
+            let snapshot = response.result.expect("job status");
+            let label = snapshot["state"].as_str().unwrap_or_default();
+            if matches!(label, "succeeded" | "failed" | "cancelled") {
+                return snapshot;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "job did not finish in time: {snapshot}"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn jobs_run_apply_with_progress_and_link_retries_to_the_operation() {
+        let state = AppState::new(temp_root("jobs"));
+        enable_writes(&state, McpAccessMode::FullProject, None, 1_000, 10, false);
+        let params = json!({
+            "projectId": LOCAL_PROJECT_ID,
+            "kind": "apply_operation",
+            "parameters": { "operation": single_set(BlockPos::new(8, 64, 8)) },
+            "idempotencyKey": "job-apply-1",
+            "worldRevision": 0
+        });
+
+        let started = handle_request(
+            &state,
+            "token",
+            request("req-job-start", "token", "start_job", params.clone()),
+        );
+        assert!(started.ok, "{:?}", started.error);
+        let started = started.result.expect("started job");
+        let job_id = started["jobId"].as_str().expect("job id").to_owned();
+        assert_eq!(started["kind"], "apply_operation");
+        assert_eq!(started["projectId"], LOCAL_PROJECT_ID);
+
+        let finished = wait_for_job(&state, &job_id);
+        assert_eq!(finished["state"], "succeeded", "{finished}");
+        assert_eq!(finished["progress"], 100);
+        assert_eq!(finished["worldRevision"], 1);
+        assert_eq!(finished["result"]["changedBlocks"], 1);
+        let operation_id = finished["result"]["operationId"]
+            .as_str()
+            .expect("operation id")
+            .to_owned();
+
+        let retry = handle_request(
+            &state,
+            "token",
+            request("req-job-retry", "token", "start_job", params),
+        );
+        assert!(retry.ok, "{:?}", retry.error);
+        let retry = retry.result.expect("retried job");
+        assert_eq!(retry["jobId"], job_id);
+        assert_eq!(retry["replayed"], true);
+        let revision = {
+            let service = state.service.lock().expect("service");
+            service.world().revision()
+        };
+        assert_eq!(revision, 1, "an idempotent retry must not write twice");
+
+        let list = handle_request(
+            &state,
+            "token",
+            request(
+                "req-job-list",
+                "token",
+                "list_jobs",
+                json!({ "projectId": LOCAL_PROJECT_ID, "limit": 10 }),
+            ),
+        );
+        assert!(list.ok, "{:?}", list.error);
+        let list = list.result.expect("job list");
+        assert_eq!(list["jobs"].as_array().expect("jobs").len(), 1);
+        assert_eq!(list["jobs"][0]["jobId"], job_id);
+        assert_eq!(list["summary"]["succeeded"], 1);
+
+        let status = handle_request(
+            &state,
+            "token",
+            request(
+                "req-job-linked-status",
+                "token",
+                "operation_status",
+                json!({ "projectId": LOCAL_PROJECT_ID, "operationId": operation_id }),
+            ),
+        );
+        assert!(status.ok, "{:?}", status.error);
+        let status = status.result.expect("operation status");
+        assert_eq!(status["job"]["available"], true);
+        assert_eq!(status["job"]["operationJob"]["jobId"], job_id);
+        assert_eq!(status["job"]["summary"]["succeeded"], 1);
+
+        let invalid = handle_request(
+            &state,
+            "token",
+            request(
+                "req-job-list-limit",
+                "token",
+                "list_jobs",
+                json!({ "projectId": LOCAL_PROJECT_ID, "limit": 0 }),
+            ),
+        );
+        assert!(!invalid.ok);
+        assert_eq!(
+            invalid.error.expect("limit error").code,
+            ErrorCode::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn jobs_require_write_access_and_keep_the_same_confirmation_gate() {
+        let state = AppState::new(temp_root("jobs-denied"));
+        let params = json!({
+            "projectId": LOCAL_PROJECT_ID,
+            "kind": "apply_operation",
+            "parameters": { "operation": single_set(BlockPos::new(9, 64, 9)) },
+            "idempotencyKey": "job-denied-1",
+            "worldRevision": 0
+        });
+        let denied = handle_request(
+            &state,
+            "token",
+            request("req-job-read-only", "token", "start_job", params.clone()),
+        );
+        assert!(!denied.ok);
+        let error = denied.error.expect("read-only error");
+        assert_eq!(error.code, ErrorCode::PermissionDenied);
+        assert_eq!(
+            error.details.expect("details")["mcpAccessMode"],
+            "read_only"
+        );
+
+        enable_writes(&state, McpAccessMode::FullProject, None, 1_000, 10, true);
+        let refused = ScriptedConfirmation::new(false);
+        let response = handle_request_with_renderer(
+            &state,
+            "token",
+            request("req-job-deny", "token", "start_job", params.clone()),
+            &refused,
+        );
+        assert!(!response.ok);
+        assert_eq!(
+            response.error.expect("denied job").code,
+            ErrorCode::PermissionDenied
+        );
+        assert_eq!(refused.calls.load(Ordering::SeqCst), 1);
+        assert!(state.jobs.list(LOCAL_PROJECT_ID, 10).is_empty());
+
+        let approved = ScriptedConfirmation::new(true);
+        let response = handle_request_with_renderer(
+            &state,
+            "token",
+            request("req-job-approve", "token", "start_job", params.clone()),
+            &approved,
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let started = response.result.expect("approved job");
+        assert_eq!(started["confirmation"]["approved"], true);
+        assert_eq!(started["confirmation"]["deferred"], true);
+        let job_id = started["jobId"].as_str().expect("job id").to_owned();
+        let finished = wait_for_job(&state, &job_id);
+        assert_eq!(finished["state"], "succeeded", "{finished}");
+        assert_eq!(approved.calls.load(Ordering::SeqCst), 1);
+
+        let retry = ScriptedConfirmation::new(true);
+        let response = handle_request_with_renderer(
+            &state,
+            "token",
+            request("req-job-retry-approved", "token", "start_job", params),
+            &retry,
+        );
+        assert!(response.ok, "{:?}", response.error);
+        assert_eq!(
+            response.result.expect("retry")["jobId"],
+            job_id,
+            "a retry returns the existing job"
+        );
+        assert_eq!(
+            retry.calls.load(Ordering::SeqCst),
+            0,
+            "an idempotent retry must not ask for approval again"
+        );
+    }
+
+    #[test]
+    fn job_status_and_cancel_are_scoped_to_the_open_project() {
+        let state = AppState::new(temp_root("job-scope"));
+        let unknown = handle_request(
+            &state,
+            "token",
+            request(
+                "req-job-unknown",
+                "token",
+                "job_status",
+                json!({ "projectId": LOCAL_PROJECT_ID, "jobId": "job-missing" }),
+            ),
+        );
+        assert!(!unknown.ok);
+        assert_eq!(
+            unknown.error.expect("unknown job").code,
+            ErrorCode::NotFound
+        );
+
+        let wrong_project = handle_request(
+            &state,
+            "token",
+            request(
+                "req-job-project",
+                "token",
+                "list_jobs",
+                json!({ "projectId": "another-project", "limit": 10 }),
+            ),
+        );
+        assert!(!wrong_project.ok);
+        assert_eq!(
+            wrong_project.error.expect("wrong project").code,
+            ErrorCode::NotFound
+        );
+
+        let cancel = handle_request(
+            &state,
+            "token",
+            request(
+                "req-job-cancel-missing",
+                "token",
+                "cancel_job",
+                json!({ "projectId": LOCAL_PROJECT_ID, "jobId": "job-missing" }),
+            ),
+        );
+        assert!(!cancel.ok);
+        assert_eq!(
+            cancel.error.expect("cancel missing").code,
+            ErrorCode::NotFound
+        );
     }
 
     #[test]
@@ -2383,7 +2842,11 @@ mod tests {
         assert_eq!(status["source"], "mcp");
         assert_eq!(status["actorId"], "mcp-bridge");
         assert_eq!(status["changedBlocks"], 2);
-        assert_eq!(status["job"]["available"], false);
+        assert_eq!(status["job"]["available"], true);
+        assert!(
+            status["job"]["operationJob"].is_null(),
+            "a synchronous write has no job record"
+        );
 
         let undo = handle_request(
             &state,

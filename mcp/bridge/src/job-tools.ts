@@ -5,6 +5,7 @@ import * as z from "zod/v4";
 import { requireProjectId } from "./capabilities.js";
 import {
   JOB_API_UNAVAILABLE,
+  JobApiError,
   JobApiUnavailableError,
   type JobApi,
   type JobSnapshot,
@@ -35,7 +36,7 @@ const startJobInput = z.object({
     .nonnegative()
     .optional()
     .describe(
-      "World revision the caller observed; omitted when the job is revision-agnostic.",
+      "World revision the caller observed. Required for mutating jobs; the desktop rejects a missing revision.",
     ),
 });
 
@@ -46,6 +47,12 @@ const jobQueryInput = z.object({
 
 function errorResult(error: unknown): CallToolResult {
   if (error instanceof JobApiUnavailableError) {
+    return {
+      isError: true,
+      content: [{ type: "text", text: `${error.code}: ${error.message}` }],
+    };
+  }
+  if (error instanceof JobApiError) {
     return {
       isError: true,
       content: [{ type: "text", text: `${error.code}: ${error.message}` }],

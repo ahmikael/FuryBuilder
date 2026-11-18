@@ -1,10 +1,10 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use project_store::{EditorState, ProjectStore};
 use serde::Serialize;
-use world_application::{AppError, WorldService};
+use world_application::{AppError, JobQueue, WorldService};
 
 use crate::local_bridge::RendererBridge;
 use crate::mcp_access::{McpAccessState, McpConfirmationBridge};
@@ -68,7 +68,8 @@ impl ProjectSession {
 /// Shared authoritative services for the Tauri process. The project session and the world
 /// service are separate locks; commands never hold both while doing blocking disk I/O.
 pub struct AppState {
-    pub service: Mutex<WorldService>,
+    pub service: Arc<Mutex<WorldService>>,
+    pub jobs: JobQueue,
     pub projects: Mutex<ProjectSession>,
     pub renderer: RendererBridge,
     pub mcp_access: McpAccessState,
@@ -78,8 +79,10 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(projects_root: PathBuf) -> Self {
+        let service = Arc::new(Mutex::new(WorldService::new()));
         Self {
-            service: Mutex::new(WorldService::new()),
+            service: service.clone(),
+            jobs: JobQueue::new(service),
             projects: Mutex::new(ProjectSession::new(ProjectStore::new(projects_root))),
             renderer: RendererBridge::default(),
             mcp_access: McpAccessState::default(),

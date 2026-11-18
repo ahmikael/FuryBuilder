@@ -129,8 +129,38 @@ The connection is explicitly ephemeral: `bridge_info.connection` publishes a ran
 per-process `instanceId`, start time, `transport: "stdio"`,
 `lifecycle: "ephemeral-stdio"`, `expiresWithProcess: true` and the context state. A bridge
 process serves exactly one client and dies with it. Job calls carry a `job_id` for status
-and cancellation, and `start_job` requires an `idempotency_key` plus an optional
-`world_revision`.
+and cancellation, and `start_job` requires an `idempotency_key` plus `world_revision` for
+write kinds.
+
+## Long-running job queue
+
+The Core owns a bounded single-worker queue (`world-application::jobs`) with at most 16
+active jobs and 256 retained records. An MCP job may execute `apply_operation` or
+`undo_operation`; any other kind is refused before queueing. A write job passes the same
+project, revision, access-mode, selection, limit and confirmation checks as the synchronous
+`apply_operation`/`undo_operation`, then returns a snapshot with `state: "queued"` or
+`running`. The confirmation is deferred: the approval summary says so and the job carries
+the approved `operationId`/extent.
+
+`get_job_status` returns the live state (`queued`, `running`, `succeeded`, `failed`,
+`cancelled`), progress 0–100, phase message, cancellation flag, world revision, error or
+completed result. `cancel_job` cancels a queued job before it starts and requests
+cooperative cancellation for a running one; cancellation during planning writes nothing,
+and cancellation during the write phase restores every touched section. Jobs are scoped to
+the explicitly named open project.
+
+`start_job` is idempotent: the queue fingerprints the project, kind, parameters and expected
+revision under `(project_id, idempotency_key)`. A retry returns the existing job with
+`replayed: true` without queueing again or asking for confirmation twice; reusing the key
+for different work is `conflict`. `operation_status` reports `job.available: true`, the queue
+summary, recent jobs and the job linked to a specific `operationId`. The editor can read the
+same data through `list_jobs`; changing the MCP access policy cancels every active MCP job so
+an approval cannot outlive the policy that granted it. Opening or closing a project and
+restoring a checkpoint cancel every active job before the authoritative world is replaced,
+so work authorized against the previous world cannot commit into the next one.
+
+If the desktop app is absent, the job tools return the stable `job_api_unavailable` error
+instead of inventing a job, progress or result.
 
 ## Tasks option and fallback
 
@@ -139,14 +169,14 @@ independent conditions for each request:
 
 1. the client's advertised capabilities include `tasks`;
 2. the bridge implements the extension (currently `false`);
-3. the authoritative Core Job API is connected (currently `false`).
+3. the authoritative Core Job API is connected (the desktop answers and its queue reports
+   `available: true`).
 
 Only when all three hold may the extension be advertised. In every other case the
 response reports `mode: "fallback"` with a specific reason
 (`client_did_not_declare_tasks`, `tasks_not_implemented` or
-`job_backend_unavailable`), and callers use the ordinary job tools. Those tools
-currently return the stable `job_api_unavailable` error instead of inventing a job,
-progress or result. This is a deliberate refusal, not a simulated success.
+`job_backend_unavailable`), and callers use the ordinary `start_job`/`get_job_status`/
+`cancel_job` tools, which now reach the authoritative queue.
 
 ## Automated evidence
 
@@ -158,8 +188,8 @@ pnpm --filter @furybuilder/mcp-bridge typecheck
 pnpm --filter @furybuilder/mcp-bridge build
 ```
 
-Observed: 24 tests passed, typecheck and build clean; the Rust desktop test binary runs
-29 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
+Observed: 25 tests passed, typecheck and build clean; the Rust desktop test binary runs
+32 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
 use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
@@ -170,7 +200,13 @@ use `@modelcontextprotocol/client` 2.4.0:
 - the context policy accepts a matching project/revision, accepts an omitted revision
   for discovery, and rejects a different project or a stale revision;
 - the three fallback job tools are listed, publish `world_revision` and
-  `idempotency_key`, and return `job_api_unavailable` instead of a fabricated job;
+  `idempotency_key`, and return `job_api_unavailable` against an absent desktop instead of
+  a fabricated job;
+- live `start_job`, `get_job_status` and `cancel_job` calls map to the desktop endpoint with
+  camelCase `projectId`/`idempotencyKey`/`worldRevision`, return the authoritative snapshot,
+  and surface `permission_denied` from the desktop as a structured tool error;
+- `bridge_info` reports `jobs.backendConnected: true` only when the desktop is reachable
+  and its queue answers `available: true`;
 - the Tasks policy enables the extension only when client, bridge and Job API all
   support it;
 - the six read-only tools are listed with read-only annotations and return
@@ -198,12 +234,14 @@ The Rust tests cover camera/capture revision verification, dimension mismatch, i
 image rejection, renderer timeout without a viewport, one-answer-per-request bridge
 semantics, read-only preview/status, policy enforcement for both edit modes, block and
 batch limits, missing revision rejection, approval/denial of apply and undo, undo extent
-tracking, granted batch apply/undo with audit entries, the bounded activity journal, and
-the endpoint link between an authenticated request and its `operationId` (including denied
-calls and one-entry-per-request ordering). The frontend tests cover the policy command
-payloads, confirmation submission, dialog rendering, restoring a pending confirmation after
-the UI reloads, and the activity query payload; the Rust bridge keeps the request id and
-expiry so the dialog can be reconstructed.
+tracking, granted batch apply/undo with audit entries, the bounded activity journal, the
+endpoint link between an authenticated request and its `operationId` (including denied
+calls and one-entry-per-request ordering), and the job queue: progress phases, rollback of
+a cancelled write, idempotent replay without duplicate confirmation, project scoping,
+operation linking and the same policy gates as synchronous writes. The frontend tests cover
+the policy command payloads, confirmation submission, dialog rendering, restoring a pending
+confirmation after the UI reloads, and the activity query payload; the Rust bridge keeps the
+request id and expiry so the dialog can be reconstructed.
 
 ### Real Tauri process
 
@@ -219,9 +257,11 @@ camera: overworld, render revision 0 = authoritative revision 0, stale false
 capture: image/png, PNG signature valid, 492714 bytes, partial true, stale false
 preview: affected 1, changed 1, world revision 0, access.allowed false (permission_denied)
 apply in read-only: permission_denied, accessMode read_only, operation apply_operation
-operation_status: revision 0, canUndo false, job.available false
-activity: 6 entries, bounded true; denied apply -> status denied, error permission_denied,
-          clientId "probe-local-bridge", projectId "local-project"
+operation_status: revision 0, canUndo false, job.available true, queued 0, retained 0
+job start in read-only: permission_denied, accessMode read_only; list_jobs empty, available true
+activity: 8 entries, bounded true; denied apply -> status denied, error permission_denied,
+          clientId "probe-local-bridge", projectId "local-project"; denied start_job is
+          recorded as start_job/denied/permission_denied
 activity limit 0: invalid_argument
 wrong token: unauthorized, responseContainsToken false
 LOCAL_BRIDGE_PROBE_OK
@@ -255,8 +295,11 @@ assume a protocol revision.
   task should scope grants and audit records to a connection identity. The journal is
   in-memory and intentionally bounded, so it is not a durable audit trail across restarts;
   accepted operations still live in the authoritative history.
-- The Job API is still absent: long operations are synchronous, and status reports
-  `job.available=false` instead of inventing progress.
+- The job queue is in-memory and process-wide: at most 16 active and 256 retained jobs, one
+  worker, no persistence across restarts. Progress is phase-based (0–5 validating, 5–80
+  planning, 80–99 applying, 100 succeeded), not a per-block estimate. A policy change
+  cancels active MCP jobs, but a job that already committed is not rolled back by that
+  policy change.
 - Camera and capture require a mounted viewport in the running editor. A hidden or
   unloaded WebView reports `backend_unavailable`; there is no headless capture path yet.
 - A capture reports `partial=true` when requested chunks are missing and `stale=true` when

@@ -331,7 +331,62 @@ console.log(
         currentRevision: status.result.currentRevision,
         canUndo: status.result.canUndo,
         jobAvailable: status.result.job.available,
-        jobReason: status.result.job.reason,
+        jobQueued: status.result.job.summary.queued,
+        jobRetained: status.result.job.summary.retained,
+      },
+    },
+    null,
+    2,
+  ),
+);
+
+const jobDenied = await request(
+  runtime,
+  "probe-job-denied",
+  runtime.token,
+  "start_job",
+  {
+    projectId: ping.result.project.projectId,
+    kind: "apply_operation",
+    parameters: {
+      operation: {
+        type: "set_block",
+        dimension: "minecraft:overworld",
+        pos: { x: 1, y: 64, z: 1 },
+        state: { name: "minecraft:stone" },
+      },
+    },
+    idempotencyKey: "probe-job-denied",
+    worldRevision: world.result.revision,
+  },
+);
+if (jobDenied.ok || jobDenied.error?.code !== "permission_denied") {
+  throw new Error(
+    `a read-only job start was not refused: ${JSON.stringify(jobDenied)}`,
+  );
+}
+const jobs = await request(runtime, "probe-jobs", runtime.token, "list_jobs", {
+  projectId: ping.result.project.projectId,
+  limit: 10,
+});
+if (!jobs.ok || jobs.result.jobs.length !== 0) {
+  throw new Error(
+    `a denied job created a queue entry: ${JSON.stringify(jobs)}`,
+  );
+}
+if (jobs.result.summary.available !== true) {
+  throw new Error(
+    `the queue did not report itself as available: ${JSON.stringify(jobs.result)}`,
+  );
+}
+console.log(
+  JSON.stringify(
+    {
+      jobGuard: {
+        code: jobDenied.error.code,
+        accessMode: jobDenied.error.details?.mcpAccessMode,
+        queued: jobs.result.jobs.length,
+        available: jobs.result.summary.available,
       },
     },
     null,
@@ -369,6 +424,18 @@ if (
     `denied write was not linked to the journal: ${JSON.stringify(deniedEntry)}`,
   );
 }
+const deniedJobEntry = activityEntries.find(
+  (entry) => entry.requestId === "probe-job-denied",
+);
+if (
+  !deniedJobEntry ||
+  deniedJobEntry.method !== "start_job" ||
+  deniedJobEntry.status !== "denied"
+) {
+  throw new Error(
+    `denied job was not linked to the journal: ${JSON.stringify(deniedJobEntry)}`,
+  );
+}
 if (
   activityEntries.some((entry) =>
     ["ping", "mcp_activity"].includes(entry.method),
@@ -394,6 +461,12 @@ console.log(
           clientId: deniedEntry.clientId,
           projectId: deniedEntry.projectId,
           durationMs: deniedEntry.durationMs,
+        },
+        deniedJob: {
+          requestId: deniedJobEntry.requestId,
+          method: deniedJobEntry.method,
+          status: deniedJobEntry.status,
+          errorCode: deniedJobEntry.errorCode,
         },
       },
     },

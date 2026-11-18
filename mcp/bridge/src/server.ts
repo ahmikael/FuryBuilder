@@ -80,11 +80,13 @@ export function createFuryBuilderServer(
       const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? null;
       const clientCapabilities =
         envelope?.[CLIENT_CAPABILITIES_META_KEY] ?? null;
+      const desktop = await probeDesktop();
+      const jobBackendConnected =
+        jobs.connected && desktop.connected && desktop.jobs?.available === true;
       const tasks = resolveTasksSupport({
         clientCapabilities,
-        jobBackendConnected: jobs.connected,
+        jobBackendConnected,
       });
-      const desktop = await probeDesktop();
       const activeContext = desktop.connected
         ? {
             projectId: desktop.project.projectId,
@@ -113,7 +115,7 @@ export function createFuryBuilderServer(
                   contextPolicy: "explicit-per-request",
                   optionalExtensions: OPTIONAL_EXTENSIONS,
                   jobs: {
-                    backendConnected: jobs.connected,
+                    backendConnected: jobBackendConnected,
                     fallbackTools: JOB_TOOL_NAMES,
                     tasks: {
                       ...tasks,

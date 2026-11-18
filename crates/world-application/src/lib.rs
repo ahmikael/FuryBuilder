@@ -5,6 +5,7 @@
 
 mod dto;
 mod error;
+mod jobs;
 mod service;
 
 pub use dto::{
@@ -13,6 +14,10 @@ pub use dto::{
     Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot, UndoTarget,
 };
 pub use error::{AppError, ErrorCode};
+pub use jobs::{
+    apply_job_operation, undo_job_operation_id, JobQueue, JobSnapshot, JobStartRequest, JobState,
+    DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT, MAX_QUEUED_JOBS, MAX_RETAINED_JOBS,
+};
 pub use service::{
     WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_READ_BLOCKS,
     MAX_REGION_SUMMARY_BLOCKS, MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,

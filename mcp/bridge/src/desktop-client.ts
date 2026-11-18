@@ -57,6 +57,17 @@ export class DesktopUnavailableError extends Error {
   }
 }
 
+export interface DesktopJobsSummary {
+  available: boolean;
+  queued: number;
+  running: number;
+  succeeded: number;
+  failed: number;
+  cancelled: number;
+  retained: number;
+  maxQueued: number;
+}
+
 export interface DesktopProbeConnected {
   connected: true;
   app: unknown;
@@ -78,6 +89,7 @@ export interface DesktopProbeConnected {
     requireConfirmation: boolean;
   } | null;
   renderer: { listening: boolean } | null;
+  jobs: DesktopJobsSummary | null;
   pendingConfirmations: number;
 }
 
@@ -370,6 +382,16 @@ export async function probeDesktop(
         requireConfirmation?: unknown;
       };
       renderer?: { listening?: unknown };
+      jobs?: {
+        available?: unknown;
+        queued?: unknown;
+        running?: unknown;
+        succeeded?: unknown;
+        failed?: unknown;
+        cancelled?: unknown;
+        retained?: unknown;
+        maxQueued?: unknown;
+      };
       pendingConfirmations?: unknown;
     };
     if (
@@ -419,6 +441,26 @@ export async function probeDesktop(
       renderer:
         typeof result.renderer?.listening === "boolean"
           ? { listening: result.renderer.listening }
+          : null,
+      jobs:
+        typeof result.jobs?.available === "boolean" &&
+        typeof result.jobs.queued === "number" &&
+        typeof result.jobs.running === "number" &&
+        typeof result.jobs.succeeded === "number" &&
+        typeof result.jobs.failed === "number" &&
+        typeof result.jobs.cancelled === "number" &&
+        typeof result.jobs.retained === "number" &&
+        typeof result.jobs.maxQueued === "number"
+          ? {
+              available: result.jobs.available,
+              queued: result.jobs.queued,
+              running: result.jobs.running,
+              succeeded: result.jobs.succeeded,
+              failed: result.jobs.failed,
+              cancelled: result.jobs.cancelled,
+              retained: result.jobs.retained,
+              maxQueued: result.jobs.maxQueued,
+            }
           : null,
       pendingConfirmations:
         typeof result.pendingConfirmations === "number"

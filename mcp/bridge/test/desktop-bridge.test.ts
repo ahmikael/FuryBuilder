@@ -56,6 +56,16 @@ describe("MCP bridge to the authoritative desktop API", () => {
           requireConfirmation: true,
         },
         renderer: { listening: true },
+        jobs: {
+          available: true,
+          queued: 1,
+          running: 0,
+          succeeded: 2,
+          failed: 0,
+          cancelled: 0,
+          retained: 3,
+          maxQueued: 16,
+        },
         pendingConfirmations: 1,
       });
     });
@@ -94,7 +104,18 @@ describe("MCP bridge to the authoritative desktop API", () => {
             requireConfirmation: boolean;
           } | null;
           renderer: { listening: boolean } | null;
+          jobs: {
+            available: boolean;
+            queued: number;
+            running: number;
+            succeeded: number;
+            retained: number;
+          } | null;
           pendingConfirmations: number;
+        };
+        jobs: {
+          backendConnected: boolean;
+          fallbackTools: string[];
         };
         connection: {
           state: string;
@@ -122,6 +143,17 @@ describe("MCP bridge to the authoritative desktop API", () => {
       requireConfirmation: true,
     });
     expect(info.bridge.desktop.renderer).toEqual({ listening: true });
+    expect(info.bridge.desktop.jobs).toMatchObject({
+      available: true,
+      queued: 1,
+      succeeded: 2,
+    });
+    expect(info.bridge.jobs.backendConnected).toBe(true);
+    expect(info.bridge.jobs.fallbackTools).toEqual([
+      "start_job",
+      "get_job_status",
+      "cancel_job",
+    ]);
     expect(info.bridge.desktop.pendingConfirmations).toBe(1);
     expect(info.bridge.connection).toMatchObject({
       state: "ready",
@@ -160,6 +192,156 @@ describe("MCP bridge to the authoritative desktop API", () => {
       valid: false,
       active: { projectId: "project-live", worldRevision: 9 },
     });
+  });
+
+  it("runs fallback job tools through the authoritative desktop Job API", async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const harness = await startMockDesktop((request) => {
+      seen.push(request);
+      const params = request.params as Record<string, unknown>;
+      if (request.method === "start_job" && params.kind === "undo_operation") {
+        return {
+          protocol: 1,
+          id: request.id,
+          ok: false,
+          error: {
+            code: "permission_denied",
+            message: "writes are disabled for this project",
+          },
+        };
+      }
+      if (request.method === "start_job") {
+        return okResult(request, {
+          jobId: "job-1",
+          projectId: params.projectId,
+          kind: params.kind,
+          state: "queued",
+          progress: 0,
+          message: "queued",
+          worldRevision: null,
+          result: null,
+          cancelRequested: false,
+          replayed: false,
+        });
+      }
+      if (request.method === "job_status") {
+        return okResult(request, {
+          jobId: params.jobId,
+          projectId: params.projectId,
+          kind: "apply_operation",
+          state: "running",
+          progress: 42,
+          message: "applying",
+          worldRevision: null,
+          result: null,
+        });
+      }
+      if (request.method === "cancel_job") {
+        return okResult(request, {
+          jobId: params.jobId,
+          projectId: params.projectId,
+          kind: "apply_operation",
+          state: "cancelled",
+          progress: 42,
+          message: "cancellation requested",
+          worldRevision: null,
+          result: null,
+          cancelRequested: true,
+        });
+      }
+      return okResult(request, {});
+    });
+    harnesses.push(harness);
+
+    const client = new Client(
+      { name: "desktop-job-client", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } },
+    );
+    clients.push(client);
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: ["--import", "tsx", "src/main.ts"],
+        cwd: bridgeRoot,
+        env: envWith(harness.runtimePath),
+        stderr: "pipe",
+      }),
+    );
+
+    const started = await client.callTool({
+      name: "start_job",
+      arguments: {
+        project_id: "project-live",
+        kind: "apply_operation",
+        parameters: {
+          operation: {
+            type: "set_block",
+            dimension: "minecraft:overworld",
+            pos: { x: 1, y: 64, z: 1 },
+            state: { name: "minecraft:stone" },
+          },
+        },
+        idempotency_key: "job-key-1",
+        world_revision: 9,
+      },
+    });
+    const startText = started.content.find((block) => block.type === "text");
+    const startSnapshot = JSON.parse(
+      startText?.type === "text" ? startText.text : "{}",
+    ) as { jobId: string; state: string };
+    expect(startSnapshot).toMatchObject({ jobId: "job-1", state: "queued" });
+    const startRequest = seen.find((request) => request.method === "start_job");
+    expect(startRequest?.params).toMatchObject({
+      projectId: "project-live",
+      kind: "apply_operation",
+      idempotencyKey: "job-key-1",
+      worldRevision: 9,
+    });
+    expect(
+      (
+        startRequest?.params as {
+          parameters: { operation: { type: string } };
+        }
+      ).parameters.operation.type,
+    ).toBe("set_block");
+
+    const status = await client.callTool({
+      name: "get_job_status",
+      arguments: { project_id: "project-live", job_id: "job-1" },
+    });
+    const statusText = status.content.find((block) => block.type === "text");
+    expect(
+      JSON.parse(statusText?.type === "text" ? statusText.text : "{}"),
+    ).toMatchObject({ jobId: "job-1", state: "running", progress: 42 });
+
+    const cancelled = await client.callTool({
+      name: "cancel_job",
+      arguments: { project_id: "project-live", job_id: "job-1" },
+    });
+    const cancelText = cancelled.content.find((block) => block.type === "text");
+    expect(
+      JSON.parse(cancelText?.type === "text" ? cancelText.text : "{}"),
+    ).toMatchObject({
+      jobId: "job-1",
+      state: "cancelled",
+      cancelRequested: true,
+    });
+
+    const denied = await client.callTool({
+      name: "start_job",
+      arguments: {
+        project_id: "project-live",
+        kind: "undo_operation",
+        parameters: {},
+        idempotency_key: "job-key-denied",
+        world_revision: 10,
+      },
+    });
+    expect(denied.isError).toBe(true);
+    const deniedText = denied.content.find((block) => block.type === "text");
+    expect(deniedText?.type === "text" ? deniedText.text : "").toMatch(
+      /^permission_denied: /,
+    );
   });
 
   it("serves world, block, camera and capture reads from the live endpoint", async () => {

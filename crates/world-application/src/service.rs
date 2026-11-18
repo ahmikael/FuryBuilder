@@ -3,7 +3,9 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use serde_json::json;
 use uuid::Uuid;
 use world_domain::{BlockBox, BlockRegistry, ChunkPos, World, WorldInfo};
-use world_operations::{self as operations, BlockChange, Operation, SectionDiff};
+use world_operations::{
+    self as operations, BlockChange, NoopObserver, Operation, OperationObserver, SectionDiff,
+};
 
 use crate::dto::{
     Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
@@ -366,6 +368,17 @@ impl WorldService {
     }
 
     pub fn execute(&mut self, request: OperationRequest) -> Result<OperationResult, AppError> {
+        self.execute_with_observer(request, &NoopObserver)
+    }
+
+    /// Executes an operation while reporting progress and checking cancellation. The
+    /// operation layer restores touched sections if cancellation arrives during writing,
+    /// so a cancelled job leaves the authoritative world unchanged.
+    pub fn execute_with_observer(
+        &mut self,
+        request: OperationRequest,
+        observer: &dyn OperationObserver,
+    ) -> Result<OperationResult, AppError> {
         self.validate_project(&request.project_id)?;
         self.validate_actor(&request.actor)?;
         if !self.writes_enabled {
@@ -415,7 +428,8 @@ impl WorldService {
             .operation
             .bounds()
             .map(|bounds| (request.operation.dimension().to_owned(), bounds));
-        let applied = operations::apply(&mut self.world, &request.operation)?;
+        let applied =
+            operations::apply_with_observer(&mut self.world, &request.operation, observer)?;
         let revision_after = if applied.changed_blocks > 0 {
             self.world.bump_revision()
         } else {

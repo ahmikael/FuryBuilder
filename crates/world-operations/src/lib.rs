@@ -27,8 +27,51 @@ pub enum OperationError {
     },
     #[error("batch operation is empty")]
     EmptyBatch,
+    #[error("operation was cancelled before it could be committed")]
+    Cancelled,
     #[error(transparent)]
     World(#[from] WorldError),
+}
+
+/// Phase reported by a cancellable operation. The application layer maps these phases to
+/// a 0–100 job percentage; the domain keeps them separate so planning and writing are not
+/// confused with each other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OperationPhase {
+    Validating,
+    Planning,
+    Applying,
+}
+
+/// Receives progress from a long operation and decides whether it should continue.
+/// Implementations must be cheap: `progress` is called for every bounded batch of work.
+pub trait OperationObserver {
+    fn progress(&self, phase: OperationPhase, processed: u64, total: u64);
+    fn is_cancelled(&self) -> bool;
+}
+
+/// Default observer for synchronous operations.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoopObserver;
+
+impl OperationObserver for NoopObserver {
+    fn progress(&self, _phase: OperationPhase, _processed: u64, _total: u64) {}
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
+fn report(
+    observer: &dyn OperationObserver,
+    phase: OperationPhase,
+    processed: u64,
+    total: u64,
+) -> Result<(), OperationError> {
+    observer.progress(phase, processed, total);
+    if observer.is_cancelled() {
+        return Err(OperationError::Cancelled);
+    }
+    Ok(())
 }
 
 /// A dimension-scoped region selection.
@@ -233,6 +276,7 @@ fn prevalidate(world: &World, operation: &Operation) -> Result<(), OperationErro
 fn target_changes(
     world: &World,
     operation: &Operation,
+    observer: &dyn OperationObserver,
 ) -> Result<Vec<BlockChange>, OperationError> {
     match operation {
         Operation::SetBlock {
@@ -240,7 +284,9 @@ fn target_changes(
             pos,
             state,
         } => {
+            report(observer, OperationPhase::Planning, 0, 1)?;
             let current = world.get_block(dimension, *pos)?;
+            report(observer, OperationPhase::Planning, 1, 1)?;
             Ok(if current == *state {
                 Vec::new()
             } else {
@@ -254,9 +300,15 @@ fn target_changes(
             if changes.is_empty() {
                 return Err(OperationError::EmptyBatch);
             }
+            let total = changes.len() as u64;
+            report(observer, OperationPhase::Planning, 0, total)?;
             let mut deduped: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
-            for change in changes {
+            for (index, change) in changes.iter().enumerate() {
                 deduped.insert(change.pos, change.state.clone());
+                let done = index as u64 + 1;
+                if done == total || done % 1024 == 0 {
+                    report(observer, OperationPhase::Planning, done, total)?;
+                }
             }
             let mut result = Vec::new();
             for (pos, state) in deduped {
@@ -271,13 +323,20 @@ fn target_changes(
             bounds,
             state,
         } => {
+            let total = bounds.volume().max(1);
+            report(observer, OperationPhase::Planning, 0, total)?;
             let mut result = Vec::new();
+            let mut done = 0;
             for pos in bounds.iter() {
                 if world.get_block(dimension, pos)? != *state {
                     result.push(BlockChange {
                         pos,
                         state: state.clone(),
                     });
+                }
+                done += 1;
+                if done == total || done % 4096 == 0 {
+                    report(observer, OperationPhase::Planning, done, total)?;
                 }
             }
             Ok(result)
@@ -288,7 +347,10 @@ fn target_changes(
             from,
             to,
         } => {
+            let total = bounds.volume().max(1);
+            report(observer, OperationPhase::Planning, 0, total)?;
             let mut result = Vec::new();
+            let mut done = 0;
             for pos in bounds.iter() {
                 if world.get_block(dimension, pos)? == *from {
                     result.push(BlockChange {
@@ -296,15 +358,29 @@ fn target_changes(
                         state: to.clone(),
                     });
                 }
+                done += 1;
+                if done == total || done % 4096 == 0 {
+                    report(observer, OperationPhase::Planning, done, total)?;
+                }
             }
             Ok(result)
         }
     }
 }
 
+fn restore_sections(
+    world: &mut World,
+    dimension: &str,
+    before: &[((ChunkPos, i32), Option<Section>)],
+) {
+    for ((chunk, section_y), section) in before {
+        let _ = world.install_section(dimension, *chunk, *section_y, section.clone());
+    }
+}
+
 pub fn preview(world: &World, operation: &Operation) -> Result<Preview, OperationError> {
     prevalidate(world, operation)?;
-    let changes = target_changes(world, operation)?;
+    let changes = target_changes(world, operation, &NoopObserver)?;
     let mut chunks = BTreeSet::new();
     for change in &changes {
         chunks.insert(change.pos.chunk_pos());
@@ -320,9 +396,23 @@ pub fn preview(world: &World, operation: &Operation) -> Result<Preview, Operatio
 /// Applies an operation atomically. All positions and limits are validated before the
 /// first write; if a write fails unexpectedly, touched sections are restored.
 pub fn apply(world: &mut World, operation: &Operation) -> Result<AppliedOperation, OperationError> {
+    apply_with_observer(world, operation, &NoopObserver)
+}
+
+/// Applies an operation atomically while reporting progress and honouring cancellation.
+/// Cancellation before the write phase touches nothing; cancellation during the write
+/// phase restores every section captured before the first write.
+pub fn apply_with_observer(
+    world: &mut World,
+    operation: &Operation,
+    observer: &dyn OperationObserver,
+) -> Result<AppliedOperation, OperationError> {
+    report(observer, OperationPhase::Validating, 0, 1)?;
     prevalidate(world, operation)?;
-    let changes = target_changes(world, operation)?;
+    report(observer, OperationPhase::Validating, 1, 1)?;
+    let changes = target_changes(world, operation, observer)?;
     if changes.is_empty() {
+        report(observer, OperationPhase::Applying, 0, 0)?;
         return Ok(AppliedOperation {
             dimension: operation.dimension().to_owned(),
             changed_blocks: 0,
@@ -351,9 +441,11 @@ pub fn apply(world: &mut World, operation: &Operation) -> Result<AppliedOperatio
         })
         .collect();
 
+    let total = changes.len() as u64;
+    report(observer, OperationPhase::Applying, 0, total)?;
     let mut changed_blocks = 0u64;
     let mut dirty_chunks = BTreeSet::new();
-    for change in &changes {
+    for (index, change) in changes.iter().enumerate() {
         match world.set_block(operation.dimension(), change.pos, &change.state) {
             Ok(write) => {
                 if write.changed {
@@ -362,19 +454,19 @@ pub fn apply(world: &mut World, operation: &Operation) -> Result<AppliedOperatio
                 }
             }
             Err(error) => {
-                for ((chunk, section_y), section) in &before {
-                    let _ = world.install_section(
-                        operation.dimension(),
-                        *chunk,
-                        *section_y,
-                        section.clone(),
-                    );
-                }
+                restore_sections(world, operation.dimension(), &before);
                 return Err(OperationError::OutOfBounds {
                     dimension: operation.dimension().to_owned(),
                     pos: change.pos,
                     source: error,
                 });
+            }
+        }
+        let done = index as u64 + 1;
+        if done == total || done % 1024 == 0 {
+            if let Err(error) = report(observer, OperationPhase::Applying, done, total) {
+                restore_sections(world, operation.dimension(), &before);
+                return Err(error);
             }
         }
     }
@@ -476,6 +568,79 @@ mod tests {
         assert_eq!(preview.changed_blocks, 1);
         assert_eq!(world.block_count(), 1);
         assert_eq!(world.revision(), 0);
+    }
+
+    struct RecordingObserver {
+        seen: std::sync::Mutex<Vec<(OperationPhase, u64, u64)>>,
+        cancel_once_applying: bool,
+    }
+
+    impl RecordingObserver {
+        fn new(cancel_once_applying: bool) -> Self {
+            Self {
+                seen: std::sync::Mutex::new(Vec::new()),
+                cancel_once_applying,
+            }
+        }
+
+        fn seen(&self) -> Vec<(OperationPhase, u64, u64)> {
+            self.seen.lock().expect("observer lock").clone()
+        }
+    }
+
+    impl OperationObserver for RecordingObserver {
+        fn progress(&self, phase: OperationPhase, processed: u64, total: u64) {
+            self.seen
+                .lock()
+                .expect("observer lock")
+                .push((phase, processed, total));
+        }
+
+        fn is_cancelled(&self) -> bool {
+            self.cancel_once_applying
+                && self.seen().iter().any(|(phase, processed, _)| {
+                    *phase == OperationPhase::Applying && *processed > 0
+                })
+        }
+    }
+
+    #[test]
+    fn observer_reports_phases_and_cancellation_rolls_back_touched_sections() {
+        let mut world = world_with_stone();
+        let bounds = BlockBox::new(BlockPos::new(0, 64, 0), BlockPos::new(15, 79, 15)).unwrap();
+        let op = Operation::FillCuboid {
+            dimension: "minecraft:overworld".into(),
+            bounds,
+            state: state("minecraft:dirt"),
+        };
+        let observer = RecordingObserver::new(true);
+        let result = apply_with_observer(&mut world, &op, &observer);
+        assert_eq!(result.unwrap_err(), OperationError::Cancelled);
+        assert_eq!(world.block_count(), 1, "cancelled write must roll back");
+        assert_eq!(world.revision(), 0);
+
+        let seen = observer.seen();
+        assert!(seen
+            .iter()
+            .any(|(phase, _, _)| *phase == OperationPhase::Validating));
+        assert!(seen
+            .iter()
+            .any(|(phase, _, _)| *phase == OperationPhase::Planning));
+        assert!(seen
+            .iter()
+            .any(|(phase, processed, _)| *phase == OperationPhase::Applying && *processed > 0));
+        assert_eq!(seen.last().expect("progress").0, OperationPhase::Applying);
+
+        let observer = RecordingObserver::new(false);
+        let applied = apply_with_observer(&mut world, &op, &observer).expect("apply");
+        assert_eq!(applied.changed_blocks, 4096);
+        assert_eq!(world.block_count(), 4096);
+        let seen = observer.seen();
+        assert!(seen.iter().any(
+            |(phase, processed, total)| *phase == OperationPhase::Applying
+                && *processed == *total
+                && *total == 4096
+        ));
     }
 
     #[test]

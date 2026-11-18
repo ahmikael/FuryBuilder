@@ -19,6 +19,7 @@ pub enum ErrorCode {
     UnsupportedFormat,
     BackendUnavailable,
     NoHistory,
+    Cancelled,
     Internal,
 }
 
@@ -102,6 +103,7 @@ impl From<OperationError> for AppError {
             OperationError::Bounds(_) | OperationError::EmptyBatch => {
                 AppError::invalid_argument(error.to_string())
             }
+            OperationError::Cancelled => AppError::new(ErrorCode::Cancelled, error.to_string()),
         }
     }
 }

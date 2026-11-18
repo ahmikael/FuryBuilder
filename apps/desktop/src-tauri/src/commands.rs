@@ -299,6 +299,7 @@ pub fn project_create(
         .begin_session(&folder, world.revision())
         .map_err(project_error)?;
     let info = world.info();
+    state.jobs.cancel_all("the open project changed");
     {
         let mut service = state
             .service
@@ -335,6 +336,7 @@ pub fn project_open(
         .begin_session(&folder, world.revision())
         .map_err(project_error)?;
     let info = world.info();
+    state.jobs.cancel_all("the open project changed");
     {
         let mut service = state
             .service
@@ -513,6 +515,9 @@ pub fn project_open_checkpoint(
         .open_checkpoint(&folder, revision)
         .map_err(project_error)?;
     let info = world.info();
+    state
+        .jobs
+        .cancel_all("the world was replaced by a checkpoint");
     {
         let mut service = state
             .service
@@ -575,6 +580,7 @@ pub fn project_close(
         .end_session(&current.folder)
         .map_err(project_error)?;
     projects.current = None;
+    state.jobs.cancel_all("the project was closed");
     {
         let mut service = state
             .service

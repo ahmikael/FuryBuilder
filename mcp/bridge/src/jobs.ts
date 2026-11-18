@@ -12,11 +12,18 @@ export type JobState =
 export interface JobSnapshot {
   jobId: string;
   projectId: string;
+  kind?: string;
   state: JobState;
   progress: number;
   message: string;
   worldRevision: number | null;
   result: unknown;
+  error?: { code: string; message: string; details?: unknown } | null;
+  cancelRequested?: boolean;
+  replayed?: boolean;
+  createdAtMs?: number;
+  startedAtMs?: number | null;
+  finishedAtMs?: number | null;
 }
 
 export interface StartJobRequest {
@@ -40,11 +47,23 @@ export const JOB_API_UNAVAILABLE = "job_api_unavailable";
 export class JobApiUnavailableError extends Error {
   readonly code = JOB_API_UNAVAILABLE;
 
-  constructor() {
+  constructor(detail?: string) {
     super(
-      "The FuryBuilder desktop Job API is not connected yet; no job was started, polled or cancelled.",
+      detail ??
+        "The FuryBuilder desktop Job API is not connected yet; no job was started, polled or cancelled.",
     );
     this.name = "JobApiUnavailableError";
+  }
+}
+
+/** Structured refusal from the authoritative desktop Job API. */
+export class JobApiError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "JobApiError";
+    this.code = code;
   }
 }
 
