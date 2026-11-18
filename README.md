@@ -87,7 +87,11 @@ folder, client JAR or resource pack, and a 1.21.4 client is accepted only after 
 declared SHA-1, internal `version.json` and `DataVersion` 4189 agree. M9.2 resolves
 blockstates, parent models and PNG textures from that verified source, applies an ordered
 resource-pack stack, builds a cached atlas and renders real reference blocks; a missing
-asset falls back to a clearly marked checker without changing block data.
+asset falls back to a clearly marked checker without changing block data. M9.3 adds
+`runtime-manager`: installed Java candidates are executed and accepted only when they
+report Java 21, a user can select `java.exe` manually, and an explicit opt-in can download
+the official Eclipse Temurin JRE from Adoptium with size/SHA-256 verification into a
+managed, clearable FuryBuilder cache. No global installation or environment change happens.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -117,6 +121,8 @@ guarantee that its whole milestone is complete.
 - `docs/assets/minecraft-assets.md` - launcher discovery, JAR checksum/version
   verification, manual selection, resource-pack validation, blockstate/model/texture
   render bundles, atlas caching and renderer limits.
+- `docs/runtime/java-runtime.md` - Java 21 probing, manual selection, opt-in Temurin
+  download/checksum verification, managed cache cleanup and its evidence.
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
@@ -155,7 +161,9 @@ guarantee that its whole milestone is complete.
 - Autosave runs every 30 seconds while dirty (plus visibility change and window close), so
   a hard crash can lose up to half a minute of edits.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
-  official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
+  official server JAR; FuryBuilder never accepts the Minecraft EULA for the user. M9.3
+  provides Java 21 discovery, manual selection and the managed Temurin download; the
+  server JAR and EULA flow are not implemented yet.
 - Import of full Java world saves is read-only. M8 implements version/layout
   validation, region/NBT reading, block states and biomes, a byte-preserving copy
   of unchanged worlds, an in-memory block-edit overlay with a versioned JSON

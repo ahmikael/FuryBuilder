@@ -8,6 +8,7 @@ members = [
     "crates/world-application",
     "crates/project-store",
     "crates/asset-source",
+    "crates/runtime-manager",
     "apps/desktop/src-tauri",
 ]
 

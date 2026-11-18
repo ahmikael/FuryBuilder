@@ -4,7 +4,21 @@ mod mcp_access;
 mod mcp_activity;
 mod state;
 
+use std::path::PathBuf;
+
 use tauri::Manager;
+
+/// Resolves the application data directory. Desktop smoke tests run a debug build with an
+/// explicit isolated directory so they cannot read or modify the user's real settings.
+fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    #[cfg(debug_assertions)]
+    if let Some(value) = std::env::var_os("FURYBUILDER_APP_DATA_DIR") {
+        let path = PathBuf::from(value);
+        std::fs::create_dir_all(&path)?;
+        return Ok(path);
+    }
+    Ok(app.path().app_data_dir()?)
+}
 
 /// Starts the Tauri application. All IPC handlers are thin adapters over
 /// `world_application` and `project_store`; no world or storage logic lives in this crate.
@@ -13,7 +27,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
-            let data_dir = app.path().app_data_dir()?;
+            let data_dir = app_data_dir(app.handle())?;
             let projects_root = data_dir.join("projects");
             std::fs::create_dir_all(&projects_root)?;
             app.manage(state::AppState::new(projects_root));
@@ -21,7 +35,11 @@ pub fn run() {
                 data_dir.join("assets.json"),
             ));
             app.manage(asset_source::AssetBundleService::new());
-            match local_bridge::start(app.handle().clone()) {
+            app.manage(runtime_manager::RuntimeManager::new(
+                data_dir.join("runtime.json"),
+                data_dir.join("runtimes").join("java"),
+            ));
+            match local_bridge::start(app.handle().clone(), data_dir.clone()) {
                 Ok(runtime) => {
                     app.manage(runtime);
                 }
@@ -82,6 +100,14 @@ pub fn run() {
             commands::assets_clear_pack_stack,
             commands::assets_render_bundle,
             commands::assets_clear_cache,
+            commands::runtime_discover,
+            commands::runtime_saved,
+            commands::runtime_select_java,
+            commands::runtime_clear_selection,
+            commands::runtime_temurin_latest,
+            commands::runtime_install_temurin,
+            commands::runtime_managed_list,
+            commands::runtime_clear_managed,
             local_bridge::renderer_ready,
             local_bridge::set_mcp_access,
             local_bridge::mcp_access_status,

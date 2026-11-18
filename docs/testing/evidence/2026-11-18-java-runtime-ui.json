@@ -1,0 +1,119 @@
+{
+  "tool": {
+    "name": "furybuilder-runtime-ui",
+    "version": 1
+  },
+  "generatedAt": "2026-11-18T19:22:55.885Z",
+  "target": "Minecraft Java 1.21.4 / Java 21",
+  "executableSha256": "6c834e3a8a99da45ff70423857848c42f04d0c652ffd1885fe622559e9a79314",
+  "isolatedAppData": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata",
+  "externalJava": {
+    "path": "D:\\mitrium-launcher\\runtimes\\java\\temurin-21-windows-x64\\jdk-21.0.12.1+1-jre\\bin\\java.exe",
+    "sha256Before": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55",
+    "sha256After": "82051fdab26319d77d20cc0065045d05ec00b3e3d05f44935d7c06b96b621d55"
+  },
+  "manualSelection": {
+    "path": "\\\\?\\D:\\mitrium-launcher\\runtimes\\java\\temurin-21-windows-x64\\jdk-21.0.12.1+1-jre\\bin\\java.exe",
+    "source": "manual",
+    "status": "compatible",
+    "version": "21.0.12.1",
+    "major": 21,
+    "vendor": "Eclipse Adoptium",
+    "arch": "amd64",
+    "vm": "OpenJDK 64-Bit Server VM",
+    "managed": false,
+    "warnings": [],
+    "error": null
+  },
+  "discovery": {
+    "targetJavaMajor": 21,
+    "targetMinecraftVersion": "1.21.4",
+    "candidates": 1,
+    "savedStatus": "compatible",
+    "savedPath": "\\\\?\\D:\\mitrium-launcher\\runtimes\\java\\temurin-21-windows-x64\\jdk-21.0.12.1+1-jre\\bin\\java.exe"
+  },
+  "adoptium": {
+    "version": "21.0.13+9.0.LTS",
+    "releaseName": "jdk-21.0.13+9",
+    "downloadUrl": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.13_9.zip",
+    "sha256": "2332c0b4cff6bed722da3567c91d5e47568bcba863fa4945d0a8d6fc76158628",
+    "size": 49106397,
+    "vendor": "Eclipse Adoptium",
+    "os": "windows",
+    "arch": "x64",
+    "imageType": "jre",
+    "source": "Adoptium API v3"
+  },
+  "installed": {
+    "runtime": {
+      "id": "temurin-21.0.13+9-windows-x64",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64",
+      "javaPath": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64\\bin\\java.exe",
+      "version": "21.0.13+9.0.LTS",
+      "releaseName": "jdk-21.0.13+9",
+      "sha256": "2332c0b4cff6bed722da3567c91d5e47568bcba863fa4945d0a8d6fc76158628",
+      "sourceUrl": "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.13%2B9/OpenJDK21U-jre_x64_windows_hotspot_21.0.13_9.zip",
+      "vendor": "Eclipse Adoptium",
+      "os": "windows",
+      "arch": "x64",
+      "installedAt": 1795029773,
+      "bytes": 151830322
+    },
+    "report": {
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64\\bin\\java.exe",
+      "source": "managed",
+      "status": "compatible",
+      "version": "21.0.13",
+      "major": 21,
+      "vendor": "Eclipse Adoptium",
+      "arch": "amd64",
+      "vm": "OpenJDK 64-Bit Server VM",
+      "managed": true,
+      "warnings": [],
+      "error": null
+    },
+    "selected": true,
+    "discoveredManaged": 1,
+    "selectedAfterInstall": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64\\bin\\java.exe",
+    "settingsSelectedJava": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64\\bin\\java.exe"
+  },
+  "settingsUi": {
+    "rendered": true,
+    "text": "JAVA & WORLD GENERATION\nJava 21 · MC 1.21.4\n\nEmpty Project and editing do not require Java. A verified Java 21 runtime is needed only for Vanilla World generation. Nothing is installed globally.\n\nSelected runtime\ncompatible\n21.0.13 · Eclipse Adoptium\nC:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64\\bin\\java.exe\nClear selection\nDetected runtimes\nChoose java.exe\nC:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java\\temurin-21.0.13+9-windows-x64\\bin\\java.exe\n21.0.13 · Eclipse Adoptium · managed · compatible\nIn use\n\nChoose the java.exe inside a Java 21 installation (for example C:\\Program Files\\Eclipse Adoptium\\jdk-21...\\bin\\java.exe), or install managed Temurin.\n\nManaged Eclipse Temurin JRE\n144.8 MiB cached\n\nDownloaded only when you press the button, from the official Adoptium API and its GitHub release host. Size and SHA-256 are checked before extraction; the JRE stays inside FuryBuilder data.\n\nCheck official Temurin download\nClear managed Java\n1 managed\n21.0.13+9.0.LTS · windows/x64 · 144.8 MiB · 2332c0b4cff6…\nClose\nClose"
+  },
+  "cleanup": {
+    "clearedReport": {
+      "root": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-runtime-smoke-nWEH0t\\appdata\\runtimes\\java",
+      "runtimes": [],
+      "totalBytes": 0,
+      "problems": []
+    },
+    "discoveredManagedAfterClear": 0,
+    "selectedAfterClear": null,
+    "settingsSelectedJavaAfterClear": null
+  },
+  "screenshot": {
+    "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-18-java-runtime-ui.png",
+    "bytes": 390760
+  },
+  "consoleErrors": [],
+  "conclusions": {
+    "manualJavaProbedAndAccepted": true,
+    "discoveryTargetsJava21": true,
+    "adoptiumMetadataIsHttpsAndChecksummed": true,
+    "temurinInstalledFromAnnouncedRelease": true,
+    "managedRuntimeLivesInIsolatedAppData": true,
+    "installedRuntimeSelected": true,
+    "settingsUiShowsManagedJava": true,
+    "managedCacheCleared": true,
+    "userJavaFileUnchanged": true,
+    "screenshotCaptured": true,
+    "noConsoleErrors": true
+  },
+  "limitations": [
+    "Temurin is downloaded from the official Adoptium API/GitHub release only after the smoke explicitly invokes the install command",
+    "the managed runtime is removed at the end; the user's external Java installation and real app settings are never modified",
+    "this task covers Java discovery/provisioning only; the official server.jar, EULA flow and isolated worldgen belong to M9.4-M9.5",
+    "the Settings dialog is shown with an isolated APPDATA profile; no project or world data is created"
+  ]
+}

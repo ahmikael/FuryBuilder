@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import { MinecraftAssetsSection } from "@/features/settings/MinecraftAssetsSection";
+import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
 import type { BackendState } from "@/hooks/use-backend";
 import { MAX_UI_SCALE, MIN_UI_SCALE, type ThemeMode, useEditorStore } from "@/state/editor-store";
 import { cn } from "@/lib/utils";
@@ -110,19 +111,7 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
         <Separator />
 
-        <section className="space-y-1.5">
-          <h3 className="text-[11px] font-semibold tracking-wide uppercase">
-            Java &amp; world generation
-          </h3>
-          <div className="flex flex-wrap gap-1.5">
-            <Button variant="outline" size="sm" disabled>
-              Java runtime &amp; server (M9)
-            </Button>
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            Runtime downloads are opt-in, checksum-verified and never required for Empty Project.
-          </p>
-        </section>
+        <JavaRuntimeSection />
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

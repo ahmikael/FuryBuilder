@@ -104,6 +104,11 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 | Resource-pack stack UI                            | `MinecraftAssetsSection.tsx`; test - add validated `.zip`, reorder, remove and clear through the saved stack API                                                                                                                                                                                                  |
 | Real 1.21.4 render smoke                          | `docs/testing/evidence/2026-11-18-assets-render-ui.json` + `.png` - isolated APPDATA, 9-chunk demo, 12 models / 15 textures, actual WebGL screenshot, no asset error, launcher root unchanged                                                                                                                     |
 | Real 1.21.4 asset discovery                       | `docs/testing/evidence/2026-11-18-minecraft-assets-1.21.4.json` - 13 versions, 1.21.4 client 28,335,587 bytes / SHA-1 verified / DV 4189 / pack 46, asset index 19 verified, 3 modded profiles, valid/wrong/missing packs, watched files unchanged                                                                |
+| Java probing and discovery                        | `crates/runtime-manager/src/probe.rs`, `discovery.rs`; unit tests parse real `-XshowSettings` output, classify Java 8/17/21/25 and 32-bit, deduplicate candidates and report a stale saved path as `unreadable`                                                                                                   |
+| Managed Temurin metadata and archive safety       | `temurin.rs`, `managed.rs`; `managed_cache.rs` - JRE-only release selection, checksum format, size range, HTTPS host allowlist, zip traversal/backslash/symlink rejection, missing Java, wrong major refused before publish, cache clear touches only manifest-owned directories                                  |
+| Java runtime settings and selection               | `settings.rs`; tests cover legacy schema migration, the saved selection, clear, and an unsupported schema reported as a load warning without trusting it                                                                                                                                                          |
+| Java runtime UI                                   | `JavaRuntimeSection.tsx`; test - target version, compatible/outdated candidates, disabled incompatible action, manual select, explicit Adoptium fetch, explicit install, checksum error and managed-cache clear                                                                                                   |
+| Real Java probe and Temurin install               | `docs/testing/evidence/2026-11-18-java-runtime-ui.json` + `.png` - Java 21.0.12.1 probed, Adoptium 21.0.13+9 49,106,397 bytes / SHA-256 verified, installed in isolated app data, selected, shown in Settings, cleared; external `java.exe` SHA-256 unchanged, no console errors                                  |
 | Import World analysis and limits                  | `crates/world-io/src/world_import.rs`; `crates/world-io/tests/world_import.rs` — supported world counts, blockers for 26.1+ split and non-4189 versions, source immutability, chunk/section/block limits, empty world                                                                                             |
 | Import World project and source copy              | `crates/project-store/src/store.rs`; `crates/project-store/tests/source_overlay.rs` — `create_imported`, immutable tree manifest, traversal/missing-file refusal, generic creator still refuses `import`                                                                                                          |
 | Import World wizard UI                            | `apps/desktop/src/features/project/ProjectManager.tsx`; `ProjectManager.test.tsx` — folder input, Analyze, supported metrics, blockers disable import, `project_import_world` called with the selected folder                                                                                                     |
@@ -153,6 +158,14 @@ builds a real render bundle for reference blocks; `--atlas <path>` writes the ge
 reproduces the real JAR/index checksum evidence and the synthetic pack checks.
 `node scripts/assets-render-webview2-smoke.mjs <out.json> <out.png> <launcher-root>`
 reproduces the real WebView2 render screenshot with an isolated profile.
+`cargo test -p furybuilder-runtime-manager`
+runs Java probe, managed cache, archive-safety and settings tests.
+`cargo run -p furybuilder-runtime-manager --example runtime_probe -- --discover`
+prints Java candidates; `-- --java <java.exe>` probes/selects one and `-- --temurin` prints
+Adoptium metadata without downloading.
+`node scripts/runtime-webview2-smoke.mjs <out.json> <out.png> <java.exe>`
+reproduces the real Java selection, opt-in Temurin download, Settings screenshot and managed
+cache cleanup with an isolated app-data directory.
 `cargo run -p furybuilder-desktop --example import_world_probe -- <source> <empty-project-root> "Imported Flat"`
 reproduces the Import World evidence, and `--analysis-only` prints an analysis report.
 

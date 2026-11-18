@@ -23,6 +23,7 @@ uuid = { workspace = true }
 interprocess = { workspace = true }
 project-store = { path = "../../../crates/project-store", package = "furybuilder-project-store" }
 asset-source = { path = "../../../crates/asset-source", package = "furybuilder-asset-source" }
+runtime-manager = { path = "../../../crates/runtime-manager", package = "furybuilder-runtime-manager" }
 world-application = { path = "../../../crates/world-application", package = "furybuilder-world-application" }
 world-domain = { path = "../../../crates/world-domain", package = "furybuilder-world-domain" }
 world-io = { path = "../../../crates/world-io", package = "furybuilder-world-io" }

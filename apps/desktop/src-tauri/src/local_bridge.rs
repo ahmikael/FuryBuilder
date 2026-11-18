@@ -429,11 +429,7 @@ struct JobListParams {
 
 /// Starts the local endpoint. Failure is reported to the caller instead of panicking so a
 /// missing pipe cannot stop the editor from opening; the UI remains fully usable.
-pub fn start(app: AppHandle) -> io::Result<LocalBridgeRuntime> {
-    let data_dir = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| io::Error::other(format!("app data directory: {error}")))?;
+pub fn start(app: AppHandle, data_dir: std::path::PathBuf) -> io::Result<LocalBridgeRuntime> {
     let discovery_dir = data_dir.join(DISCOVERY_DIR);
     fs::create_dir_all(&discovery_dir)?;
     let discovery_path = discovery_dir.join(DISCOVERY_FILE);

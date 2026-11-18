@@ -7,6 +7,10 @@ use asset_source::{
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+use runtime_manager::{
+    InstalledRuntime, JavaRuntimeReport, ManagedCacheReport, RuntimeDiscoveryReport,
+    RuntimeManager, RuntimeProgress, RuntimeReleaseInfo,
+};
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
@@ -1457,6 +1461,133 @@ pub fn assets_render_bundle(
 #[tauri::command]
 pub fn assets_clear_cache(service: State<'_, AssetBundleService>) {
     service.clear_cache();
+}
+
+#[tauri::command]
+pub async fn runtime_discover(
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeDiscoveryReport, AppError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.discover())
+        .await
+        .map_err(|error| AppError::internal(format!("runtime discovery task failed: {error}")))
+}
+
+#[tauri::command]
+pub fn runtime_saved(manager: State<'_, RuntimeManager>) -> Option<JavaRuntimeReport> {
+    manager.saved()
+}
+
+#[tauri::command]
+pub async fn runtime_select_java(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+    path: String,
+) -> Result<JavaRuntimeReport, AppError> {
+    let manager = manager.inner().clone();
+    let report =
+        tauri::async_runtime::spawn_blocking(move || manager.select(std::path::Path::new(&path)))
+            .await
+            .map_err(|error| AppError::internal(format!("runtime probe task failed: {error}")))?
+            .map_err(runtime_error)?;
+    let _ = app.emit("furybuilder-runtime-changed", ());
+    Ok(report)
+}
+
+#[tauri::command]
+pub fn runtime_clear_selection(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+) -> Result<(), AppError> {
+    manager.clear_selection().map_err(runtime_error)?;
+    let _ = app.emit("furybuilder-runtime-changed", ());
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn runtime_temurin_latest(
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeReleaseInfo, AppError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.latest_temurin())
+        .await
+        .map_err(|error| AppError::internal(format!("Adoptium request task failed: {error}")))?
+        .map_err(runtime_error)
+}
+
+#[tauri::command]
+pub async fn runtime_install_temurin(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+    version: String,
+) -> Result<InstalledRuntime, AppError> {
+    let manager = manager.inner().clone();
+    let progress_app = app.clone();
+    let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
+    let installed = tauri::async_runtime::spawn_blocking(move || {
+        manager.install_temurin(&version, &|progress: RuntimeProgress| {
+            let should_emit = match last.lock() {
+                Ok(previous) => match previous.as_ref() {
+                    None => true,
+                    Some((phase, at)) => {
+                        *phase != progress.phase
+                            || at.elapsed() >= std::time::Duration::from_millis(250)
+                    }
+                },
+                Err(_) => true,
+            };
+            if should_emit {
+                if let Ok(mut previous) = last.lock() {
+                    *previous = Some((progress.phase.clone(), std::time::Instant::now()));
+                }
+                let _ = progress_app.emit("furybuilder-runtime-download", &progress);
+            }
+        })
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("managed Java install task failed: {error}")))?
+    .map_err(runtime_error)?;
+    let _ = app.emit("furybuilder-runtime-changed", ());
+    Ok(installed)
+}
+
+#[tauri::command]
+pub async fn runtime_managed_list(
+    manager: State<'_, RuntimeManager>,
+) -> Result<ManagedCacheReport, AppError> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || manager.managed_list())
+        .await
+        .map_err(|error| AppError::internal(format!("runtime cache task failed: {error}")))?
+        .map_err(runtime_error)
+}
+
+#[tauri::command]
+pub async fn runtime_clear_managed(
+    app: AppHandle,
+    manager: State<'_, RuntimeManager>,
+) -> Result<ManagedCacheReport, AppError> {
+    let manager = manager.inner().clone();
+    let report = tauri::async_runtime::spawn_blocking(move || manager.clear_managed())
+        .await
+        .map_err(|error| AppError::internal(format!("runtime cache task failed: {error}")))?
+        .map_err(runtime_error)?;
+    let _ = app.emit("furybuilder-runtime-changed", ());
+    Ok(report)
+}
+
+fn runtime_error(error: runtime_manager::RuntimeError) -> AppError {
+    let code = match error.code() {
+        "invalid_argument" => ErrorCode::InvalidArgument,
+        "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "network_error" => ErrorCode::BackendUnavailable,
+        "checksum_mismatch" => ErrorCode::Conflict,
+        "archive_error" | "unsupported_format" => ErrorCode::UnsupportedFormat,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "busy" => ErrorCode::Conflict,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
 }
 
 fn asset_settings_error(error: asset_source::AssetSettingsError) -> AppError {
