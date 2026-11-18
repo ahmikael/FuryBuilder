@@ -64,7 +64,11 @@ finally analyzes a selected world read-only, reports blockers and limitations, a
 creates a project with a byte-for-byte immutable source copy plus an editable block
 snapshot. A verified writer now publishes a new region file for classic 1.21.4
 when only `sections[].block_states` changes; untouched chunk records stay
-byte-identical and the source hash is rechecked. Full world-folder export is next.
+byte-identical and the source hash is rechecked. A read-only derived-data
+inventory and an official 1.21.4 server round-trip now document the remaining
+boundary: heightmaps, light, ticks, block entities and POI are preserved raw but
+are not recomputed, and placing block-entity blocks is not semantically supported
+yet. Full world-folder export and a metadata policy are next.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -82,6 +86,8 @@ guarantee that its whole milestone is complete.
   turn access off.
 - `docs/formats/java-world-layouts.md` — observed Java world layouts, release
   `DataVersion`s and the supported-version matrix.
+- `docs/formats/java-chunk-derived-data.md` — 1.21.4 heightmaps, light, ticks,
+  block entities, entity/POI sidecars and the official-server round-trip.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
 - `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
 - `docs/adr/` — architecture decision records (format, MCP runtime, versions).
@@ -95,7 +101,9 @@ guarantee that its whole milestone is complete.
   (`Vanilla World`) is a future mode until M9.
 - Imported worlds are analyzed read-only and copied byte for byte into the project source
   layer. Only block states are editable yet; biomes, block entities, entities, ticks,
-  heightmaps, lighting and POI remain in the immutable source copy.
+  heightmaps, lighting and POI are preserved as raw source data but are not recalculated
+  after an edit. Placing or removing block-entity blocks is not semantically supported:
+  the official 1.21.4 server did not synthesize a missing block entity on load.
 - Structure import/export is currently Java structure `.nbt` only. It refuses entities,
   block entities and unknown tags; `.schem` support is not available yet.
 - Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
@@ -108,6 +116,9 @@ guarantee that its whole milestone is complete.
   of unchanged worlds, an in-memory block-edit overlay with a versioned JSON
   document and verified chunk NBT materialization, the `Import World` wizard
   with an immutable source copy, and a verified writer for a new region file
-  limited to classic 1.21.4 `sections[].block_states`. Export of a complete
-  modified world folder is not available yet, and the source world is never
-  written.
+  limited to classic 1.21.4 `sections[].block_states`. M8.8 adds a read-only
+  inventory of heightmaps, light, ticks, block entities, POI and entity sidecars,
+  plus an official-server round-trip showing that a normal load/save does not
+  rebuild stale heightmaps or light and does not create missing block entities.
+  Export of a complete modified world folder is not available yet, and the source
+  world is never written.

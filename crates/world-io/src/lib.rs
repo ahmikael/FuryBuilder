@@ -9,6 +9,7 @@
 //! (`DataVersion` 4189). Sponge `.schem` v3 is the planned second adapter.
 
 pub mod anvil;
+pub mod derived;
 pub mod exchange;
 pub mod java_chunk;
 pub mod java_structure;
@@ -24,6 +25,12 @@ pub use anvil::{
     RegionChunk, RegionChunkSummary, RegionEntry, RegionFile, ANVIL_HEADER_BYTES,
     ANVIL_LOCATION_ENTRIES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_REGION_EXTENSION, ANVIL_SECTOR_BYTES,
     MAX_LEVEL_DAT_BYTES, MAX_REGION_FILE_BYTES,
+};
+pub use derived::{
+    analyze_java_world_derived, inspect_chunk_derived, ChunkDerivedData, ChunkFingerprints,
+    DerivedCounters, DerivedDataError, DerivedDataReport, DimensionDerivedData, HeightmapInfo,
+    SidecarScan, MAX_DERIVED_CHUNKS, MAX_DERIVED_REGION_FILES, MAX_DERIVED_SAMPLES,
+    MAX_DERIVED_SIDECAR_RECORDS,
 };
 pub use exchange::{
     content_bounds, import_preview, palette_counts, palette_usage, prepare_export,

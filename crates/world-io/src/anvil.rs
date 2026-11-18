@@ -410,6 +410,14 @@ pub struct RegionChunk {
     pub nbt: NbtFile,
 }
 
+struct DecodedRecord {
+    entry: RegionEntry,
+    compression: ChunkCompression,
+    compressed_bytes: usize,
+    nbt_bytes: usize,
+    nbt: NbtFile,
+}
+
 /// A validated region header. Chunks are decoded lazily, one at a time.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RegionFile {
@@ -534,6 +542,29 @@ impl RegionFile {
     }
 
     pub fn read_chunk(&self, x: i32, z: i32) -> Result<RegionChunk, AnvilError> {
+        let record = self.read_record(x, z)?;
+        let summary = summarize_chunk(&record.nbt, x, z)?;
+        Ok(RegionChunk {
+            x,
+            z,
+            timestamp: record.entry.timestamp,
+            compression: record.compression,
+            compressed_bytes: record.compressed_bytes,
+            nbt_bytes: record.nbt_bytes,
+            summary,
+            nbt: record.nbt,
+        })
+    }
+
+    /// Reads one chunk record without applying the strict chunk-summary schema.
+    ///
+    /// This is used for sidecar containers (`poi/`, `entities/`) whose chunk roots do
+    /// not carry the block-chunk fields (`xPos`, `zPos`, `Status`, `sections`).
+    pub fn read_nbt(&self, x: i32, z: i32) -> Result<NbtFile, AnvilError> {
+        Ok(self.read_record(x, z)?.nbt)
+    }
+
+    fn read_record(&self, x: i32, z: i32) -> Result<DecodedRecord, AnvilError> {
         if x.div_euclid(ANVIL_REGION_AXIS_CHUNKS) != self.region_x
             || z.div_euclid(ANVIL_REGION_AXIS_CHUNKS) != self.region_z
         {
@@ -592,15 +623,11 @@ impl RegionFile {
             .map_err(|error| io_error(path, &error))?;
         let nbt_bytes = decompress_chunk(&payload, compression, x, z)?;
         let nbt = nbt::read_uncompressed(&nbt_bytes)?;
-        let summary = summarize_chunk(&nbt, x, z)?;
-        Ok(RegionChunk {
-            x,
-            z,
-            timestamp: entry.timestamp,
+        Ok(DecodedRecord {
+            entry,
             compression,
             compressed_bytes: payload_len,
             nbt_bytes: nbt_bytes.len(),
-            summary,
             nbt,
         })
     }
