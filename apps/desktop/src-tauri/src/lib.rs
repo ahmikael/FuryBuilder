@@ -65,6 +65,7 @@ pub fn run() {
             commands::structure_export_preview,
             commands::structure_export,
             local_bridge::renderer_ready,
+            local_bridge::set_mcp_writes_enabled,
             local_bridge::submit_renderer_response
         ])
         .build(tauri::generate_context!())

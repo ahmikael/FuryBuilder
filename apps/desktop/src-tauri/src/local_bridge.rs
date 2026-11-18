@@ -20,7 +20,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
-use world_application::{app_info, AppError, ErrorCode, Query};
+use world_application::{
+    app_info, Actor, AppError, ErrorCode, Operation, OperationRequest, Query, WorldService,
+};
 
 use crate::state::{session_status, AppState, LOCAL_PROJECT_ID};
 
@@ -28,7 +30,7 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub const DISCOVERY_SCHEMA_VERSION: u32 = 1;
 pub const RENDERER_REQUEST_EVENT: &str = "furybuilder-renderer-request";
 
-const MAX_MESSAGE_BYTES: usize = 256 * 1024;
+const MAX_MESSAGE_BYTES: usize = 4 * 1024 * 1024;
 const MAX_REQUEST_ID_BYTES: usize = 128;
 const DISCOVERY_DIR: &str = "mcp";
 const DISCOVERY_FILE: &str = "runtime.json";
@@ -90,6 +92,37 @@ impl RendererBridge {
         if let Ok(mut pending) = self.pending.lock() {
             pending.remove(request_id);
         }
+    }
+}
+
+/// Explicit user grant for MCP writes. The bridge cannot grant it: only the Tauri UI
+/// calls `set_mcp_writes_enabled`. Until then apply/undo are refused by the endpoint.
+/// Modes, selections and per-request confirmation arrive in the access-policy task.
+#[derive(Debug, Default)]
+pub struct McpWriteAccess {
+    granted_at_ms: std::sync::Mutex<Option<u64>>,
+}
+
+impl McpWriteAccess {
+    fn granted(&self) -> bool {
+        self.granted_at_ms
+            .lock()
+            .ok()
+            .is_some_and(|granted| granted.is_some())
+    }
+
+    fn set(&self, enabled: bool) {
+        if let Ok(mut granted) = self.granted_at_ms.lock() {
+            *granted = enabled.then(now_ms);
+        }
+    }
+
+    pub fn summary(&self) -> Value {
+        let granted_at_ms = self.granted_at_ms.lock().ok().and_then(|granted| *granted);
+        json!({
+            "writesEnabled": granted_at_ms.is_some(),
+            "grantedAtMs": granted_at_ms,
+        })
     }
 }
 
@@ -276,6 +309,35 @@ struct RenderParams {
     dimension: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OperationParams {
+    project_id: String,
+    operation: Operation,
+    #[serde(default)]
+    world_revision: Option<u64>,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UndoParams {
+    project_id: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
+    #[serde(default)]
+    operation_id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StatusParams {
+    project_id: String,
+    #[serde(default)]
+    operation_id: Option<String>,
+}
+
 /// Starts the local endpoint. Failure is reported to the caller instead of panicking so a
 /// missing pipe cannot stop the editor from opening; the UI remains fully usable.
 pub fn start(app: AppHandle) -> io::Result<LocalBridgeRuntime> {
@@ -455,6 +517,7 @@ fn dispatch(
                     "pid": std::process::id(),
                 },
                 "renderer": state.renderer.readiness(),
+                "mcp": state.mcp_writes.summary(),
             }))
         }
         "world_info" => {
@@ -495,10 +558,127 @@ fn dispatch(
             require_revision(state, params.world_revision)?;
             request_renderer(state, requester, RendererRequestKind::Capture, params)
         }
+        "preview_operation" => {
+            let params: OperationParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            let service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            let preview = service.preview(&params.project_id, &params.operation)?;
+            let mut value = to_value(preview)?;
+            value["worldRevision"] = json!(service.world().revision());
+            Ok(value)
+        }
+        "apply_operation" => {
+            let params: OperationParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_mcp_write_access(state)?;
+            require_revision(state, params.world_revision)?;
+            let mut service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            to_value(service.execute(OperationRequest {
+                project_id: params.project_id,
+                operation: params.operation,
+                expected_revision: params.world_revision,
+                idempotency_key: params.idempotency_key,
+                actor: Actor::mcp("mcp-bridge"),
+                linked_object_id: None,
+            })?)
+        }
+        "undo_operation" => {
+            let params: UndoParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_mcp_write_access(state)?;
+            require_revision(state, params.world_revision)?;
+            let mut service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            to_value(service.undo(
+                &params.project_id,
+                Actor::mcp("mcp-bridge"),
+                params.operation_id.as_deref(),
+            )?)
+        }
+        "operation_status" => {
+            let params: StatusParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            let service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            operation_status(&service, params.operation_id.as_deref())
+        }
         other => Err(AppError::invalid_argument(format!(
             "unknown bridge method `{other}`"
         ))),
     }
+}
+
+fn require_mcp_write_access(state: &AppState) -> Result<(), AppError> {
+    if state.mcp_writes.granted() {
+        return Ok(());
+    }
+    Err(AppError::new(
+        ErrorCode::PermissionDenied,
+        "MCP write access is not enabled; enable it explicitly in FuryBuilder",
+    )
+    .with_details(json!({ "mcpWritesEnabled": false })))
+}
+
+/// Operations are synchronous, so their authoritative status lives in the audit log.
+/// Jobs/progress are explicitly unavailable rather than simulated.
+fn operation_status(service: &WorldService, operation_id: Option<&str>) -> Result<Value, AppError> {
+    let revision = service.world().revision();
+    if let Some(id) = operation_id {
+        let entry = service
+            .audit_log()
+            .iter()
+            .rev()
+            .find(|entry| entry.operation_id == id)
+            .ok_or_else(|| {
+                AppError::new(ErrorCode::NotFound, format!("unknown operation `{id}`"))
+            })?;
+        return Ok(json!({
+            "operationId": id,
+            "status": "completed",
+            "found": true,
+            "action": entry.action,
+            "actorId": entry.actor_id,
+            "source": entry.source,
+            "revisionBefore": entry.revision_before,
+            "revisionAfter": entry.revision_after,
+            "changedBlocks": entry.changed_blocks,
+            "timestampMs": entry.timestamp_ms,
+            "parameterSummary": entry.parameter_summary,
+            "currentRevision": revision,
+            "canUndo": service.can_undo(),
+            "canRedo": service.can_redo(),
+            "job": {
+                "available": false,
+                "progress": null,
+                "reason": "job_api_unavailable"
+            },
+        }));
+    }
+
+    let recent: Vec<_> = service.history().into_iter().rev().take(10).collect();
+    Ok(json!({
+        "status": "idle",
+        "currentRevision": revision,
+        "canUndo": service.can_undo(),
+        "canRedo": service.can_redo(),
+        "recentOperations": recent,
+        "job": {
+            "available": false,
+            "progress": null,
+            "reason": "job_api_unavailable"
+        },
+    }))
 }
 
 fn request_renderer(
@@ -682,6 +862,14 @@ fn validate_camera_pose(pose: &Value) -> Result<(), AppError> {
 #[tauri::command]
 pub fn renderer_ready(state: tauri::State<'_, AppState>) {
     state.renderer.mark_ready();
+}
+
+/// Grants or revokes MCP write access. This is a Tauri/UI command, not a local-socket
+/// method: an MCP client cannot call it to authorize itself.
+#[tauri::command]
+pub fn set_mcp_writes_enabled(state: tauri::State<'_, AppState>, enabled: bool) -> Value {
+    state.mcp_writes.set(enabled);
+    state.mcp_writes.summary()
 }
 
 /// Answers a pending viewport request. Called by the Tauri UI after it builds the
@@ -1184,6 +1372,223 @@ mod tests {
         assert_eq!(receiver.recv().expect("response"), json!({ "ok": true }));
         assert!(!bridge.complete("known", json!({ "ok": false })));
         assert!(!bridge.complete("never-opened", json!({})));
+    }
+
+    #[test]
+    fn preview_and_status_are_read_only_without_a_write_grant() {
+        let state = AppState::new(temp_root("preview"));
+        let preview = handle_request(
+            &state,
+            "token",
+            request(
+                "req-preview",
+                "token",
+                "preview_operation",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "operation": {
+                        "type": "set_block",
+                        "dimension": "minecraft:overworld",
+                        "pos": { "x": 1, "y": 64, "z": 1 },
+                        "state": { "name": "minecraft:stone" }
+                    }
+                }),
+            ),
+        );
+        assert!(preview.ok, "{:?}", preview.error);
+        let preview = preview.result.expect("preview");
+        assert_eq!(preview["affectedBlocks"], 1);
+        assert_eq!(preview["changedBlocks"], 1);
+        assert_eq!(preview["worldRevision"], 0);
+
+        let revision = {
+            let service = state.service.lock().expect("service");
+            service.world().revision()
+        };
+        assert_eq!(revision, 0, "preview must not mutate the world");
+
+        let status = handle_request(
+            &state,
+            "token",
+            request(
+                "req-status",
+                "token",
+                "operation_status",
+                json!({ "projectId": LOCAL_PROJECT_ID }),
+            ),
+        );
+        assert!(status.ok, "{:?}", status.error);
+        let status = status.result.expect("status");
+        assert_eq!(status["currentRevision"], 0);
+        assert_eq!(status["canUndo"], false);
+        assert_eq!(status["job"]["available"], false);
+        assert_eq!(status["job"]["reason"], "job_api_unavailable");
+    }
+
+    #[test]
+    fn apply_and_undo_are_refused_until_mcp_write_access_is_granted() {
+        let state = AppState::new(temp_root("write-denied"));
+        let operation = json!({
+            "type": "set_block",
+            "dimension": "minecraft:overworld",
+            "pos": { "x": 1, "y": 64, "z": 1 },
+            "state": { "name": "minecraft:stone" }
+        });
+
+        let apply = handle_request(
+            &state,
+            "token",
+            request(
+                "req-apply-denied",
+                "token",
+                "apply_operation",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "operation": operation.clone(),
+                    "idempotencyKey": "denied-1"
+                }),
+            ),
+        );
+        assert!(!apply.ok);
+        let error = apply.error.expect("error");
+        assert_eq!(error.code, ErrorCode::PermissionDenied);
+        assert_eq!(error.details.expect("details")["mcpWritesEnabled"], false);
+
+        let undo = handle_request(
+            &state,
+            "token",
+            request(
+                "req-undo-denied",
+                "token",
+                "undo_operation",
+                json!({ "projectId": LOCAL_PROJECT_ID }),
+            ),
+        );
+        assert!(!undo.ok);
+        assert_eq!(undo.error.expect("error").code, ErrorCode::PermissionDenied);
+
+        let revision = {
+            let service = state.service.lock().expect("service");
+            service.world().revision()
+        };
+        assert_eq!(revision, 0);
+    }
+
+    #[test]
+    fn granted_batch_apply_is_audited_and_can_be_undone() {
+        let state = AppState::new(temp_root("write-granted"));
+        state.mcp_writes.set(true);
+
+        let apply = handle_request(
+            &state,
+            "token",
+            request(
+                "req-apply",
+                "token",
+                "apply_operation",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 0,
+                    "idempotencyKey": "batch-1",
+                    "operation": {
+                        "type": "batch",
+                        "dimension": "minecraft:overworld",
+                        "changes": [
+                            {
+                                "pos": { "x": 1, "y": 64, "z": 1 },
+                                "state": { "name": "minecraft:stone" }
+                            },
+                            {
+                                "pos": { "x": 2, "y": 64, "z": 1 },
+                                "state": { "name": "minecraft:oak_planks" }
+                            }
+                        ]
+                    }
+                }),
+            ),
+        );
+        assert!(apply.ok, "{:?}", apply.error);
+        let apply = apply.result.expect("apply result");
+        assert_eq!(apply["changedBlocks"], 2);
+        assert_eq!(apply["worldRevision"], 1);
+        let operation_id = apply["operationId"]
+            .as_str()
+            .expect("operation id")
+            .to_owned();
+
+        let status = handle_request(
+            &state,
+            "token",
+            request(
+                "req-applied-status",
+                "token",
+                "operation_status",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "operationId": operation_id
+                }),
+            ),
+        );
+        assert!(status.ok, "{:?}", status.error);
+        let status = status.result.expect("status");
+        assert_eq!(status["action"], "apply");
+        assert_eq!(status["source"], "mcp");
+        assert_eq!(status["actorId"], "mcp-bridge");
+        assert_eq!(status["changedBlocks"], 2);
+        assert_eq!(status["job"]["available"], false);
+
+        let undo = handle_request(
+            &state,
+            "token",
+            request(
+                "req-undo",
+                "token",
+                "undo_operation",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 1,
+                    "operationId": operation_id
+                }),
+            ),
+        );
+        assert!(undo.ok, "{:?}", undo.error);
+        let undo = undo.result.expect("undo result");
+        assert_eq!(undo["changedBlocks"], 2);
+        assert_eq!(undo["worldRevision"], 2);
+
+        let block = handle_request(
+            &state,
+            "token",
+            request(
+                "req-block-after-undo",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": {
+                        "type": "get_block",
+                        "dimension": "minecraft:overworld",
+                        "pos": { "x": 1, "y": 64, "z": 1 }
+                    }
+                }),
+            ),
+        );
+        assert!(block.ok, "{:?}", block.error);
+        let block = block.result.expect("block");
+        assert_eq!(block["data"]["state"]["name"], "minecraft:air");
+    }
+
+    #[test]
+    fn mcp_write_grant_summary_reflects_the_explicit_toggle() {
+        let access = McpWriteAccess::default();
+        assert!(!access.granted());
+        assert_eq!(access.summary()["writesEnabled"], false);
+        access.set(true);
+        assert!(access.granted());
+        assert_eq!(access.summary()["writesEnabled"], true);
+        access.set(false);
+        assert!(!access.granted());
+        assert_eq!(access.summary()["writesEnabled"], false);
     }
 
     #[test]

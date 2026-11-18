@@ -31,11 +31,18 @@ The first transport slice is implemented and exercised against the real Tauri pr
   a clean exit; a stale file is reported as `app_not_running`.
 - The protocol is newline-delimited JSON with one authenticated request per connection.
   Messages are size-limited; the token is compared without an early exit; errors never echo
-  it. The methods are `ping`, `world_info`, `query`, `project_status`, `get_camera` and
-  `capture_viewport`.
+  it. The methods are `ping`, `world_info`, `query`, `project_status`, `get_camera`,
+  `capture_viewport`, `preview_operation`, `apply_operation`, `undo_operation` and
+  `operation_status`.
 - `query`/`world_info` require an explicit `project_id` matching the project currently open
-  in the editor. The handler calls the same `WorldService` as the UI; write methods are not
-  exposed yet.
+  in the editor. The handler calls the same `WorldService` as the UI; writes are gated (see
+  below).
+- Preview validates and counts blocks without mutating. Apply and undo require an explicit
+  user grant made through the Tauri-only `set_mcp_writes_enabled` command; the bridge cannot
+  grant itself. Tool writes are recorded as `actor: mcp-bridge`, `source: mcp` in the same
+  history and audit log as UI operations, and `operation_status` reads that audit trail.
+  The grant is a single on/off switch until the access-policy task adds modes, selections
+  and confirmation.
 - Camera and capture requests go from the Tauri process to the mounted viewport over a local
   event and come back through `submit_renderer_response`. `ping.renderer.listening` reports
   readiness. The endpoint validates the response size and PNG format, refuses a different

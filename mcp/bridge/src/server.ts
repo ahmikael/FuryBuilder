@@ -22,6 +22,7 @@ import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
 import { createUnavailableJobApi, type JobApi } from "./jobs.js";
 import { probeDesktop } from "./desktop-client.js";
 import { registerReadTools } from "./read-tools.js";
+import { registerWriteTools } from "./write-tools.js";
 
 const BRIDGE_INSTANCE_ID = randomUUID();
 const BRIDGE_STARTED_AT_MS = Date.now();
@@ -56,6 +57,7 @@ export function createFuryBuilderServer(
 
   registerJobTools(server, jobs);
   registerReadTools(server);
+  registerWriteTools(server);
 
   server.registerTool(
     "bridge_info",

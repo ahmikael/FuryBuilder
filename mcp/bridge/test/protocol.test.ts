@@ -295,4 +295,70 @@ describe("MCP protocol negotiation", () => {
     });
     expect(block.isError).toBe(true);
   });
+
+  it("registers safe write tools and fails honestly without the desktop app", async () => {
+    const client = await connect(true);
+    const { tools } = await client.listTools();
+    const writeTools = tools.filter((tool) =>
+      [
+        "preview_operation",
+        "apply_operation",
+        "apply_operations_batch",
+        "undo_operation",
+        "get_operation_status",
+      ].includes(tool.name),
+    );
+    expect(writeTools.map((tool) => tool.name).sort()).toEqual([
+      "apply_operation",
+      "apply_operations_batch",
+      "get_operation_status",
+      "preview_operation",
+      "undo_operation",
+    ]);
+    const apply = writeTools.find((tool) => tool.name === "apply_operation");
+    expect(apply?.annotations?.readOnlyHint).toBe(false);
+    expect(apply?.annotations?.destructiveHint).toBe(true);
+    expect(JSON.stringify(apply?.inputSchema)).toContain("idempotency_key");
+    const preview = writeTools.find(
+      (tool) => tool.name === "preview_operation",
+    );
+    expect(preview?.annotations?.readOnlyHint).toBe(true);
+
+    const previewResult = await client.callTool({
+      name: "preview_operation",
+      arguments: {
+        project_id: "project-write",
+        operation: {
+          type: "set_block",
+          dimension: "minecraft:overworld",
+          pos: { x: 0, y: 64, z: 0 },
+          state: { name: "minecraft:stone" },
+        },
+      },
+    });
+    expect(previewResult.isError).toBe(true);
+    const previewText = previewResult.content.find(
+      (entry) => entry.type === "text",
+    );
+    expect(previewText?.type === "text" ? previewText.text : "").toMatch(
+      /^runtime_file_missing:/,
+    );
+
+    const applied = await client.callTool({
+      name: "apply_operations_batch",
+      arguments: {
+        project_id: "project-write",
+        world_revision: 0,
+        dimension: "minecraft:overworld",
+        changes: [
+          {
+            pos: { x: 0, y: 64, z: 0 },
+            state: { name: "minecraft:stone" },
+          },
+        ],
+        idempotency_key: "batch-1",
+      },
+    });
+    expect(applied.isError).toBe(true);
+  });
 });

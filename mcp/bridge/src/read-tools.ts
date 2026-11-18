@@ -1,8 +1,9 @@
-import type { CallToolResult, McpServer } from "@modelcontextprotocol/server";
+import type { McpServer } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 
 import { requireProjectId } from "./capabilities.js";
-import { callDesktop, DesktopUnavailableError } from "./desktop-client.js";
+import { callDesktop } from "./desktop-client.js";
+import { errorResult, textResult, withRevision } from "./tool-result.js";
 
 /**
  * Read-only MCP tools over the authoritative Application API. None of them mutates the
@@ -47,42 +48,6 @@ const readOnly = {
   idempotentHint: true,
   openWorldHint: false,
 } as const;
-
-function textResult(value: unknown): CallToolResult {
-  return {
-    content: [{ type: "text", text: JSON.stringify(value, null, 2) }],
-  };
-}
-
-function errorResult(error: unknown): CallToolResult {
-  if (error instanceof DesktopUnavailableError) {
-    const code = error.code ?? error.reason;
-    return {
-      isError: true,
-      content: [{ type: "text", text: `${code}: ${error.message}` }],
-    };
-  }
-  if (error instanceof Error) {
-    return {
-      isError: true,
-      content: [{ type: "text", text: `bridge_error: ${error.message}` }],
-    };
-  }
-  return {
-    isError: true,
-    content: [{ type: "text", text: "bridge_error: unknown failure" }],
-  };
-}
-
-/** Omits the revision instead of sending null, which the local endpoint rejects. */
-function withRevision<T extends Record<string, unknown>>(
-  payload: T,
-  revision: number | undefined,
-): T {
-  return revision === undefined
-    ? payload
-    : { ...payload, worldRevision: revision };
-}
 
 async function queryDesktop(
   projectId: string,

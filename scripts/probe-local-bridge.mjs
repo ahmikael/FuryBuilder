@@ -221,6 +221,102 @@ if (captureBytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
   throw new Error("capture does not contain a PNG signature");
 }
 
+const previewOperation = {
+  type: "set_block",
+  dimension: camera.result.dimension,
+  pos: { x: 0, y: 70, z: 0 },
+  state: { name: "minecraft:stone", properties: {} },
+};
+const preview = await request(
+  runtime,
+  "probe-preview",
+  runtime.token,
+  "preview_operation",
+  {
+    projectId: ping.result.project.projectId,
+    worldRevision: world.result.revision,
+    operation: previewOperation,
+  },
+);
+if (!preview.ok) {
+  throw new Error(
+    `authorized preview_operation failed: ${JSON.stringify(preview.error)}`,
+  );
+}
+console.log(
+  JSON.stringify(
+    {
+      preview: {
+        affectedBlocks: preview.result.affectedBlocks,
+        changedBlocks: preview.result.changedBlocks,
+        worldRevision: preview.result.worldRevision,
+      },
+    },
+    null,
+    2,
+  ),
+);
+
+const apply = await request(
+  runtime,
+  "probe-apply-denied",
+  runtime.token,
+  "apply_operation",
+  {
+    projectId: ping.result.project.projectId,
+    worldRevision: preview.result.worldRevision,
+    idempotencyKey: "probe-denied-write",
+    operation: previewOperation,
+  },
+);
+if (apply.ok) {
+  throw new Error("MCP write unexpectedly succeeded without explicit access");
+}
+if (apply.error?.code !== "permission_denied") {
+  throw new Error(
+    `expected permission_denied, got ${JSON.stringify(apply.error)}`,
+  );
+}
+console.log(
+  JSON.stringify(
+    {
+      writeGuard: {
+        code: apply.error.code,
+        mcpWritesEnabled: apply.error.details?.mcpWritesEnabled,
+      },
+    },
+    null,
+    2,
+  ),
+);
+
+const status = await request(
+  runtime,
+  "probe-operation-status",
+  runtime.token,
+  "operation_status",
+  { projectId: ping.result.project.projectId },
+);
+if (!status.ok) {
+  throw new Error(
+    `authorized operation_status failed: ${JSON.stringify(status.error)}`,
+  );
+}
+console.log(
+  JSON.stringify(
+    {
+      operationStatus: {
+        currentRevision: status.result.currentRevision,
+        canUndo: status.result.canUndo,
+        jobAvailable: status.result.job.available,
+        jobReason: status.result.job.reason,
+      },
+    },
+    null,
+    2,
+  ),
+);
+
 const denied = await request(
   runtime,
   "probe-denied",

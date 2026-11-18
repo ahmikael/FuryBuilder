@@ -263,4 +263,144 @@ describe("MCP bridge to the authoritative desktop API", () => {
     expect(captureMetadata.metadata.partial).toBe(true);
     expect(captureMetadata.verification.partial).toBe(true);
   });
+
+  it("maps preview, batch apply, status and undo to the endpoint", async () => {
+    const observed: Array<Record<string, unknown>> = [];
+    const harness = await startMockDesktop((request) => {
+      observed.push(request);
+      if (request.method === "preview_operation") {
+        return okResult(request, {
+          affectedBlocks: 2,
+          changedBlocks: 1,
+          dirtyChunks: [{ x: 0, z: 0 }],
+          warnings: [],
+          worldRevision: 9,
+        });
+      }
+      if (request.method === "apply_operation") {
+        return okResult(request, {
+          operationId: "op-1",
+          worldRevision: 10,
+          changedBlocks: 2,
+          dirtyChunks: [{ x: 0, z: 0 }],
+          warnings: [],
+          replayed: false,
+        });
+      }
+      if (request.method === "operation_status") {
+        return okResult(request, {
+          operationId: "op-1",
+          status: "completed",
+          changedBlocks: 2,
+          currentRevision: 10,
+          canUndo: true,
+          job: { available: false, reason: "job_api_unavailable" },
+        });
+      }
+      if (request.method === "undo_operation") {
+        return okResult(request, {
+          operationId: "op-2",
+          worldRevision: 11,
+          changedBlocks: 2,
+          dirtyChunks: [],
+          warnings: [],
+          replayed: false,
+        });
+      }
+      return okResult(request, {});
+    });
+    harnesses.push(harness);
+
+    const client = new Client(
+      { name: "desktop-write-client", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } },
+    );
+    clients.push(client);
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: ["--import", "tsx", "src/main.ts"],
+        cwd: bridgeRoot,
+        env: envWith(harness.runtimePath),
+        stderr: "pipe",
+      }),
+    );
+
+    const preview = await client.callTool({
+      name: "preview_operation",
+      arguments: {
+        project_id: "project-live",
+        operation: {
+          type: "set_block",
+          dimension: "minecraft:overworld",
+          pos: { x: 0, y: 64, z: 0 },
+          state: { name: "minecraft:stone" },
+        },
+      },
+    });
+    expect(preview.isError).not.toBe(true);
+
+    const applied = await client.callTool({
+      name: "apply_operations_batch",
+      arguments: {
+        project_id: "project-live",
+        world_revision: 9,
+        dimension: "minecraft:overworld",
+        changes: [
+          {
+            pos: { x: 0, y: 64, z: 0 },
+            state: { name: "minecraft:stone" },
+          },
+        ],
+        idempotency_key: "batch-1",
+      },
+    });
+    const appliedText = applied.content.find((entry) => entry.type === "text");
+    expect(appliedText?.type === "text" ? appliedText.text : "").toContain(
+      '"operationId": "op-1"',
+    );
+
+    const status = await client.callTool({
+      name: "get_operation_status",
+      arguments: { project_id: "project-live", operation_id: "op-1" },
+    });
+    const statusText = status.content.find((entry) => entry.type === "text");
+    expect(statusText?.type === "text" ? statusText.text : "").toContain(
+      '"job": {',
+    );
+
+    const undone = await client.callTool({
+      name: "undo_operation",
+      arguments: {
+        project_id: "project-live",
+        world_revision: 10,
+        operation_id: "op-1",
+      },
+    });
+    const undoneText = undone.content.find((entry) => entry.type === "text");
+    expect(undoneText?.type === "text" ? undoneText.text : "").toContain(
+      '"worldRevision": 11',
+    );
+
+    const applyRequest = observed.find(
+      (request) => request.method === "apply_operation",
+    ) as { params?: Record<string, unknown> } | undefined;
+    expect(applyRequest?.params).toMatchObject({
+      projectId: "project-live",
+      worldRevision: 9,
+      idempotencyKey: "batch-1",
+      operation: {
+        type: "batch",
+        dimension: "minecraft:overworld",
+      },
+    });
+    const undoRequest = observed.find(
+      (request) => request.method === "undo_operation",
+    ) as { params?: Record<string, unknown> } | undefined;
+    expect(undoRequest?.params).toMatchObject({
+      projectId: "project-live",
+      worldRevision: 10,
+      operationId: "op-1",
+    });
+  });
 });

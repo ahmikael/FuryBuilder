@@ -58,6 +58,25 @@ All six are registered with read-only annotations. Screenshots are returned as a
 `image` content block plus a text metadata block; the bridge never fabricates an image or
 claims that a partial frame is complete.
 
+## Safe write tools
+
+| Tool                     | Maps to                      | Behavior                                                 |
+| ------------------------ | ---------------------------- | -------------------------------------------------------- |
+| `preview_operation`      | endpoint `preview_operation` | validates and counts changes; never mutates              |
+| `apply_operation`        | endpoint `apply_operation`   | one typed operation; requires user grant + idempotency   |
+| `apply_operations_batch` | endpoint `apply_operation`   | atomic `batch` of up to 8192 changes                     |
+| `undo_operation`         | endpoint `undo_operation`    | latest/named undo; requires user grant                   |
+| `get_operation_status`   | endpoint `operation_status`  | audit entry or recent history; jobs reported unavailable |
+
+MCP starts **read-only**. The bridge cannot enable writes: only the Tauri UI can call
+`set_mcp_writes_enabled`. The endpoint enforces the grant for every apply/undo request and
+records `actor: mcp-bridge`, `source: mcp` in the authoritative history and audit log.
+Without the grant the call fails with `permission_denied` and touches nothing. Preview and
+status remain available without a grant.
+
+The grant is currently a single on/off switch. Selection-scoped access, project modes and
+per-request confirmation are the next M7 task, so this is not yet a complete access policy.
+
 ## Explicit request context and connection lifecycle
 
 Every MCP tool call names its project. The bridge compares it with the live desktop project
@@ -99,8 +118,8 @@ pnpm --filter @furybuilder/mcp-bridge typecheck
 pnpm --filter @furybuilder/mcp-bridge build
 ```
 
-Observed: 22 tests passed, typecheck and build clean; the Rust local-bridge module runs
-13 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
+Observed: 24 tests passed, typecheck and build clean; the Rust local-bridge module runs
+17 tests. The TypeScript tests spawn the real bridge over stdio with `tsx src/main.ts` and
 use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
@@ -122,13 +141,19 @@ use `@modelcontextprotocol/client` 2.4.0:
   the active revision visible in the response;
 - live reads cover `world_info`, `get_block`, `get_camera` and `capture_viewport`; the
   capture is returned as PNG image content plus metadata;
+- the five write tools are listed: preview is read-only, apply/undo declare destructive
+  writes and require `idempotency_key`, and every call fails honestly when the desktop
+  app is absent;
+- live calls map `preview_operation`, `apply_operations_batch`, `operation_status` and
+  `undo_operation` to the expected endpoint payloads;
 - the desktop client maps a wrong token to `authentication_failed`, a stale endpoint
   to `app_not_running`, malformed discovery files to `invalid_runtime_file`, and a
   silent endpoint to `timeout`.
 
 The Rust tests cover camera/capture revision verification, dimension mismatch, invalid
-image rejection, renderer timeout without a viewport, and one-answer-per-request bridge
-semantics.
+image rejection, renderer timeout without a viewport, one-answer-per-request bridge
+semantics, read-only preview/status, write refusal without a grant, and granted batch
+apply/undo with audit entries.
 
 ### Real Tauri process
 
@@ -141,6 +166,9 @@ renderer: listening true after the WebView mounted
 world_info: ok, target Minecraft 1.21.4, revision 0, 3 dimensions
 camera: overworld, render revision 0 = authoritative revision 0, stale false
 capture: image/png, PNG signature valid, 492714 bytes, partial true, stale false
+preview: affected 1, changed 1, world revision 0 (world unchanged)
+apply without grant: permission_denied, mcpWritesEnabled false
+operation_status: revision 0, canUndo false, job.available false
 wrong token: unauthorized, responseContainsToken false
 LOCAL_BRIDGE_PROBE_OK
 ```
@@ -165,10 +193,12 @@ assume a protocol revision.
 
 ## Limitations
 
-- `bridge_info` is a handshake diagnostic, not an editor tool. The write tool surface
-  arrives in the following M7 tasks.
-- Reads are implemented; writes, preview/apply/undo and the Job API are still absent, so
-  an AI cannot edit through MCP yet.
+- `bridge_info` is a handshake diagnostic, not an editor tool.
+- Writes exist but are disabled by default. A single UI-level on/off grant exists; modes,
+  selection scoping, per-request confirmation and quotas are the next M7 task. Until then
+  an AI cannot edit a fresh installation.
+- The Job API is still absent: long operations are synchronous, and status reports
+  `job.available=false` instead of inventing progress.
 - Camera and capture require a mounted viewport in the running editor. A hidden or
   unloaded WebView reports `backend_unavailable`; there is no headless capture path yet.
 - A capture reports `partial=true` when requested chunks are missing and `stale=true` when
