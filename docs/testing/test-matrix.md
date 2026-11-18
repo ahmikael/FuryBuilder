@@ -53,23 +53,30 @@ Fixtures stay under `fixtures/` and must not contain Mojang binaries or textures
 
 ## M8 world import
 
-| Requirement                                       | Automated / recorded evidence                                                                                                                                                                                   |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Distinguish classic and 26.1+ split world folders | `scripts/inspect_world_layout.py`; `scripts/test_inspect_world_layout.py` (classic, split, legacy `.mcr`, mixed markers, unknown folders)                                                                       |
-| Both `level.dat` versions agree                   | Inspector reads `Data.DataVersion` and `Data.Version.Id`; a synthetic disagreement is flagged; malformed gzip/NBT, trailing bytes, duplicate tags and symlinked `level.dat` are refused                         |
-| Real 1.21.4 classic world                         | `docs/testing/evidence/2026-11-18-world-layout-1.21.4.json` — official server world, revision 4189, 4 Overworld region files, `targetMatch: true`                                                               |
-| Real 26.3 split world                             | `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — official server world, revision 5023, all dimensions under `dimensions/minecraft/`, `version_history: [5023]`, `targetMatch: false`                 |
-| Current release metadata and DataVersion          | `docs/testing/evidence/2026-11-18-world-layout-26.3-server-version.txt` — official server SHA-1, `world_version: 5023`, Java 25, protocol 777; release/layout table in `docs/formats/java-world-layouts.md`     |
-| Read classic `level.dat` + region `.mca`/NBT      | `crates/world-io/src/anvil.rs`; `crates/world-io/tests/anvil.rs` — target version, agreeing `DataVersion`/`Version.Id`, zlib/gzip/uncompressed chunks, negative region/chunk coordinates, empty `TAG_End` lists |
-| Region and chunk structural fail-closed checks    | `crates/world-io/tests/anvil.rs` — overlap, header offsets, short/unaligned files, bad names, oversized length, wrong position/version, trailing NBT, external `.mcc`, LZ4/custom compression, symlinks         |
-| Real 1.21.4 region read                           | `docs/testing/evidence/2026-11-18-anvil-read-1.21.4.json` — 4 regions, 841 chunks all `DataVersion` 4189, 24 sections, `yPos` -4; status breakdown includes 49 `full` and 792 proto-chunks                      |
-| Classic/modern layout and version refusal         | `crates/world-io/tests/anvil.rs` — unsupported DataVersion, 26.1+ split, mixed markers and a missing `region/` are refused                                                                                      |
+| Requirement                                       | Automated / recorded evidence                                                                                                                                                                                          |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Distinguish classic and 26.1+ split world folders | `scripts/inspect_world_layout.py`; `scripts/test_inspect_world_layout.py` (classic, split, legacy `.mcr`, mixed markers, unknown folders)                                                                              |
+| Both `level.dat` versions agree                   | Inspector reads `Data.DataVersion` and `Data.Version.Id`; a synthetic disagreement is flagged; malformed gzip/NBT, trailing bytes, duplicate tags and symlinked `level.dat` are refused                                |
+| Real 1.21.4 classic world                         | `docs/testing/evidence/2026-11-18-world-layout-1.21.4.json` — official server world, revision 4189, 4 Overworld region files, `targetMatch: true`                                                                      |
+| Real 26.3 split world                             | `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — official server world, revision 5023, all dimensions under `dimensions/minecraft/`, `version_history: [5023]`, `targetMatch: false`                        |
+| Current release metadata and DataVersion          | `docs/testing/evidence/2026-11-18-world-layout-26.3-server-version.txt` — official server SHA-1, `world_version: 5023`, Java 25, protocol 777; release/layout table in `docs/formats/java-world-layouts.md`            |
+| Read classic `level.dat` + region `.mca`/NBT      | `crates/world-io/src/anvil.rs`; `crates/world-io/tests/anvil.rs` — target version, agreeing `DataVersion`/`Version.Id`, zlib/gzip/uncompressed chunks, negative region/chunk coordinates, empty `TAG_End` lists        |
+| Region and chunk structural fail-closed checks    | `crates/world-io/tests/anvil.rs` — overlap, header offsets, short/unaligned files, bad names, oversized length, wrong position/version, trailing NBT, external `.mcc`, LZ4/custom compression, symlinks                |
+| Real 1.21.4 region read                           | `docs/testing/evidence/2026-11-18-anvil-read-1.21.4.json` — 4 regions, 841 chunks all `DataVersion` 4189, 24 sections, `yPos` -4; status breakdown includes 49 `full` and 792 proto-chunks                             |
+| Block states, palettes and biomes                 | `crates/world-io/src/java_chunk.rs`; `crates/world-io/tests/java_chunk.rs` — properties, non-spanning bit packing, one-entry palettes, 4/5/6-bit data, 64 biome cells, YZX order, negative coordinates                 |
+| Height and dimension validation                   | `crates/world-io/tests/java_chunk.rs` — `yPos` must match `min_y`, section Y must fit the dimension height, duplicate/oversized section lists are refused, missing sections read as air                                |
+| Custom dimensions and dimension symlinks          | `crates/world-io/tests/anvil.rs` — a classic world with data under `dimensions/` is refused, an empty `dimensions/` is accepted, a symlinked `DIM-1` is refused                                                        |
+| Corrupt palette fail-closed checks                | `crates/world-io/tests/java_chunk.rs` — wrong long counts, out-of-range indices, missing/extra data, invalid biome ids and missing biome palettes are refused                                                          |
+| Real 1.21.4 chunk decoding                        | `docs/testing/evidence/2026-11-18-anvil-decode-1.21.4.json` — 841 chunks, 20,184 sections, 125 non-empty, 123,908 non-air blocks, 0 missing sections in present chunks, 5 block states, `minecraft:plains`             |
+| Real multi-biome cross-check                      | `docs/testing/evidence/2026-11-18-anvil-biomes-1.21.4.json` — 5 biomes, 98 block states; 48 running-server biome queries matched the decoded cell grid at y=63/65/100 in chunk (-2, -3); empty-section caveat recorded |
+| Classic/modern layout and version refusal         | `crates/world-io/tests/anvil.rs` — unsupported DataVersion, 26.1+ split, mixed markers and a missing `region/` are refused                                                                                             |
 
 The Python inventory script is deliberately metadata-only: it does not decode chunks.
-`crates/world-io/src/anvil.rs` is the read-only decoder; it has no write API.
-`cargo test -p furybuilder-world-io --test anvil` runs its tests, and
-`cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder>` reproduces the
-real-world evidence without modifying the world.
+`crates/world-io/src/anvil.rs` and `crates/world-io/src/java_chunk.rs` are the read-only
+decoder; they have no write API. `cargo test -p furybuilder-world-io` runs the anvil and
+java_chunk suites, and
+`cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --decode`
+reproduces the real-world evidence without modifying the world.
 
 ## Implemented coverage (M3)
 

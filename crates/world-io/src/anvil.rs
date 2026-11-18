@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::read::{GzDecoder, ZlibDecoder};
 use thiserror::Error;
-use world_domain::TARGET_DATA_VERSION;
+use world_domain::{DimensionKind, TARGET_DATA_VERSION};
 
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, MAX_NBT_BYTES, TAG_COMPOUND};
 
@@ -75,6 +75,8 @@ pub enum AnvilError {
     },
     #[error("region chunk ({x}, {z}) is not allocated")]
     ChunkNotPresent { x: i32, z: i32 },
+    #[error("chunk ({x}, {z}) is invalid: {message}")]
+    InvalidChunk { x: i32, z: i32, message: String },
     #[error("unknown dimension: {0}")]
     UnknownDimension(String),
     #[error("Anvil limit exceeded: {0}")]
@@ -92,7 +94,8 @@ impl AnvilError {
             AnvilError::Io(_) => "io_error",
             AnvilError::InvalidLevel(_)
             | AnvilError::InvalidRegion(_)
-            | AnvilError::InvalidRegionName(_) => "unsupported_format",
+            | AnvilError::InvalidRegionName(_)
+            | AnvilError::InvalidChunk { .. } => "unsupported_format",
             AnvilError::UnsupportedDataVersion { .. }
             | AnvilError::UnsupportedLayout(_)
             | AnvilError::UnsupportedCompression(_) => "unsupported_version",
@@ -162,12 +165,44 @@ impl LevelDat {
         }
         Ok(())
     }
+
+    /// Dimension IDs declared by `Data.WorldGenSettings.dimensions`.
+    ///
+    /// This is metadata, not proof that a dimension folder exists. An empty list means the
+    /// tag is absent (for example in a heavily modified world) and is not silently filled
+    /// with the standard dimensions.
+    pub fn declared_dimensions(&self) -> Result<Vec<String>, AnvilError> {
+        let root = self
+            .raw
+            .root
+            .as_compound()
+            .ok_or_else(|| AnvilError::InvalidLevel("root tag is not a compound".to_owned()))?;
+        let data = compound_field(root, "Data", "level.dat")?;
+        let Some(world_gen) = data.get("WorldGenSettings") else {
+            return Ok(Vec::new());
+        };
+        let world_gen = world_gen.as_compound().ok_or_else(|| {
+            AnvilError::InvalidLevel("level.dat WorldGenSettings is not a compound".to_owned())
+        })?;
+        let Some(dimensions) = world_gen.get("dimensions") else {
+            return Ok(Vec::new());
+        };
+        let dimensions = dimensions.as_compound().ok_or_else(|| {
+            AnvilError::InvalidLevel(
+                "level.dat WorldGenSettings.dimensions is not a compound".to_owned(),
+            )
+        })?;
+        Ok(dimensions.keys().cloned().collect())
+    }
 }
 
 /// A standard dimension folder in a classic Anvil world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JavaWorldDimension {
     pub id: String,
+    pub kind: DimensionKind,
+    pub min_y: i32,
+    pub height: i32,
     pub folder: PathBuf,
     pub region_folder: PathBuf,
     pub region_files: usize,
@@ -178,6 +213,7 @@ pub struct JavaWorldDimension {
 pub struct JavaWorld {
     pub root: PathBuf,
     pub level: LevelDat,
+    pub declared_dimensions: Vec<String>,
     pub dimensions: Vec<JavaWorldDimension>,
 }
 
@@ -199,6 +235,7 @@ impl JavaWorld {
 
         let level = LevelDat::read(root.join("level.dat"))?;
         level.ensure_supported()?;
+        let declared_dimensions = level.declared_dimensions()?;
 
         let modern_overworld = root.join("dimensions").join("minecraft").join("overworld");
         let split_data = root
@@ -218,29 +255,54 @@ impl JavaWorld {
                 "26.1+ split world layout is not supported".to_owned(),
             ));
         }
-        if !is_real_dir(&root.join("region")) {
+        if !require_directory(&root.join("region"))? {
             return Err(AnvilError::UnsupportedLayout(
                 "classic Overworld region/ folder is missing".to_owned(),
             ));
+        }
+
+        let custom_dimensions = classic_custom_dimensions(root)?;
+        if !custom_dimensions.is_empty() {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "classic worlds with custom dimensions are not supported yet: {}",
+                custom_dimensions.join(", ")
+            )));
         }
 
         let mut dimensions = vec![discover_dimension(
             root,
             "minecraft:overworld",
             Path::new("."),
+            DimensionKind::Overworld,
+            -64,
+            384,
         )?];
-        for (folder, id) in [
-            ("DIM-1", "minecraft:the_nether"),
-            ("DIM1", "minecraft:the_end"),
+        for (folder, id, kind, min_y, height) in [
+            (
+                "DIM-1",
+                "minecraft:the_nether",
+                DimensionKind::Nether,
+                0,
+                256,
+            ),
+            ("DIM1", "minecraft:the_end", DimensionKind::End, 0, 256),
         ] {
-            if is_real_dir(&root.join(folder)) {
-                dimensions.push(discover_dimension(root, id, Path::new(folder))?);
+            if require_directory(&root.join(folder))? {
+                dimensions.push(discover_dimension(
+                    root,
+                    id,
+                    Path::new(folder),
+                    kind,
+                    min_y,
+                    height,
+                )?);
             }
         }
 
         Ok(Self {
             root: root.to_path_buf(),
             level,
+            declared_dimensions,
             dimensions,
         })
     }
@@ -743,6 +805,9 @@ fn discover_dimension(
     root: &Path,
     id: &str,
     relative_folder: &Path,
+    kind: DimensionKind,
+    min_y: i32,
+    height: i32,
 ) -> Result<JavaWorldDimension, AnvilError> {
     let folder = if relative_folder == Path::new(".") {
         root.to_path_buf()
@@ -752,6 +817,9 @@ fn discover_dimension(
     let region_folder = folder.join("region");
     Ok(JavaWorldDimension {
         id: id.to_owned(),
+        kind,
+        min_y,
+        height,
         folder,
         region_files: count_region_files(&region_folder)?,
         region_folder,
@@ -840,6 +908,41 @@ fn is_real_file(path: &Path) -> bool {
     fs::symlink_metadata(path)
         .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
         .unwrap_or(false)
+}
+
+/// Returns `true` for a real directory, `false` when the path is absent.
+/// Symlinks and non-directories are refused instead of being treated as absent.
+fn require_directory(path: &Path) -> Result<bool, AnvilError> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(AnvilError::Symlink(path.display().to_string()));
+            }
+            if !metadata.is_dir() {
+                return Err(AnvilError::UnsupportedLayout(format!(
+                    "{} is not a directory",
+                    path.display()
+                )));
+            }
+            Ok(true)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(io_error(path, &error)),
+    }
+}
+
+fn classic_custom_dimensions(root: &Path) -> Result<Vec<String>, AnvilError> {
+    let folder = root.join("dimensions");
+    if !require_directory(&folder)? {
+        return Ok(Vec::new());
+    }
+    let mut names = Vec::new();
+    for entry in fs::read_dir(&folder).map_err(|error| io_error(&folder, &error))? {
+        let entry = entry.map_err(|error| io_error(&folder, &error))?;
+        names.push(entry.file_name().to_string_lossy().into_owned());
+    }
+    names.sort();
+    Ok(names)
 }
 
 fn file_len_checked(path: &Path, limit: u64) -> Result<u64, AnvilError> {

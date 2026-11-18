@@ -1,0 +1,338 @@
+{
+  "declaredDimensions": [
+    "minecraft:overworld",
+    "minecraft:the_end",
+    "minecraft:the_nether"
+  ],
+  "decode": {
+    "biomes": ["minecraft:plains"],
+    "chunks": 841,
+    "distinctBiomes": 1,
+    "distinctBlockStates": 5,
+    "missingSections": 0,
+    "nonAirBlocks": 123908,
+    "nonEmptySections": 125,
+    "sections": 20184
+  },
+  "dimensions": [
+    {
+      "decode": {
+        "biomes": ["minecraft:plains"],
+        "chunks": 841,
+        "distinctBiomes": 1,
+        "distinctBlockStates": 5,
+        "missingSections": 0,
+        "nonAirBlocks": 123908,
+        "nonEmptySections": 125,
+        "sections": 20184
+      },
+      "folder": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+      "height": 384,
+      "id": "minecraft:overworld",
+      "kind": "overworld",
+      "minY": -64,
+      "regionFiles": 4,
+      "regions": [
+        {
+          "allocatedChunks": 196,
+          "blockEntities": 0,
+          "decode": {
+            "biomes": ["minecraft:plains"],
+            "chunks": 196,
+            "distinctBiomes": 1,
+            "distinctBlockStates": 4,
+            "missingSections": 0,
+            "nonAirBlocks": 25600,
+            "nonEmptySections": 25,
+            "sections": 4704
+          },
+          "entities": 0,
+          "fileBytes": 811008,
+          "regionX": -1,
+          "regionZ": -1,
+          "sampleChunks": [
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": -14,
+              "yPos": -4,
+              "z": -14
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": -13,
+              "yPos": -4,
+              "z": -14
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": -12,
+              "yPos": -4,
+              "z": -14
+            }
+          ],
+          "sections": {
+            "max": 24,
+            "min": 24
+          },
+          "statusCounts": {
+            "minecraft:biomes": 11,
+            "minecraft:carvers": 9,
+            "minecraft:full": 9,
+            "minecraft:initialize_light": 7,
+            "minecraft:structure_starts": 160
+          },
+          "yPositions": [-4]
+        },
+        {
+          "allocatedChunks": 210,
+          "blockEntities": 0,
+          "decode": {
+            "biomes": ["minecraft:plains"],
+            "chunks": 210,
+            "distinctBiomes": 1,
+            "distinctBlockStates": 4,
+            "missingSections": 0,
+            "nonAirBlocks": 30720,
+            "nonEmptySections": 30,
+            "sections": 5040
+          },
+          "entities": 0,
+          "fileBytes": 868352,
+          "regionX": -1,
+          "regionZ": 0,
+          "sampleChunks": [
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": -14,
+              "yPos": -4,
+              "z": 0
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": -13,
+              "yPos": -4,
+              "z": 0
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": -12,
+              "yPos": -4,
+              "z": 0
+            }
+          ],
+          "sections": {
+            "max": 24,
+            "min": 24
+          },
+          "statusCounts": {
+            "minecraft:biomes": 12,
+            "minecraft:carvers": 10,
+            "minecraft:full": 12,
+            "minecraft:initialize_light": 8,
+            "minecraft:structure_starts": 168
+          },
+          "yPositions": [-4]
+        },
+        {
+          "allocatedChunks": 210,
+          "blockEntities": 0,
+          "decode": {
+            "biomes": ["minecraft:plains"],
+            "chunks": 210,
+            "distinctBiomes": 1,
+            "distinctBlockStates": 5,
+            "missingSections": 0,
+            "nonAirBlocks": 30722,
+            "nonEmptySections": 32,
+            "sections": 5040
+          },
+          "entities": 0,
+          "fileBytes": 868352,
+          "regionX": 0,
+          "regionZ": -1,
+          "sampleChunks": [
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": 0,
+              "yPos": -4,
+              "z": -14
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": 1,
+              "yPos": -4,
+              "z": -14
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:structure_starts",
+              "x": 2,
+              "yPos": -4,
+              "z": -14
+            }
+          ],
+          "sections": {
+            "max": 24,
+            "min": 24
+          },
+          "statusCounts": {
+            "minecraft:biomes": 12,
+            "minecraft:carvers": 10,
+            "minecraft:full": 12,
+            "minecraft:initialize_light": 8,
+            "minecraft:structure_starts": 168
+          },
+          "yPositions": [-4]
+        },
+        {
+          "allocatedChunks": 225,
+          "blockEntities": 0,
+          "decode": {
+            "biomes": ["minecraft:plains"],
+            "chunks": 225,
+            "distinctBiomes": 1,
+            "distinctBlockStates": 5,
+            "missingSections": 0,
+            "nonAirBlocks": 36866,
+            "nonEmptySections": 38,
+            "sections": 5400
+          },
+          "entities": 0,
+          "fileBytes": 929792,
+          "regionX": 0,
+          "regionZ": 0,
+          "sampleChunks": [
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:full",
+              "x": 0,
+              "yPos": -4,
+              "z": 0
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:full",
+              "x": 1,
+              "yPos": -4,
+              "z": 0
+            },
+            {
+              "blockEntities": 0,
+              "dataVersion": 4189,
+              "entities": 0,
+              "sections": 24,
+              "status": "minecraft:full",
+              "x": 2,
+              "yPos": -4,
+              "z": 0
+            }
+          ],
+          "sections": {
+            "max": 24,
+            "min": 24
+          },
+          "statusCounts": {
+            "minecraft:biomes": 13,
+            "minecraft:carvers": 11,
+            "minecraft:full": 16,
+            "minecraft:initialize_light": 9,
+            "minecraft:structure_starts": 176
+          },
+          "yPositions": [-4]
+        }
+      ]
+    },
+    {
+      "decode": {
+        "biomes": [],
+        "chunks": 0,
+        "distinctBiomes": 0,
+        "distinctBlockStates": 0,
+        "missingSections": 0,
+        "nonAirBlocks": 0,
+        "nonEmptySections": 0,
+        "sections": 0
+      },
+      "folder": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world\\DIM-1",
+      "height": 256,
+      "id": "minecraft:the_nether",
+      "kind": "nether",
+      "minY": 0,
+      "regionFiles": 0,
+      "regions": []
+    },
+    {
+      "decode": {
+        "biomes": [],
+        "chunks": 0,
+        "distinctBiomes": 0,
+        "distinctBlockStates": 0,
+        "missingSections": 0,
+        "nonAirBlocks": 0,
+        "nonEmptySections": 0,
+        "sections": 0
+      },
+      "folder": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world\\DIM1",
+      "height": 256,
+      "id": "minecraft:the_end",
+      "kind": "end",
+      "minY": 0,
+      "regionFiles": 0,
+      "regions": []
+    }
+  ],
+  "layout": "classic_anvil",
+  "level": {
+    "dataVersion": 4189,
+    "levelName": "world",
+    "versionId": 4189,
+    "versionName": "1.21.4"
+  },
+  "readOnly": true,
+  "tool": {
+    "name": "furybuilder-anvil-probe",
+    "version": 2
+  },
+  "worldFolder": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world"
+}

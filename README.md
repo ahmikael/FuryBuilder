@@ -53,9 +53,10 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 M0–M7 are complete. M8 is in progress: the read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
-coordinates and proto-chunks, without writing to the source world. Block-state
-palettes and biomes are the next step. The first interchange format, Minecraft
-Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and verified
+coordinates and proto-chunks, then decodes block-state palettes, sections and
+biomes without writing to the source world. Passthrough, overlay and the
+`Import World` wizard are next. The first interchange format, Minecraft Java
+1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and verified
 against real game-saved fixtures, a real Tauri IPC flow and an official 1.21.4
 server load. Block states and orientations are preserved; entities and block
 entities are refused rather than silently dropped. Sponge `.schem` is the next

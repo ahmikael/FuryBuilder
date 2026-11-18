@@ -185,20 +185,25 @@ either as a supported import target.
 Java 25 is a real requirement for 26.3; it is not enough to reuse the Java 21
 runtime from the 1.21.4 target.
 
-## Read-only Rust reader (M8.2)
+## Read-only Rust reader (M8.2–M8.3)
 
-`crates/world-io/src/anvil.rs` implements the read-only half of the 1.21.4
-adapter. It has no write path.
+`crates/world-io/src/anvil.rs` implements the container half and
+`crates/world-io/src/java_chunk.rs` the section half of the 1.21.4 adapter.
+There is no write path.
 
-| API                             | What it does                                                                                                     |
-| ------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `LevelDat::read`                | bounded gzip/NBT read; requires `Data.DataVersion` and `Data.Version.Id` to agree                                |
-| `LevelDat::ensure_supported`    | refuses any version other than 4189                                                                              |
-| `JavaWorld::open`               | validates a classic layout, discovers the standard dimensions and counts their region files                      |
-| `JavaWorld::region_coordinates` | lists `r.<x>.<z>.mca` files after validating every name                                                          |
-| `RegionFile::open`              | validates the two 4 KiB header tables, allocation ranges and overlaps                                            |
-| `RegionFile::read_chunk`        | decodes one chunk, checks its position and returns the complete `NbtFile`                                        |
-| `RegionFile::summarize_all`     | decodes every allocated chunk, discards its NBT and returns structural summaries; peak memory stays at one chunk |
+| API                             | What it does                                                                                                       |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `LevelDat::read`                | bounded gzip/NBT read; requires `Data.DataVersion` and `Data.Version.Id` to agree                                  |
+| `LevelDat::ensure_supported`    | refuses any version other than 4189                                                                                |
+| `LevelDat::declared_dimensions` | lists `WorldGenSettings.dimensions` keys; missing tags yield an empty list, not invented dimensions                |
+| `JavaWorld::open`               | validates a classic layout, discovers the standard dimensions with their `min_y`/`height`, and counts region files |
+| `JavaWorld::region_coordinates` | lists `r.<x>.<z>.mca` files after validating every name                                                            |
+| `RegionFile::open`              | validates the two 4 KiB header tables, allocation ranges and overlaps                                              |
+| `RegionFile::read_chunk`        | decodes one chunk, checks its position and returns the complete `NbtFile`                                          |
+| `RegionFile::summarize_all`     | decodes every allocated chunk, discards its NBT and returns structural summaries; peak memory stays at one chunk   |
+| `RegionChunk::decode`           | turns one chunk into block [`Section`]s and biome palettes for its dimension                                       |
+| `JavaWorld::decode_chunk`       | the same operation, resolving the dimension by id                                                                  |
+| `DecodedChunk::to_chunk`        | copies non-empty block sections into the editor chunk model                                                        |
 
 Supported at this stage:
 
@@ -209,11 +214,20 @@ Supported at this stage:
 - `level.dat` up to 8 MiB compressed, a region file up to 1 GiB, and one
   decompressed chunk up to the shared 64 MiB NBT limit;
 - empty `sections`, `block_entities` and `entities` lists with either
-  `TAG_Compound` or `TAG_End` element type, as produced by the real game.
+  `TAG_Compound` or `TAG_End` element type, as produced by the real game;
+- block-state palettes with properties, using Minecraft's non-spanning bit
+  packing and the 4-bit minimum; 4096 indices in YZX order;
+- biome palettes, using `ceil(log2(palette))` bits and 64 cells of 4×4×4
+  blocks; a one-entry biome palette may omit `data`;
+- proto-chunks whose absent sections are reported in `missing_sections` and
+  read as air, while every present section is still decoded.
 
 Refused explicitly instead of guessed:
 
 - the 26.1+ split layout, and a folder that mixes classic and split markers;
+- classic worlds that contain a non-empty `dimensions/` folder (custom
+  dimensions), rather than silently importing only the Overworld; an empty
+  `dimensions/` folder is accepted;
 - external `.mcc` chunks (compression flag `0x80`), LZ4 (4), custom algorithms
   (127) and unknown compression ids;
 - region files that are shorter than 8 KiB, not 4 KiB aligned, have partially
@@ -221,33 +235,44 @@ Refused explicitly instead of guessed:
 - a chunk length larger than its allocated sectors, an NBT `xPos`/`zPos`
   mismatch, a chunk `DataVersion` other than 4189, a malformed section, or
   trailing bytes after the chunk NBT root;
+- a chunk `yPos` that does not match the dimension's `min_y`, a section `Y`
+  outside the dimension height, duplicate section Y values, or more sections
+  than the dimension can hold;
+- block palettes that are empty, too large, use unsupported tag types, have
+  the wrong long-array length, a non-empty `data` with a one-entry palette, or
+  an index outside the palette;
+- biome palettes that are empty, too large, non-string, have an invalid
+  resource location, the wrong long-array length, or an out-of-range cell;
 - symlinked world files and region files.
 
-Block states, section palettes and biomes are **not decoded yet**; that is M8.3.
-Passthrough, overlay, import UI and any write path are later M8 stages.
+Biomes are decoded but not yet persisted in `world-domain`; they remain on
+`DecodedChunk`, and `to_chunk()` copies blocks only. Raw chunk NBT is also kept
+on `RegionChunk` for the passthrough work. Passthrough, overlay, import UI and
+any write path are later M8 stages.
 
 Probe and tests:
 
 ```powershell
-cargo test -p furybuilder-world-io --test anvil
+cargo test -p furybuilder-world-io
 cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder>
-cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --all-chunks
+cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --decode
+cargo run -p furybuilder-world-io --example anvil_probe -- <world-folder> --decode --all-chunks
 ```
 
-The default probe prints region-level aggregates and three sample chunks per
-region; `--all-chunks` prints every chunk summary. Both modes decode all chunks
-first, so a zero exit code means the whole region table was read.
+Every mode decodes all allocated chunks before printing, so a zero exit code
+means the whole region table was read. `--decode` additionally reports block
+and biome aggregates; `--all-chunks` prints every per-chunk summary.
 
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                                                                  | Write | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------------------------------------------- | ----- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | partial: `level.dat` + region/NBT structure (M8.2); block palettes and biomes pending | no    | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                                                    | no    | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                                                    | no    | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                                                    | no    | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                                                    | no    | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                                                    | no    | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                                                        | Write | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | --------------------------------------------------------------------------- | ----- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3); passthrough/edit pending | no    | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                                          | no    | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                                          | no    | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                                          | no    | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                                          | no    | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                                          | no    | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support.
@@ -295,6 +320,20 @@ Recorded evidence:
   `full`; the non-full chunks are proto-chunks, not import failures. The Nether
   and End had no region files in this world. The probe exited 0 and wrote
   nothing to the world.
+- `docs/testing/evidence/2026-11-18-anvil-decode-1.21.4.json` — the same world
+  fully decoded: 841 chunks, 20,184 sections, 125 non-empty sections, 123,908
+  non-air blocks, 0 missing sections in present chunks, 5 distinct block states
+  and the `minecraft:plains` biome. All negative regions `r.-1.-1`,
+  `r.-1.0` and `r.0.-1` decoded successfully. `--decode` exited 0.
+- `docs/testing/evidence/2026-11-18-anvil-biomes-1.21.4.json` — a separately
+  generated vanilla 1.21.4 world with five biomes and 98 block states:
+  841 chunks and 1,040 non-empty sections decoded. The running server was asked
+  for the biome at 16 cell centres in chunk (-2, -3) at y=63, 65 and 100; the
+  decoded `beach` cell at (2, 3) and `ocean` elsewhere matched all 48 answers.
+  The world and server logs are not committed. A caveat is recorded: at y=241,
+  in an empty section above terrain, the server reported `ocean` while the
+  stored NBT says `beach`; the adapter reports stored NBT and does not claim
+  that the game uses those cells.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` — a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
@@ -324,9 +363,9 @@ Sources checked on 2026-11-18:
 
 ## Consequences for the next M8 tasks
 
-1. The M8.2 reader now covers `level.dat` plus one region at a time, with both
-   version values checked. The next step is decoding section palettes, block
-   states and biomes inside the already-validated chunk NBT.
+1. The M8.3 reader covers `level.dat`, region containers, block-state palettes
+   and biomes for 1.21.4 classic. The next step is passthrough of unmodified
+   fields, chunks and files, including unknown metadata.
 2. Keep layout detection explicit. Opening a 26.1+ folder must return a
    structured `unsupported_layout`/`unsupported_version`, not a partial world.
 3. Add a real 26.1+ fixture and adapter only when the game format and the

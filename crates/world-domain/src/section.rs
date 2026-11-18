@@ -108,6 +108,42 @@ impl Section {
         })
     }
 
+    /// Builds a section from a palette and one index per block in YZX order.
+    ///
+    /// This is the import path for formats that use a different packed layout (for example
+    /// Minecraft's non-spanning 4-bit minimum). The caller decodes the external container
+    /// into exactly [`SECTION_VOLUME`] indices; this method validates them and re-packs
+    /// them into the canonical internal layout used by `from_raw`.
+    pub fn from_palette_indices(palette: Vec<BlockState>, indices: &[u16]) -> Option<Self> {
+        if palette.is_empty() || palette.len() > MAX_PALETTE || indices.len() != SECTION_VOLUME {
+            return None;
+        }
+        if palette.len() == 1 {
+            if indices.iter().any(|index| *index != 0) {
+                return None;
+            }
+            return Some(Self::single(palette.into_iter().next()?));
+        }
+        if indices.iter().any(|index| *index as usize >= palette.len()) {
+            return None;
+        }
+        let bits = bits_for(palette.len());
+        let mut data = vec![0u64; (SECTION_VOLUME * bits as usize).div_ceil(64)];
+        let mut non_air = 0u16;
+        for (index, palette_index) in indices.iter().copied().enumerate() {
+            write_packed(&mut data, bits, index, palette_index);
+            if !palette[palette_index as usize].is_air() {
+                non_air += 1;
+            }
+        }
+        Some(Self {
+            palette,
+            data,
+            bits_per_index: bits,
+            non_air,
+        })
+    }
+
     pub fn non_air_count(&self) -> usize {
         self.non_air as usize
     }
@@ -405,5 +441,58 @@ mod tests {
             section.bits_per_index()
         )
         .is_none());
+    }
+
+    #[test]
+    fn from_palette_indices_imports_yzx_order_and_large_palettes() {
+        let palette = (0..300)
+            .map(|index| BlockState::simple(format!("minecraft:test_block_{index}")).unwrap())
+            .collect::<Vec<_>>();
+        let mut indices = vec![0u16; SECTION_VOLUME];
+        for (index, value) in indices.iter_mut().enumerate() {
+            *value = (index % palette.len()) as u16;
+        }
+        let section = Section::from_palette_indices(palette.clone(), &indices).expect("section");
+        assert_eq!(section.palette_len(), 300);
+        assert!(section.bits_per_index() >= 9);
+        assert_eq!(
+            section.get(1, 2, 3),
+            Some(&palette[Section::local_index(1, 2, 3).unwrap() % palette.len()])
+        );
+        assert_eq!(
+            section.get(15, 15, 15),
+            Some(&palette[Section::local_index(15, 15, 15).unwrap() % palette.len()])
+        );
+        assert_eq!(section.non_air_count(), SECTION_VOLUME);
+
+        assert!(Section::from_palette_indices(Vec::new(), &indices).is_none());
+        assert!(Section::from_palette_indices(palette.clone(), &indices[..10]).is_none());
+        let mut invalid = indices.clone();
+        invalid[17] = palette.len() as u16;
+        assert!(Section::from_palette_indices(palette, &invalid).is_none());
+    }
+
+    #[test]
+    fn from_palette_indices_handles_single_state_and_all_air_palettes() {
+        let stone = stone();
+        let single =
+            Section::from_palette_indices(vec![stone.clone()], &vec![0u16; SECTION_VOLUME])
+                .expect("single state");
+        assert_eq!(single.palette_len(), 1);
+        assert_eq!(single.non_air_count(), SECTION_VOLUME);
+        assert_eq!(single.get(4, 5, 6), Some(&stone));
+
+        let mut invalid = vec![0u16; SECTION_VOLUME];
+        invalid[0] = 1;
+        assert!(Section::from_palette_indices(vec![stone], &invalid).is_none());
+
+        let air: BlockState = "minecraft:air".parse().unwrap();
+        let cave_air: BlockState = "minecraft:cave_air".parse().unwrap();
+        let all_air =
+            Section::from_palette_indices(vec![air, cave_air], &vec![0u16; SECTION_VOLUME])
+                .expect("all-air palette");
+        assert_eq!(all_air.palette_len(), 2);
+        assert!(all_air.is_empty());
+        assert_eq!(all_air.non_air_count(), 0);
     }
 }

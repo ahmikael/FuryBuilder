@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::write::{GzEncoder, ZlibEncoder};
 use flate2::Compression;
+use world_domain::DimensionKind;
 use world_io::anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, LevelDat, RegionChunkSummary,
     RegionFile,
@@ -61,6 +62,26 @@ fn level_dat_bytes(data_version: i32, version_id: i32, name: &str) -> Vec<u8> {
                     ]),
                 ),
                 ("LevelName", NbtValue::String("Anvil test".to_owned())),
+                (
+                    "WorldGenSettings",
+                    NbtValue::compound([(
+                        "dimensions",
+                        NbtValue::compound([
+                            (
+                                "minecraft:overworld",
+                                NbtValue::compound([("seed", NbtValue::Long(1))]),
+                            ),
+                            (
+                                "minecraft:the_nether",
+                                NbtValue::compound([("seed", NbtValue::Long(1))]),
+                            ),
+                            (
+                                "minecraft:the_end",
+                                NbtValue::compound([("seed", NbtValue::Long(1))]),
+                            ),
+                        ]),
+                    )]),
+                ),
             ]),
         )]),
     );
@@ -494,6 +515,26 @@ fn java_world_opens_classic_layout_and_reads_its_region() {
     );
     let overworld = world.dimension("minecraft:overworld").expect("overworld");
     assert_eq!(overworld.region_files, 1);
+    assert_eq!(overworld.kind, DimensionKind::Overworld);
+    assert_eq!((overworld.min_y, overworld.height), (-64, 384));
+    assert_eq!(
+        world.declared_dimensions,
+        [
+            "minecraft:overworld",
+            "minecraft:the_end",
+            "minecraft:the_nether"
+        ]
+    );
+    let nether = world.dimension("minecraft:the_nether").expect("nether");
+    assert_eq!(
+        (nether.kind, nether.min_y, nether.height),
+        (DimensionKind::Nether, 0, 256)
+    );
+    let end = world.dimension("minecraft:the_end").expect("end");
+    assert_eq!(
+        (end.kind, end.min_y, end.height),
+        (DimensionKind::End, 0, 256)
+    );
     assert_eq!(
         world
             .region_coordinates("minecraft:overworld")
@@ -577,6 +618,55 @@ fn java_world_refuses_unsupported_versions_layouts_and_mixed_markers() {
         JavaWorld::open(&no_region),
         Err(AnvilError::UnsupportedLayout(message)) if message.contains("region/")
     ));
+
+    let custom = dir.path().join("custom-dimension");
+    write_level_dat(&custom, TARGET, TARGET, "1.21.4");
+    fs::create_dir_all(custom.join("region")).expect("create classic region");
+    fs::create_dir_all(
+        custom
+            .join("dimensions")
+            .join("custom")
+            .join("void")
+            .join("region"),
+    )
+    .expect("create custom dimension");
+    assert!(matches!(
+        JavaWorld::open(&custom),
+        Err(AnvilError::UnsupportedLayout(message)) if message.contains("custom dimension")
+    ));
+
+    let empty_custom = dir.path().join("empty-dimensions");
+    write_level_dat(&empty_custom, TARGET, TARGET, "1.21.4");
+    fs::create_dir_all(empty_custom.join("region")).expect("create classic region");
+    fs::create_dir_all(empty_custom.join("dimensions")).expect("create empty dimensions");
+    JavaWorld::open(&empty_custom).expect("an empty dimensions/ folder carries no data");
+}
+
+#[test]
+fn java_world_refuses_symlinked_dimension_folders() {
+    let dir = TempDir::new("dimension-symlink");
+    let root = dir.path().join("world");
+    write_level_dat(&root, TARGET, TARGET, "1.21.4");
+    fs::create_dir_all(root.join("region")).expect("create classic region");
+    let real = dir.path().join("real-nether");
+    fs::create_dir_all(real.join("region")).expect("create real nether");
+    if !make_symlink_dir(&real, &root.join("DIM-1")) {
+        return;
+    }
+    assert!(matches!(
+        JavaWorld::open(&root),
+        Err(AnvilError::Symlink(path)) if path.ends_with("DIM-1")
+    ));
+}
+
+#[cfg(windows)]
+fn make_symlink_dir(target: &Path, link: &Path) -> bool {
+    std::os::windows::fs::symlink_dir(target, link).is_ok()
+}
+
+#[cfg(unix)]
+fn make_symlink_dir(target: &Path, link: &Path) -> bool {
+    std::os::unix::fs::symlink(target, link).is_ok()
 }
 
 #[test]

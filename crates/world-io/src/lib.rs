@@ -10,6 +10,7 @@
 
 pub mod anvil;
 pub mod exchange;
+pub mod java_chunk;
 pub mod java_structure;
 pub mod nbt;
 pub mod structure;
@@ -24,6 +25,10 @@ pub use exchange::{
     content_bounds, import_preview, palette_counts, palette_usage, prepare_export,
     preview_from_structure, read_verified_import, ExportBundle, PaletteCount,
     StructureImportPreview, MAX_PALETTE_PREVIEW, MAX_SCAN_SECTIONS,
+};
+pub use java_chunk::{
+    BiomeSection, DecodedChunk, DecodedSection, BIOME_SECTION_VOLUME, BLOCK_SECTION_VOLUME,
+    MAX_BIOME_PALETTE, MAX_BLOCK_PALETTE,
 };
 pub use java_structure::{
     inspect_java_structure, read_java_structure, read_java_structure_unchecked,
