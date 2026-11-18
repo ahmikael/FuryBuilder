@@ -6,6 +6,8 @@ use project_store::{EditorState, ProjectStore};
 use serde::Serialize;
 use world_application::{AppError, WorldService};
 
+use crate::local_bridge::RendererBridge;
+
 /// Project namespace used by the local editor until a project is opened. The MCP bridge
 /// must supply this identifier explicitly instead of inferring context from a session.
 pub const LOCAL_PROJECT_ID: &str = "local-project";
@@ -66,6 +68,7 @@ impl ProjectSession {
 pub struct AppState {
     pub service: Mutex<WorldService>,
     pub projects: Mutex<ProjectSession>,
+    pub renderer: RendererBridge,
 }
 
 impl AppState {
@@ -73,6 +76,7 @@ impl AppState {
         Self {
             service: Mutex::new(WorldService::new()),
             projects: Mutex::new(ProjectSession::new(ProjectStore::new(projects_root))),
+            renderer: RendererBridge::default(),
         }
     }
 }

@@ -248,4 +248,51 @@ describe("MCP protocol negotiation", () => {
     });
     expect(cancelled.isError).toBe(true);
   });
+
+  it("registers the read-only tools and fails honestly without the desktop app", async () => {
+    const client = await connect(true);
+    const { tools } = await client.listTools();
+    const readTools = tools.filter((tool) =>
+      [
+        "world_info",
+        "get_block",
+        "inspect_region",
+        "get_region",
+        "get_camera",
+        "capture_viewport",
+      ].includes(tool.name),
+    );
+    expect(readTools.map((tool) => tool.name).sort()).toEqual([
+      "capture_viewport",
+      "get_block",
+      "get_camera",
+      "get_region",
+      "inspect_region",
+      "world_info",
+    ]);
+    for (const tool of readTools) {
+      expect(tool.annotations?.readOnlyHint).toBe(true);
+      expect(tool.annotations?.destructiveHint).toBe(false);
+    }
+
+    const missing = await client.callTool({
+      name: "world_info",
+      arguments: { project_id: "project-read" },
+    });
+    expect(missing.isError).toBe(true);
+    const text = missing.content.find((block) => block.type === "text");
+    expect(text?.type === "text" ? text.text : "").toMatch(
+      /^runtime_file_missing: FuryBuilder is not running/,
+    );
+
+    const block = await client.callTool({
+      name: "get_block",
+      arguments: {
+        project_id: "project-read",
+        dimension: "minecraft:overworld",
+        pos: { x: 0, y: 64, z: 0 },
+      },
+    });
+    expect(block.isError).toBe(true);
+  });
 });

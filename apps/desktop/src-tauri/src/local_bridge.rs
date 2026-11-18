@@ -6,17 +6,19 @@
 //! Every request is handled by the same `WorldService` used by the UI, so world data,
 //! revisions and policy stay authoritative in the Core.
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{self, BufRead, BufReader, Read, Write};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::mpsc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use interprocess::local_socket::prelude::*;
 use interprocess::local_socket::{GenericNamespaced, Listener, ListenerOptions, Stream};
 use interprocess::TryClone;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use world_application::{app_info, AppError, ErrorCode, Query};
 
@@ -24,11 +26,150 @@ use crate::state::{session_status, AppState, LOCAL_PROJECT_ID};
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const DISCOVERY_SCHEMA_VERSION: u32 = 1;
+pub const RENDERER_REQUEST_EVENT: &str = "furybuilder-renderer-request";
 
 const MAX_MESSAGE_BYTES: usize = 256 * 1024;
 const MAX_REQUEST_ID_BYTES: usize = 128;
 const DISCOVERY_DIR: &str = "mcp";
 const DISCOVERY_FILE: &str = "runtime.json";
+const MAX_CAPTURE_DATA_URL_BYTES: usize = 12 * 1024 * 1024;
+const MAX_RENDERER_RESPONSE_BYTES: usize = MAX_CAPTURE_DATA_URL_BYTES + 256 * 1024;
+const MAX_PENDING_RENDERER_REQUESTS: usize = 8;
+const RENDERER_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const PNG_DATA_URL_PREFIX: &str = "data:image/png;base64,";
+
+/// Pending viewport requests. The Tauri UI answers them through the
+/// `submit_renderer_response` command; a request that times out is removed so a late
+/// answer is rejected instead of reaching a different caller.
+#[derive(Debug, Default)]
+pub struct RendererBridge {
+    pending: std::sync::Mutex<HashMap<String, mpsc::Sender<Value>>>,
+    ready_at_ms: std::sync::Mutex<Option<u64>>,
+}
+
+impl RendererBridge {
+    pub fn mark_ready(&self) {
+        if let Ok(mut ready) = self.ready_at_ms.lock() {
+            *ready = Some(now_ms());
+        }
+    }
+
+    fn readiness(&self) -> Value {
+        match self.ready_at_ms.lock().ok().and_then(|ready| *ready) {
+            Some(ready_at_ms) => json!({ "listening": true, "readyAtMs": ready_at_ms }),
+            None => json!({ "listening": false, "readyAtMs": null }),
+        }
+    }
+
+    fn open(&self, request_id: &str) -> Result<mpsc::Receiver<Value>, AppError> {
+        let mut pending = self
+            .pending
+            .lock()
+            .map_err(|_| AppError::internal("renderer bridge lock poisoned"))?;
+        if pending.len() >= MAX_PENDING_RENDERER_REQUESTS {
+            return Err(AppError::new(
+                ErrorCode::LimitExceeded,
+                "too many viewport requests are already pending",
+            ));
+        }
+        let (sender, receiver) = mpsc::channel();
+        pending.insert(request_id.to_owned(), sender);
+        Ok(receiver)
+    }
+
+    fn complete(&self, request_id: &str, response: Value) -> bool {
+        let sender = self
+            .pending
+            .lock()
+            .ok()
+            .and_then(|mut pending| pending.remove(request_id));
+        sender.is_some_and(|sender| sender.send(response).is_ok())
+    }
+
+    fn cancel(&self, request_id: &str) {
+        if let Ok(mut pending) = self.pending.lock() {
+            pending.remove(request_id);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RendererRequestKind {
+    Camera,
+    Capture,
+}
+
+impl RendererRequestKind {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Camera => "camera",
+            Self::Capture => "capture",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RendererRequest {
+    pub kind: RendererRequestKind,
+    pub project_id: String,
+    pub dimension: Option<String>,
+}
+
+/// Sends a read-only viewport request and waits for the Tauri UI to answer it. The
+/// application tests substitute a fake so capture handling can be verified without a window.
+pub trait RendererRequester: Sync {
+    fn request(&self, state: &AppState, request: RendererRequest) -> Result<Value, AppError>;
+}
+
+/// Used when the local endpoint runs without a connected viewport (tests and headless
+/// restarts). It never returns fabricated camera or image data.
+#[cfg(test)]
+pub struct UnavailableRenderer;
+
+#[cfg(test)]
+impl RendererRequester for UnavailableRenderer {
+    fn request(&self, _state: &AppState, _request: RendererRequest) -> Result<Value, AppError> {
+        Err(AppError::new(
+            ErrorCode::BackendUnavailable,
+            "the editor viewport is not attached; open the FuryBuilder window and retry",
+        ))
+    }
+}
+
+struct TauriRendererRequester {
+    app: AppHandle,
+}
+
+impl RendererRequester for TauriRendererRequester {
+    fn request(&self, state: &AppState, request: RendererRequest) -> Result<Value, AppError> {
+        let request_id = Uuid::new_v4().simple().to_string();
+        let receiver = state.renderer.open(&request_id)?;
+        let payload = json!({
+            "requestId": request_id,
+            "kind": request.kind.as_str(),
+            "projectId": request.project_id,
+            "dimension": request.dimension,
+        });
+        if let Err(error) = self.app.emit(RENDERER_REQUEST_EVENT, payload) {
+            state.renderer.cancel(&request_id);
+            return Err(AppError::new(
+                ErrorCode::BackendUnavailable,
+                format!("the editor viewport is not available: {error}"),
+            ));
+        }
+        let response = match receiver.recv_timeout(RENDERER_REQUEST_TIMEOUT) {
+            Ok(response) => response,
+            Err(_) => {
+                state.renderer.cancel(&request_id);
+                return Err(AppError::new(
+                    ErrorCode::BackendUnavailable,
+                    "the editor viewport did not answer the request in time",
+                ));
+            }
+        };
+        Ok(response)
+    }
+}
 
 /// The file the bridge reads to discover the endpoint. It contains a secret token and is
 /// therefore written to the application data directory, never to logs or tool output.
@@ -125,6 +266,16 @@ struct QueryParams {
     query: Query,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RenderParams {
+    project_id: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
+    #[serde(default)]
+    dimension: Option<String>,
+}
+
 /// Starts the local endpoint. Failure is reported to the caller instead of panicking so a
 /// missing pipe cannot stop the editor from opening; the UI remains fully usable.
 pub fn start(app: AppHandle) -> io::Result<LocalBridgeRuntime> {
@@ -176,7 +327,8 @@ fn run_listener(listener: Listener, token: String, app: AppHandle) {
                     .name("furybuilder-mcp-request".to_owned())
                     .spawn(move || {
                         let state = app.state::<AppState>();
-                        if let Err(error) = serve_connection(stream, &token, &state) {
+                        let requester = TauriRendererRequester { app: app.clone() };
+                        if let Err(error) = serve_connection(stream, &token, &state, &requester) {
                             eprintln!("FuryBuilder MCP bridge request failed: {error}");
                         }
                     });
@@ -189,7 +341,12 @@ fn run_listener(listener: Listener, token: String, app: AppHandle) {
     }
 }
 
-fn serve_connection(stream: Stream, expected_token: &str, state: &AppState) -> io::Result<()> {
+fn serve_connection(
+    stream: Stream,
+    expected_token: &str,
+    state: &AppState,
+    requester: &dyn RendererRequester,
+) -> io::Result<()> {
     let mut reader = BufReader::new(stream.try_clone()?);
     let mut writer = stream;
 
@@ -212,7 +369,9 @@ fn serve_connection(stream: Stream, expected_token: &str, state: &AppState) -> i
             .ok()
             .and_then(|text| serde_json::from_str::<WireRequest>(text).ok())
         {
-            Some(request) => handle_request(state, expected_token, request),
+            Some(request) => {
+                handle_request_with_renderer(state, expected_token, request, requester)
+            }
             None => WireResponse::error(
                 "unknown".to_owned(),
                 AppError::invalid_argument("bridge request is not valid protocol JSON"),
@@ -227,7 +386,17 @@ fn serve_connection(stream: Stream, expected_token: &str, state: &AppState) -> i
     writer.flush()
 }
 
+#[cfg(test)]
 fn handle_request(state: &AppState, expected_token: &str, request: WireRequest) -> WireResponse {
+    handle_request_with_renderer(state, expected_token, request, &UnavailableRenderer)
+}
+
+fn handle_request_with_renderer(
+    state: &AppState,
+    expected_token: &str,
+    request: WireRequest,
+    requester: &dyn RendererRequester,
+) -> WireResponse {
     let id = request.id;
     if request.protocol != PROTOCOL_VERSION {
         return WireResponse::error(
@@ -257,13 +426,18 @@ fn handle_request(state: &AppState, expected_token: &str, request: WireRequest) 
         );
     }
 
-    match dispatch(state, &request.method, request.params) {
+    match dispatch(state, &request.method, request.params, requester) {
         Ok(result) => WireResponse::ok(id, result),
         Err(error) => WireResponse::error(id, error),
     }
 }
 
-fn dispatch(state: &AppState, method: &str, params: Value) -> Result<Value, AppError> {
+fn dispatch(
+    state: &AppState,
+    method: &str,
+    params: Value,
+    requester: &dyn RendererRequester,
+) -> Result<Value, AppError> {
     match method {
         "ping" => {
             let (project_id, project_name) = active_project_identity(state)?;
@@ -280,6 +454,7 @@ fn dispatch(state: &AppState, method: &str, params: Value) -> Result<Value, AppE
                     "transport": "local_socket",
                     "pid": std::process::id(),
                 },
+                "renderer": state.renderer.readiness(),
             }))
         }
         "world_info" => {
@@ -308,10 +483,236 @@ fn dispatch(state: &AppState, method: &str, params: Value) -> Result<Value, AppE
             require_revision(state, params.world_revision)?;
             to_value(session_status(state)?)
         }
+        "get_camera" => {
+            let params: RenderParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            request_renderer(state, requester, RendererRequestKind::Camera, params)
+        }
+        "capture_viewport" => {
+            let params: RenderParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            request_renderer(state, requester, RendererRequestKind::Capture, params)
+        }
         other => Err(AppError::invalid_argument(format!(
             "unknown bridge method `{other}`"
         ))),
     }
+}
+
+fn request_renderer(
+    state: &AppState,
+    requester: &dyn RendererRequester,
+    kind: RendererRequestKind,
+    params: RenderParams,
+) -> Result<Value, AppError> {
+    if let Some(dimension) = &params.dimension {
+        if dimension.trim().is_empty() || dimension.len() > MAX_REQUEST_ID_BYTES {
+            return Err(AppError::invalid_argument(
+                "dimension must be 1..=128 characters",
+            ));
+        }
+    }
+    let requested_dimension = params.dimension.clone();
+    let response = requester.request(
+        state,
+        RendererRequest {
+            kind,
+            project_id: params.project_id,
+            dimension: params.dimension,
+        },
+    )?;
+    let authoritative = world_revision(state)?;
+    finalize_renderer_response(
+        kind,
+        requested_dimension.as_deref(),
+        response,
+        authoritative,
+    )
+}
+
+/// Converts a UI answer into a result that never claims a newer revision than the
+/// renderer actually produced. `stale` is true when the authoritative world moved on.
+fn finalize_renderer_response(
+    kind: RendererRequestKind,
+    requested_dimension: Option<&str>,
+    response: Value,
+    authoritative_revision: u64,
+) -> Result<Value, AppError> {
+    if response.get("kind").and_then(Value::as_str) == Some("error") {
+        let code = response
+            .get("code")
+            .and_then(Value::as_str)
+            .unwrap_or("renderer_error");
+        let message = response
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or("the editor viewport rejected the request");
+        return Err(AppError::new(ErrorCode::InvalidArgument, message)
+            .with_details(json!({ "rendererCode": code })));
+    }
+    if response.get("kind").and_then(Value::as_str) != Some(kind.as_str()) {
+        return Err(AppError::invalid_argument(
+            "editor viewport returned an unexpected response kind",
+        ));
+    }
+    let dimension = response
+        .get("dimension")
+        .and_then(Value::as_str)
+        .ok_or_else(|| AppError::invalid_argument("editor viewport response has no dimension"))?;
+    if let Some(requested) = requested_dimension {
+        if requested != dimension {
+            return Err(AppError::new(
+                ErrorCode::NotFound,
+                format!(
+                    "requested dimension `{requested}` is not the dimension shown in the editor (`{dimension}`)"
+                ),
+            )
+            .with_details(json!({
+                "requestedDimension": requested,
+                "actualDimension": dimension,
+            })));
+        }
+    }
+    let render_revision = response
+        .get("worldRevision")
+        .and_then(Value::as_u64)
+        .ok_or_else(|| {
+            AppError::invalid_argument("editor viewport response has no world revision")
+        })?;
+
+    match kind {
+        RendererRequestKind::Camera => {
+            let pose = response.get("pose").ok_or_else(|| {
+                AppError::invalid_argument("editor viewport response has no camera pose")
+            })?;
+            validate_camera_pose(pose)?;
+            Ok(json!({
+                "kind": "camera",
+                "dimension": dimension,
+                "pose": pose,
+                "capturedAtMs": response.get("capturedAtMs").cloned().unwrap_or(Value::Null),
+                "verification": {
+                    "authoritativeRevision": authoritative_revision,
+                    "renderRevision": render_revision,
+                    "stale": render_revision != authoritative_revision,
+                },
+            }))
+        }
+        RendererRequestKind::Capture => {
+            let data_url = response
+                .get("dataUrl")
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    AppError::invalid_argument("editor viewport response has no image")
+                })?;
+            if !data_url.starts_with(PNG_DATA_URL_PREFIX) {
+                return Err(AppError::invalid_argument(
+                    "editor viewport image must be a PNG data URL",
+                ));
+            }
+            if data_url.len() > MAX_CAPTURE_DATA_URL_BYTES {
+                return Err(AppError::new(
+                    ErrorCode::LimitExceeded,
+                    "viewport capture exceeds the image size limit",
+                ));
+            }
+            let metadata = response.get("metadata").ok_or_else(|| {
+                AppError::invalid_argument("editor viewport response has no capture metadata")
+            })?;
+            if metadata.get("dimension").and_then(Value::as_str) != Some(dimension) {
+                return Err(AppError::invalid_argument(
+                    "capture metadata dimension does not match the image",
+                ));
+            }
+            let partial = metadata
+                .get("partial")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    AppError::invalid_argument("capture metadata has no partial flag")
+                })?;
+            if let Some(missing) = metadata.get("missingChunks") {
+                if !missing.is_array() {
+                    return Err(AppError::invalid_argument(
+                        "capture metadata missingChunks must be an array",
+                    ));
+                }
+            }
+            Ok(json!({
+                "kind": "capture",
+                "dataUrl": data_url,
+                "metadata": metadata,
+                "capturedAtMs": response.get("capturedAtMs").cloned().unwrap_or(Value::Null),
+                "verification": {
+                    "authoritativeRevision": authoritative_revision,
+                    "renderRevision": render_revision,
+                    "stale": render_revision != authoritative_revision,
+                    "partial": partial,
+                },
+            }))
+        }
+    }
+}
+
+fn validate_camera_pose(pose: &Value) -> Result<(), AppError> {
+    for field in ["position", "target"] {
+        let values = pose
+            .get(field)
+            .and_then(Value::as_array)
+            .ok_or_else(|| AppError::invalid_argument(format!("camera pose has no {field}")))?;
+        if values.len() != 3 || values.iter().any(|value| !value.is_number()) {
+            return Err(AppError::invalid_argument(format!(
+                "camera pose {field} must contain three numbers"
+            )));
+        }
+    }
+    for field in ["yaw", "pitch", "fov"] {
+        if !pose.get(field).is_some_and(Value::is_number) {
+            return Err(AppError::invalid_argument(format!(
+                "camera pose has no numeric {field}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Marks the mounted viewport listener as ready. `ping` exposes this so a client can
+/// distinguish "app started" from "a camera or capture request can be answered".
+#[tauri::command]
+pub fn renderer_ready(state: tauri::State<'_, AppState>) {
+    state.renderer.mark_ready();
+}
+
+/// Answers a pending viewport request. Called by the Tauri UI after it builds the
+/// response. Unknown or expired ids are rejected instead of being queued forever.
+#[tauri::command]
+pub fn submit_renderer_response(
+    state: tauri::State<'_, AppState>,
+    request_id: String,
+    response: Value,
+) -> Result<(), AppError> {
+    if request_id.trim().is_empty() || request_id.len() > MAX_REQUEST_ID_BYTES {
+        return Err(AppError::invalid_argument(
+            "renderer request id must be 1..=128 characters",
+        ));
+    }
+    let encoded = serde_json::to_vec(&response).map_err(|error| {
+        AppError::invalid_argument(format!("renderer response is not serializable: {error}"))
+    })?;
+    if encoded.len() > MAX_RENDERER_RESPONSE_BYTES {
+        return Err(AppError::new(
+            ErrorCode::LimitExceeded,
+            "renderer response exceeds the size limit",
+        ));
+    }
+    if !state.renderer.complete(&request_id, response) {
+        return Err(AppError::new(
+            ErrorCode::NotFound,
+            "renderer request is unknown or expired",
+        ));
+    }
+    Ok(())
 }
 
 fn parse_params<T: for<'de> Deserialize<'de>>(params: Value) -> Result<T, AppError> {
@@ -592,6 +993,199 @@ mod tests {
         );
     }
 
+    struct FakeRenderer {
+        camera: Value,
+        capture: Value,
+    }
+
+    impl RendererRequester for FakeRenderer {
+        fn request(&self, _state: &AppState, request: RendererRequest) -> Result<Value, AppError> {
+            Ok(match request.kind {
+                RendererRequestKind::Camera => self.camera.clone(),
+                RendererRequestKind::Capture => self.capture.clone(),
+            })
+        }
+    }
+
+    fn camera_response(revision: u64) -> Value {
+        json!({
+            "kind": "camera",
+            "dimension": "minecraft:overworld",
+            "worldRevision": revision,
+            "pose": {
+                "position": [1.0, 2.0, 3.0],
+                "target": [0.0, 0.0, 0.0],
+                "yaw": 0.5,
+                "pitch": -0.2,
+                "fov": 70.0
+            },
+            "capturedAtMs": 123
+        })
+    }
+
+    fn capture_response(revision: u64, dimension: &str, data_url: &str) -> Value {
+        json!({
+            "kind": "capture",
+            "dimension": dimension,
+            "worldRevision": revision,
+            "dataUrl": data_url,
+            "metadata": {
+                "dimension": dimension,
+                "worldRevision": revision,
+                "partial": false,
+                "missingChunks": []
+            },
+            "capturedAtMs": 124
+        })
+    }
+
+    #[test]
+    fn serves_camera_and_capture_with_explicit_revision_verification() {
+        let state = AppState::new(temp_root("renderer"));
+        let renderer = FakeRenderer {
+            camera: camera_response(0),
+            capture: capture_response(
+                7,
+                "minecraft:overworld",
+                &format!("{PNG_DATA_URL_PREFIX}iVBORw0KGgo="),
+            ),
+        };
+
+        let camera = handle_request_with_renderer(
+            &state,
+            "token",
+            request(
+                "req-camera",
+                "token",
+                "get_camera",
+                json!({ "projectId": LOCAL_PROJECT_ID }),
+            ),
+            &renderer,
+        );
+        assert!(camera.ok, "{:?}", camera.error);
+        let camera = camera.result.expect("camera result");
+        assert_eq!(camera["pose"]["position"][1], 2.0);
+        assert_eq!(camera["verification"]["authoritativeRevision"], 0);
+        assert_eq!(camera["verification"]["stale"], false);
+
+        let capture = handle_request_with_renderer(
+            &state,
+            "token",
+            request(
+                "req-capture",
+                "token",
+                "capture_viewport",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "dimension": "minecraft:overworld"
+                }),
+            ),
+            &renderer,
+        );
+        assert!(capture.ok, "{:?}", capture.error);
+        let capture = capture.result.expect("capture result");
+        assert!(capture["dataUrl"]
+            .as_str()
+            .expect("data url")
+            .starts_with(PNG_DATA_URL_PREFIX));
+        assert_eq!(capture["verification"]["renderRevision"], 7);
+        assert_eq!(capture["verification"]["authoritativeRevision"], 0);
+        assert_eq!(capture["verification"]["stale"], true);
+        assert_eq!(capture["verification"]["partial"], false);
+    }
+
+    #[test]
+    fn refuses_a_capture_for_a_dimension_the_viewport_is_not_showing() {
+        let state = AppState::new(temp_root("renderer-dimension"));
+        let renderer = FakeRenderer {
+            camera: camera_response(0),
+            capture: capture_response(
+                0,
+                "minecraft:the_nether",
+                &format!("{PNG_DATA_URL_PREFIX}iVBORw0KGgo="),
+            ),
+        };
+        let response = handle_request_with_renderer(
+            &state,
+            "token",
+            request(
+                "req-dimension",
+                "token",
+                "capture_viewport",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "dimension": "minecraft:overworld"
+                }),
+            ),
+            &renderer,
+        );
+        assert!(!response.ok);
+        let error = response.error.expect("error");
+        assert_eq!(error.code, ErrorCode::NotFound);
+        assert_eq!(
+            error.details.expect("details")["actualDimension"],
+            "minecraft:the_nether"
+        );
+    }
+
+    #[test]
+    fn rejects_an_invalid_viewport_capture_instead_of_returning_it() {
+        let state = AppState::new(temp_root("renderer-invalid"));
+        let renderer = FakeRenderer {
+            camera: camera_response(0),
+            capture: capture_response(0, "minecraft:overworld", "https://example.invalid/a.png"),
+        };
+        let response = handle_request_with_renderer(
+            &state,
+            "token",
+            request(
+                "req-invalid",
+                "token",
+                "capture_viewport",
+                json!({ "projectId": LOCAL_PROJECT_ID }),
+            ),
+            &renderer,
+        );
+        assert!(!response.ok);
+        assert_eq!(
+            response.error.expect("error").code,
+            ErrorCode::InvalidArgument
+        );
+    }
+
+    #[test]
+    fn fails_honestly_when_no_viewport_is_attached() {
+        let state = AppState::new(temp_root("renderer-missing"));
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-missing",
+                "token",
+                "get_camera",
+                json!({ "projectId": LOCAL_PROJECT_ID }),
+            ),
+        );
+        assert!(!response.ok);
+        assert_eq!(
+            response.error.expect("error").code,
+            ErrorCode::BackendUnavailable
+        );
+    }
+
+    #[test]
+    fn renderer_bridge_accepts_one_answer_per_request_and_rejects_expired_ids() {
+        let bridge = RendererBridge::default();
+        assert_eq!(bridge.readiness()["listening"], false);
+        bridge.mark_ready();
+        assert_eq!(bridge.readiness()["listening"], true);
+        let receiver = bridge.open("known").expect("open");
+        assert!(bridge.complete("known", json!({ "ok": true })));
+        assert_eq!(receiver.recv().expect("response"), json!({ "ok": true }));
+        assert!(!bridge.complete("known", json!({ "ok": false })));
+        assert!(!bridge.complete("never-opened", json!({})));
+    }
+
     #[test]
     fn local_socket_round_trip_reaches_the_authoritative_service() {
         let state = AppState::new(temp_root("socket"));
@@ -617,7 +1211,7 @@ mod tests {
                     .next()
                     .expect("connection")
                     .expect("stream");
-                serve_connection(connection, "token", &state).expect("serve");
+                serve_connection(connection, "token", &state, &UnavailableRenderer).expect("serve");
             });
 
             let name = endpoint

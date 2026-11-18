@@ -42,7 +42,7 @@ function request(runtime, id, token, method, params = {}) {
     const timer = setTimeout(() => {
       socket.destroy();
       reject(new Error(`timeout for ${method}`));
-    }, 5000);
+    }, 20_000);
     socket.setEncoding("utf8");
     socket.once("connect", () => {
       socket.write(
@@ -97,12 +97,37 @@ console.log(
         projectId: ping.result.project.projectId,
         worldRevision: ping.result.project.worldRevision,
         appVersion: ping.result.app.version,
+        rendererListening: ping.result.renderer?.listening ?? null,
       },
     },
     null,
     2,
   ),
 );
+
+async function waitForRenderer(timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let last = null;
+  while (Date.now() < deadline) {
+    const probe = await request(
+      runtime,
+      `probe-renderer-${Date.now()}`,
+      runtime.token,
+      "ping",
+    );
+    if (probe.ok) {
+      last = probe.result.renderer ?? null;
+      if (last?.listening === true) return last;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  throw new Error(
+    `viewport listener did not become ready: ${JSON.stringify(last)}`,
+  );
+}
+
+const renderer = await waitForRenderer(60_000);
+console.log(JSON.stringify({ renderer }, null, 2));
 
 const world = await request(
   runtime,
@@ -127,6 +152,74 @@ console.log(
     2,
   ),
 );
+
+const camera = await request(
+  runtime,
+  "probe-camera",
+  runtime.token,
+  "get_camera",
+  {
+    projectId: ping.result.project.projectId,
+  },
+);
+if (!camera.ok) {
+  throw new Error(
+    `authorized get_camera failed: ${JSON.stringify(camera.error)}`,
+  );
+}
+console.log(
+  JSON.stringify(
+    {
+      camera: {
+        dimension: camera.result.dimension,
+        renderRevision: camera.result.verification.renderRevision,
+        authoritativeRevision: camera.result.verification.authoritativeRevision,
+        stale: camera.result.verification.stale,
+        position: camera.result.pose.position,
+      },
+    },
+    null,
+    2,
+  ),
+);
+
+const capture = await request(
+  runtime,
+  "probe-capture",
+  runtime.token,
+  "capture_viewport",
+  {
+    projectId: ping.result.project.projectId,
+    dimension: camera.result.dimension,
+  },
+);
+if (!capture.ok) {
+  throw new Error(
+    `authorized capture_viewport failed: ${JSON.stringify(capture.error)}`,
+  );
+}
+const captureBytes = Buffer.from(
+  capture.result.dataUrl.split(",")[1] ?? "",
+  "base64",
+);
+console.log(
+  JSON.stringify(
+    {
+      capture: {
+        isPng: capture.result.dataUrl.startsWith("data:image/png;base64,"),
+        pngSignature: captureBytes.subarray(0, 8).toString("hex"),
+        bytes: captureBytes.length,
+        partial: capture.result.verification.partial,
+        stale: capture.result.verification.stale,
+      },
+    },
+    null,
+    2,
+  ),
+);
+if (captureBytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a") {
+  throw new Error("capture does not contain a PNG signature");
+}
 
 const denied = await request(
   runtime,

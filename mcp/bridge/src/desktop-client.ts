@@ -14,7 +14,9 @@ export const DESKTOP_PROTOCOL_VERSION = 1;
 export const DESKTOP_DISCOVERY_SCHEMA_VERSION = 1;
 
 const MAX_RUNTIME_FILE_BYTES = 16 * 1024;
-const MAX_RESPONSE_BYTES = 1024 * 1024;
+// A PNG viewport capture is base64-encoded inside one JSON response. The Tauri endpoint
+// caps the image at 12 MiB; leave room for metadata and JSON quoting.
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 5_000;
 
 export interface DesktopRuntime {

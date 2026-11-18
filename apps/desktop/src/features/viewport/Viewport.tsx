@@ -40,6 +40,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { invokeCommand, isTauriRuntime } from "@/lib/ipc";
+import { listenForRendererRequests } from "@/lib/renderer-bridge";
 import type { WorldInfo } from "@/lib/contracts";
 import { createDemoSnapshot } from "@/renderer/demo";
 import { ViewportRenderer, type CameraMode } from "@/renderer/viewport-renderer";
@@ -296,6 +297,14 @@ export function Viewport() {
     }
 
     rendererRef.current = renderer;
+    let rendererDisposed = false;
+    let stopRendererRequests: (() => void) | null = null;
+    if (tauri) {
+      void listenForRendererRequests(renderer).then((stop) => {
+        if (rendererDisposed) stop();
+        else stopRendererRequests = stop;
+      });
+    }
     if (import.meta.env.DEV) {
       (window as unknown as { __furyViewport?: ViewportRenderer }).__furyViewport = renderer;
     }
@@ -324,6 +333,8 @@ export function Viewport() {
     viewportBus.addEventListener("reload-world", onReload);
 
     return () => {
+      rendererDisposed = true;
+      stopRendererRequests?.();
       viewportBus.removeEventListener("refresh-chunks", onRefresh);
       viewportBus.removeEventListener("reload-world", onReload);
       unsubscribe();

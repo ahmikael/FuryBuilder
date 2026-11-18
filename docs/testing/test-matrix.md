@@ -127,8 +127,9 @@ second format and is not enabled in the UI.
 | Real bridge process reaching a live local endpoint                 | `mcp/bridge/test/desktop-bridge.test.ts` (`bridge_info.desktop.connected`)                                                                                            |
 | Explicit `project_id` / `world_revision` / `job_id` contract       | `mcp/bridge/test/context.test.ts`; `local_bridge.rs` stale-revision test; `job-tools.ts` schema exposes `job_id`, `world_revision`, `idempotency_key`                 |
 | Explicit connection lifecycle                                      | `bridge_info.connection` (`instanceId`, `startedAtMs`, `ephemeral-stdio`, `expiresWithProcess`, state); asserted in `protocol.test.ts` and `desktop-bridge.test.ts`   |
-| Real Tauri process                                                 | `scripts/probe-local-bridge.mjs`; recorded in `docs/testing/mcp-compatibility.md` — authorized ping/world info, wrong token `unauthorized`, no token echo             |
+| Read-only tools: world info, block, region summary/blocks          | `mcp/bridge/src/read-tools.ts`; `protocol.test.ts`; live-endpoint reads in `desktop-bridge.test.ts`                                                                   |
+| Camera and real viewport screenshot                                | `apps/desktop/src/lib/renderer-bridge.test.ts`; Rust camera/capture/revision tests; real Tauri probe recorded in `docs/testing/mcp-compatibility.md`                  |
+| Real Tauri process                                                 | `scripts/probe-local-bridge.mjs`; recorded in `docs/testing/mcp-compatibility.md` — ping/world info/camera/PNG capture, wrong token `unauthorized`, no token echo     |
 
-Remaining M7 work: the read-only and bounded write MCP tool surface, the Core Job API,
-an external MCP client connection and the full AI build/verify/undo loop. No AI editing
-is claimed yet.
+Remaining M7 work: the bounded write MCP tool surface, the Core Job API, an external MCP
+client connection and the full AI build/verify/undo loop. No AI editing is claimed yet.

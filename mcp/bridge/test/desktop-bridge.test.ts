@@ -127,4 +127,140 @@ describe("MCP bridge to the authoritative desktop API", () => {
       active: { projectId: "project-live", worldRevision: 9 },
     });
   });
+
+  it("serves world, block, camera and capture reads from the live endpoint", async () => {
+    const harness = await startMockDesktop((request) => {
+      const method = request.method;
+      if (method === "world_info") {
+        return okResult(request, {
+          targetMinecraftVersion: "1.21.4",
+          revision: 9,
+          dimensions: ["minecraft:overworld"],
+        });
+      }
+      if (method === "query") {
+        return okResult(request, {
+          type: "block",
+          data: {
+            dimension: "minecraft:overworld",
+            pos: { x: 0, y: 64, z: 0 },
+            state: { name: "minecraft:stone", properties: {} },
+          },
+        });
+      }
+      if (method === "get_camera") {
+        return okResult(request, {
+          kind: "camera",
+          dimension: "minecraft:overworld",
+          worldRevision: 9,
+          pose: {
+            position: [1, 2, 3],
+            target: [0, 0, 0],
+            yaw: 0.5,
+            pitch: -0.2,
+            fov: 70,
+          },
+          capturedAtMs: 1_700_000_000_000,
+          verification: {
+            authoritativeRevision: 9,
+            renderRevision: 9,
+            stale: false,
+          },
+        });
+      }
+      if (method === "capture_viewport") {
+        return okResult(request, {
+          kind: "capture",
+          dataUrl: "data:image/png;base64,iVBORw0KGgo=",
+          metadata: {
+            schemaVersion: 1,
+            mode: "viewport",
+            dimension: "minecraft:overworld",
+            worldRevision: 9,
+            partial: true,
+            missingChunks: [{ x: 0, z: 0 }],
+          },
+          capturedAtMs: 1_700_000_000_000,
+          verification: {
+            authoritativeRevision: 9,
+            renderRevision: 9,
+            stale: false,
+            partial: true,
+          },
+        });
+      }
+      return okResult(request, {});
+    });
+    harnesses.push(harness);
+
+    const client = new Client(
+      { name: "desktop-read-client", version: "1.0.0" },
+      { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } },
+    );
+    clients.push(client);
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: ["--import", "tsx", "src/main.ts"],
+        cwd: bridgeRoot,
+        env: envWith(harness.runtimePath),
+        stderr: "pipe",
+      }),
+    );
+
+    const world = await client.callTool({
+      name: "world_info",
+      arguments: { project_id: "project-live", world_revision: 9 },
+    });
+    const worldText = world.content.find((block) => block.type === "text");
+    expect(worldText?.type === "text" ? worldText.text : "").toContain(
+      '"targetMinecraftVersion": "1.21.4"',
+    );
+
+    const block = await client.callTool({
+      name: "get_block",
+      arguments: {
+        project_id: "project-live",
+        dimension: "minecraft:overworld",
+        pos: { x: 0, y: 64, z: 0 },
+        world_revision: 9,
+      },
+    });
+    const blockText = block.content.find((entry) => entry.type === "text");
+    expect(blockText?.type === "text" ? blockText.text : "").toContain(
+      '"name": "minecraft:stone"',
+    );
+
+    const camera = await client.callTool({
+      name: "get_camera",
+      arguments: { project_id: "project-live" },
+    });
+    const cameraText = camera.content.find((entry) => entry.type === "text");
+    const cameraResult = JSON.parse(
+      cameraText?.type === "text" ? cameraText.text : "{}",
+    ) as { kind: string; pose: { fov: number } };
+    expect(cameraResult.kind).toBe("camera");
+    expect(cameraResult.pose.fov).toBe(70);
+
+    const capture = await client.callTool({
+      name: "capture_viewport",
+      arguments: {
+        project_id: "project-live",
+        dimension: "minecraft:overworld",
+        world_revision: 9,
+      },
+    });
+    const image = capture.content.find((entry) => entry.type === "image");
+    expect(image).toMatchObject({
+      type: "image",
+      mimeType: "image/png",
+      data: "iVBORw0KGgo=",
+    });
+    const captureText = capture.content.find((entry) => entry.type === "text");
+    const captureMetadata = JSON.parse(
+      captureText?.type === "text" ? captureText.text : "{}",
+    ) as { metadata: { partial: boolean }; verification: { partial: boolean } };
+    expect(captureMetadata.metadata.partial).toBe(true);
+    expect(captureMetadata.verification.partial).toBe(true);
+  });
 });

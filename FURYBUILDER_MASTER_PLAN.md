@@ -958,7 +958,7 @@ furybuilder/
 - [x] Определить поддержку MCP Tasks как **опцию** поверх внутреннего Job API; при отсутствии capability оставить совместимые start/status/cancel tools.
 - [x] Реализовать локальный stdio bridge к авторитетному Application API.
 - [x] Ввести `project_id`, `world_revision`, `job_id` и явный жизненный цикл подключений.
-- [ ] Зарегистрировать read-only tools: world info, inspect, get block/region, camera, screenshot.
+- [x] Зарегистрировать read-only tools: world info, inspect, get block/region, camera, screenshot.
 - [ ] Зарегистрировать безопасные write tools: preview, apply batch, undo, status.
 - [ ] Добавить схему доступа read-only/edit-in-selection/full-project, лимиты и подтверждения.
 - [ ] Привязать tool calls к истории операций и журналу действий.
