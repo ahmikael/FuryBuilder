@@ -44,3 +44,48 @@ pub fn unsupported(detail: impl Into<String>) -> RuntimeError {
         detail: detail.into(),
     }
 }
+
+#[derive(Debug, Error)]
+pub enum ServerError {
+    #[error("server JAR files cannot be read or written: {0}")]
+    Io(String),
+    #[error("server JAR request is not valid: {0}")]
+    Invalid(String),
+    #[error("server JAR does not match Minecraft {target}: {detail}")]
+    Unsupported {
+        target: &'static str,
+        detail: String,
+    },
+    #[error("server JAR network request failed: {0}")]
+    Network(String),
+    #[error("server JAR failed an integrity check: {0}")]
+    Checksum(String),
+    #[error("server JAR is not a safe or supported Minecraft server archive: {0}")]
+    Archive(String),
+    #[error("server JAR limit exceeded: {0}")]
+    Limit(String),
+    #[error("server JAR cache is busy: {0}")]
+    Busy(String),
+}
+
+impl ServerError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            ServerError::Io(_) => "io_error",
+            ServerError::Invalid(_) => "invalid_argument",
+            ServerError::Unsupported { .. } => "unsupported_version",
+            ServerError::Network(_) => "network_error",
+            ServerError::Checksum(_) => "checksum_mismatch",
+            ServerError::Archive(_) => "archive_error",
+            ServerError::Limit(_) => "limit_exceeded",
+            ServerError::Busy(_) => "busy",
+        }
+    }
+}
+
+pub fn unsupported_server(detail: impl Into<String>) -> ServerError {
+    ServerError::Unsupported {
+        target: crate::types::TARGET_MINECRAFT_VERSION,
+        detail: detail.into(),
+    }
+}

@@ -142,5 +142,7 @@ because it explicitly calls the install command.
 - There is no resume for an interrupted download and no automatic update of an installed
   runtime. Re-run the explicit download to install a newer Temurin build.
 - This task does **not** download `server.jar`, accept the Minecraft EULA or start a server;
-  those belong to M9.4–M9.5.
+  M9.4 now provides the verified official `server.jar` cache separately (see
+  `docs/runtime/minecraft-server-jar.md`); EULA acceptance and the server process remain
+  M9.5 work.
 - No global installation, `PATH` edit, registry edit or background provisioning is done.

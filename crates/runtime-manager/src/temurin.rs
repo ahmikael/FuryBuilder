@@ -1,20 +1,19 @@
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
-use std::time::Duration;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use crate::error::RuntimeError;
 use crate::managed::hex;
+use crate::net;
 use crate::types::{RuntimeProgress, RuntimeReleaseInfo};
 
 const API_BASE: &str = "https://api.adoptium.net/v3";
 const MAX_METADATA_BYTES: u64 = 1024 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 200 * 1024 * 1024;
 const MIN_DOWNLOAD_BYTES: u64 = 10 * 1024 * 1024;
-const MAX_REDIRECTS: usize = 5;
 
 const DOWNLOAD_HOSTS: &[&str] = &[
     "github.com",
@@ -67,12 +66,7 @@ impl Default for AdoptiumClient {
 
 impl AdoptiumClient {
     pub fn new() -> Self {
-        let agent = ureq::AgentBuilder::new()
-            .timeout_connect(Duration::from_secs(15))
-            .timeout_read(Duration::from_secs(120))
-            .redirects(0)
-            .user_agent("FuryBuilder/0.1 (managed Java runtime provisioning)")
-            .build();
+        let agent = net::agent();
         Self { agent }
     }
 
@@ -113,7 +107,8 @@ impl AdoptiumClient {
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<(), RuntimeError> {
         require_download_url(&release.download_url)?;
-        let response = open(&self.agent, &release.download_url)?;
+        let response = net::open(&self.agent, &release.download_url, DOWNLOAD_HOSTS)
+            .map_err(RuntimeError::Network)?;
         if response.status() != 200 {
             return Err(RuntimeError::Network(format!(
                 "download returned HTTP {}",
@@ -296,67 +291,12 @@ pub fn parse_latest_release(
     })
 }
 
-fn host_of(url: &str) -> Option<&str> {
-    let rest = url.strip_prefix("https://")?;
-    let authority = rest.split('/').next()?;
-    if authority.contains('@') {
-        return None;
-    }
-    let host = authority.split(':').next()?;
-    (!host.is_empty()).then_some(host)
-}
-
 fn require_download_url(url: &str) -> Result<(), RuntimeError> {
-    if !url.starts_with("https://") {
-        return Err(RuntimeError::Network(format!(
-            "refusing non-HTTPS runtime URL: {url}"
-        )));
-    }
-    let host =
-        host_of(url).ok_or_else(|| RuntimeError::Network(format!("invalid runtime URL: {url}")))?;
-    let allowed = DOWNLOAD_HOSTS
-        .iter()
-        .any(|candidate| host.eq_ignore_ascii_case(candidate));
-    if !allowed {
-        return Err(RuntimeError::Network(format!(
-            "refusing runtime URL from untrusted host {host}"
-        )));
-    }
-    Ok(())
-}
-
-fn open(agent: &ureq::Agent, url: &str) -> Result<ureq::Response, RuntimeError> {
-    let mut current = url.to_owned();
-    for _ in 0..=MAX_REDIRECTS {
-        require_download_url(&current)?;
-        let response = agent.get(&current).call().map_err(map_http_error)?;
-        let status = response.status();
-        if matches!(status, 301 | 302 | 303 | 307 | 308) {
-            let location = response
-                .header("location")
-                .ok_or_else(|| RuntimeError::Network("redirect without Location".to_owned()))?;
-            if !location.starts_with("https://") {
-                return Err(RuntimeError::Network(
-                    "redirect to a non-HTTPS URL was refused".to_owned(),
-                ));
-            }
-            current = location.to_owned();
-            continue;
-        }
-        return Ok(response);
-    }
-    Err(RuntimeError::Network(
-        "too many runtime download redirects".to_owned(),
-    ))
+    net::check_url(url, DOWNLOAD_HOSTS).map_err(RuntimeError::Network)
 }
 
 fn map_http_error(error: ureq::Error) -> RuntimeError {
-    match error {
-        ureq::Error::Status(status, _) => {
-            RuntimeError::Network(format!("HTTP {status} from the runtime source"))
-        }
-        ureq::Error::Transport(error) => RuntimeError::Network(error.to_string()),
-    }
+    RuntimeError::Network(net::http_error(error))
 }
 
 /// Removes a partially downloaded archive after a failed install.

@@ -211,7 +211,7 @@ export function MinecraftAssetsSection() {
     : "Minecraft 1.21.4 · DV 4189 · pack format 46";
 
   return (
-    <section className="space-y-2">
+    <section className="min-w-0 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <h3 className="text-[11px] font-semibold tracking-wide uppercase">Minecraft assets</h3>
         <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">

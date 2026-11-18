@@ -39,6 +39,10 @@ pub fn run() {
                 data_dir.join("runtime.json"),
                 data_dir.join("runtimes").join("java"),
             ));
+            app.manage(runtime_manager::ServerManager::new(
+                data_dir.join("server.json"),
+                data_dir.join("servers"),
+            ));
             match local_bridge::start(app.handle().clone(), data_dir.clone()) {
                 Ok(runtime) => {
                     app.manage(runtime);
@@ -108,6 +112,14 @@ pub fn run() {
             commands::runtime_install_temurin,
             commands::runtime_managed_list,
             commands::runtime_clear_managed,
+            commands::server_discover,
+            commands::server_saved,
+            commands::server_select_jar,
+            commands::server_clear_selection,
+            commands::server_release,
+            commands::server_install,
+            commands::server_managed_list,
+            commands::server_clear_managed,
             local_bridge::renderer_ready,
             local_bridge::set_mcp_access,
             local_bridge::mcp_access_status,

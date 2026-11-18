@@ -1,0 +1,94 @@
+{
+  "tool": {
+    "name": "furybuilder-server-jar-ui",
+    "version": 1
+  },
+  "generatedAt": "2026-11-18T19:40:49.566Z",
+  "target": "Minecraft Java 1.21.4 / server.jar",
+  "executableSha256": "c361cabda9a59d7d5dfb6f580b892a4aa732498d2075686d879a4c8eb0a2a6a6",
+  "isolatedAppData": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata",
+  "mojang": {
+    "minecraftVersion": "1.21.4",
+    "versionType": "release",
+    "releaseTime": "2024-12-03T10:12:57+00:00",
+    "manifestUrl": "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json",
+    "versionJsonSha1": "c88775961e316f2be09859c54e13017660ee7770",
+    "downloadUrl": "https://piston-data.mojang.com/v1/objects/4707d00eb834b446575d89a61a11b5d548d8c001/server.jar",
+    "sha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
+    "size": 56880250,
+    "javaMajor": 21,
+    "expectedDataVersion": 4189,
+    "source": "Mojang version_manifest_v2"
+  },
+  "installed": {
+    "server": {
+      "version": "1.21.4",
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers\\minecraft-1.21.4",
+      "jarPath": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers\\minecraft-1.21.4\\server.jar",
+      "sha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
+      "size": 56880250,
+      "dataVersion": 4189,
+      "javaMajor": 21,
+      "releaseTime": "2024-12-03T10:12:57+00:00",
+      "sourceUrl": "https://piston-data.mojang.com/v1/objects/4707d00eb834b446575d89a61a11b5d548d8c001/server.jar",
+      "installedAt": 1795030840
+    },
+    "report": {
+      "path": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers\\minecraft-1.21.4\\server.jar",
+      "source": "managed",
+      "managed": true,
+      "ready": true,
+      "version": "1.21.4",
+      "dataVersion": 4189,
+      "javaMajor": 21,
+      "protocolVersion": 769,
+      "resourcePackFormat": 46,
+      "sha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
+      "size": 56880250,
+      "matchesOfficial": true,
+      "warnings": [],
+      "error": null
+    },
+    "selected": true,
+    "discoveredManaged": 1,
+    "selectedAfterInstall": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers\\minecraft-1.21.4\\server.jar",
+    "settingsSelectedPath": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers\\minecraft-1.21.4\\server.jar"
+  },
+  "settingsUi": {
+    "rendered": true,
+    "text": "MINECRAFT SERVER JAR\nMC 1.21.4 · DV 4189 · Java 21\n\nUsed only by the future Vanilla World generator. The official JAR is downloaded from Mojang's version manifest only after you ask for it. It is never bundled, executed here or covered by an automatically accepted EULA.\n\nSelected server JAR\nready\nmanaged cache\nVersion 1.21.4\nDataVersion 4189\nJava 21\nSize 54.2 MiB\nmatches Mojang\nC:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers\\minecraft-1.21.4\\server.jar\nSHA-1 4707d00eb834b446575d89a61a11b5d548d8c001\nReplace server.jar\nClear selection\nOfficial Mojang server JAR\n\nResolved from version_manifest_v2 → version JSON → downloads.server. SHA-1, size, internal version.json and the server entry point are checked before the JAR enters the cache.\n\nCheck official server JAR\nClear managed server JARs\n1 cached · 54.2 MiB\n1.21.4 · DV 4189 · 54.2 MiB · 4707d00eb834…\n\nChoose the official Minecraft 1.21.4 server.jar, or download it explicitly from Mojang's version manifest. Client JARs and other versions are rejected.\n\nClose\nClose"
+  },
+  "cleanup": {
+    "clearedReport": {
+      "root": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-server-smoke-SpEDdd\\appdata\\servers",
+      "servers": [],
+      "totalBytes": 0,
+      "problems": []
+    },
+    "discoveredManagedAfterClear": 0,
+    "selectedAfterClear": null,
+    "settingsSelectedAfterClear": null
+  },
+  "screenshot": {
+    "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-18-minecraft-server-jar.png",
+    "bytes": 399691
+  },
+  "consoleErrors": [],
+  "conclusions": {
+    "mojangMetadataIsExact": true,
+    "installedFromAnnouncedRelease": true,
+    "internalVersionVerified": true,
+    "managedJarLivesInIsolatedAppData": true,
+    "installedJarSelected": true,
+    "settingsUiShowsServerJar": true,
+    "managedCacheCleared": true,
+    "screenshotCaptured": true,
+    "noConsoleErrors": true
+  },
+  "limitations": [
+    "the official server JAR is downloaded only after this smoke explicitly invokes server_install",
+    "the JAR is verified but not executed; EULA acceptance and the isolated server process belong to M9.5",
+    "the managed JAR is removed at the end; no Mojang binary is stored in the repository",
+    "Empty Project and Import World are unaffected by this test"
+  ]
+}

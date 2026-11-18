@@ -92,6 +92,10 @@ asset falls back to a clearly marked checker without changing block data. M9.3 a
 report Java 21, a user can select `java.exe` manually, and an explicit opt-in can download
 the official Eclipse Temurin JRE from Adoptium with size/SHA-256 verification into a
 managed, clearable FuryBuilder cache. No global installation or environment change happens.
+M9.4 adds the official `server.jar` path: the exact 1.21.4 download is resolved through
+Mojang's version manifest, SHA-1/size verified, checked for `world_version` 4189 and a server
+entry point, and stored in a separate clearable cache; a local JAR can be selected manually
+and must pass the same internal checks.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -123,6 +127,8 @@ guarantee that its whole milestone is complete.
   render bundles, atlas caching and renderer limits.
 - `docs/runtime/java-runtime.md` - Java 21 probing, manual selection, opt-in Temurin
   download/checksum verification, managed cache cleanup and its evidence.
+- `docs/runtime/minecraft-server-jar.md` - official server JAR resolution through Mojang
+  metadata, SHA-1/version verification, manual selection, cache cleanup and its evidence.
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
@@ -162,8 +168,9 @@ guarantee that its whole milestone is complete.
   a hard crash can lose up to half a minute of edits.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user. M9.3
-  provides Java 21 discovery, manual selection and the managed Temurin download; the
-  server JAR and EULA flow are not implemented yet.
+  provides Java 21 discovery, manual selection and the managed Temurin download; M9.4
+  provides verified server JAR provisioning. EULA confirmation and the isolated server
+  process are not implemented yet.
 - Import of full Java world saves is read-only. M8 implements version/layout
   validation, region/NBT reading, block states and biomes, a byte-preserving copy
   of unchanged worlds, an in-memory block-edit overlay with a versioned JSON

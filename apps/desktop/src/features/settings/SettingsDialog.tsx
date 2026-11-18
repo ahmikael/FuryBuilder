@@ -11,6 +11,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { MinecraftAssetsSection } from "@/features/settings/MinecraftAssetsSection";
 import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
+import { MinecraftServerSection } from "@/features/settings/MinecraftServerSection";
 import type { BackendState } from "@/hooks/use-backend";
 import { MAX_UI_SCALE, MIN_UI_SCALE, type ThemeMode, useEditorStore } from "@/state/editor-store";
 import { cn } from "@/lib/utils";
@@ -35,7 +36,7 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-xl overflow-y-auto">
+      <DialogContent className="max-h-[88vh] max-w-xl overflow-x-hidden overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
@@ -112,6 +113,10 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
         <Separator />
 
         <JavaRuntimeSection />
+
+        <Separator />
+
+        <MinecraftServerSection />
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

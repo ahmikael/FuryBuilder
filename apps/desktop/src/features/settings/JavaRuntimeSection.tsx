@@ -236,7 +236,7 @@ export function JavaRuntimeSection() {
       : null;
 
   return (
-    <section className="space-y-2">
+    <section className="min-w-0 space-y-2">
       <div className="flex items-center justify-between">
         <h3 className="text-[11px] font-semibold tracking-wide uppercase">
           Java &amp; world generation
