@@ -17,19 +17,25 @@
 //! - symlinks at the selected root are reported instead of followed.
 
 mod archive;
+mod bundle;
 mod discovery;
 mod jar;
 mod resource_pack;
 mod settings;
 mod types;
 
+pub use bundle::{
+    AssetBundle, AssetBundleCache, AssetBundleService, BlockStateRequest, BundleBlock,
+    BundleElement, BundleElementRotation, BundleError, BundleFace, BundlePack, BundlePart,
+    BundleTexture, ASSET_BUNDLE_SCHEMA_VERSION, MAX_BLOCK_STATES,
+};
 pub use discovery::{
     default_minecraft_roots, discover_assets, discover_root, discover_roots, inspect_asset_path,
     DEFAULT_RESOURCE_PACK_FORMAT,
 };
 pub use settings::{
     AssetSettingsError, AssetSettingsStore, AssetSourceSetting, SavedAssetSource,
-    ASSET_SETTINGS_SCHEMA_VERSION,
+    ASSET_SETTINGS_SCHEMA_VERSION, MAX_RESOURCE_PACKS,
 };
 pub use types::{
     AssetDiscoveryReport, AssetPathReport, AssetSelectionKind, InstallationReport,

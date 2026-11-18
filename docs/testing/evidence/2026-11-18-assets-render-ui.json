@@ -1,0 +1,60 @@
+{
+  "tool": {
+    "name": "furybuilder-assets-render-ui",
+    "version": 1
+  },
+  "generatedAt": "2026-11-18T19:03:13.553Z",
+  "target": "Minecraft Java 1.21.4",
+  "executableSha256": "acb2e7aba1b0f12dff66fc7483e6ef8ad211859419d1a97a4b73a5d23370e7c5",
+  "launcherRoot": "D:\\mitrium-launcher\\data",
+  "isolatedAppData": "C:\\Users\\Mike\\AppData\\Local\\Temp\\fury-assets-render-0KoT2C\\appdata",
+  "savedSource": {
+    "kind": "minecraft_root",
+    "path": "D:\\mitrium-launcher\\data"
+  },
+  "world": {
+    "minecraftVersion": "1.21.4",
+    "dimensions": 3,
+    "revision": 1,
+    "chunkCount": 9,
+    "blockCount": 297719
+  },
+  "assetLabel": "12 models · 15 tex",
+  "screenshot": {
+    "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-18-assets-render-ui.png",
+    "bytes": 619016,
+    "width": 1200,
+    "height": 825,
+    "opaqueRatio": 1,
+    "meanLuminance": 61.1362104045951,
+    "standardDeviation": 46.08222079498165,
+    "uniqueColors": 863,
+    "greenRatio": 0.37647979797979797,
+    "blueRatio": 0.1027929292929293,
+    "warmRatio": 0.018343434343434342
+  },
+  "diagnostics": {
+    "href": "http://127.0.0.1:1420/",
+    "hasError": false,
+    "performanceText": "PERFORMANCE\n120 fps\nFrame\n7.5 ms\nDraw calls\n32\nTriangles\n62,668\nMeshes\n20\nGeometries\n30\nTextures\n1\nChunks\n9\nSections\n81\nAssets\n12 models · 15 tex\nView distance\n3×3\n5×5\n7×7\n9×9\nSave\nno project\nWASD fly · RMB look · open a project to edit · Ctrl+S save\nINSPECTOR\nBLOCK STATE\nminecraft:air\nNo block selected\nProperties\n—\nPosition\n—, —, —\nChunk\n—\nFace\n—\nSELECTION\nUse the Box select tool (5) and click two corners\nCopy\nPaste\nEDIT TARGET\nstone_bricks\nbrush\nUse picked as brush\nUse picked as source\nReplace source\nnot set\nPROJECT\nName\nNo project open\nFolder\n—\nMode\n—\nMinecraft\n1.21.4\nDataVersion\n4189\nSchema\n—\nDimension\nminecraft:overworld\nSource\nRuntime core only\nRevision\n1\nSaved revision\n—\nAutosave\n—\nState\nno project\nChunks\n9\nBlocks\n297,719\nAI ACTIONS\n\nThe same Operation API will be exposed to MCP tools after the bridge milestone. Every edit is revisioned, audited and undoable.\n\nValues shown here ar"
+  },
+  "conclusions": {
+    "assetSourceSaved": true,
+    "demoWorldLoaded": true,
+    "assetBundleActive": true,
+    "screenshotCaptured": true,
+    "sceneNotBlank": true,
+    "texturedReferenceBlocksVisible": true,
+    "noAssetError": true,
+    "isolatedSettings": true
+  },
+  "limitations": [
+    "the demo scene is FuryBuilder demo content, not a Minecraft world",
+    "the screenshot proves the WebGL scene and verified atlas are active; it is not a per-pixel vanilla parity test",
+    "animation frames after the first frame are not played back",
+    "vanilla fluids (water/lava) are rendered as a documented full-cube approximation with their real still/flow textures and a fixed tint",
+    "block states without properties use a deterministic default variant with a warning",
+    "the startup project overlay is hidden for the screenshot because it is not part of the renderer",
+    "the launcher root and the user's real app settings are never modified"
+  ]
+}

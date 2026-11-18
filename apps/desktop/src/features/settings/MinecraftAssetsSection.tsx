@@ -1,11 +1,14 @@
 import { useEffect, useState } from "react";
 import {
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   FolderOpen,
   HardDrive,
   Loader2,
   RefreshCw,
   ShieldAlert,
+  Trash2,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,11 +25,13 @@ import {
   discoverMinecraftAssets,
   inspectAssetPath,
   saveMinecraftAssets,
+  saveMinecraftPackStack,
   savedMinecraftAssets,
 } from "@/lib/assets-api";
 import { cn } from "@/lib/utils";
 
-type BusyAction = "load" | "detect" | "root" | "jar" | "pack-zip" | "pack-folder" | "clear" | null;
+type BusyAction =
+  "load" | "detect" | "root" | "jar" | "pack-zip" | "pack-folder" | "pack" | "clear" | null;
 
 export function MinecraftAssetsSection() {
   const [discovery, setDiscovery] = useState<AssetDiscoveryReport | null>(null);
@@ -142,6 +147,65 @@ export function MinecraftAssetsSection() {
     }
   }
 
+  async function writePacks(paths: string[], message: string) {
+    const next = await run("pack", () => saveMinecraftPackStack(paths));
+    if (next) {
+      setSaved(next);
+      setNotice(message);
+    }
+  }
+
+  async function addPack(kind: "zip" | "folder") {
+    const selected = await selectPath(
+      kind === "folder",
+      kind === "zip" ? "Select resource pack .zip" : "Select resource pack folder",
+      kind === "zip" ? [{ name: "Resource pack", extensions: ["zip"] }] : undefined,
+    );
+    if (!selected) return;
+    setBusy("pack");
+    setError(null);
+    setNotice(null);
+    try {
+      const report = await inspectAssetPath(selected);
+      if (!report.valid || report.kind !== "resource_pack") {
+        setError(
+          report.errors[0] ?? "The selection is not a compatible Minecraft 1.21.4 resource pack.",
+        );
+        return;
+      }
+      const current = saved?.packs.map((pack) => pack.path) ?? [];
+      if (current.some((path) => path.toLowerCase() === selected.toLowerCase())) {
+        setError("That resource pack is already in the stack.");
+        return;
+      }
+      const next = await saveMinecraftPackStack([selected, ...current]);
+      setSaved(next);
+      setNotice("Resource pack added at the highest priority.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function removePack(path: string) {
+    const paths = (saved?.packs ?? [])
+      .filter((pack) => pack.path !== path)
+      .map((pack) => pack.path);
+    await writePacks(paths, "Resource pack removed.");
+  }
+
+  async function movePack(index: number, offset: -1 | 1) {
+    const paths = (saved?.packs ?? []).map((pack) => pack.path);
+    const target = index + offset;
+    if (target < 0 || target >= paths.length) return;
+    const swapped = [...paths];
+    [swapped[index], swapped[target]] = [swapped[target]!, swapped[index]!];
+    await writePacks(swapped, "Resource pack priority updated.");
+  }
+
+  const packs = saved?.packs ?? [];
+
   const targetVersion = discovery
     ? `Minecraft ${discovery.targetMinecraftVersion} · DV ${discovery.targetDataVersion} · pack format ${discovery.targetResourcePackFormat}`
     : "Minecraft 1.21.4 · DV 4189 · pack format 46";
@@ -192,6 +256,122 @@ export function MinecraftAssetsSection() {
           No Minecraft asset source is selected. Placeholder textures remain active.
         </div>
       )}
+
+      <div className="space-y-1.5 rounded border border-border bg-card/40 p-2 text-[10px]">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[10px] font-semibold tracking-wide uppercase">
+            Resource pack stack
+          </span>
+          <span className="font-mono text-[9px] text-muted-foreground">
+            {packs.length}/16 · highest first
+          </span>
+        </div>
+        {packs.length === 0 ? (
+          <p className="text-[10px] text-muted-foreground">
+            No user packs. Verified assets from the selected source are used directly.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {packs.map((pack, index) => (
+              <div
+                key={pack.path}
+                className="rounded border border-border/70 bg-background/40 p-1.5"
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-mono text-[9px] text-muted-foreground">#{index + 1}</span>
+                  <span className="truncate font-medium" title={pack.name}>
+                    {pack.name}
+                  </span>
+                  <span
+                    className={cn(
+                      "ml-auto rounded px-1 py-0.5 font-mono text-[8px]",
+                      pack.status === "compatible"
+                        ? "bg-status-ok/15 text-status-ok"
+                        : "bg-status-warn/15 text-status-warn",
+                    )}
+                  >
+                    format {pack.packFormat ?? "?"} · {pack.status.replaceAll("_", " ")}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    aria-label={`Move ${pack.name} up`}
+                    disabled={index === 0 || busy !== null}
+                    onClick={() => void movePack(index, -1)}
+                  >
+                    <ArrowUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    aria-label={`Move ${pack.name} down`}
+                    disabled={index === packs.length - 1 || busy !== null}
+                    onClick={() => void movePack(index, 1)}
+                  >
+                    <ArrowDown />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 text-status-warn"
+                    aria-label={`Remove ${pack.name}`}
+                    disabled={busy !== null}
+                    onClick={() => void removePack(pack.path)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                <div
+                  className="truncate font-mono text-[9px] text-muted-foreground"
+                  title={pack.path}
+                >
+                  {compactPath(pack.path)}
+                </div>
+                {pack.errors.slice(0, 2).map((message) => (
+                  <div key={message} className="text-[9px] text-status-warn">
+                    {message}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void addPack("zip")}
+            disabled={busy !== null}
+          >
+            {busy === "pack" ? <Loader2 className="animate-spin" /> : <FolderOpen />} Add pack .zip
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void addPack("folder")}
+            disabled={busy !== null}
+          >
+            {busy === "pack" ? <Loader2 className="animate-spin" /> : <FolderOpen />} Add pack
+            folder
+          </Button>
+          {packs.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void writePacks([], "Resource pack stack cleared.")}
+              disabled={busy !== null}
+            >
+              <X /> Clear stack
+            </Button>
+          ) : null}
+        </div>
+        <p className="text-[9px] text-muted-foreground">
+          Packs override blockstates, models and textures by path. Files are read in memory;
+          traversal, symlinks and wrong pack formats are refused.
+        </p>
+      </div>
 
       {discovery ? (
         <div className="space-y-1.5">
@@ -274,8 +454,9 @@ export function MinecraftAssetsSection() {
 
       <p className="text-[9px] text-muted-foreground">
         JARs are pinned to the client SHA-1 declared by the launcher metadata. Archive entries are
-        validated in memory; traversal, symlinks and oversized packs are refused. Renderer
-        integration is the next M9 task.
+        validated in memory; traversal, symlinks and oversized packs are refused. Verified packs
+        feed the blockstate/model/texture renderer; malformed assets fall back to the missing
+        checker without changing block data.
       </p>
     </section>
   );

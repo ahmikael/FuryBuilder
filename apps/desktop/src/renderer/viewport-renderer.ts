@@ -24,7 +24,10 @@ import {
   Uint32BufferAttribute,
   WebGLRenderer,
 } from "three";
+import type { Texture } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { AssetModels } from "@/assets/model-assets";
+import type { AssetBundle } from "@/assets/render-types";
 import { createPlaceholderAtlasCanvas } from "@/renderer/assets";
 import { FlyCameraController } from "@/renderer/camera-controller";
 import { buildChunkMesh } from "@/renderer/mesher";
@@ -75,7 +78,8 @@ export class ViewportRenderer {
   private readonly renderer: WebGLRenderer;
   private readonly fly: FlyCameraController;
   private readonly orbit: OrbitControls;
-  private readonly atlas: CanvasTexture;
+  private atlas: Texture;
+  private assetModels: AssetModels | null = null;
   private readonly materials: Record<"opaque" | "cutout" | "translucent", MeshBasicMaterial>;
   private readonly chunkGroup = new Group();
   private readonly borderGroup = new Group();
@@ -247,6 +251,69 @@ export class ViewportRenderer {
 
   setCallbacks(callbacks: ViewportCallbacks): void {
     this.callbacks = callbacks;
+  }
+
+  /** True when a verified Minecraft asset bundle currently backs the chunk meshes. */
+  get hasAssetBundle(): boolean {
+    return this.assetModels !== null;
+  }
+
+  get assetStats() {
+    return this.assetModels?.stats ?? null;
+  }
+
+  /**
+   * Replaces the open placeholder atlas with a verified bundle and rebuilds loaded chunks.
+   * The atlas is decoded by the WebView; malformed PNG data rejects and the caller keeps
+   * the placeholder fallback.
+   */
+  async setAssetBundle(bundle: AssetBundle): Promise<void> {
+    const image = new Image();
+    image.src = `data:image/png;base64,${bundle.atlasPngBase64}`;
+    await image.decode();
+    const previous = this.atlas;
+    this.atlas = new CanvasTexture(image);
+    this.configureAtlas(this.atlas);
+    for (const material of Object.values(this.materials)) {
+      material.map = this.atlas;
+      material.needsUpdate = true;
+    }
+    previous.dispose();
+    this.assetModels = new AssetModels(bundle);
+    this.rebuildAllChunks();
+  }
+
+  /** Returns to the original open placeholder atlas without touching world data. */
+  clearAssetBundle(): void {
+    if (!this.assetModels) return;
+    const previous = this.atlas;
+    this.atlas = new CanvasTexture(createPlaceholderAtlasCanvas());
+    this.configureAtlas(this.atlas);
+    for (const material of Object.values(this.materials)) {
+      material.map = this.atlas;
+      material.needsUpdate = true;
+    }
+    previous.dispose();
+    this.assetModels = null;
+    this.rebuildAllChunks();
+  }
+
+  private configureAtlas(atlas: Texture): void {
+    atlas.colorSpace = SRGBColorSpace;
+    // Model and placeholder UVs use a top-left origin; CanvasTexture defaults to a
+    // bottom-left origin, which would mirror every tile into an unpainted atlas row.
+    atlas.flipY = false;
+    atlas.magFilter = NearestFilter;
+    atlas.minFilter = NearestFilter;
+    atlas.generateMipmaps = false;
+    atlas.needsUpdate = true;
+  }
+
+  private rebuildAllChunks(): void {
+    for (const chunk of this.world.loadedChunks()) {
+      this.rebuildChunk(chunk);
+    }
+    this.rebuildBorders();
   }
 
   setSnapshot(snapshot: RenderSnapshot): void {
@@ -507,6 +574,7 @@ export class ViewportRenderer {
     (this.ghostEdges.material as LineBasicMaterial).dispose();
     for (const material of Object.values(this.materials)) material.dispose();
     this.atlas.dispose();
+    this.assetModels = null;
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
@@ -526,7 +594,7 @@ export class ViewportRenderer {
     const key = chunkKey(pos);
     this.removeChunkMesh(key);
 
-    const data = buildChunkMesh(this.world, pos);
+    const data = buildChunkMesh(this.world, pos, this.assetModels);
     const meshes: Mesh[] = [];
     for (const category of ["opaque", "cutout", "translucent"] as const) {
       const buffers = data[category];

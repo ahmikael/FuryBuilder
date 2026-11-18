@@ -2,12 +2,12 @@
 //! application facade, returning structured `AppError` values.
 
 use asset_source::{
-    AssetDiscoveryReport, AssetPathReport, AssetSelectionKind, AssetSettingsStore,
-    AssetSourceSetting, SavedAssetSource,
+    AssetBundle, AssetBundleService, AssetDiscoveryReport, AssetPathReport, AssetSelectionKind,
+    AssetSettingsStore, AssetSourceSetting, BlockStateRequest, SavedAssetSource,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
     ErrorCode, HistoryState, HistorySummary, Operation, OperationRequest, OperationResult,
@@ -1348,6 +1348,7 @@ pub fn assets_saved_source(store: State<'_, AssetSettingsStore>) -> SavedAssetSo
 
 #[tauri::command]
 pub fn assets_save_source(
+    app: AppHandle,
     store: State<'_, AssetSettingsStore>,
     kind: String,
     path: String,
@@ -1388,14 +1389,91 @@ pub fn assets_save_source(
     }
     store
         .save(AssetSourceSetting { kind, path })
-        .map_err(|error| AppError::new(ErrorCode::Internal, error.to_string()))
+        .map_err(asset_settings_error)
+        .inspect(|_| {
+            let _ = app.emit("furybuilder-assets-changed", ());
+        })
 }
 
 #[tauri::command]
 pub fn assets_clear_source(
+    app: AppHandle,
+    store: State<'_, AssetSettingsStore>,
+) -> Result<SavedAssetSource, AppError> {
+    store.clear().map_err(asset_settings_error).inspect(|_| {
+        let _ = app.emit("furybuilder-assets-changed", ());
+    })
+}
+
+#[tauri::command]
+pub fn assets_save_pack_stack(
+    app: AppHandle,
+    store: State<'_, AssetSettingsStore>,
+    paths: Vec<String>,
+) -> Result<SavedAssetSource, AppError> {
+    store
+        .save_pack_stack(paths)
+        .map_err(asset_settings_error)
+        .inspect(|_| {
+            let _ = app.emit("furybuilder-assets-changed", ());
+        })
+}
+
+#[tauri::command]
+pub fn assets_clear_pack_stack(
+    app: AppHandle,
     store: State<'_, AssetSettingsStore>,
 ) -> Result<SavedAssetSource, AppError> {
     store
-        .clear()
-        .map_err(|error| AppError::new(ErrorCode::Internal, error.to_string()))
+        .clear_pack_stack()
+        .map_err(asset_settings_error)
+        .inspect(|_| {
+            let _ = app.emit("furybuilder-assets-changed", ());
+        })
+}
+
+#[tauri::command]
+pub fn assets_render_bundle(
+    store: State<'_, AssetSettingsStore>,
+    service: State<'_, AssetBundleService>,
+    block_states: Vec<BlockStateRequest>,
+    source_kind: Option<String>,
+    source_path: Option<String>,
+) -> Result<AssetBundle, AppError> {
+    let source = match (source_kind, source_path) {
+        (Some(kind), Some(path)) => Some(AssetSourceSetting { kind, path }),
+        (None, None) => store.saved_source().source,
+        _ => {
+            return Err(AppError::invalid_argument(
+                "sourceKind and sourcePath must be provided together",
+            ))
+        }
+    };
+    service
+        .bundle(source.as_ref(), &store.pack_stack(), &block_states)
+        .map_err(asset_bundle_error)
+}
+
+#[tauri::command]
+pub fn assets_clear_cache(service: State<'_, AssetBundleService>) {
+    service.clear_cache();
+}
+
+fn asset_settings_error(error: asset_source::AssetSettingsError) -> AppError {
+    let code = match error.code() {
+        "invalid_argument" => ErrorCode::InvalidArgument,
+        "unsupported_format" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+fn asset_bundle_error(error: asset_source::BundleError) -> AppError {
+    let code = match error.code() {
+        "invalid_argument" => ErrorCode::InvalidArgument,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "unsupported_format" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
 }

@@ -160,6 +160,29 @@ export class RenderWorld {
     return this.blockAt(pos)?.name ?? null;
   }
 
+  /** Unique non-air block states in loaded chunks, bounded for an asset bundle request. */
+  uniqueBlockStates(limit = 512): BlockState[] {
+    const seen = new Set<string>();
+    const states: BlockState[] = [];
+    for (const chunk of this.chunks.values()) {
+      for (const section of chunk.sections.values()) {
+        for (const state of section.palette) {
+          if (isAirName(state.name)) continue;
+          const properties = state.properties ?? {};
+          const key = `${state.name}[${Object.keys(properties)
+            .sort()
+            .map((name) => `${name}=${properties[name]}`)
+            .join(",")}]`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          states.push(state);
+          if (states.length >= limit) return states;
+        }
+      }
+    }
+    return states;
+  }
+
   /** Counts non-air blocks by state name across loaded chunks (for observation legends). */
   blockCountsByState(): Map<string, number> {
     const counts = new Map<string, number>();

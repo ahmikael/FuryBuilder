@@ -41,6 +41,8 @@ import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { invokeCommand, isTauriRuntime } from "@/lib/ipc";
 import { listenForRendererRequests } from "@/lib/renderer-bridge";
+import { loadAssetBundle } from "@/lib/assets-api";
+import { blockStateKey, type AssetStats } from "@/assets/model-assets";
 import type { WorldInfo } from "@/lib/contracts";
 import { createDemoSnapshot } from "@/renderer/demo";
 import { ViewportRenderer, type CameraMode } from "@/renderer/viewport-renderer";
@@ -222,6 +224,11 @@ export function Viewport() {
   const [captureImage, setCaptureImage] = useState<string | null>(null);
   const [goto, setGoto] = useState({ x: "0", y: "70", z: "0" });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [assetStats, setAssetStats] = useState<AssetStats | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
+  const [sceneEpoch, setSceneEpoch] = useState(0);
+  const assetSignature = useRef("");
+  const assetBusy = useRef(false);
   const tauri = isTauriRuntime();
   const project = useProjectStore((state) => state.current);
   const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
@@ -253,6 +260,36 @@ export function Viewport() {
   const canRedo = useHistoryStore((state) => state.canRedo);
   const projectDirty = projectIsDirty(project, revision);
   const autosaved = projectDirty && project?.autosavedRevision === revision;
+
+  const refreshAssets = useCallback(async (force = false): Promise<void> => {
+    const renderer = rendererRef.current;
+    if (!renderer || !isTauriRuntime() || assetBusy.current) return;
+    const states = renderer.world.uniqueBlockStates();
+    if (states.length === 0) return;
+    const signature = states.map(blockStateKey).sort().join("|");
+    if (!force && signature === assetSignature.current) return;
+    assetBusy.current = true;
+    try {
+      const bundle = await loadAssetBundle(
+        states.map((state) => ({
+          name: state.name,
+          properties: state.properties ?? {},
+        })),
+      );
+      await renderer.setAssetBundle(bundle);
+      assetSignature.current = signature;
+      setAssetStats(renderer.assetStats);
+      setAssetError(null);
+    } catch (cause) {
+      // Keep the documented placeholder fallback; never invent Minecraft textures.
+      assetSignature.current = signature;
+      renderer.clearAssetBundle();
+      setAssetStats(null);
+      setAssetError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      assetBusy.current = false;
+    }
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -319,6 +356,11 @@ export function Viewport() {
     const observer = new ResizeObserver(() => renderer.resize());
     observer.observe(container);
     void initialLoad(renderer).then(() => {
+      if (rendererRef.current !== renderer) return;
+      // React StrictMode mounts effects twice in development. The first renderer may
+      // finish loading after it was disposed, so only the current renderer may signal
+      // that a snapshot is ready for asset resolution.
+      setSceneEpoch((value) => value + 1);
       if (tauri) void useProjectStore.getState().resume();
     });
 
@@ -371,6 +413,35 @@ export function Viewport() {
   useEffect(() => {
     refreshGhost();
   }, [tool, brushRadius, boxSelection, selectedBlock, replaceFrom]);
+
+  useEffect(() => {
+    if (!tauri || status !== "ready") return;
+    void refreshAssets();
+  }, [tauri, status, revision, sceneEpoch, refreshAssets]);
+
+  useEffect(() => {
+    if (!tauri) return;
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+    void import("@tauri-apps/api/event")
+      .then(({ listen }) =>
+        listen("furybuilder-assets-changed", () => {
+          if (disposed) return;
+          assetSignature.current = "";
+          void refreshAssets(true);
+        }).then((stop) => {
+          if (disposed) stop();
+          else unlisten = stop;
+        }),
+      )
+      .catch(() => {
+        // The event API is only present inside Tauri; the placeholder stays usable.
+      });
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, [tauri, refreshAssets]);
 
   useEffect(
     () => () => {
@@ -944,6 +1015,18 @@ export function Viewport() {
             <span className="text-right">{metrics?.loadedChunks ?? "—"}</span>
             <span>Sections</span>
             <span className="text-right">{metrics?.renderedSections ?? "—"}</span>
+            <span>Assets</span>
+            <span
+              className={cn(
+                "text-right",
+                assetError ? "text-status-warn" : assetStats ? "text-status-ok" : "text-white/40",
+              )}
+              title={assetError ?? undefined}
+            >
+              {assetStats
+                ? `${assetStats.models} models · ${assetStats.textures} tex`
+                : "placeholder"}
+            </span>
             <span>View distance</span>
             <span className="text-right">
               <select

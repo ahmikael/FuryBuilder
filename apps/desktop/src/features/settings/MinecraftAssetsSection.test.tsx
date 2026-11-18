@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AssetDiscoveryReport,
   AssetPathReport,
+  ResourcePackReport,
   SavedAssetSource,
   VersionReport,
 } from "@/assets/types";
@@ -15,6 +16,8 @@ const api = vi.hoisted(() => ({
   saved: vi.fn(),
   save: vi.fn(),
   clear: vi.fn(),
+  savePacks: vi.fn(),
+  clearPacks: vi.fn(),
 }));
 
 const dialog = vi.hoisted(() => ({ open: vi.fn() }));
@@ -29,6 +32,8 @@ vi.mock("@/lib/assets-api", () => ({
   savedMinecraftAssets: api.saved,
   saveMinecraftAssets: api.save,
   clearMinecraftAssets: api.clear,
+  saveMinecraftPackStack: api.savePacks,
+  clearMinecraftPackStack: api.clearPacks,
 }));
 
 const targetVersion: VersionReport = {
@@ -83,6 +88,7 @@ const noSource: SavedAssetSource = {
   source: null,
   report: null,
   loadWarning: null,
+  packs: [],
 };
 
 describe("MinecraftAssetsSection", () => {
@@ -92,6 +98,8 @@ describe("MinecraftAssetsSection", () => {
     api.saved.mockReset();
     api.save.mockReset();
     api.clear.mockReset();
+    api.savePacks.mockReset();
+    api.clearPacks.mockReset();
     dialog.open.mockReset();
     api.saved.mockResolvedValue(noSource);
     api.discover.mockResolvedValue(discovery);
@@ -182,10 +190,110 @@ describe("MinecraftAssetsSection", () => {
       source: { kind: "minecraft_root", path: "C:\\gone" },
       report: invalidReport,
       loadWarning: null,
+      packs: [],
     });
     render(<MinecraftAssetsSection />);
 
     expect(await screen.findByText(/no longer valid/)).toBeInTheDocument();
     expect(screen.getAllByText(/path does not exist/).length).toBeGreaterThan(0);
+  });
+
+  it("adds a validated pack at the highest priority", async () => {
+    const user = userEvent.setup();
+    const pack: ResourcePackReport = {
+      path: "C:\\packs\\A.zip",
+      name: "Pack A",
+      kind: "zip",
+      bytes: 1024,
+      packFormat: 46,
+      supportedFormats: null,
+      description: null,
+      compatible: true,
+      hasBlockstates: true,
+      hasTextures: true,
+      entryCount: 3,
+      status: "compatible",
+      errors: [],
+      warnings: [],
+    };
+    const validReport: AssetPathReport = {
+      path: "C:\\packs\\A.zip",
+      kind: "resource_pack",
+      valid: true,
+      targetMatch: true,
+      installation: null,
+      version: null,
+      resourcePack: pack,
+      errors: [],
+      warnings: [],
+    };
+    dialog.open.mockResolvedValue("C:\\packs\\A.zip");
+    api.inspect.mockResolvedValue(validReport);
+    api.savePacks.mockResolvedValue({
+      source: null,
+      report: null,
+      loadWarning: null,
+      packs: [pack],
+    });
+    render(<MinecraftAssetsSection />);
+    await screen.findByText("target found");
+
+    await user.click(screen.getByRole("button", { name: /Add pack \.zip/ }));
+    await waitFor(() => expect(api.savePacks).toHaveBeenCalledWith(["C:\\packs\\A.zip"]));
+    expect(
+      await screen.findByText("Resource pack added at the highest priority."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Pack A")).toBeInTheDocument();
+    expect(screen.getByText(/format 46 · compatible/)).toBeInTheDocument();
+  });
+
+  it("reorders and removes packs through the saved stack API", async () => {
+    const user = userEvent.setup();
+    const pack = (name: string, path: string): ResourcePackReport => ({
+      path,
+      name,
+      kind: "zip",
+      bytes: 1024,
+      packFormat: 46,
+      supportedFormats: null,
+      description: null,
+      compatible: true,
+      hasBlockstates: true,
+      hasTextures: true,
+      entryCount: 3,
+      status: "compatible",
+      errors: [],
+      warnings: [],
+    });
+    const first = pack("Pack A", "C:\\packs\\A.zip");
+    const second = pack("Pack B", "C:\\packs\\B.zip");
+    api.saved.mockResolvedValue({
+      source: { kind: "minecraft_root", path: "C:\\mc" },
+      report: null,
+      loadWarning: null,
+      packs: [first, second],
+    });
+    api.savePacks.mockResolvedValue({
+      source: null,
+      report: null,
+      loadWarning: null,
+      packs: [second, first],
+    });
+    render(<MinecraftAssetsSection />);
+    await screen.findByText("Pack A");
+
+    await user.click(screen.getByRole("button", { name: "Move Pack A down" }));
+    await waitFor(() =>
+      expect(api.savePacks).toHaveBeenCalledWith(["C:\\packs\\B.zip", "C:\\packs\\A.zip"]),
+    );
+
+    api.savePacks.mockResolvedValue({
+      source: null,
+      report: null,
+      loadWarning: null,
+      packs: [second],
+    });
+    await user.click(screen.getByRole("button", { name: "Remove Pack A" }));
+    await waitFor(() => expect(api.savePacks).toHaveBeenLastCalledWith(["C:\\packs\\B.zip"]));
   });
 });

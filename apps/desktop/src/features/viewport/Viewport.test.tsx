@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => {
   const instances: FakeRenderer[] = [];
   class ViewportRenderer {
     setSnapshot = vi.fn();
+    world = { uniqueBlockStates: vi.fn(() => []) };
     setGridVisible = vi.fn();
     setChunkBordersVisible = vi.fn();
     setSelectionBox = vi.fn();

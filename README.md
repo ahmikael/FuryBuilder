@@ -80,13 +80,14 @@ in the same server, verifies the edited and neighbor blocks and decodes the save
 result again. The Import World wizard now shows a machine-readable
 read/edit/write/passthrough support matrix by version and data category.
 Placing block-entity blocks and POI updates are still not semantically supported.
-Client rendering is still a manual check. M9.1 adds read-only Minecraft asset
-discovery: conventional launcher roots and launcher profiles are scanned for
-installed versions, `settings → Minecraft assets` accepts a manual `.minecraft`
-folder, client JAR or resource pack, and a 1.21.4 client is accepted only after
-its declared SHA-1, internal `version.json` and `DataVersion` 4189 agree.
-Resource packs are validated as untrusted archives. They are not rendered yet;
-the renderer still ships placeholder textures until M9.2.
+Client rendering is no longer only a manual placeholder check. M9.1 adds read-only
+Minecraft asset discovery: conventional launcher roots and launcher profiles are scanned
+for installed versions, `settings → Minecraft assets` accepts a manual `.minecraft`
+folder, client JAR or resource pack, and a 1.21.4 client is accepted only after its
+declared SHA-1, internal `version.json` and `DataVersion` 4189 agree. M9.2 resolves
+blockstates, parent models and PNG textures from that verified source, applies an ordered
+resource-pack stack, builds a cached atlas and renders real reference blocks; a missing
+asset falls back to a clearly marked checker without changing block data.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -113,8 +114,9 @@ guarantee that its whole milestone is complete.
   directory, layout matrix and passthrough refusal boundaries.
 - `docs/formats/support-matrix.md` — read/edit/write/passthrough/unsupported
   status by version and data category, also shown in the Import World wizard.
-- `docs/assets/minecraft-assets.md` — launcher discovery, JAR checksum/version
-  verification, manual selection and resource pack validation.
+- `docs/assets/minecraft-assets.md` - launcher discovery, JAR checksum/version
+  verification, manual selection, resource-pack validation, blockstate/model/texture
+  render bundles, atlas caching and renderer limits.
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
@@ -123,10 +125,12 @@ guarantee that its whole milestone is complete.
 
 ## Known limitations (early development)
 
-- Minecraft game assets are not bundled. The renderer ships original placeholder textures
-  and approximate shapes for slabs/stairs/torches. `Settings → Minecraft assets` can
-  detect and validate an installed 1.21.4 client and resource packs, but M9.2 has not
-  connected them to the renderer yet.
+- Minecraft game assets are not bundled. Without a verified 1.21.4 source the renderer
+  ships original placeholder textures and approximate shapes for slabs/stairs/torches.
+  With a verified source, blockstates/models/textures and up to 16 ordered resource packs
+  are used; missing assets show the missing checker. Fluid flow, animation timing,
+  `uvlock`, element `rescale`, builtin entity models and biome-accurate tints are not
+  implemented yet. See `docs/assets/minecraft-assets.md`.
 - Projects live in the app-data directory. `Empty Project`, a flat base and `Import World`
   (classic Java 1.21.4) are available. Automatic vanilla world generation
   (`Vanilla World`) is a later M9 task and is not enabled.
@@ -143,8 +147,8 @@ guarantee that its whole milestone is complete.
   folder. Split 26.1+, mixed and legacy `.mcr` layouts are detected but not supported.
 - Minecraft asset discovery targets conventional launcher roots plus launcher profile
   `gameDir` entries. Custom launchers are handled through manual selection. Modded
-  client profiles are reported but never used as vanilla assets, and resource packs are
-  validated but not yet applied by the renderer.
+  client profiles are reported but never used as vanilla assets. Resource packs are
+  validated as untrusted archives and applied only in the saved priority order.
 - Structure import/export is currently Java structure `.nbt` only. It refuses entities,
   block entities and unknown tags; `.schem` support is not available yet.
 - Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.

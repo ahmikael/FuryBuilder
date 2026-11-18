@@ -124,4 +124,6 @@ export interface SavedAssetSource {
   source: AssetSourceSetting | null;
   report: AssetPathReport | null;
   loadWarning: string | null;
+  /** Saved packs in priority order, highest priority first. */
+  packs: ResourcePackReport[];
 }

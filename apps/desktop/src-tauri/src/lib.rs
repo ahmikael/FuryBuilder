@@ -20,6 +20,7 @@ pub fn run() {
             app.manage(asset_source::AssetSettingsStore::new(
                 data_dir.join("assets.json"),
             ));
+            app.manage(asset_source::AssetBundleService::new());
             match local_bridge::start(app.handle().clone()) {
                 Ok(runtime) => {
                     app.manage(runtime);
@@ -77,6 +78,10 @@ pub fn run() {
             commands::assets_saved_source,
             commands::assets_save_source,
             commands::assets_clear_source,
+            commands::assets_save_pack_stack,
+            commands::assets_clear_pack_stack,
+            commands::assets_render_bundle,
+            commands::assets_clear_cache,
             local_bridge::renderer_ready,
             local_bridge::set_mcp_access,
             local_bridge::mcp_access_status,

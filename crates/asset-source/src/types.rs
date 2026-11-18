@@ -79,6 +79,23 @@ pub enum VersionStatus {
     InvalidClientJar,
 }
 
+impl VersionStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            VersionStatus::Compatible => "compatible",
+            VersionStatus::CompatibleUnverified => "compatible_unverified",
+            VersionStatus::WrongVersion => "wrong_version",
+            VersionStatus::Modded => "modded",
+            VersionStatus::MissingMetadata => "missing_metadata",
+            VersionStatus::MissingClientJar => "missing_client_jar",
+            VersionStatus::ChecksumMismatch => "checksum_mismatch",
+            VersionStatus::WorldVersionMismatch => "world_version_mismatch",
+            VersionStatus::InvalidMetadata => "invalid_metadata",
+            VersionStatus::InvalidClientJar => "invalid_client_jar",
+        }
+    }
+}
+
 /// One installed Minecraft version, described without launching it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
