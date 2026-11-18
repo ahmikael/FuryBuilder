@@ -6,7 +6,7 @@ import { createFuryBuilderServer } from "./server.js";
 // stdout is the JSON-RPC channel; diagnostics must go to stderr only.
 console.error("FuryBuilder MCP bridge listening on stdio");
 
-const handle = serveStdio(createFuryBuilderServer, {
+const handle = serveStdio(() => createFuryBuilderServer(), {
   legacy: "serve",
   onerror: (error) => {
     console.error(`FuryBuilder MCP bridge error: ${error.message}`);

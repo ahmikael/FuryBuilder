@@ -62,6 +62,16 @@ describe("MCP protocol negotiation", () => {
         contextPolicy: string;
         protocolTarget: string;
         optionalExtensions: unknown;
+        jobs: {
+          backendConnected: boolean;
+          fallbackTools: string[];
+          tasks: {
+            mode: string;
+            reason: string;
+            extensionAdvertised: boolean;
+            bridgeImplementsTasks: boolean;
+          };
+        };
       };
       request: {
         projectId: string;
@@ -74,6 +84,16 @@ describe("MCP protocol negotiation", () => {
     expect(info.bridge.optionalExtensions).toEqual({
       tasks: false,
       apps: false,
+    });
+    expect(info.bridge.jobs).toMatchObject({
+      backendConnected: false,
+      fallbackTools: ["start_job", "get_job_status", "cancel_job"],
+      tasks: {
+        mode: "fallback",
+        reason: "client_did_not_declare_tasks",
+        extensionAdvertised: false,
+        bridgeImplementsTasks: false,
+      },
     });
     expect(info.request).toMatchObject({
       projectId: "project-modern",
@@ -129,5 +149,45 @@ describe("MCP protocol negotiation", () => {
 
     expect(first.request.projectId).toBe("project-one");
     expect(second.request.projectId).toBe("project-two");
+  });
+
+  it("keeps compatible job tools without inventing a job when the Job API is absent", async () => {
+    const client = await connect(false);
+    const { tools } = await client.listTools();
+    const names = tools.map((tool) => tool.name);
+    expect(names).toEqual(
+      expect.arrayContaining(["start_job", "get_job_status", "cancel_job"]),
+    );
+
+    const started = await client.callTool({
+      name: "start_job",
+      arguments: {
+        project_id: "project-jobs",
+        kind: "structure_export",
+        parameters: {},
+        idempotency_key: "job-1",
+      },
+    });
+    expect(started.isError).toBe(true);
+    const startText = started.content.find((block) => block.type === "text");
+    expect(startText?.type === "text" ? startText.text : "").toMatch(
+      /^job_api_unavailable:/,
+    );
+
+    const status = await client.callTool({
+      name: "get_job_status",
+      arguments: { project_id: "project-jobs", job_id: "job-1" },
+    });
+    expect(status.isError).toBe(true);
+    const statusText = status.content.find((block) => block.type === "text");
+    expect(statusText?.type === "text" ? statusText.text : "").toMatch(
+      /^job_api_unavailable:/,
+    );
+
+    const cancelled = await client.callTool({
+      name: "cancel_job",
+      arguments: { project_id: "project-jobs", job_id: "job-1" },
+    });
+    expect(cancelled.isError).toBe(true);
   });
 });

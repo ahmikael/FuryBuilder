@@ -14,6 +14,23 @@ connection is still outstanding.
 | Transport           | stdio only; no network listener                                   |
 | Context policy      | explicit per request; no project/selection/job in transport state |
 | Optional extensions | Tasks and Apps are **not** advertised yet                         |
+| Job tools           | `start_job`, `get_job_status`, `cancel_job` always registered     |
+
+## Tasks option and fallback
+
+Tasks remains an explicit option, never an assumption. The bridge evaluates three
+independent conditions for each request:
+
+1. the client's advertised capabilities include `tasks`;
+2. the bridge implements the extension (currently `false`);
+3. the authoritative Core Job API is connected (currently `false`).
+
+Only when all three hold may the extension be advertised. In every other case the
+response reports `mode: "fallback"` with a specific reason
+(`client_did_not_declare_tasks`, `tasks_not_implemented` or
+`job_backend_unavailable`), and callers use the ordinary job tools. Those tools
+currently return the stable `job_api_unavailable` error instead of inventing a job,
+progress or result. This is a deliberate refusal, not a simulated success.
 
 ## Automated evidence
 
@@ -22,16 +39,21 @@ Command:
 ```powershell
 pnpm --filter @furybuilder/mcp-bridge test
 pnpm --filter @furybuilder/mcp-bridge typecheck
+pnpm --filter @furybuilder/mcp-bridge build
 ```
 
-Observed: 3 tests passed, typecheck clean. The tests spawn the real bridge over
-stdio with `tsx src/main.ts` and use `@modelcontextprotocol/client` 2.4.0:
+Observed: 8 tests passed, typecheck and build clean. The tests spawn the real bridge
+over stdio with `tsx src/main.ts` and use `@modelcontextprotocol/client` 2.4.0:
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
   and receives an explicit project/revision response;
 - a default client connects through the legacy lifecycle and calls the same tool;
 - a call without `project_id` is rejected, and consecutive calls with different
-  project IDs do not inherit one another's context.
+  project IDs do not inherit one another's context;
+- the three fallback job tools are listed and return `job_api_unavailable` instead
+  of a fabricated job;
+- the Tasks policy enables the extension only when client, bridge and Job API all
+  support it.
 
 ## Client matrix
 
@@ -50,7 +72,7 @@ assume a protocol revision.
 - `bridge_info` is a handshake diagnostic, not an editor tool. Project/world tools
   arrive in the following M7 tasks.
 - The bridge does not yet connect to the Tauri Application API.
-- Tasks/Apps negotiation is deliberately absent until those extensions are
-  implemented and tested; clients must use ordinary tools.
+- Tasks is not advertised; the fallback job tools currently refuse with
+  `job_api_unavailable` until the Core Job API is connected.
 - This evidence does not establish end-to-end AI editing or real-world
   compatibility.

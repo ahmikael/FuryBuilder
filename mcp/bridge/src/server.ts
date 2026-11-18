@@ -6,14 +6,18 @@ import {
 import * as z from "zod/v4";
 
 import {
+  BRIDGE_IMPLEMENTS_TASKS,
   BRIDGE_INSTRUCTIONS,
   BRIDGE_NAME,
   BRIDGE_VERSION,
   MODERN_PROTOCOL_VERSION,
   OPTIONAL_EXTENSIONS,
   requireProjectId,
+  resolveTasksSupport,
   type ProtocolEra,
 } from "./capabilities.js";
+import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
+import { createUnavailableJobApi, type JobApi } from "./jobs.js";
 
 const bridgeInfoInput = z.object({
   project_id: z
@@ -34,11 +38,16 @@ const bridgeInfoInput = z.object({
  * calling this factory, so the returned instance serves exactly one client connection.
  * Handlers read explicit arguments; none of them consult transport-global project state.
  */
-export function createFuryBuilderServer(): McpServer {
+export function createFuryBuilderServer(
+  dependencies: { jobs?: JobApi } = {},
+): McpServer {
+  const jobs = dependencies.jobs ?? createUnavailableJobApi();
   const server = new McpServer(
     { name: BRIDGE_NAME, version: BRIDGE_VERSION },
     { instructions: BRIDGE_INSTRUCTIONS },
   );
+
+  registerJobTools(server, jobs);
 
   server.registerTool(
     "bridge_info",
@@ -64,6 +73,10 @@ export function createFuryBuilderServer(): McpServer {
       const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? null;
       const clientCapabilities =
         envelope?.[CLIENT_CAPABILITIES_META_KEY] ?? null;
+      const tasks = resolveTasksSupport({
+        clientCapabilities,
+        jobBackendConnected: jobs.connected,
+      });
 
       return {
         content: [
@@ -78,6 +91,14 @@ export function createFuryBuilderServer(): McpServer {
                   legacyFallback: true,
                   contextPolicy: "explicit-per-request",
                   optionalExtensions: OPTIONAL_EXTENSIONS,
+                  jobs: {
+                    backendConnected: jobs.connected,
+                    fallbackTools: JOB_TOOL_NAMES,
+                    tasks: {
+                      ...tasks,
+                      bridgeImplementsTasks: BRIDGE_IMPLEMENTS_TASKS,
+                    },
+                  },
                 },
                 request: {
                   projectId,
