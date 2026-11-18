@@ -24,6 +24,7 @@ flate2 = "1"
 base64 = "0.22"
 thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
+interprocess = "2.4.8"
 
 [profile.release]
 lto = "thin"

@@ -12,9 +12,10 @@ use world_application::{
 use world_domain::{BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo};
 use world_io::{self, JavaStructureError, PaletteCount, Structure, StructureImportPreview};
 
-use crate::state::{AppState, CurrentProject, ProjectSession, SessionStatus};
+use crate::state::{
+    session_status, AppState, CurrentProject, ProjectSession, SessionStatus, LOCAL_PROJECT_ID,
+};
 
-const UI_PROJECT_ID: &str = "local-project";
 /// Compressed structure uploads are capped before base64 decoding; the NBT codec then caps
 /// decompressed size and every collection independently.
 const MAX_STRUCTURE_UPLOAD_BYTES: usize = 32 * 1024 * 1024;
@@ -96,7 +97,7 @@ pub fn preview_operation(
         .service
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
-    service.preview(UI_PROJECT_ID, &operation)
+    service.preview(LOCAL_PROJECT_ID, &operation)
 }
 
 #[tauri::command]
@@ -111,7 +112,7 @@ pub fn apply_operation(
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     service.execute(OperationRequest {
-        project_id: UI_PROJECT_ID.to_owned(),
+        project_id: LOCAL_PROJECT_ID.to_owned(),
         operation,
         expected_revision,
         idempotency_key,
@@ -129,7 +130,7 @@ pub fn undo_operation(
         .service
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
-    service.undo(UI_PROJECT_ID, ui_actor(), operation_id.as_deref())
+    service.undo(LOCAL_PROJECT_ID, ui_actor(), operation_id.as_deref())
 }
 
 #[tauri::command]
@@ -138,7 +139,7 @@ pub fn redo_operation(state: State<'_, AppState>) -> Result<OperationResult, App
         .service
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
-    service.redo(UI_PROJECT_ID, ui_actor())
+    service.redo(LOCAL_PROJECT_ID, ui_actor())
 }
 
 #[tauri::command]
@@ -231,48 +232,6 @@ fn current_payload(
         info: world_info,
         recovery,
         session,
-    })
-}
-
-fn session_status(state: &AppState) -> Result<SessionStatus, AppError> {
-    let revision = {
-        let service = state
-            .service
-            .lock()
-            .map_err(|_| AppError::internal("world state lock poisoned"))?;
-        service.world().revision()
-    };
-    let projects = state
-        .projects
-        .lock()
-        .map_err(|_| AppError::internal("project state lock poisoned"))?;
-    let checkpoint_count = projects
-        .current
-        .as_ref()
-        .and_then(|current| projects.checkpoints.get(&current.folder))
-        .map(Vec::len)
-        .unwrap_or(0);
-    Ok(match &projects.current {
-        Some(current) => SessionStatus {
-            folder: Some(current.folder.clone()),
-            name: Some(current.name.clone()),
-            saved_revision: current.saved_revision,
-            autosaved_revision: current.autosaved_revision,
-            revision,
-            dirty: revision != current.saved_revision,
-            editor_state: Some(current.editor_state.clone()),
-            available_checkpoints: checkpoint_count,
-        },
-        None => SessionStatus {
-            folder: None,
-            name: None,
-            saved_revision: 0,
-            autosaved_revision: None,
-            revision,
-            dirty: false,
-            editor_state: None,
-            available_checkpoints: 0,
-        },
     })
 }
 
@@ -881,6 +840,9 @@ pub fn structure_import_preview(payload: String) -> Result<StructureImportPrevie
 }
 
 #[tauri::command]
+// Tauri exposes flat command arguments; grouping them would change the public IPC shape
+// without removing any validation. Keep the adapter explicit and satisfy the lint.
+#[allow(clippy::too_many_arguments)]
 pub fn structure_import_project(
     state: State<'_, AppState>,
     name: String,

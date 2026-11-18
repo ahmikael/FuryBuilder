@@ -1,4 +1,5 @@
 mod commands;
+mod local_bridge;
 mod state;
 
 use tauri::Manager;
@@ -13,6 +14,16 @@ pub fn run() {
             let projects_root = data_dir.join("projects");
             std::fs::create_dir_all(&projects_root)?;
             app.manage(state::AppState::new(projects_root));
+            match local_bridge::start(app.handle().clone()) {
+                Ok(runtime) => {
+                    app.manage(runtime);
+                }
+                Err(error) => {
+                    // The editor stays usable; the MCP bridge reports that the desktop
+                    // endpoint is unavailable instead of pretending to be connected.
+                    eprintln!("FuryBuilder MCP bridge endpoint unavailable: {error}");
+                }
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -54,6 +65,13 @@ pub fn run() {
             commands::structure_export_preview,
             commands::structure_export
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running FuryBuilder");
+        .build(tauri::generate_context!())
+        .expect("error while building FuryBuilder")
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(runtime) = app.try_state::<local_bridge::LocalBridgeRuntime>() {
+                    runtime.cleanup();
+                }
+            }
+        });
 }

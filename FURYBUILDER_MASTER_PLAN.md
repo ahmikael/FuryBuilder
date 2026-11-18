@@ -956,7 +956,7 @@ furybuilder/
 - [x] Проверить актуальный MCP SDK/transport для спецификации 2026-07-28 и выбранных AI-клиентов.
 - [x] Реализовать согласование возможностей клиента и совместимость: stateless-v2026 при поддержке клиента, legacy fallback, без неявного хранения проектного контекста в MCP-сессии.
 - [x] Определить поддержку MCP Tasks как **опцию** поверх внутреннего Job API; при отсутствии capability оставить совместимые start/status/cancel tools.
-- [ ] Реализовать локальный stdio bridge к авторитетному Application API.
+- [x] Реализовать локальный stdio bridge к авторитетному Application API.
 - [ ] Ввести `project_id`, `world_revision`, `job_id` и явный жизненный цикл подключений.
 - [ ] Зарегистрировать read-only tools: world info, inspect, get block/region, camera, screenshot.
 - [ ] Зарегистрировать безопасные write tools: preview, apply batch, undo, status.

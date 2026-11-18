@@ -18,6 +18,7 @@ import {
 } from "./capabilities.js";
 import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
 import { createUnavailableJobApi, type JobApi } from "./jobs.js";
+import { probeDesktop } from "./desktop-client.js";
 
 const bridgeInfoInput = z.object({
   project_id: z
@@ -77,6 +78,7 @@ export function createFuryBuilderServer(
         clientCapabilities,
         jobBackendConnected: jobs.connected,
       });
+      const desktop = await probeDesktop();
 
       return {
         content: [
@@ -99,6 +101,7 @@ export function createFuryBuilderServer(
                       bridgeImplementsTasks: BRIDGE_IMPLEMENTS_TASKS,
                     },
                   },
+                  desktop,
                 },
                 request: {
                   projectId,

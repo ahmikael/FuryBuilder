@@ -12,6 +12,7 @@ pub enum ErrorCode {
     NotFound,
     Conflict,
     PermissionDenied,
+    Unauthorized,
     RevisionMismatch,
     LimitExceeded,
     UnsupportedVersion,

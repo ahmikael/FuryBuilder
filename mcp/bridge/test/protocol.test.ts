@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/client";
 import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
-import { dirname, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -8,12 +9,28 @@ import { MODERN_PROTOCOL_VERSION } from "../src/capabilities.js";
 
 const bridgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const clients: Client[] = [];
+// Keep the diagnostic deterministic even when the developer has the desktop app running.
+const missingRuntime = join(tmpdir(), "furybuilder-bridge-no-runtime.json");
 
-function stdioTransport(): StdioClientTransport {
+function bridgeEnv(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  env.FURYBUILDER_MCP_RUNTIME = missingRuntime;
+  return { ...env, ...overrides };
+}
+
+export function stdioTransport(
+  runtimePath = missingRuntime,
+): StdioClientTransport {
   return new StdioClientTransport({
     command: process.execPath,
     args: ["--import", "tsx", "src/main.ts"],
     cwd: bridgeRoot,
+    env: bridgeEnv({ FURYBUILDER_MCP_RUNTIME: runtimePath }),
     stderr: "pipe",
   });
 }
@@ -72,6 +89,10 @@ describe("MCP protocol negotiation", () => {
             bridgeImplementsTasks: boolean;
           };
         };
+        desktop: {
+          connected: boolean;
+          reason?: string;
+        };
       };
       request: {
         projectId: string;
@@ -94,6 +115,10 @@ describe("MCP protocol negotiation", () => {
         extensionAdvertised: false,
         bridgeImplementsTasks: false,
       },
+    });
+    expect(info.bridge.desktop).toMatchObject({
+      connected: false,
+      reason: "runtime_file_missing",
     });
     expect(info.request).toMatchObject({
       projectId: "project-modern",

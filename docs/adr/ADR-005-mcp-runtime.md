@@ -21,6 +21,28 @@ Tauri UI.
 - No network port is opened by default. Streamable HTTP, if added, binds loopback only,
   validates Origin/Host, and requires explicit user enablement.
 
+## Implementation note (2026-11-18)
+
+The first transport slice is implemented and exercised against the real Tauri process:
+
+- The desktop process creates a `local_socket` endpoint (Windows named pipe) and writes
+  `mcp/runtime.json` under the application data directory. The file contains the endpoint,
+  a 64-character per-launch token, the process id and protocol version 1. It is removed on
+  a clean exit; a stale file is reported as `app_not_running`.
+- The protocol is newline-delimited JSON with one authenticated request per connection.
+  Messages are size-limited; the token is compared without an early exit; errors never echo
+  it. The initial methods are `ping`, `world_info`, `query` and `project_status`.
+- `query`/`world_info` require an explicit `project_id` matching the project currently open
+  in the editor. The handler calls the same `WorldService` as the UI; write methods are not
+  exposed yet.
+- `mcp/bridge` reads the discovery file, connects over the local socket, and reports a
+  non-failing `desktop` status in `bridge_info`. It never opens project or world files.
+- Verified with a real `tauri dev` process: authorized `ping` and `world_info` succeeded and
+  a wrong token returned `unauthorized` without leaking the secret.
+- Unix domain sockets are not exercised yet; Windows is the first target. The discovery
+  file relies on the per-user application data directory ACL, so multi-user pipe hardening
+  remains a review item.
+
 ## Rationale
 
 External AI clients start stdio servers easily. A sidecar on the official TS SDK avoids
