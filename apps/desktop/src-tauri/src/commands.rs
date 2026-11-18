@@ -10,7 +10,9 @@ use world_application::{
     PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, WorldService,
 };
 use world_domain::{BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo};
-use world_io::{self, JavaStructureError, PaletteCount, Structure, StructureImportPreview};
+use world_io::{
+    self, JavaStructureError, JavaWorldAnalysis, PaletteCount, Structure, StructureImportPreview,
+};
 
 use crate::state::{
     session_status, AppState, CurrentProject, ProjectSession, SessionStatus, LOCAL_PROJECT_ID,
@@ -206,6 +208,34 @@ fn project_error(error: project_store::ProjectError) -> AppError {
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
         "unsupported_format" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+fn world_import_error(error: world_io::WorldImportError) -> AppError {
+    use world_application::ErrorCode;
+    let code = match error.code() {
+        "invalid_argument" | "unsafe_path" => ErrorCode::InvalidArgument,
+        "not_found" => ErrorCode::NotFound,
+        "conflict" | "source_changed" => ErrorCode::Conflict,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "unsupported_format" | "verification_failed" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+fn passthrough_error(error: world_io::PassthroughError) -> AppError {
+    use world_application::ErrorCode;
+    let code = match error.code() {
+        "invalid_argument" | "unsafe_path" => ErrorCode::InvalidArgument,
+        "not_found" => ErrorCode::NotFound,
+        "already_exists" | "source_changed" => ErrorCode::Conflict,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "unsupported_format" | "verification_failed" => ErrorCode::UnsupportedFormat,
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
@@ -612,6 +642,126 @@ pub fn project_rename(
         }
     }
     Ok(detail)
+}
+
+// ---------------------------------------------------------------------------------------
+// Import World (M8.6). The selected world is analyzed and decoded read-only; the project
+// receives a byte-preserving immutable source copy plus an editable block snapshot.
+// ---------------------------------------------------------------------------------------
+
+#[tauri::command]
+pub fn world_import_preview(folder: String) -> JavaWorldAnalysis {
+    world_io::analyze_java_world(&folder)
+}
+
+#[tauri::command]
+pub fn project_import_world(
+    state: State<'_, AppState>,
+    name: String,
+    world_folder: String,
+    mut editor_state: project_store::EditorState,
+) -> Result<OpenedProjectPayload, AppError> {
+    let analysis = world_io::analyze_java_world(&world_folder);
+    if !analysis.supported {
+        let code = if analysis
+            .blockers
+            .iter()
+            .any(|blocker| blocker.contains("DataVersion"))
+        {
+            ErrorCode::UnsupportedVersion
+        } else {
+            ErrorCode::UnsupportedFormat
+        };
+        return Err(AppError::new(
+            code,
+            format!(
+                "the world cannot be imported: {}",
+                analysis.blockers.join("; ")
+            ),
+        ));
+    }
+    let (mut world, _load_report) =
+        world_io::load_java_world(&world_folder).map_err(world_import_error)?;
+    world.bump_revision();
+    if !world
+        .dimensions()
+        .contains_key(&editor_state.selected_dimension)
+    {
+        editor_state.selected_dimension = "minecraft:overworld".to_owned();
+    }
+    editor_state.validate().map_err(project_error)?;
+    let info = world.info();
+    let revision = world.revision();
+
+    let mut projects = state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?;
+    ensure_current_closed(&state, &mut projects)?;
+    let detail = projects
+        .store
+        .create_imported(&name, editor_state.clone(), &world, "world")
+        .map_err(project_error)?;
+    let folder = detail.summary.folder.clone();
+    let project_dir = projects.store.root().join(&folder);
+    let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");
+
+    let built = (|| -> Result<project_store::ProjectDetail, AppError> {
+        let copy = world_io::passthrough_java_world(&world_folder, &source_world)
+            .map_err(passthrough_error)?;
+        let files = copy
+            .files
+            .iter()
+            .map(|file| {
+                let relative = file.relative_path.to_string_lossy().replace('\\', "/");
+                project_store::SourceFile {
+                    relative_path: format!("world/{relative}"),
+                    bytes: file.bytes,
+                    sha256: file.sha256.clone(),
+                }
+            })
+            .collect::<Vec<_>>();
+        let detail = projects
+            .store
+            .record_source_tree(&folder, "world", &files)
+            .map_err(project_error)?;
+        projects
+            .store
+            .begin_session(&folder, revision)
+            .map_err(project_error)?;
+        Ok(detail)
+    })();
+
+    match built {
+        Ok(detail) => {
+            state.jobs.cancel_all("the open project changed");
+            {
+                let mut service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                *service = WorldService::from_world(world);
+            }
+            projects.current = Some(CurrentProject {
+                folder: folder.clone(),
+                project_id: detail.summary.project_id.clone(),
+                name: detail.summary.name.clone(),
+                saved_revision: detail.summary.world_revision,
+                autosaved_revision: None,
+                editor_state,
+            });
+            projects.refresh_checkpoints(&folder);
+            drop(projects);
+            current_payload(&state, detail, info, None)
+        }
+        Err(error) => {
+            drop(projects);
+            // The project folder was created by this command and was never exposed as an
+            // open project. Remove it so a failed import leaves no half-usable state.
+            let _ = std::fs::remove_dir_all(&project_dir);
+            Err(error)
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------------------

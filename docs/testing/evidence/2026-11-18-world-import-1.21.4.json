@@ -1,0 +1,162 @@
+{
+  "tool": {
+    "name": "furybuilder-import-world-probe",
+    "version": 1
+  },
+  "source": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+  "projectFolder": "Imported Flat.furybuilder",
+  "analysis": {
+    "blockEntities": 0,
+    "blockers": [],
+    "chunks": 841,
+    "dataVersion": 4189,
+    "declaredDimensions": [
+      "minecraft:overworld",
+      "minecraft:the_end",
+      "minecraft:the_nether"
+    ],
+    "dimensions": [
+      {
+        "chunks": 841,
+        "height": 384,
+        "id": "minecraft:overworld",
+        "kind": "overworld",
+        "minY": -64,
+        "regionFiles": 4
+      },
+      {
+        "chunks": 0,
+        "height": 256,
+        "id": "minecraft:the_nether",
+        "kind": "nether",
+        "minY": 0,
+        "regionFiles": 0
+      },
+      {
+        "chunks": 0,
+        "height": 256,
+        "id": "minecraft:the_end",
+        "kind": "end",
+        "minY": 0,
+        "regionFiles": 0
+      }
+    ],
+    "entities": 0,
+    "layout": "classic_anvil",
+    "levelName": "world",
+    "regions": 4,
+    "root": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-reference-server-11ppj36x\\world",
+    "supported": true,
+    "versionId": 4189,
+    "versionName": "1.21.4",
+    "warnings": [
+      "the selected world is opened read-only and is never modified; importing copies it byte for byte into the project source layer",
+      "only block states become editable in this milestone; biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy",
+      "editable import limits: 20000 chunks, 2000000 sections, 50000000 non-air blocks"
+    ]
+  },
+  "load": {
+    "blockEntities": 0,
+    "chunks": 841,
+    "dimensions": [
+      "minecraft:overworld",
+      "minecraft:the_nether",
+      "minecraft:the_end"
+    ],
+    "emptyChunks": 720,
+    "entities": 0,
+    "nonAirBlocks": 123908,
+    "nonFullChunks": 792,
+    "sections": 125,
+    "warnings": [
+      "792 chunk(s) do not have status minecraft:full; their stored blocks are imported as-is",
+      "biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags are preserved only in the immutable source copy"
+    ]
+  },
+  "copy": {
+    "bytes": 3481260,
+    "chunkValidation": true,
+    "chunks": 841,
+    "files": 20,
+    "regions": 4,
+    "skipped": [
+      {
+        "path": "session.lock",
+        "reason": "transient game session lock"
+      }
+    ]
+  },
+  "project": {
+    "creationMode": "import",
+    "editableBlocks": 123908,
+    "editableChunks": 121,
+    "editableSections": 125,
+    "name": "Imported Flat",
+    "revision": 1,
+    "source": {
+      "immutable": true,
+      "kind": "imported",
+      "reference": "world"
+    },
+    "sourceFiles": 20
+  },
+  "independentVerification": {
+    "sourceFilesHashedBeforeAndAfter": 21,
+    "sourceUnchanged": true,
+    "probeExitCode": 0,
+    "copiedFilesCompared": 20,
+    "copiedFilesMatchSource": true,
+    "copiedFilesNotInSource": 0,
+    "sourceFiles": {
+      "data/chunks.dat": "f83a0efda6893606b6360384d62ffeda8048bc8047a338deb091069ea4c21148",
+      "session.lock": "51643361c79ecaef25a8de802de24f570ba25d9c2df1d22d94fade11b4f466cc",
+      "level.dat": "a6004d204bb461e392c70824648f7258563bca47a21313cb584c18ceb9f792c8",
+      "region/r.-1.0.mca": "3cc97e70395dbee5cdaaeaf46a64d496e1399ce90eebf2def885ad65a0c20045",
+      "entities/r.0.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "region/r.-1.-1.mca": "c2bea93a97479c38a91cdb97b3fd11f38d8cb0cc4f0c4825015b2404b945cd50",
+      "DIM-1/data/raids.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "region/r.0.0.mca": "91ee70753c08b8f30be4c7aa3a7f8bb65a77b7afd3c7d076921bf33ceafad727",
+      "poi/r.0.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entities/r.-1.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "poi/r.0.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entities/r.0.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "region/r.0.-1.mca": "f6f6fd7500219cf830fea6a01d2149c4fa187cefd56147296ca6d4314d96c266",
+      "level.dat_old": "84a94da6133d4f7859c38e2768c05cab258edf5eccd40814233204cf13aaa559",
+      "poi/r.-1.0.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "entities/r.-1.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "data/raids.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "DIM1/data/raids_end.dat": "7ad4e27ee015579612695b449e8a19eb8045b6c6535b93b4f828cca0dd0e525f",
+      "data/scoreboard.dat": "75e55e2261e5ddf47d5e73cef2c2715d605ec77aebce2c9adb664329e3bc8fa6",
+      "data/random_sequences.dat": "58768a0de7a7bc656476251c7f737ede081ac9a44e307ac9eea45f4b97b3a442",
+      "poi/r.-1.-1.mca": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "unsupportedExample": {
+    "source": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-26.3-world\\world",
+    "exitCode": 0,
+    "analysis": {
+      "root": "C:\\Users\\Mike\\AppData\\Local\\Temp\\opencode\\fury-26.3-world\\world",
+      "layout": "split_26_1_plus",
+      "supported": false,
+      "dataVersion": 5023,
+      "versionId": 5023,
+      "versionName": "26.3",
+      "levelName": "world",
+      "declaredDimensions": [],
+      "dimensions": [],
+      "regions": 0,
+      "chunks": 0,
+      "blockEntities": 0,
+      "entities": 0,
+      "warnings": [
+        "the selected world is opened read-only and is never modified; importing copies it byte for byte into the project source layer",
+        "only block states become editable in this milestone; biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy",
+        "editable import limits: 20000 chunks, 2000000 sections, 50000000 non-air blocks"
+      ],
+      "blockers": [
+        "26.1+ split world layout is not supported",
+        "DataVersion 5023 is not supported; this build edits 4189 (Minecraft Java 1.21.4)"
+      ]
+    }
+  }
+}

@@ -10,6 +10,7 @@ import {
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
   RotateCcw,
   Save,
   ArrowLeftRight,
@@ -32,6 +33,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
+import { pushToast } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import {
   CREATION_MODES,
@@ -136,15 +138,20 @@ export function ProjectManager() {
   const loading = useProjectStore((state) => state.loading);
   const error = useProjectStore((state) => state.error);
   const lastSave = useProjectStore((state) => state.lastSave);
+  const worldAnalysis = useProjectStore((state) => state.worldAnalysis);
+  const analysisLoading = useProjectStore((state) => state.analysisLoading);
   const worldRevision = useWorldStore((state) => state.revision);
   const [tab, setTab] = useState("projects");
   const [name, setName] = useState("");
   const [mode, setMode] = useState<CreationMode>("empty");
+  const [worldFolder, setWorldFolder] = useState("");
   const [renameFolder, setRenameFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [pending, setPending] = useState<PendingAction>(null);
   const [checkpointReason, setCheckpointReason] = useState("manual checkpoint");
   const dirty = projectIsDirty(current, worldRevision);
+  const importReady =
+    mode !== "import" || (worldAnalysis?.supported === true && worldFolder.trim().length > 0);
   const activeFolder = current?.folder ?? null;
   const desktop = isTauriRuntime();
 
@@ -191,15 +198,49 @@ export function ProjectManager() {
     setPending(null);
   };
 
+  const submitImport = async (): Promise<void> => {
+    const imported = await useProjectStore.getState().importWorld(name, worldFolder);
+    if (imported) {
+      setName("");
+      setWorldFolder("");
+      setTab("projects");
+    }
+  };
+
   const submitCreate = async (): Promise<void> => {
     if (dirty) {
       setPending({ kind: "create" });
+      return;
+    }
+    if (mode === "import") {
+      await submitImport();
       return;
     }
     const created = await useProjectStore.getState().create(name, mode);
     if (created) {
       setName("");
       setTab("projects");
+    }
+  };
+
+  const browseWorldFolder = async (): Promise<void> => {
+    try {
+      const { open: openFolder } = await import("@tauri-apps/plugin-dialog");
+      const selected = await openFolder({
+        directory: true,
+        multiple: false,
+        title: "Select a Java world folder",
+      });
+      if (typeof selected === "string" && selected.length > 0) {
+        setWorldFolder(selected);
+        useProjectStore.getState().clearWorldAnalysis();
+      }
+    } catch (pickerError) {
+      pushToast({
+        kind: "error",
+        title: "Folder picker unavailable",
+        description: String(pickerError),
+      });
     }
   };
 
@@ -519,6 +560,116 @@ export function ProjectManager() {
                   ))}
                 </div>
 
+                {mode === "import" ? (
+                  <div className="space-y-1.5 rounded border border-border bg-background/40 p-2">
+                    <label
+                      className="text-[10px] font-medium text-muted-foreground"
+                      htmlFor="world-folder"
+                    >
+                      Java world folder
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        id="world-folder"
+                        className="h-7 font-mono text-[10px]"
+                        value={worldFolder}
+                        placeholder="…/.minecraft/saves/My World"
+                        onChange={(event) => {
+                          setWorldFolder(event.target.value);
+                          useProjectStore.getState().clearWorldAnalysis();
+                        }}
+                      />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 px-2 text-[10px]"
+                        onClick={() => void browseWorldFolder()}
+                      >
+                        <FolderOpen className="mr-1 size-3" /> Browse
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 shrink-0 px-2 text-[10px]"
+                        disabled={analysisLoading || worldFolder.trim().length === 0}
+                        onClick={() => void useProjectStore.getState().analyzeWorld(worldFolder)}
+                      >
+                        {analysisLoading ? (
+                          <Loader2 className="mr-1 size-3 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-1 size-3" />
+                        )}
+                        Analyze
+                      </Button>
+                    </div>
+
+                    {worldAnalysis ? (
+                      <div className="space-y-1.5 rounded border border-border bg-card/60 p-2">
+                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+                          <span
+                            className={cn(
+                              "rounded px-1 py-0.5 text-[8px] font-semibold uppercase",
+                              worldAnalysis.supported
+                                ? "bg-status-ok/15 text-status-ok"
+                                : "bg-status-error/15 text-status-error",
+                            )}
+                          >
+                            {worldAnalysis.supported ? "supported" : "blocked"}
+                          </span>
+                          <span className="font-mono">
+                            DataVersion {worldAnalysis.dataVersion ?? "unknown"}
+                            {worldAnalysis.versionName ? ` · ${worldAnalysis.versionName}` : ""}
+                          </span>
+                          <span className="text-muted-foreground">{worldAnalysis.layout}</span>
+                          <span className="ml-auto font-mono text-muted-foreground">
+                            {worldAnalysis.regions} region(s) · {worldAnalysis.chunks} chunk(s)
+                          </span>
+                        </div>
+                        {worldAnalysis.levelName ? (
+                          <div className="text-[10px] text-muted-foreground">
+                            Level: <span className="font-medium">{worldAnalysis.levelName}</span>
+                          </div>
+                        ) : null}
+                        <div className="space-y-0.5">
+                          {worldAnalysis.dimensions.map((dimension) => (
+                            <div
+                              key={dimension.id}
+                              className="flex items-center gap-2 rounded bg-background/60 px-1.5 py-0.5 font-mono text-[9px]"
+                            >
+                              <span className="truncate">{dimension.id}</span>
+                              <span className="text-muted-foreground">
+                                y {dimension.minY}..{dimension.minY + dimension.height - 1}
+                              </span>
+                              <span className="ml-auto text-muted-foreground">
+                                {dimension.regionFiles} region(s) · {dimension.chunks} chunk(s)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                        {worldAnalysis.blockers.length > 0 ? (
+                          <div className="space-y-0.5 rounded border border-status-error/30 bg-status-error/5 p-1.5 text-[9px] text-status-error">
+                            {worldAnalysis.blockers.map((blocker) => (
+                              <div key={blocker}>{blocker}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                        {worldAnalysis.warnings.length > 0 ? (
+                          <div className="scrollbar-thin max-h-24 space-y-0.5 overflow-y-auto rounded border border-status-warn/30 bg-status-warn/5 p-1.5 text-[9px] text-status-warn">
+                            {worldAnalysis.warnings.map((warning) => (
+                              <div key={warning}>{warning}</div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <p className="text-[9px] leading-relaxed text-muted-foreground">
+                        Read-only analysis validates level.dat, the classic 1.21.4 layout, every
+                        region and every chunk before import. The original folder is never written.
+                      </p>
+                    )}
+                  </div>
+                ) : null}
+
                 <div className="flex items-center gap-2 rounded border border-border bg-background/40 px-2 py-1.5 text-[10px]">
                   <Sparkles className="size-3.5 text-primary" />
                   <span className="text-muted-foreground">Target Java</span>
@@ -538,19 +689,22 @@ export function ProjectManager() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    disabled={loading || name.trim().length === 0}
+                    disabled={
+                      loading || analysisLoading || name.trim().length === 0 || !importReady
+                    }
                     onClick={() => void submitCreate()}
                   >
-                    {loading ? (
+                    {loading || analysisLoading ? (
                       <Loader2 className="mr-1 size-3 animate-spin" />
                     ) : (
                       <Plus className="mr-1 size-3" />
                     )}
-                    Create project
+                    {mode === "import" ? "Import world" : "Create project"}
                   </Button>
                   <span className="text-[9px] text-muted-foreground">
-                    Folders get a unique suffix when the name already exists. Renaming changes the
-                    display name only.
+                    {mode === "import"
+                      ? "Analyze a supported world first. The source folder is copied byte for byte and stays read-only."
+                      : "Folders get a unique suffix when the name already exists. Renaming changes the display name only."}
                   </span>
                 </div>
               </TabsContent>

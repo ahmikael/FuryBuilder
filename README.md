@@ -7,7 +7,7 @@ Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
 - **Target game version:** Minecraft Java **1.21.4** (`DataVersion` 4189, Java 21).
-- **Project modes:** `Empty Project` (MVP), `Vanilla World` and `Import World` phased in later.
+- **Project modes:** `Empty Project` and `Import World` (classic Java 1.21.4) are available; `Vanilla World` is a later phase.
 - **License:** MIT for FuryBuilder code. Minecraft game assets are **not** distributed with
   this repository; see `docs/legal/third-party-notices.md`.
 
@@ -59,8 +59,10 @@ of an unchanged world - including unknown files and region containers - is
 implemented and verified against a real 841-chunk world. A copy-on-write overlay
 now keeps block edits in memory, persists them as a versioned document and
 materialises a patched chunk NBT while preserving unknown tags, biomes, block
-entities and entities; the source stays byte-identical. The `Import World`
-wizard and export of a new world copy are next. The first interchange format,
+entities and entities; the source stays byte-identical. The `Import World` wizard
+finally analyzes a selected world read-only, reports blockers and limitations, and
+creates a project with a byte-for-byte immutable source copy plus an editable block
+snapshot. Export of a new world copy is next. The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
 1.21.4 server load. Block states and orientations are preserved; entities and
@@ -85,9 +87,12 @@ guarantee that its whole milestone is complete.
 
 - Minecraft game assets are not bundled. The renderer ships original placeholder textures
   and approximate shapes for slabs/stairs/torches.
-- Projects live in the app-data directory and store an Empty or flat-base world. Automatic
-  vanilla world generation (`Vanilla World`) and world imports (`Import World`) are shown
-  as future modes until M9/M8.
+- Projects live in the app-data directory. `Empty Project`, a flat base and `Import World`
+  (classic Java 1.21.4) are available. Automatic vanilla world generation
+  (`Vanilla World`) is a future mode until M9.
+- Imported worlds are analyzed read-only and copied byte for byte into the project source
+  layer. Only block states are editable yet; biomes, block entities, entities, ticks,
+  heightmaps, lighting and POI remain in the immutable source copy.
 - Structure import/export is currently Java structure `.nbt` only. It refuses entities,
   block entities and unknown tags; `.schem` support is not available yet.
 - Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
@@ -97,7 +102,7 @@ guarantee that its whole milestone is complete.
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user.
 - Import of full Java world saves is read-only. M8 implements version/layout
   validation, region/NBT reading, block states and biomes, a byte-preserving copy
-  of unchanged worlds, and an in-memory block-edit overlay with a versioned JSON
-  document and verified chunk NBT materialization. The `Import World` wizard,
-  region-file writing and export of modified worlds are not available yet, and the
-  source world is never written.
+  of unchanged worlds, an in-memory block-edit overlay with a versioned JSON
+  document and verified chunk NBT materialization, and the `Import World` wizard
+  with an immutable source copy. Region-file writing and export of modified worlds
+  are not available yet, and the source world is never written.

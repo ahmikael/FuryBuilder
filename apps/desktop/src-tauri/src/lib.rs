@@ -11,6 +11,7 @@ use tauri::Manager;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             let projects_root = data_dir.join("projects");
@@ -61,6 +62,8 @@ pub fn run() {
             commands::project_open_checkpoint,
             commands::project_close,
             commands::project_rename,
+            commands::world_import_preview,
+            commands::project_import_world,
             commands::structure_import_preview,
             commands::structure_import_project,
             commands::structure_insert,

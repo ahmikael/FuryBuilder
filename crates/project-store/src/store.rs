@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -9,13 +10,14 @@ use crate::error::ProjectError;
 use crate::manifest::{
     folder_component, is_hex_sha256, normalize_name, now_ms, validate_folder, CreationMode,
     EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, RecoveryInfo,
-    SaveKind, SaveOutcome, SourceInfo, PROJECT_FILE, PROJECT_SCHEMA_VERSION,
+    SaveKind, SaveOutcome, SourceInfo, SourceKind, PROJECT_FILE, PROJECT_SCHEMA_VERSION,
 };
 use crate::snapshot::{decode_world, encode_world};
-use crate::source::{read_source_manifest, SourceManifest};
+use crate::source::{read_source_manifest, SourceFile, SourceManifest};
 
 pub const MAX_SNAPSHOTS: usize = 8;
 pub const MAX_CHECKPOINTS: usize = 5;
+pub const MAX_SOURCE_FILES: usize = 100_000;
 pub const SESSION_MARKER: &str = "session.lock";
 pub const AUTOSAVE_FILE: &str = "autosave.fwl";
 pub const AUTOSAVE_META: &str = "autosave.json";
@@ -322,15 +324,52 @@ impl ProjectStore {
         let name = normalize_name(name)?;
         if !mode.is_available() {
             return Err(ProjectError::InvalidManifest(format!(
-                "creation mode `{}` is not available yet",
+                "creation mode `{}` is not available through the generic creator",
                 mode.label()
             )));
         }
         editor_state.validate()?;
+        let mut world = build_world(mode)?;
+        world.bump_revision();
+        self.create_with_world(&name, mode, editor_state, &world, SourceInfo::generated())
+    }
+
+    /// Creates an `Import World` project from an already decoded editable world.
+    ///
+    /// The immutable source tree is recorded separately by [`Self::record_source_tree`]
+    /// after the caller has copied it with the byte-preserving passthrough adapter.
+    pub fn create_imported(
+        &self,
+        name: &str,
+        editor_state: EditorState,
+        world: &World,
+        source_reference: &str,
+    ) -> Result<ProjectDetail, ProjectError> {
+        let name = normalize_name(name)?;
+        editor_state.validate()?;
+        if !valid_source_component(source_reference) {
+            return Err(ProjectError::UnsafeSource(source_reference.to_owned()));
+        }
+        let source = SourceInfo {
+            kind: SourceKind::Imported,
+            immutable: true,
+            reference: Some(source_reference.to_owned()),
+        };
+        self.create_with_world(&name, CreationMode::Import, editor_state, world, source)
+    }
+
+    fn create_with_world(
+        &self,
+        name: &str,
+        mode: CreationMode,
+        editor_state: EditorState,
+        world: &World,
+        source: SourceInfo,
+    ) -> Result<ProjectDetail, ProjectError> {
         fs::create_dir_all(&self.root)
             .map_err(|error| io_error(format!("creating {}", self.root.display()), error))?;
 
-        let base = folder_component(&name);
+        let base = folder_component(name);
         let mut folder = base.clone();
         let mut counter = 1;
         while self.root.join(&folder).exists() {
@@ -338,7 +377,7 @@ impl ProjectStore {
             let stem = base.trim_end_matches(".furybuilder");
             folder = format!("{stem} ({counter}).furybuilder");
             if counter > 999 {
-                return Err(ProjectError::AlreadyExists(name.clone()));
+                return Err(ProjectError::AlreadyExists(name.to_owned()));
             }
         }
         let dir = self.root.join(&folder);
@@ -349,9 +388,7 @@ impl ProjectStore {
         fs::create_dir_all(dir.join(SOURCE_DIR))
             .map_err(|error| io_error(format!("creating {}", dir.display()), error))?;
 
-        let mut world = build_world(mode)?;
-        world.bump_revision();
-        let bytes = encode_world(&world)?;
+        let bytes = encode_world(world)?;
         verify_round_trip(&bytes)?;
         let checksum = sha256_hex(&bytes);
         let file = snapshot_file(world.revision());
@@ -359,8 +396,10 @@ impl ProjectStore {
 
         let now = now_ms();
         let project_id = uuid::Uuid::new_v4().to_string();
-        let mut manifest = ProjectManifest::new(project_id, name, mode, world.revision(), now);
+        let mut manifest =
+            ProjectManifest::new(project_id, name.to_owned(), mode, world.revision(), now);
         manifest.editor_state = editor_state;
+        manifest.source = source;
         manifest.set_world_payload(format!("{DATA_DIR}/{file}"), checksum, bytes.len() as u64);
         manifest.validate()?;
         write_json(&dir.join(PROJECT_FILE), &manifest)?;
@@ -834,6 +873,78 @@ impl ProjectStore {
         self.detail(folder)
     }
 
+    /// Records an already copied immutable source tree.
+    ///
+    /// Paths are relative to the project `source/` directory and must start with
+    /// `<source_reference>/`. The caller copies the tree with the byte-preserving world
+    /// adapter; this method verifies that every referenced file still exists with the
+    /// recorded size before it becomes part of the project source manifest.
+    pub fn record_source_tree(
+        &self,
+        folder: &str,
+        source_reference: &str,
+        files: &[SourceFile],
+    ) -> Result<ProjectDetail, ProjectError> {
+        let dir = self.project_dir(folder)?;
+        let mut manifest = self.manifest(&dir)?;
+        manifest.validate()?;
+        if !valid_source_component(source_reference) {
+            return Err(ProjectError::UnsafeSource(source_reference.to_owned()));
+        }
+        if files.len() > MAX_SOURCE_FILES {
+            return Err(ProjectError::InvalidManifest(format!(
+                "source tree has {} files, limit is {MAX_SOURCE_FILES}",
+                files.len()
+            )));
+        }
+        let prefix = format!("{source_reference}/");
+        let source_root = dir.join(SOURCE_DIR);
+        let mut recorded = Vec::with_capacity(files.len());
+        let mut seen = BTreeSet::new();
+        for file in files {
+            if !valid_source_relative_path(&file.relative_path)
+                || !file.relative_path.starts_with(&prefix)
+            {
+                return Err(ProjectError::UnsafeSource(file.relative_path.clone()));
+            }
+            if !seen.insert(file.relative_path.clone()) {
+                return Err(ProjectError::corrupt(format!(
+                    "duplicate source path `{}`",
+                    file.relative_path
+                )));
+            }
+            let path = source_root.join(
+                file.relative_path
+                    .split('/')
+                    .collect::<std::path::PathBuf>(),
+            );
+            let metadata = fs::symlink_metadata(&path)
+                .map_err(|error| io_error(format!("reading {}", path.display()), error))?;
+            if !metadata.is_file() || metadata.len() != file.bytes {
+                return Err(ProjectError::corrupt(format!(
+                    "source file `{}` is missing, linked or has an unexpected size",
+                    file.relative_path
+                )));
+            }
+            recorded.push(file.clone());
+        }
+        recorded.sort_by(|left, right| left.relative_path.cmp(&right.relative_path));
+        let source = SourceManifest {
+            schema_version: 1,
+            immutable: true,
+            files: recorded,
+        };
+        write_json(&dir.join(SOURCE_DIR).join("source.json"), &source)?;
+        manifest.source = SourceInfo {
+            kind: SourceKind::Imported,
+            immutable: true,
+            reference: Some(source_reference.to_owned()),
+        };
+        manifest.updated_at_ms = now_ms();
+        write_json(&dir.join(PROJECT_FILE), &manifest)?;
+        self.detail(folder)
+    }
+
     /// Publishes an interchange file under `exports/` with an atomic write and a byte-level
     /// read-back check. Existing names get a numeric suffix instead of being overwritten.
     pub fn write_export(
@@ -905,6 +1016,31 @@ impl ProjectStore {
         let dir = self.project_dir(folder)?;
         read_source_manifest(&dir.join(SOURCE_DIR).join("source.json"))
     }
+}
+
+/// A single source component (the directory name under `source/`), never a path.
+fn valid_source_component(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value != "."
+        && value != ".."
+        && !value.contains('/')
+        && !value.contains('\\')
+        && !value.contains(':')
+        && !value.contains('\0')
+}
+
+/// A path below `source/` using `/` separators, with no traversal components.
+fn valid_source_relative_path(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 1024
+        && !value.starts_with('/')
+        && !value.contains('\\')
+        && !value.contains(':')
+        && !value.contains('\0')
+        && value
+            .split('/')
+            .all(|component| !component.is_empty() && component != "." && component != "..")
 }
 
 /// Migrates a stored manifest to the current schema. Unknown/newer versions are refused

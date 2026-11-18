@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { normalizeError } from "@/lib/ipc";
 import {
+  analyzeJavaWorld,
   autosaveProject,
   checkpointProject,
   closeProject,
@@ -8,6 +9,7 @@ import {
   fetchCheckpoints,
   fetchProjectStatus,
   fetchProjects,
+  importJavaWorld,
   openCheckpoint,
   openProject,
   renameProject,
@@ -22,6 +24,7 @@ import type {
   CheckpointMeta,
   CreationMode,
   EditorState,
+  JavaWorldAnalysis,
   OpenedProjectPayload,
   ProjectSummary,
   RecoveryInfo,
@@ -43,6 +46,8 @@ interface ProjectUiState {
   checkpoints: CheckpointMeta[];
   lastSavedAtMs: number | null;
   lastSave: SaveOutcome | null;
+  worldAnalysis: JavaWorldAnalysis | null;
+  analysisLoading: boolean;
   loading: boolean;
   error: string | null;
   managerOpen: boolean;
@@ -51,6 +56,9 @@ interface ProjectUiState {
   refreshSession: () => Promise<void>;
   resume: () => Promise<void>;
   create: (name: string, mode: CreationMode) => Promise<boolean>;
+  analyzeWorld: (folder: string) => Promise<JavaWorldAnalysis | null>;
+  clearWorldAnalysis: () => void;
+  importWorld: (name: string, folder: string) => Promise<boolean>;
   importStructure: (args: StructureImportProjectArgs) => Promise<boolean>;
   insertStructure: (args: StructureInsertArgs) => Promise<boolean>;
   open: (folder: string, options?: { discardCurrent?: boolean }) => Promise<boolean>;
@@ -74,6 +82,8 @@ const initial = {
   checkpoints: [] as CheckpointMeta[],
   lastSavedAtMs: null as number | null,
   lastSave: null as SaveOutcome | null,
+  worldAnalysis: null as JavaWorldAnalysis | null,
+  analysisLoading: false,
   loading: false,
   error: null as string | null,
   managerOpen: false,
@@ -105,6 +115,8 @@ function applyPayload(payload: OpenedProjectPayload): void {
     loading: false,
     error: null,
     checkpoints: [],
+    worldAnalysis: null,
+    analysisLoading: false,
   });
   const editorState = detail.editorState;
   useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
@@ -197,6 +209,60 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     } catch (error) {
       set({ loading: false });
       reportError(error, "Project creation failed");
+      return false;
+    }
+  },
+
+  analyzeWorld: async (folder) => {
+    const trimmed = folder.trim();
+    if (!trimmed) {
+      pushToast({
+        kind: "info",
+        title: "Select a world folder",
+        description: "Choose the folder that contains level.dat and region/.",
+      });
+      return null;
+    }
+    set({ analysisLoading: true });
+    try {
+      const analysis = await analyzeJavaWorld(trimmed);
+      set({ worldAnalysis: analysis, analysisLoading: false, error: null });
+      if (!analysis.supported) {
+        pushToast({
+          kind: "warning",
+          title: "World cannot be imported",
+          description: analysis.blockers.join(" · "),
+        });
+      }
+      return analysis;
+    } catch (error) {
+      set({ worldAnalysis: null, analysisLoading: false });
+      reportError(error, "World analysis failed");
+      return null;
+    }
+  },
+
+  clearWorldAnalysis: () => set({ worldAnalysis: null }),
+
+  importWorld: async (name, folder) => {
+    const trimmed = folder.trim();
+    if (!trimmed) return false;
+    const analysis = get().worldAnalysis;
+    set({ loading: true });
+    try {
+      const payload = await importJavaWorld(name.trim(), trimmed, currentEditorState());
+      applyPayload(payload);
+      set({ managerOpen: false });
+      pushToast({
+        kind: "success",
+        title: `Imported “${payload.detail.summary.name}”`,
+        description: `${analysis?.chunks ?? payload.info.chunkCount} chunk(s) · ${payload.info.blockCount.toLocaleString()} editable block(s) · source copy kept read-only`,
+      });
+      void get().refreshList();
+      return true;
+    } catch (error) {
+      set({ loading: false });
+      reportError(error, "World import failed");
       return false;
     }
   },

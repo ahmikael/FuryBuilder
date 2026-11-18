@@ -3,6 +3,7 @@ import type {
   CheckpointMeta,
   CreationMode,
   EditorState,
+  JavaWorldAnalysis,
   OpenedProjectPayload,
   ProjectDetail,
   ProjectList,
@@ -59,4 +60,20 @@ export function closeProject(save: boolean, editorState: EditorState): Promise<S
 
 export function renameProject(folder: string, name: string): Promise<ProjectDetail> {
   return invokeCommand<ProjectDetail>("project_rename", { folder, name });
+}
+
+export function analyzeJavaWorld(folder: string): Promise<JavaWorldAnalysis> {
+  return invokeCommand<JavaWorldAnalysis>("world_import_preview", { folder });
+}
+
+export function importJavaWorld(
+  name: string,
+  worldFolder: string,
+  editorState: EditorState,
+): Promise<OpenedProjectPayload> {
+  return invokeCommand<OpenedProjectPayload>("project_import_world", {
+    name,
+    worldFolder,
+    editorState,
+  });
 }

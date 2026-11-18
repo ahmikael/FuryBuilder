@@ -16,6 +16,7 @@ pub mod nbt;
 pub mod overlay;
 pub mod passthrough;
 pub mod structure;
+pub mod world_import;
 
 pub use anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LevelDat,
@@ -51,4 +52,9 @@ pub use passthrough::{
 pub use structure::{
     Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,
     MAX_STRUCTURE_VOLUME,
+};
+pub use world_import::{
+    analyze_java_world, load_java_world, load_java_world_with_options, ImportDimensionAnalysis,
+    JavaWorldAnalysis, JavaWorldLoadReport, WorldImportError, WorldImportOptions,
+    MAX_IMPORT_CHUNKS, MAX_IMPORT_NON_AIR_BLOCKS, MAX_IMPORT_SECTIONS, SUPPORTED_LAYOUT,
 };

@@ -32,5 +32,5 @@ pub use source::{SourceFile, SourceManifest};
 pub use store::{
     build_world, checksum, create_flat_base, migrate_manifest, snapshot_bytes, CheckpointMeta,
     ExportOutcome, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR, DATA_DIR, EXPORTS_DIR,
-    MAX_CHECKPOINTS, MAX_SNAPSHOTS, SESSION_MARKER, SOURCE_DIR,
+    MAX_CHECKPOINTS, MAX_SNAPSHOTS, MAX_SOURCE_FILES, SESSION_MARKER, SOURCE_DIR,
 };

@@ -358,22 +358,64 @@ cargo run -p furybuilder-world-io --example overlay_probe -- <world> <dimension>
 cargo run -p furybuilder-world-io --example overlay_probe -- <world> <dimension> <x> <y> <z> <block-state> --document
 ```
 
+## Import World wizard (M8.6)
+
+The desktop wizard now offers `Import World` as a third creation mode. The folder
+is analyzed before any project is created:
+
+| API                            | What it does                                                                  |
+| ------------------------------ | ----------------------------------------------------------------------------- |
+| `world_import_preview`         | read-only `level.dat`, layout, region and chunk validation with blockers      |
+| `project_import_world`         | creates the project, copies the source byte for byte, decodes editable blocks |
+| `world_io::analyze_java_world` | library analysis used by the command and by the probe                         |
+| `world_io::load_java_world`    | bounded block-state decoding into the sparse editor world                     |
+
+Guarantees and checks:
+
+- the selected folder is never modified; analysis only reads `level.dat`, region
+  tables and chunk NBT;
+- only classic Java 1.21.4 (`DataVersion` 4189) is accepted; 26.1+ split worlds,
+  legacy `.mcr` worlds and mixed layouts are refused with explicit blockers;
+- the analysis validates every allocated chunk and reports regions, chunks,
+  dimensions, block entities and entities;
+- the project stores an immutable source copy under `source/world/` using the M8.4
+  passthrough adapter: byte equality, `session.lock` skipped, every copied file
+  recorded with its SHA-256 in `source/source.json`;
+- editable import limits are 20,000 chunks, 2,000,000 non-empty sections and
+  50,000,000 non-air blocks; exceeding a limit fails before a project is kept;
+- only block states enter the editable project snapshot. Biomes, block entities,
+  entities, ticks, heightmaps, lighting, POI and unknown tags remain in the source
+  copy; the wizard lists these limitations instead of dropping them silently;
+- a failed copy or manifest write removes the half-created project folder.
+
+`Import World` does not write a new world or a region file yet. The next M8 stages
+must add a verified write path and export a new folder copy without touching the
+original.
+
+```powershell
+cargo test -p furybuilder-world-io --test world_import
+cargo test -p furybuilder-project-store --test source_overlay
+cargo run -p furybuilder-desktop --example import_world_probe -- <world> <empty-project-root> "Imported Flat"
+cargo run -p furybuilder-desktop --example import_world_probe -- <world> --analysis-only
+pnpm --filter @furybuilder/desktop test -- ProjectManager.test.tsx
+```
+
 ## FuryBuilder support matrix (M8 planning)
 
-| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                      | Write | Decision                        |
-| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ---------------------------- | ----- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory block edits (M8.5) | no    | first implementation target     |
-| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                           | no    | needs a separate tested adapter |
-| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                           | no    | needs a new layout adapter      |
-| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                           | no    | unsupported, moving target      |
-| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                           | no    | out of scope                    |
-| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                           | no    | out of scope                    |
+| World                                                      | DataVersion | Layout  | Read                                              | Passthrough                     | Overlay                                           | Write | Decision                        |
+| ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------- | ------------------------------------------------- | ----- | ------------------------------- |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4) | in-memory edits + Import World wizard (M8.5–M8.6) | no    | first implementation target     |
+| Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                              | no                                                | no    | needs a separate tested adapter |
+| Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                              | no                                                | no    | needs a new layout adapter      |
+| Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                              | no                                                | no    | unsupported, moving target      |
+| Pre-1.13 saves (pre-flattening, including MCRegion worlds) | varies      | legacy  | no                                                | no                              | no                                                | no    | out of scope                    |
+| Bedrock worlds                                             | n/a         | Bedrock | no                                                | no                              | no                                                | no    | out of scope                    |
 
 “Read” here means “a verified importer exists”. A folder being recognisable by
 the inventory script is not read support. “Passthrough” means unchanged files
-are copied byte for byte. “Overlay” means block edits are kept in memory and can
-be materialized to chunk NBT; it does not mean modified region files can already
-be exported.
+are copied byte for byte. “Overlay/wizard” means block edits are kept in memory,
+the desktop wizard can create an imported project, and edits can be materialized
+to chunk NBT; it does not mean modified region files can already be exported.
 
 ## Safety rules for the M8 importer
 
@@ -444,6 +486,13 @@ Recorded evidence:
   section became dirty, the biome stayed `minecraft:plains`, the patched chunk
   re-decoded to the new block, the overlay document was 6,634 bytes, and all 21
   source files were byte-identical before and after the probe.
+- `docs/testing/evidence/2026-11-18-world-import-1.21.4.json` - the full Import
+  World pipeline over the same 841-chunk world: analysis accepted 4 regions and
+  decoded 123,908 non-air blocks; the source copy copied 20 files / 3,481,260
+  bytes, all 20 copied files matched the source SHA-256, the source stayed
+  byte-identical, and the reopened project had 121 editable chunks. The same
+  evidence records a real 26.3 split world being refused with `DataVersion 5023`
+  and split-layout blockers.
 - `docs/testing/evidence/2026-11-18-world-layout-26.3.json` - a real official
   26.3 server world: split layout, `DataVersion` 5023, `Version.Id` 5023,
   `version_history: [5023]`, all three default dimensions under
@@ -476,8 +525,9 @@ Sources checked on 2026-11-18:
 1. The M8.3 reader covers `level.dat`, region containers, block-state palettes
    and biomes for 1.21.4 classic. M8.4 adds a byte-preserving, validated copy of
    unchanged files, including unknown metadata. M8.5 adds an in-memory
-   copy-on-write overlay and verified chunk NBT materialization. The next step is
-   connecting that overlay to the project wizard.
+   copy-on-write overlay and verified chunk NBT materialization. M8.6 connects
+   analysis, source copy and block import to the `Import World` wizard. The next
+   step is the verified write path for modified chunks.
 2. Keep layout detection explicit. Opening a 26.1+ folder must return a
    structured `unsupported_layout`/`unsupported_version`, not a partial world.
 3. Add a real 26.1+ fixture and adapter only when the game format and the

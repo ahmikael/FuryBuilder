@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
 import { ProjectManager } from "@/features/project/ProjectManager";
-import type { ProjectSummary } from "@/project/types";
+import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
 import { useProjectStore } from "@/state/project-store";
 import { useToastStore, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
@@ -20,6 +20,8 @@ const api = vi.hoisted(() => ({
   openCheckpoint: vi.fn(),
   close: vi.fn(),
   rename: vi.fn(),
+  analyze: vi.fn(),
+  importWorld: vi.fn(),
 }));
 
 const worldApi = vi.hoisted(() => ({
@@ -39,6 +41,8 @@ vi.mock("@/lib/project-api", () => ({
   openCheckpoint: api.openCheckpoint,
   closeProject: api.close,
   renameProject: api.rename,
+  analyzeJavaWorld: api.analyze,
+  importJavaWorld: api.importWorld,
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => {
@@ -81,6 +85,36 @@ const second: ProjectSummary = {
   bytes: 512,
   schemaVersion: 1,
   recoverable: true,
+};
+
+const worldAnalysis: JavaWorldAnalysis = {
+  root: "C:\\saves\\World",
+  layout: "classic_anvil",
+  supported: true,
+  dataVersion: 4189,
+  versionId: 4189,
+  versionName: "1.21.4",
+  levelName: "Import test",
+  declaredDimensions: ["minecraft:overworld"],
+  dimensions: [
+    {
+      id: "minecraft:overworld",
+      kind: "overworld",
+      minY: -64,
+      height: 384,
+      regionFiles: 4,
+      chunks: 841,
+    },
+  ],
+  regions: 4,
+  chunks: 841,
+  blockEntities: 3,
+  entities: 2,
+  warnings: [
+    "the selected world is opened read-only and is never modified",
+    "only block states become editable in this milestone",
+  ],
+  blockers: [],
 };
 
 function opened(summary: ProjectSummary) {
@@ -140,6 +174,8 @@ function seed(overrides: { revision?: number; recovery?: boolean } = {}): void {
       : null,
     checkpoints: [],
     lastSave: null,
+    worldAnalysis: null,
+    analysisLoading: false,
     loading: false,
     error: null,
   });
@@ -179,6 +215,8 @@ beforeEach(() => {
     ...opened(first).detail,
     summary: { ...first, name },
   }));
+  api.analyze.mockReset();
+  api.importWorld.mockReset();
   worldApi.info.mockReset().mockResolvedValue(opened(first).info);
   worldApi.history.mockReset().mockResolvedValue({
     canUndo: false,
@@ -190,7 +228,7 @@ beforeEach(() => {
 });
 
 describe("project manager", () => {
-  it("lists projects with modes and marks future creation modes as unavailable", async () => {
+  it("lists projects with modes and marks only Vanilla World as unavailable", async () => {
     render(<ProjectManager />);
     expect((await screen.findAllByText("First Castle")).length).toBeGreaterThan(0);
     expect(screen.getByText("Second Base")).toBeInTheDocument();
@@ -199,7 +237,7 @@ describe("project manager", () => {
 
     await userEvent.setup().click(screen.getByRole("tab", { name: /New project/ }));
     expect(screen.getByRole("button", { name: /Vanilla World/ })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Import World/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Import World/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Empty Project/ })).toBeEnabled();
     expect(screen.getByLabelText("Target Java version")).toBeDisabled();
     expect(screen.getByLabelText("Target Java version")).toHaveValue("1.21.4");
@@ -285,5 +323,59 @@ describe("project manager", () => {
     await user.click(screen.getByRole("button", { name: "Restore" }));
     await waitFor(() => expect(api.openCheckpoint).toHaveBeenCalledWith(9));
     confirm.mockRestore();
+  });
+
+  it("analyzes and imports a supported Java world folder", async () => {
+    api.analyze.mockResolvedValue(worldAnalysis);
+    const importedSummary: ProjectSummary = {
+      ...first,
+      folder: "Imported World.furybuilder",
+      name: "Imported World",
+      creationMode: "import",
+    };
+    api.importWorld.mockResolvedValue(opened(importedSummary));
+    const user = userEvent.setup();
+    render(<ProjectManager />);
+
+    await user.click(screen.getByRole("tab", { name: /New project/ }));
+    await user.click(screen.getByRole("button", { name: /Import World/ }));
+    await user.type(screen.getByLabelText("Java world folder"), "C:\\saves\\World");
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    await waitFor(() => expect(api.analyze).toHaveBeenCalledWith("C:\\saves\\World"));
+    expect(screen.getAllByText(/DataVersion 4189/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/4 region\(s\) · 841 chunk\(s\)/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/classic_anvil/)).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Project name"), "Imported World");
+    await user.click(screen.getByRole("button", { name: "Import world" }));
+    await waitFor(() =>
+      expect(api.importWorld).toHaveBeenCalledWith("Imported World", "C:\\saves\\World", {
+        selectedDimension: "minecraft:overworld",
+        loadRadius: 1,
+      }),
+    );
+    await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("shows blockers and keeps import disabled for an unsupported world", async () => {
+    api.analyze.mockResolvedValue({
+      ...worldAnalysis,
+      supported: false,
+      dataVersion: 4325,
+      blockers: [
+        "DataVersion 4325 is not supported; this build edits 4189 (Minecraft Java 1.21.4)",
+      ],
+    });
+    const user = userEvent.setup();
+    render(<ProjectManager />);
+
+    await user.click(screen.getByRole("tab", { name: /New project/ }));
+    await user.click(screen.getByRole("button", { name: /Import World/ }));
+    await user.type(screen.getByLabelText("Java world folder"), "C:\\saves\\Newer");
+    await user.type(screen.getByLabelText("Project name"), "Newer World");
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByText(/DataVersion 4325 is not supported/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import world" })).toBeDisabled();
+    expect(api.importWorld).not.toHaveBeenCalled();
   });
 });

@@ -1,0 +1,432 @@
+//! Read-only analysis and editable block import for supported classic Java worlds.
+//!
+//! This is the format layer behind the `Import World` project mode. It never writes to
+//! the selected world:
+//!
+//! - [`analyze_java_world`] validates `level.dat`, the layout, every region table and every
+//!   allocated chunk, then returns counts and explicit blockers;
+//! - [`load_java_world`] decodes block states into the sparse `world_domain::World` used by
+//!   the editor, under hard chunk/section/block limits.
+//!
+//! Biomes, block entities, entities, ticks, heightmaps, lighting and unknown tags are not
+//! represented in the editable world. They stay in the byte-preserving source copy made by
+//! [`crate::passthrough`], and the analysis reports them as limitations instead of dropping
+//! them silently.
+
+use std::path::Path;
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+use world_domain::{ChunkPos, DimensionKind, World};
+
+use crate::anvil::{AnvilError, JavaWorld, LevelDat};
+use crate::passthrough::PassthroughError;
+
+/// Maximum allocated source chunks that can be decoded into one editable project.
+pub const MAX_IMPORT_CHUNKS: usize = 20_000;
+/// Maximum non-air blocks accepted into the editable project snapshot.
+pub const MAX_IMPORT_NON_AIR_BLOCKS: usize = 50_000_000;
+/// Maximum non-empty sections accepted into the editable project snapshot.
+pub const MAX_IMPORT_SECTIONS: usize = 2_000_000;
+/// Layout identifier used by the supported classic Anvil reader.
+pub const SUPPORTED_LAYOUT: &str = "classic_anvil";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportDimensionAnalysis {
+    pub id: String,
+    pub kind: DimensionKind,
+    pub min_y: i32,
+    pub height: i32,
+    pub region_files: usize,
+    pub chunks: usize,
+}
+
+/// Bounded, read-only report for a selected world folder.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaWorldAnalysis {
+    pub root: String,
+    pub layout: String,
+    pub supported: bool,
+    pub data_version: Option<i32>,
+    pub version_id: Option<i32>,
+    pub version_name: Option<String>,
+    pub level_name: Option<String>,
+    pub declared_dimensions: Vec<String>,
+    pub dimensions: Vec<ImportDimensionAnalysis>,
+    pub regions: usize,
+    pub chunks: usize,
+    pub block_entities: usize,
+    pub entities: usize,
+    pub warnings: Vec<String>,
+    pub blockers: Vec<String>,
+}
+
+/// Counts produced while decoding an imported world into the editable model.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaWorldLoadReport {
+    pub chunks: usize,
+    pub empty_chunks: usize,
+    pub non_full_chunks: usize,
+    pub sections: usize,
+    pub non_air_blocks: usize,
+    pub block_entities: usize,
+    pub entities: usize,
+    pub dimensions: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WorldImportOptions {
+    pub max_chunks: usize,
+    pub max_sections: usize,
+    pub max_non_air_blocks: usize,
+}
+
+impl Default for WorldImportOptions {
+    fn default() -> Self {
+        Self {
+            max_chunks: MAX_IMPORT_CHUNKS,
+            max_sections: MAX_IMPORT_SECTIONS,
+            max_non_air_blocks: MAX_IMPORT_NON_AIR_BLOCKS,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum WorldImportError {
+    #[error(transparent)]
+    Anvil(#[from] AnvilError),
+    #[error(transparent)]
+    Passthrough(#[from] PassthroughError),
+    #[error(transparent)]
+    World(#[from] world_domain::WorldError),
+    #[error("world import limit exceeded: {0}")]
+    LimitExceeded(String),
+    #[error("world import verification failed: {0}")]
+    VerificationFailed(String),
+    #[error("world import I/O failed: {0}")]
+    Io(String),
+}
+
+impl WorldImportError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            WorldImportError::Anvil(error) => error.code(),
+            WorldImportError::Passthrough(error) => error.code(),
+            WorldImportError::World(_) => "invalid_argument",
+            WorldImportError::LimitExceeded(_) => "limit_exceeded",
+            WorldImportError::VerificationFailed(_) => "verification_failed",
+            WorldImportError::Io(_) => "io_error",
+        }
+    }
+}
+
+/// Opens the selected folder read-only and reports what the importer can and cannot use.
+///
+/// Unsupported versions, layouts and malformed chunks are returned as blockers instead of
+/// an exception so the wizard can show why creation is disabled. The function never
+/// modifies the world.
+pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
+    let root = root.as_ref();
+    let mut analysis = JavaWorldAnalysis {
+        root: root.display().to_string(),
+        layout: detect_layout(root).to_owned(),
+        supported: false,
+        data_version: None,
+        version_id: None,
+        version_name: None,
+        level_name: None,
+        declared_dimensions: Vec::new(),
+        dimensions: Vec::new(),
+        regions: 0,
+        chunks: 0,
+        block_entities: 0,
+        entities: 0,
+        warnings: Vec::new(),
+        blockers: Vec::new(),
+    };
+
+    let level = LevelDat::read(root.join("level.dat"));
+    match &level {
+        Ok(level) => {
+            analysis.data_version = Some(level.data_version);
+            analysis.version_id = Some(level.version_id);
+            analysis.version_name = level.version_name.clone();
+            analysis.level_name = level.level_name.clone();
+        }
+        Err(error) => analysis
+            .blockers
+            .push(format!("level.dat is missing or unreadable: {error}")),
+    }
+
+    match JavaWorld::open(root) {
+        Ok(world) => {
+            analysis.layout = SUPPORTED_LAYOUT.to_owned();
+            analysis.declared_dimensions = world.declared_dimensions.clone();
+            if let Err(error) = inspect_world(&world, &mut analysis) {
+                analysis.blockers.push(error.to_string());
+            }
+        }
+        Err(error) => {
+            if analysis.layout == "mixed" {
+                analysis.blockers.push(
+                    "the world mixes classic region/ files with 26.1+ split layout markers"
+                        .to_owned(),
+                );
+            } else if analysis.layout == "split_26_1_plus" {
+                analysis
+                    .blockers
+                    .push("26.1+ split world layout is not supported".to_owned());
+            }
+            analysis.blockers.push(match &error {
+                AnvilError::UnsupportedDataVersion { found, supported } => format!(
+                    "DataVersion {found} is not supported; this build edits {supported} (Minecraft Java 1.21.4)"
+                ),
+                other => other.to_string(),
+            });
+        }
+    }
+
+    if analysis.chunks > MAX_IMPORT_CHUNKS {
+        analysis.blockers.push(format!(
+            "the world has {} allocated chunks; the editable import limit is {MAX_IMPORT_CHUNKS}",
+            analysis.chunks
+        ));
+    }
+    if analysis.chunks == 0 && analysis.blockers.is_empty() {
+        analysis
+            .warnings
+            .push("the world contains no allocated chunks".to_owned());
+    }
+
+    analysis.warnings.push(
+        "the selected world is opened read-only and is never modified; importing copies it byte for byte into the project source layer"
+            .to_owned(),
+    );
+    analysis.warnings.push(
+        "only block states become editable in this milestone; biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy"
+            .to_owned(),
+    );
+    if analysis.block_entities > 0 || analysis.entities > 0 {
+        analysis.warnings.push(format!(
+            "{} block entit{} and {} entit{} found; they remain unchanged in the source copy",
+            analysis.block_entities,
+            if analysis.block_entities == 1 {
+                "y"
+            } else {
+                "ies"
+            },
+            analysis.entities,
+            if analysis.entities == 1 { "y" } else { "ies" },
+        ));
+    }
+    analysis.warnings.push(format!(
+        "editable import limits: {MAX_IMPORT_CHUNKS} chunks, {MAX_IMPORT_SECTIONS} sections, {MAX_IMPORT_NON_AIR_BLOCKS} non-air blocks"
+    ));
+
+    analysis.supported = analysis.blockers.is_empty();
+    analysis
+}
+
+fn inspect_world(world: &JavaWorld, analysis: &mut JavaWorldAnalysis) -> Result<(), AnvilError> {
+    for dimension in &world.dimensions {
+        let coordinates = world.region_coordinates(&dimension.id)?;
+        let mut dimension_chunks = 0usize;
+        for (region_x, region_z) in &coordinates {
+            let region = world.read_region(&dimension.id, *region_x, *region_z)?;
+            dimension_chunks += region.entries().len();
+            analysis.chunks += region.entries().len();
+            if analysis.chunks > MAX_IMPORT_CHUNKS {
+                analysis.blockers.push(format!(
+                    "the world has more than {MAX_IMPORT_CHUNKS} allocated chunks"
+                ));
+                return Ok(());
+            }
+            for summary in region.summarize_all()? {
+                analysis.block_entities += summary.block_entities;
+                analysis.entities += summary.entities;
+            }
+        }
+        analysis.regions += coordinates.len();
+        analysis.dimensions.push(ImportDimensionAnalysis {
+            id: dimension.id.clone(),
+            kind: dimension.kind,
+            min_y: dimension.min_y,
+            height: dimension.height,
+            region_files: coordinates.len(),
+            chunks: dimension_chunks,
+        });
+    }
+    Ok(())
+}
+
+fn detect_layout(root: &Path) -> &'static str {
+    let classic = is_dir(&root.join("region"));
+    let split_overworld = is_dir(&root.join("dimensions").join("minecraft").join("overworld"));
+    let split_players = is_dir(&root.join("players"));
+    let split_data = is_file(
+        &root
+            .join("data")
+            .join("minecraft")
+            .join("world_gen_settings.dat"),
+    );
+    let split = split_overworld || (split_players && split_data);
+    let legacy = has_legacy_region_file(&root.join("region"));
+    if classic && split {
+        "mixed"
+    } else if split {
+        "split_26_1_plus"
+    } else if classic {
+        SUPPORTED_LAYOUT
+    } else if legacy {
+        "legacy_mcr"
+    } else {
+        "unknown"
+    }
+}
+
+fn is_dir(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|metadata| metadata.is_dir())
+        .unwrap_or(false)
+}
+
+fn is_file(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|metadata| metadata.is_file())
+        .unwrap_or(false)
+}
+
+fn has_legacy_region_file(region_dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(region_dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        entry
+            .path()
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| extension.eq_ignore_ascii_case("mcr"))
+    })
+}
+
+/// Decodes every allocated chunk into the editable sparse world.
+///
+/// The caller must first check [`analyze_java_world`]; this function repeats the version
+/// and layout checks and enforces its own hard limits. It leaves the world revision at the
+/// decoded value (zero) for the project creator to bump.
+pub fn load_java_world(
+    root: impl AsRef<Path>,
+) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
+    load_java_world_with_options(root, WorldImportOptions::default())
+}
+
+pub fn load_java_world_with_options(
+    root: impl AsRef<Path>,
+    options: WorldImportOptions,
+) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
+    let world = JavaWorld::open(root)?;
+    let mut report = JavaWorldLoadReport {
+        chunks: 0,
+        empty_chunks: 0,
+        non_full_chunks: 0,
+        sections: 0,
+        non_air_blocks: 0,
+        block_entities: 0,
+        entities: 0,
+        dimensions: Vec::new(),
+        warnings: Vec::new(),
+    };
+    let mut editable = World::new_empty();
+
+    for dimension in &world.dimensions {
+        report.dimensions.push(dimension.id.clone());
+        for (region_x, region_z) in world.region_coordinates(&dimension.id)? {
+            let region = world.read_region(&dimension.id, region_x, region_z)?;
+            for entry in region.entries() {
+                if report.chunks >= options.max_chunks {
+                    return Err(WorldImportError::LimitExceeded(format!(
+                        "more than {} chunks",
+                        options.max_chunks
+                    )));
+                }
+                let chunk = region.read_chunk(entry.x, entry.z)?;
+                let decoded = chunk.decode(dimension)?;
+                report.chunks += 1;
+                report.block_entities += decoded.block_entities;
+                report.entities += decoded.entities;
+                if decoded.status.as_deref() != Some("minecraft:full") {
+                    report.non_full_chunks += 1;
+                }
+                if decoded
+                    .sections
+                    .values()
+                    .all(|section| section.blocks.is_empty())
+                {
+                    report.empty_chunks += 1;
+                    continue;
+                }
+                let chunk_pos = ChunkPos::new(decoded.x, decoded.z);
+                for (section_y, section) in decoded.sections {
+                    if section.blocks.is_empty() {
+                        continue;
+                    }
+                    report.sections = report.sections.checked_add(1).ok_or_else(|| {
+                        WorldImportError::LimitExceeded("section counter overflow".to_owned())
+                    })?;
+                    if report.sections > options.max_sections {
+                        return Err(WorldImportError::LimitExceeded(format!(
+                            "more than {} non-empty sections",
+                            options.max_sections
+                        )));
+                    }
+                    report.non_air_blocks = report
+                        .non_air_blocks
+                        .checked_add(section.blocks.non_air_count())
+                        .ok_or_else(|| {
+                            WorldImportError::LimitExceeded("block counter overflow".to_owned())
+                        })?;
+                    if report.non_air_blocks > options.max_non_air_blocks {
+                        return Err(WorldImportError::LimitExceeded(format!(
+                            "more than {} non-air blocks",
+                            options.max_non_air_blocks
+                        )));
+                    }
+                    editable.install_section(
+                        &dimension.id,
+                        chunk_pos,
+                        section_y,
+                        Some(section.blocks),
+                    )?;
+                }
+            }
+        }
+    }
+
+    if report.non_full_chunks > 0 {
+        report.warnings.push(format!(
+            "{} chunk(s) do not have status minecraft:full; their stored blocks are imported as-is",
+            report.non_full_chunks
+        ));
+    }
+    report.warnings.push(
+        "biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags are preserved only in the immutable source copy"
+            .to_owned(),
+    );
+    Ok((editable, report))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_world_reports_a_blocker_instead_of_panicking() {
+        let analysis = analyze_java_world(std::env::temp_dir().join("furybuilder-missing-world"));
+        assert!(!analysis.supported);
+        assert!(!analysis.blockers.is_empty());
+    }
+}

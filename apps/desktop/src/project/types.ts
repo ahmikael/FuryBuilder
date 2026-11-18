@@ -86,6 +86,33 @@ export interface CheckpointMeta {
   reason: string;
 }
 
+export interface ImportDimensionAnalysis {
+  id: string;
+  kind: "overworld" | "nether" | "end" | "custom" | string;
+  minY: number;
+  height: number;
+  regionFiles: number;
+  chunks: number;
+}
+
+export interface JavaWorldAnalysis {
+  root: string;
+  layout: string;
+  supported: boolean;
+  dataVersion: number | null;
+  versionId: number | null;
+  versionName: string | null;
+  levelName: string | null;
+  declaredDimensions: string[];
+  dimensions: ImportDimensionAnalysis[];
+  regions: number;
+  chunks: number;
+  blockEntities: number;
+  entities: number;
+  warnings: string[];
+  blockers: string[];
+}
+
 export const CREATION_MODES: Array<{
   mode: CreationMode;
   label: string;
@@ -116,8 +143,8 @@ export const CREATION_MODES: Array<{
     mode: "import",
     label: "Import World",
     description:
-      "Future mode. Import a Java world or structure as an immutable source with an overlay project layer.",
-    available: false,
+      "Open a supported Java 1.21.4 world read-only, keep a byte-for-byte source copy and edit its blocks through the project overlay.",
+    available: true,
   },
 ];
 
