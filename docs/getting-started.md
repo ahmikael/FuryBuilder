@@ -1,11 +1,12 @@
 # Getting started
 
 This guide takes you from a fresh checkout to a saved, exported build. It describes the
-current alpha, not a future release. If a screen or action is not listed here, assume it is
-not implemented yet.
+current Windows beta, not a future release. If a screen or action is not listed here, assume
+it is not implemented yet.
 
 To install a packaged Windows beta instead of running a checkout, start with
-[Windows installation and updates](install-windows.md).
+[Windows installation and updates](install-windows.md); the supported baseline and tested
+reference machine are in [System requirements](system-requirements.md).
 
 FuryBuilder is a desktop 3D editor for Minecraft Java Edition worlds and structures. It is
 not a game client: it does not run Minecraft, simulate redstone or guarantee vanilla world
@@ -14,14 +15,16 @@ for blocks; the viewport is a derived view.
 
 ## 1. What you need
 
-- Windows 10 or 11 with the WebView2 runtime (normally preinstalled).
-- Node.js 22+ and pnpm 10+.
-- Rust stable with the MSVC toolchain and Visual Studio Build Tools (for the desktop shell).
+- Windows 10 or 11 (64-bit) with the WebView2 runtime (normally preinstalled).
 - No Minecraft installation, Java runtime or server JAR is required for `Empty Project`,
-  `Flat base` or structure import/export.
+  `Flat base`, `Import World` or structure import/export.
+- Building from source additionally needs Node.js 22+, pnpm 10+ and Rust stable with the
+  MSVC toolchain and Visual Studio Build Tools.
 
 Minecraft assets, Java and the official server JAR are optional additions for realistic
-textures and `Vanilla World`. FuryBuilder never bundles Mojang game files.
+textures and `Vanilla World`. FuryBuilder never bundles Mojang game files. The full
+baseline, tested reference machine and unsupported configurations are in
+[System requirements](system-requirements.md).
 
 ## 2. Start the application
 

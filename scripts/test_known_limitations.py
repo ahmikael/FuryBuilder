@@ -65,8 +65,18 @@ class KnownLimitationsTests(unittest.TestCase):
             "Reference overlays are not enabled",
             "OpenCode CLI 2.3.2",
             "testing/test-matrix.md",
+            "system-requirements.md",
+            "KL-43",
         ):
             self.assertIn(term, self.text, f"known-limitations.md is missing {term}")
+
+    def test_external_beta_evidence_gap_is_documented(self):
+        self.assertIn("KL-43", self.summary)
+        block = self.text.split("### KL-43", 1)[1].split("###", 1)[0]
+        self.assertIn("**Status:** pending M11", block)
+        self.assertIn("No external user", block)
+        self.assertIn("system-requirements.md", block)
+        self.assertIn("java-server-interop.md", block)
 
     def test_readme_and_docs_index_link_to_the_list(self):
         readme = read(README)

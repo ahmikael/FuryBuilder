@@ -27,6 +27,10 @@ format at a time; do not keep an NSIS and an MSI installation side by side.
   only after explicit consent, verifies checksums and keeps them in its own
   cache. `Import World` needs a user-owned Java 1.21.4 world folder.
 
+The supported baseline, memory/disk guidance, tested reference machine and
+configurations that are not validated are in
+[system-requirements.md](system-requirements.md).
+
 ## Install
 
 1. Verify the downloaded file against the SHA-256 published with the release:

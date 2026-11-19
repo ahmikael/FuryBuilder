@@ -52,6 +52,11 @@ jobs:
       - name: Java server import/export evidence
         run: python scripts/test_java_server_interop.py
 
+      - name: System requirements and limitations
+        run: |
+          python scripts/test_system_requirements.py
+          python scripts/test_known_limitations.py
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

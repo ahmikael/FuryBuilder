@@ -40,6 +40,14 @@ fixtures/              Small self-authored test structures (no Mojang assets)
 
 ## Requirements
 
+For the packaged Windows beta, see [docs/system-requirements.md](docs/system-requirements.md).
+In short: 64-bit Windows 10/11 with the WebView2 runtime; no Minecraft installation or Java
+runtime is required for `Empty Project`, `Flat base`, `Import World` or structure exchange.
+`Vanilla World` additionally needs Java 21 and the official Minecraft 1.21.4 `server.jar`,
+provided or downloaded only after explicit consent.
+
+Building from source additionally needs:
+
 - Node.js >= 22 and pnpm >= 10
 - Rust stable (MSVC toolchain) and Visual Studio Build Tools
 - WebView2 runtime (preinstalled on current Windows 10/11)
@@ -331,17 +339,19 @@ record and ADR.
 - `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
 - `docs/adr/` — architecture decision records (format, MCP runtime, versions).
 
-## Known limitations (early development)
+## Known limitations (Windows beta)
 
 The maintained, example-backed list is [docs/known-limitations.md](docs/known-limitations.md).
-It covers platform and distribution, the single supported Java version, import/export and
+The supported baseline and tested reference machine are in
+[docs/system-requirements.md](docs/system-requirements.md). It covers platform and
+distribution, the single supported Java version, import/export and
 derived-data boundaries, Vanilla World prerequisites and parity scope, editor workflow limits,
 the asset/renderer subset, the measured GPU envelope, MCP access/transport limits, recovery and
 diagnostics. Each entry has a status, a concrete example, a workaround and evidence.
 
 The most important current boundaries:
 
-- Windows-first alpha; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
+- Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
 - Only Minecraft Java 1.21.4 (`DataVersion` 4189). Other versions, Bedrock and custom dimensions
   are refused; a bare `.mca`/`region/` is not a complete world.
 - Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are
@@ -354,3 +364,6 @@ The most important current boundaries:
   visible viewport for screenshots.
 - Autosave runs every 30 seconds; a damaged autosave is not recovered. The renderer's large-map
   envelope is machine-specific, and the tested hardware was one GTX 1060 plus software backends.
+- The current evidence comes from internal harnesses and one Windows 11 reference machine. No
+  external beta-user field data exists yet (KL-43); untested configurations are not supported
+  just because the app opens.

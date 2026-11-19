@@ -6,6 +6,9 @@ milestone is complete.
 
 ## User guides
 
+- [System requirements](system-requirements.md) — supported Windows/WebView2 baseline, tested
+  reference machine, optional Java/Minecraft dependencies and configurations that are not
+  validated.
 - [Windows installation and updates](install-windows.md) — packages, requirements,
   install/update/uninstall, user-data location and unsigned-beta warnings.
 - [Demo project and screenshots](demo/README.md) — open the bundled project, see real captures
