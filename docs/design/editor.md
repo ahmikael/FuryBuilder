@@ -380,6 +380,38 @@ The measurements and the five-cycle post-GC heap result are recorded in
 `docs/testing/perf-runs.md`; the evidence is committed under
 `docs/testing/evidence/2026-11-19-webview2-resilience/`.
 
+## Shell layout, shortcuts and command palette (M10.4)
+
+The editor shell is now persistent and keyboard-operable instead of relying on hard-coded
+panel visibility:
+
+- **Persisted layout.** `furybuilder.editor-ui` stores the theme, UI scale, selected
+  dimension, left/right/bottom visibility and the active bottom-panel tab. The persisted
+  value is merged into the built-in defaults; old records without the new fields and
+  unknown tab ids are sanitized, so a stale record cannot render an empty controlled tab.
+- **Three ways to change panels.** The View menu lists the three panels with visible
+  state, a reset action and the command palette. The toolbar keeps panel toggle buttons
+  visible even when a panel is hidden, the panel headers have close buttons, and the
+  command palette exposes the same actions.
+- **Shortcuts.** `Ctrl/Cmd+K` opens the searchable command palette; `Ctrl+B`,
+  `Ctrl+Alt+B` and `Ctrl+J` toggle the world panel, inspector and bottom panel. The
+  existing editor shortcuts (tools `1`-`8`, undo/redo, copy/paste, delete, Enter, Escape)
+  keep their behavior. Shortcuts are fixed by design for this milestone; user-defined
+  keybindings are not implemented.
+- **Search.** The command palette searches actions by their labels, groups and keywords,
+  supports arrow navigation with Enter to run and Escape to close, and turns a query such
+  as `12 64 -8` into a “Go to” camera command. The block palette and the world-tree filter
+  remain separate, purpose-specific searches rather than pretending one search box knows
+  every domain.
+- **Themes.** Dark, light and system themes remain persisted and are reachable from the
+  toolbar, Settings and the command palette. System mode follows the OS preference live.
+- **End-to-end coverage.** `app/app-shortcuts.test.ts` covers shortcut mapping, and
+  `app/ux-scenarios.test.tsx` exercises the real App shell: palette search and theme
+  change, keyboard-only panel hiding with persisted state, restoring a panel through the
+  View menu, opening a bottom tab by search, filtering the world tree, and coordinate
+  search moving the camera through the viewport bus. These tests run without Tauri; they
+  verify UI state and events, not a native desktop session.
+
 ## Commit pipeline
 
 ```text

@@ -5,6 +5,7 @@ import {
   Copy,
   Layers,
   Paintbrush,
+  PanelRightClose,
   SlidersHorizontal,
   Sparkles,
 } from "lucide-react";
@@ -17,6 +18,7 @@ import { creationModeLabel } from "@/project/types";
 import { blockColor } from "@/renderer/assets";
 import type { BlockState } from "@/renderer/types";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
+import { useEditorStore } from "@/state/editor-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 
@@ -70,6 +72,7 @@ export function Inspector() {
   const projectSummary = useProjectStore((state) =>
     state.projects.find((entry) => entry.folder === state.current?.folder),
   );
+  const setPanelOpen = useEditorStore((state) => state.setPanelOpen);
   const projectDirty = projectIsDirty(project, revision);
   const autosaved = projectDirty && project?.autosavedRevision === revision;
   const state = selection?.state ?? { name: "minecraft:air", properties: {} };
@@ -88,6 +91,15 @@ export function Inspector() {
       <div className="flex h-9 items-center gap-1.5 border-b border-border px-2.5">
         <SlidersHorizontal className="size-3.5 text-muted-foreground" />
         <span className="text-[11px] font-semibold tracking-wide uppercase">Inspector</span>
+        <button
+          type="button"
+          aria-label="Hide inspector"
+          title="Hide inspector"
+          className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          onClick={() => setPanelOpen("right", false)}
+        >
+          <PanelRightClose className="size-3.5" />
+        </button>
       </div>
 
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">

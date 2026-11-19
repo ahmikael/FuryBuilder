@@ -227,6 +227,13 @@ mesher finalizes buffers with direct typed-array copies. A forced-GC WebView2 pr
 five load/unload cycles within 0.3 MB and returns geometry/mesh counts to zero, so there
 is no retained renderer leak; the remaining 822 ms frame gap / 780 ms long task at the
 artificial 4,225-chunk ceiling is documented as a limit in `docs/testing/perf-runs.md`.
+M10.4 makes the shell persistent and keyboard-operable: panel visibility and the active
+bottom tab are saved with the theme and UI scale, the View menu and toolbar expose the
+same toggles, and a searchable command palette (`Ctrl+K`) runs layout, theme, tab, tool,
+project and settings commands. A coordinate query such as `12 64 -8` moves the camera.
+`Ctrl+B`, `Ctrl+Alt+B` and `Ctrl+J` toggle the three panels; shortcuts are fixed for this
+milestone. The world tree filter is live instead of decorative, and six App-level UX
+scenario tests cover search, theme changes, keyboard-only layout changes and persistence.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

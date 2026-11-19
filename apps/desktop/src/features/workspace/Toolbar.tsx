@@ -2,8 +2,12 @@ import {
   Flame,
   FolderOpen,
   HardDrive,
+  PanelBottom,
+  PanelLeft,
+  PanelRight,
   Redo2,
   Save,
+  Search,
   Settings,
   Sun,
   Moon,
@@ -15,15 +19,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import type { BackendStatus } from "@/lib/contracts";
 import { isTauriRuntime } from "@/lib/ipc";
 import { redoWorld, undoWorld } from "@/editor/commands";
+import { COMMAND_PALETTE_SHORTCUT, PANEL_SHORTCUTS } from "@/editor/layout";
 import { blockColor } from "@/renderer/assets";
 import { useHistoryStore } from "@/state/history-store";
+import { useEditorStore } from "@/state/editor-store";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
+import { useUiStore } from "@/state/ui-store";
 import { useWorldStore } from "@/state/world-store";
 import { formatRelativeTime } from "@/project/types";
 import { cn } from "@/lib/utils";
-
-const menus = ["View", "Tools", "AI / MCP", "Export"] as const;
+import { ViewMenu } from "@/features/workspace/ViewMenu";
 
 interface ToolbarProps {
   backendStatus: BackendStatus;
@@ -48,6 +54,11 @@ export function Toolbar({
   const loading = useProjectStore((state) => state.loading);
   const lastSavedAtMs = useProjectStore((state) => state.lastSavedAtMs);
   const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
+  const leftPanelOpen = useEditorStore((state) => state.leftPanelOpen);
+  const rightPanelOpen = useEditorStore((state) => state.rightPanelOpen);
+  const bottomPanelOpen = useEditorStore((state) => state.bottomPanelOpen);
+  const togglePanel = useEditorStore((state) => state.togglePanel);
+  const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const worldRevision = useWorldStore((state) => state.revision);
   const tauri = isTauriRuntime();
   const projectOpen = Boolean(current?.folder);
@@ -101,37 +112,44 @@ export function Toolbar({
             Project manager — list, create, open, rename and checkpoints. Ctrl+S saves.
           </TooltipContent>
         </Tooltip>
-        {menus.map((menu) =>
-          menu === "AI / MCP" ? (
-            <Tooltip key={menu}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground"
-                  onClick={onOpenMcpAccess}
-                >
-                  {menu}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                MCP access mode, write limits and confirmation. Read-only by default.
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <Tooltip key={menu}>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
-                  {menu}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {menu} menus arrive with later milestones. Editing actions live in the viewport
-                toolbar and context menu.
-              </TooltipContent>
-            </Tooltip>
-          ),
-        )}
+        <ViewMenu />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
+              Tools
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Tools menus arrive with later milestones. Editing actions live in the viewport toolbar
+            and bottom panel.
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={onOpenMcpAccess}
+            >
+              AI / MCP
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            MCP access mode, write limits and confirmation. Read-only by default.
+          </TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
+              Export
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            Export controls live in the project manager. Supported formats and honest version limits
+            are listed there.
+          </TooltipContent>
+        </Tooltip>
       </nav>
 
       <div className="ml-2 flex items-center gap-1">
@@ -166,6 +184,56 @@ export function Toolbar({
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">
+        <div className="flex items-center">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Toggle world panel"
+                aria-pressed={leftPanelOpen}
+                onClick={() => togglePanel("left")}
+                className={cn(!leftPanelOpen && "text-muted-foreground/60")}
+              >
+                <PanelLeft />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>World panel · {PANEL_SHORTCUTS.left}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Toggle bottom panel"
+                aria-pressed={bottomPanelOpen}
+                onClick={() => togglePanel("bottom")}
+                className={cn(!bottomPanelOpen && "text-muted-foreground/60")}
+              >
+                <PanelBottom />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Bottom panel · {PANEL_SHORTCUTS.bottom}</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Toggle inspector"
+                aria-pressed={rightPanelOpen}
+                onClick={() => togglePanel("right")}
+                className={cn(!rightPanelOpen && "text-muted-foreground/60")}
+              >
+                <PanelRight />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Inspector · {PANEL_SHORTCUTS.right}</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <Separator orientation="vertical" className="mx-0.5 h-5" />
+
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -282,6 +350,20 @@ export function Toolbar({
             </Button>
           </TooltipTrigger>
           <TooltipContent>Project storage, checkpoints and recovery.</TooltipContent>
+        </Tooltip>
+
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Open command palette"
+              onClick={() => setCommandPaletteOpen(true)}
+            >
+              <Search />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Command palette · {COMMAND_PALETTE_SHORTCUT}</TooltipContent>
         </Tooltip>
 
         <Tooltip>

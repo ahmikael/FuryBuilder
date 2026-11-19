@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Blocks,
@@ -12,6 +12,7 @@ import {
   Loader2,
   Map,
   Mountain,
+  PanelBottomClose,
   Redo2,
   RotateCcw,
   Route,
@@ -28,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BackendState } from "@/hooks/use-backend";
 import type { BlockDefinition } from "@/editor/types";
+import { BOTTOM_PANEL_TABS, isBottomPanelTabId, type BottomPanelTabId } from "@/editor/layout";
 import { TOOL_LABELS, TOOL_SHORTCUTS } from "@/editor/session";
 import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor/commands";
 import { TerrainPanel } from "@/features/workspace/TerrainPanel";
@@ -47,6 +49,7 @@ import { fetchBlockCatalog } from "@/lib/world-api";
 import { blockColor } from "@/renderer/assets";
 import type { EditorTool } from "@/editor/types";
 import { useHistoryStore } from "@/state/history-store";
+import { useEditorStore } from "@/state/editor-store";
 import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
@@ -628,66 +631,60 @@ function WarningsPanel() {
   );
 }
 
+const TAB_ICONS: Record<BottomPanelTabId, ReactNode> = {
+  palette: <Blocks className="size-3" />,
+  tools: <Wrench className="size-3" />,
+  terrain: <Mountain className="size-3" />,
+  heightmap: <Grid3X3 className="size-3" />,
+  biomes: <Leaf className="size-3" />,
+  generators: <Route className="size-3" />,
+  layers: <Layers className="size-3" />,
+  templates: <Library className="size-3" />,
+  objects: <Shapes className="size-3" />,
+  parametric: <Boxes className="size-3" />,
+  dsl: <Braces className="size-3" />,
+  observation: <Map className="size-3" />,
+  validation: <ShieldCheck className="size-3" />,
+  console: <Terminal className="size-3" />,
+  history: <History className="size-3" />,
+  warnings: <AlertTriangle className="size-3" />,
+};
+
 export function BottomPanel({ backend }: { backend: BackendState }) {
   const job = useToolStore((state) => state.job);
   const tool = useToolStore((state) => state.tool);
+  const bottomPanelTab = useEditorStore((state) => state.bottomPanelTab);
+  const setBottomPanelTab = useEditorStore((state) => state.setBottomPanelTab);
+  const setPanelOpen = useEditorStore((state) => state.setPanelOpen);
   return (
     <section className="flex h-44 shrink-0 flex-col border-t border-border bg-card/50">
-      <Tabs defaultValue="palette" className="min-h-0 flex-1">
+      <Tabs
+        value={bottomPanelTab}
+        onValueChange={(value) => {
+          if (isBottomPanelTabId(value)) setBottomPanelTab(value);
+        }}
+        className="min-h-0 flex-1"
+      >
         <div className="flex h-8 items-center gap-2 border-b border-border px-2">
           <TabsList>
-            <TabsTrigger value="palette">
-              <Blocks className="size-3" /> Palette
-            </TabsTrigger>
-            <TabsTrigger value="tools">
-              <Wrench className="size-3" /> Tools
-            </TabsTrigger>
-            <TabsTrigger value="terrain">
-              <Mountain className="size-3" /> Terrain
-            </TabsTrigger>
-            <TabsTrigger value="heightmap">
-              <Grid3X3 className="size-3" /> Heightmap
-            </TabsTrigger>
-            <TabsTrigger value="biomes">
-              <Leaf className="size-3" /> Biomes
-            </TabsTrigger>
-            <TabsTrigger value="generators">
-              <Route className="size-3" /> Generators
-            </TabsTrigger>
-            <TabsTrigger value="layers">
-              <Layers className="size-3" /> Layers
-            </TabsTrigger>
-            <TabsTrigger value="templates">
-              <Library className="size-3" /> Templates
-            </TabsTrigger>
-            <TabsTrigger value="objects">
-              <Shapes className="size-3" /> Objects
-            </TabsTrigger>
-            <TabsTrigger value="parametric">
-              <Boxes className="size-3" /> Parametric
-            </TabsTrigger>
-            <TabsTrigger value="dsl">
-              <Braces className="size-3" /> Build DSL
-            </TabsTrigger>
-            <TabsTrigger value="observation">
-              <Map className="size-3" /> Observation
-            </TabsTrigger>
-            <TabsTrigger value="validation">
-              <ShieldCheck className="size-3" /> Validation
-            </TabsTrigger>
-            <TabsTrigger value="console">
-              <Terminal className="size-3" /> Console
-            </TabsTrigger>
-            <TabsTrigger value="history">
-              <History className="size-3" /> History
-            </TabsTrigger>
-            <TabsTrigger value="warnings">
-              <AlertTriangle className="size-3" /> Warnings
-            </TabsTrigger>
+            {BOTTOM_PANEL_TABS.map((tab) => (
+              <TabsTrigger key={tab.id} value={tab.id}>
+                {TAB_ICONS[tab.id]} {tab.label}
+              </TabsTrigger>
+            ))}
           </TabsList>
           <span className="ml-auto font-mono text-[9px] text-muted-foreground">
             active tool · {TOOL_LABELS[tool]}
           </span>
+          <button
+            type="button"
+            aria-label="Hide bottom panel"
+            title="Hide bottom panel"
+            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+            onClick={() => setPanelOpen("bottom", false)}
+          >
+            <PanelBottomClose className="size-3.5" />
+          </button>
         </div>
 
         <TabsContent value="palette" className="m-0 flex min-h-0 flex-col p-2">

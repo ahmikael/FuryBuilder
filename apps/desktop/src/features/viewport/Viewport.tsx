@@ -46,7 +46,7 @@ import { blockStateKey, type AssetStats } from "@/assets/model-assets";
 import type { WorldInfo } from "@/lib/contracts";
 import { createDemoSnapshot } from "@/renderer/demo";
 import { ViewportRenderer, type CameraMode } from "@/renderer/viewport-renderer";
-import type { ChunkPos, ChunkSnapshotBatch, RenderSnapshot } from "@/renderer/types";
+import type { BlockPosition, ChunkPos, ChunkSnapshotBatch, RenderSnapshot } from "@/renderer/types";
 import type { CaptureResult } from "@/renderer/observation";
 import type { RayHit } from "@/renderer/raycast";
 import {
@@ -372,14 +372,22 @@ export function Viewport() {
     const onReload = (): void => {
       void reloadRadius(renderer, useWorldStore.getState().loadRadius);
     };
+    const onFocusPosition = (event: Event): void => {
+      const detail = (event as CustomEvent<BlockPosition>).detail;
+      if (detail && [detail.x, detail.y, detail.z].every((value) => Number.isFinite(value))) {
+        renderer.focusOn(detail);
+      }
+    };
     viewportBus.addEventListener("refresh-chunks", onRefresh);
     viewportBus.addEventListener("reload-world", onReload);
+    viewportBus.addEventListener("focus-position", onFocusPosition);
 
     return () => {
       rendererDisposed = true;
       stopRendererRequests?.();
       viewportBus.removeEventListener("refresh-chunks", onRefresh);
       viewportBus.removeEventListener("reload-world", onReload);
+      viewportBus.removeEventListener("focus-position", onFocusPosition);
       unsubscribe();
       observer.disconnect();
       renderer.dispose();

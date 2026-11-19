@@ -1,4 +1,12 @@
-import { Box, ChevronDown, ChevronRight, Globe2, Layers, Search } from "lucide-react";
+import {
+  Box,
+  ChevronDown,
+  ChevronRight,
+  Globe2,
+  Layers,
+  PanelLeftClose,
+  Search,
+} from "lucide-react";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useEditorStore } from "@/state/editor-store";
@@ -16,20 +24,44 @@ const dimensions = [
   { id: "minecraft:the_end", label: "The End", yRange: "0 … 255", loaded: false },
 ];
 
+const modes = [
+  { label: "Vanilla World", milestone: "M9" },
+  { label: "Import World", milestone: "M8" },
+];
+
 export function WorldTree() {
   const [expanded, setExpanded] = useState(true);
+  const [search, setSearch] = useState("");
   const selectedDimension = useEditorStore((state) => state.selectedDimension);
   const setSelectedDimension = useEditorStore((state) => state.setSelectedDimension);
+  const setPanelOpen = useEditorStore((state) => state.setPanelOpen);
   const chunkCount = useWorldStore((state) => state.chunkCount);
   const blockCount = useWorldStore((state) => state.blockCount);
   const revision = useWorldStore((state) => state.revision);
   const source = useWorldStore((state) => state.source);
+  const needle = search.trim().toLowerCase();
+  const visibleDimensions = dimensions.filter(
+    (dimension) =>
+      !needle ||
+      dimension.label.toLowerCase().includes(needle) ||
+      dimension.id.toLowerCase().includes(needle),
+  );
+  const visibleModes = modes.filter((mode) => !needle || mode.label.toLowerCase().includes(needle));
 
   return (
     <aside className="flex min-h-0 w-56 shrink-0 flex-col border-r border-border bg-sidebar text-sidebar-foreground">
       <div className="flex h-9 items-center gap-1.5 border-b border-border px-2.5">
         <Globe2 className="size-3.5 text-muted-foreground" />
         <span className="text-[11px] font-semibold tracking-wide uppercase">World</span>
+        <button
+          type="button"
+          aria-label="Hide world panel"
+          title="Hide world panel"
+          className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          onClick={() => setPanelOpen("left", false)}
+        >
+          <PanelLeftClose className="size-3.5" />
+        </button>
       </div>
 
       <div className="border-b border-border p-1.5">
@@ -37,9 +69,10 @@ export function WorldTree() {
           <Search className="absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="h-6 pl-7"
-            placeholder="Search world…"
-            disabled
-            aria-label="Search world"
+            placeholder="Filter world tree…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Filter world tree"
           />
         </div>
       </div>
@@ -60,7 +93,7 @@ export function WorldTree() {
 
         {expanded ? (
           <div className="mt-0.5 ml-2 border-l border-border pl-2">
-            {dimensions.map((dimension) => {
+            {visibleDimensions.map((dimension) => {
               const selected = selectedDimension === dimension.id;
               return (
                 <button
@@ -93,14 +126,20 @@ export function WorldTree() {
           Modes
         </div>
         <div className="mt-1 space-y-1 px-1">
-          <div className="flex items-center justify-between rounded border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
-            <span>Vanilla World</span>
-            <span className="text-[9px]">M9</span>
-          </div>
-          <div className="flex items-center justify-between rounded border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground">
-            <span>Import World</span>
-            <span className="text-[9px]">M8</span>
-          </div>
+          {visibleModes.map((mode) => (
+            <div
+              key={mode.label}
+              className="flex items-center justify-between rounded border border-dashed border-border px-2 py-1.5 text-[11px] text-muted-foreground"
+            >
+              <span>{mode.label}</span>
+              <span className="text-[9px]">{mode.milestone}</span>
+            </div>
+          ))}
+          {visibleDimensions.length === 0 && visibleModes.length === 0 ? (
+            <div className="rounded border border-dashed border-border px-2 py-1.5 text-[10px] text-muted-foreground">
+              Nothing in the world tree matches “{search}”.
+            </div>
+          ) : null}
         </div>
       </div>
 

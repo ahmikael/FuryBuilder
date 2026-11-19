@@ -1,4 +1,4 @@
-import type { ChunkPos } from "@/renderer/types";
+import type { BlockPosition, ChunkPos } from "@/renderer/types";
 
 /**
  * Small typed event bridge between editing commands and the imperative viewport.
@@ -14,4 +14,9 @@ export function refreshViewportChunks(chunks: ChunkPos[]): void {
 /** Reloads the full bounded snapshot (used after a revision conflict). */
 export function reloadViewport(): void {
   viewportBus.dispatchEvent(new CustomEvent("reload-world"));
+}
+
+/** Moves the free camera near a position from the command palette or a search hit. */
+export function focusViewportPosition(pos: BlockPosition): void {
+  viewportBus.dispatchEvent(new CustomEvent("focus-position", { detail: pos }));
 }
