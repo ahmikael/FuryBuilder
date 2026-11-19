@@ -200,6 +200,13 @@ verified `.nbt` schematic ghost. The findings, threat model, storage/transform d
 limits and test plan are in `docs/research/reference-overlays.md`. The overlay UI and
 commands are intentionally not enabled yet; references remain editor-only guides and must
 never enter world history or export.
+M9.23 measured the real renderer under load in WebView2: a synthetic 4,225-chunk /
+9.0-million-block map was rendered and captured at radii 8-32, and 4,225 chunks were
+streamed through `updateChunks` in 16, 32 and 64-chunk batches. The run defines the tested
+ceiling (radius 32), the comfortable interactive envelope (radius 16, 1,089 chunks) and the
+upper playable bound (radius 24, 2,401 chunks), plus a 16-32 chunk streaming budget. These
+are single-machine reference numbers, not guarantees; details and caveats are in
+`docs/testing/perf-runs.md`.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
