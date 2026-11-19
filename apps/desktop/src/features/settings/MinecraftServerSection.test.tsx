@@ -191,6 +191,9 @@ describe("MinecraftServerSection", () => {
       await screen.findByRole("button", { name: "Download and install server JAR" }),
     );
     expect(await screen.findByText(/integrity check: SHA-1 mismatch/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Empty Project and Import World do not need this JAR/),
+    ).toBeInTheDocument();
   });
 
   it("clears only the managed server cache after an explicit action", async () => {

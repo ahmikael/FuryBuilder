@@ -12,6 +12,7 @@ import { Separator } from "@/components/ui/separator";
 import { MinecraftAssetsSection } from "@/features/settings/MinecraftAssetsSection";
 import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
 import { MinecraftServerSection } from "@/features/settings/MinecraftServerSection";
+import { DependencyReadiness } from "@/features/settings/DependencyReadiness";
 import type { BackendState } from "@/hooks/use-backend";
 import { MAX_UI_SCALE, MIN_UI_SCALE, type ThemeMode, useEditorStore } from "@/state/editor-store";
 import { cn } from "@/lib/utils";
@@ -112,11 +113,28 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
         <Separator />
 
-        <JavaRuntimeSection />
+        <div className="min-w-0 space-y-3">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-[11px] font-semibold tracking-wide uppercase">
+                Java &amp; World Generation
+              </h3>
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                Optional for Empty Project
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">
+              These components are only needed to generate a real Vanilla World. Discovery is local;
+              downloads start only from the explicit buttons below and are verified before use.
+            </p>
+          </div>
 
-        <Separator />
+          <DependencyReadiness />
 
-        <MinecraftServerSection />
+          <JavaRuntimeSection />
+
+          <MinecraftServerSection />
+        </div>
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

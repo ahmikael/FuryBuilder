@@ -238,9 +238,7 @@ export function JavaRuntimeSection() {
   return (
     <section className="min-w-0 space-y-2">
       <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold tracking-wide uppercase">
-          Java &amp; world generation
-        </h3>
+        <h3 className="text-[11px] font-semibold tracking-wide uppercase">Java runtime</h3>
         <span className="text-[10px] text-muted-foreground">
           Java {discovery?.targetJavaMajor ?? 21} · MC{" "}
           {discovery?.targetMinecraftVersion ?? "1.21.4"}
@@ -474,9 +472,13 @@ export function JavaRuntimeSection() {
       </div>
 
       {error ? (
-        <p className="rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">
-          {error}
-        </p>
+        <div className="space-y-0.5 rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">
+          <p>{error}</p>
+          <p className="text-muted-foreground">
+            Empty Project and manual editing keep working without Java. If the network is
+            unavailable, retry later or choose a local java.exe.
+          </p>
+        </div>
       ) : null}
       {notice ? (
         <p className="rounded border border-status-ok/40 bg-status-ok/10 px-2 py-1 text-[10px] text-status-ok">

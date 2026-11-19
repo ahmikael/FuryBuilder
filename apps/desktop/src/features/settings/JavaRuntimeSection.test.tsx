@@ -199,6 +199,9 @@ describe("JavaRuntimeSection", () => {
     await user.click(screen.getByRole("button", { name: "Check official Temurin download" }));
     await user.click(await screen.findByRole("button", { name: "Download and install Temurin" }));
     expect(await screen.findByText(/integrity check: SHA-256 mismatch/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Empty Project and manual editing keep working without Java/),
+    ).toBeInTheDocument();
     expect(api.select).not.toHaveBeenCalled();
   });
 

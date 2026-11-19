@@ -234,6 +234,12 @@ project and settings commands. A coordinate query such as `12 64 -8` moves the c
 `Ctrl+B`, `Ctrl+Alt+B` and `Ctrl+J` toggle the three panels; shortcuts are fixed for this
 milestone. The world tree filter is live instead of decorative, and six App-level UX
 scenario tests cover search, theme changes, keyboard-only layout changes and persistence.
+M10.5 completes the dependency settings UI: Minecraft assets, Java runtime and the server
+JAR are grouped with their target versions, automatic detection and manual pickers, plus
+explicit two-step download previews with progress and integrity errors. A read-only
+Vanilla World readiness card lists Java/JAR/EULA blockers without downloading or accepting
+anything. Derived asset bundles and managed Java/server caches can be cleared separately,
+and missing assets or offline failures explain the placeholder/Empty Project fallback.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

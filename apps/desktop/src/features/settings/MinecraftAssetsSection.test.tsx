@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   clear: vi.fn(),
   savePacks: vi.fn(),
   clearPacks: vi.fn(),
+  clearCache: vi.fn(),
 }));
 
 const dialog = vi.hoisted(() => ({ open: vi.fn() }));
@@ -34,6 +35,7 @@ vi.mock("@/lib/assets-api", () => ({
   clearMinecraftAssets: api.clear,
   saveMinecraftPackStack: api.savePacks,
   clearMinecraftPackStack: api.clearPacks,
+  clearAssetBundleCache: api.clearCache,
 }));
 
 const targetVersion: VersionReport = {
@@ -100,6 +102,7 @@ describe("MinecraftAssetsSection", () => {
     api.clear.mockReset();
     api.savePacks.mockReset();
     api.clearPacks.mockReset();
+    api.clearCache.mockReset();
     dialog.open.mockReset();
     api.saved.mockResolvedValue(noSource);
     api.discover.mockResolvedValue(discovery);
@@ -295,5 +298,17 @@ describe("MinecraftAssetsSection", () => {
     });
     await user.click(screen.getByRole("button", { name: "Remove Pack A" }));
     await waitFor(() => expect(api.savePacks).toHaveBeenLastCalledWith(["C:\\packs\\B.zip"]));
+  });
+
+  it("clears the derived asset cache only through the explicit action", async () => {
+    const user = userEvent.setup();
+    api.clearCache.mockResolvedValue(undefined);
+    render(<MinecraftAssetsSection />);
+    await screen.findByText("target found");
+    expect(api.clearCache).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Clear derived asset cache" }));
+    await waitFor(() => expect(api.clearCache).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/Derived asset cache cleared/)).toBeInTheDocument();
   });
 });

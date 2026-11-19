@@ -21,6 +21,7 @@ import type {
   VersionReport,
 } from "@/assets/types";
 import {
+  clearAssetBundleCache,
   clearMinecraftAssets,
   discoverMinecraftAssets,
   inspectAssetPath,
@@ -31,7 +32,16 @@ import {
 import { cn } from "@/lib/utils";
 
 type BusyAction =
-  "load" | "detect" | "root" | "jar" | "pack-zip" | "pack-folder" | "pack" | "clear" | null;
+  | "load"
+  | "detect"
+  | "root"
+  | "jar"
+  | "pack-zip"
+  | "pack-folder"
+  | "pack"
+  | "cache"
+  | "clear"
+  | null;
 
 export function MinecraftAssetsSection() {
   const [discovery, setDiscovery] = useState<AssetDiscoveryReport | null>(null);
@@ -144,6 +154,22 @@ export function MinecraftAssetsSection() {
       setSaved(next);
       setInspection(null);
       setNotice("Minecraft asset source cleared. Placeholder textures stay available.");
+    }
+  }
+
+  async function clearCache() {
+    setBusy("cache");
+    setError(null);
+    setNotice(null);
+    try {
+      await clearAssetBundleCache();
+      setNotice(
+        "Derived asset cache cleared. The viewport rebuilds models and textures from the selected source on its next load.",
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -450,13 +476,24 @@ export function MinecraftAssetsSection() {
             {busy === "clear" ? <Loader2 className="animate-spin" /> : <X />} Forget
           </Button>
         ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void clearCache()}
+          disabled={busy !== null}
+          aria-label="Clear derived asset cache"
+        >
+          {busy === "cache" ? <Loader2 className="animate-spin" /> : <Trash2 />} Clear asset cache
+        </Button>
       </div>
 
       <p className="text-[9px] text-muted-foreground">
-        JARs are pinned to the client SHA-1 declared by the launcher metadata. Archive entries are
-        validated in memory; traversal, symlinks and oversized packs are refused. Verified packs
-        feed the blockstate/model/texture renderer; malformed assets fall back to the missing
-        checker without changing block data.
+        Derived model/texture bundles are cached in memory so repeated viewport loads stay fast.
+        Clear the asset cache after replacing a JAR or pack outside FuryBuilder; world data is never
+        touched. JARs are pinned to the client SHA-1 declared by the launcher metadata. Archive
+        entries are validated in memory; traversal, symlinks and oversized packs are refused.
+        Verified packs feed the blockstate/model/texture renderer; malformed assets fall back to the
+        missing checker without changing block data.
       </p>
     </section>
   );

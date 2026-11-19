@@ -124,6 +124,15 @@ Resource packs can be added as `.zip` or folder, reordered and removed in
 format-46 and archive-safety checks as discovery; the UI emits
 `furybuilder-assets-changed` so the viewport rebuilds meshes without touching world data.
 
+The section separates automatic detection from manual choices: **Detect again** scans known
+launcher roots, while **.minecraft**, **client.jar**, **Pack .zip** and **Pack folder** open
+native pickers. A card reports the selected source, verified version, DataVersion, pack
+format and checksum state; invalid or removed sources show an explicit error instead of
+silently reverting. **Clear asset cache** drops only the derived in-memory bundle cache and
+never touches world data, the selected source or user packs. When no launcher, JAR or pack
+is available, the section states that placeholder textures remain active so an Empty
+Project still works offline.
+
 ## Renderer limitations
 
 - `uvlock` is recorded but not applied; element `rescale` is recorded but not applied.

@@ -91,6 +91,24 @@ files in the cache root, external Java installations and user settings outside t
 root are never touched. If the selected runtime was managed, its stale selection is cleared
 after removal.
 
+## Settings UI
+
+`Settings → Java & World Generation` groups the dependency UI and is explicitly marked
+**Optional for Empty Project**. A read-only **Vanilla World readiness** roll-up summarizes
+Java, server JAR and EULA state from verified local selections. It never probes, downloads,
+accepts the EULA or starts a process; refresh only re-reads backend state. Ready shows a
+green summary, an incomplete setup lists every blocker, and a backend/offline failure shows
+a retry action plus the reminder that Empty Project and Import World still work without
+Java.
+
+The Java section shows the target `Java 21 · MC 1.21.4`, the selected runtime with version,
+vendor, architecture, path and status, all detected candidates with the reason they cannot
+be selected, and the managed cache size. A manual `Choose java.exe` path and the two-step
+Adoptium flow (**Check official Temurin download** → preview of version/size/SHA-256/URL →
+**Download & install**) are separate actions. Download progress, integrity failures and
+cache clearing are reported inline; error states name the local fallback instead of
+suggesting that the editor is unusable.
+
 ## Commands and events
 
 | Command                   | Purpose                                                       |

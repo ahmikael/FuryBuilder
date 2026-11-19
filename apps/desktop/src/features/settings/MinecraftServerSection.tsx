@@ -421,9 +421,13 @@ export function MinecraftServerSection() {
       <ServerGenerationPanel discovery={discovery} onDiscoveryChanged={reload} />
 
       {error ? (
-        <p className="rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">
-          {error}
-        </p>
+        <div className="space-y-0.5 rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">
+          <p>{error}</p>
+          <p className="text-muted-foreground">
+            Empty Project and Import World do not need this JAR. If the network is unavailable,
+            retry later or choose a verified local server.jar.
+          </p>
+        </div>
       ) : null}
       {notice ? (
         <p className="rounded border border-status-ok/40 bg-status-ok/10 px-2 py-1 text-[10px] text-status-ok">
