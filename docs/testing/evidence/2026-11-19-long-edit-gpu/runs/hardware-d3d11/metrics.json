@@ -1,0 +1,7466 @@
+{
+  "kind": "long-edit-webview2",
+  "schemaVersion": 1,
+  "milestone": "M10.8",
+  "startedAt": "2026-11-19T15:09:41.732Z",
+  "durationMs": 609035,
+  "schedule": {
+    "requestedDurationMs": 600000,
+    "intervalMs": 250,
+    "verifyTimeoutMs": 8000,
+    "probeEveryMs": 60000
+  },
+  "backend": {
+    "id": "hardware-d3d11",
+    "label": "hardware / ANGLE D3D11",
+    "kind": "hardware",
+    "expectation": "The default WebView2 hardware path on the installed NVIDIA adapter.",
+    "browserArguments": [],
+    "commonBrowserArguments": [
+      "--remote-debugging-port=0",
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-features=CalculateNativeWinOcclusion",
+      "--enable-precise-memory-info"
+    ]
+  },
+  "environment": {
+    "platform": "win32",
+    "osRelease": "10.0.26300",
+    "node": "v26.13.1",
+    "cpu": "Intel(R) Core(TM) i5-9600KF CPU @ 3.70GHz",
+    "logicalCpus": 6,
+    "totalMemoryBytes": 17093582848,
+    "system": {
+      "adapters": [
+        {
+          "Name": "NVIDIA GeForce GTX 1060 3GB",
+          "DriverVersion": "32.0.15.6094",
+          "AdapterRAM": 3221225472,
+          "PNPDeviceID": "PCI\\VEN_10DE&DEV_1C02&SUBSYS_37221458&REV_A1\\4&FA0C5&0&0008"
+        }
+      ],
+      "cpu": [
+        {
+          "Name": "Intel(R) Core(TM) i5-9600KF CPU @ 3.70GHz",
+          "NumberOfCores": 6,
+          "NumberOfLogicalProcessors": 6
+        }
+      ],
+      "os": [
+        {
+          "Caption": "Microsoft Windows 11 Pro",
+          "Version": "10.0.26300",
+          "BuildNumber": "26300"
+        }
+      ],
+      "webview2": [
+        {
+          "name": "Microsoft Edge WebView2 Runtime",
+          "version": "157.0.4341.60"
+        }
+      ]
+    },
+    "physicalGpuLimitation": "Only 1 physical display adapter(s) detected (NVIDIA GeForce GTX 1060 3GB). No integrated or second discrete GPU is available in this environment. This run covers the \"hardware / ANGLE D3D11\" path only; cross-vendor and integrated/discrete hardware coverage is not claimed."
+  },
+  "app": {
+    "executable": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\target\\debug\\furybuilder-desktop.exe",
+    "sha256": "209d4f0c849ad952494cbd4a7947f880cb2c1ac61402bf848b504014eae7eea9",
+    "webgl": {
+      "vendor": "Google Inc. (NVIDIA)",
+      "renderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 3GB (0x00001C02) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "shadingLanguage": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+      "timerAvailable": true,
+      "contextLost": false,
+      "attributes": {
+        "alpha": true,
+        "antialias": true,
+        "depth": true,
+        "desynchronized": false,
+        "failIfMajorPerformanceCaveat": false,
+        "powerPreference": "high-performance",
+        "premultipliedAlpha": true,
+        "preserveDrawingBuffer": false,
+        "stencil": false,
+        "xrCompatible": false
+      },
+      "error": 0
+    },
+    "initialInfo": {
+      "targetMinecraftVersion": "1.21.4",
+      "targetDataVersion": 4189,
+      "revision": 1,
+      "dimensions": [
+        {
+          "id": "minecraft:overworld",
+          "kind": "overworld",
+          "minY": -64,
+          "maxY": 319,
+          "height": 384,
+          "chunkCount": 9,
+          "sectionCount": 216,
+          "blockCount": 3267
+        },
+        {
+          "id": "minecraft:the_end",
+          "kind": "end",
+          "minY": 0,
+          "maxY": 255,
+          "height": 256,
+          "chunkCount": 0,
+          "sectionCount": 0,
+          "blockCount": 0
+        },
+        {
+          "id": "minecraft:the_nether",
+          "kind": "nether",
+          "minY": 0,
+          "maxY": 255,
+          "height": 256,
+          "chunkCount": 0,
+          "sectionCount": 0,
+          "blockCount": 0
+        }
+      ],
+      "chunkCount": 9,
+      "sectionCount": 216,
+      "blockCount": 3267
+    },
+    "initialHeap": {
+      "usedBytes": 55913984,
+      "totalBytes": 63626696,
+      "limitBytes": 4395630592
+    },
+    "finalHeap": {
+      "usedBytes": 67102823,
+      "totalBytes": 73903167,
+      "limitBytes": 4395630592
+    }
+  },
+  "project": {
+    "name": "M10.8 hardware-d3d11 1795100985642",
+    "folder": "M10.8 hardware-d3d11 1795100985642.furybuilder",
+    "initialRevision": 1
+  },
+  "operations": {
+    "attempted": 1165,
+    "succeeded": 1165,
+    "failed": 0,
+    "zeroChange": 59,
+    "changedBlocks": 120174,
+    "byKind": {
+      "fill_cuboid": 728,
+      "batch": 146,
+      "terrain_brush": 146,
+      "replace": 145
+    },
+    "undoRedoProbes": [
+      {
+        "cycle": 112,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:air"
+        },
+        "target": {
+          "name": "minecraft:gold_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 100.69999999925494,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 115,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 102.29999999888241,
+          "lastBlock": {
+            "name": "minecraft:air"
+          },
+          "lastRevision": 116,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 100.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 117,
+          "lastContextLost": false
+        },
+        "revision": 115
+      },
+      {
+        "cycle": 226,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:gold_block"
+        },
+        "target": {
+          "name": "minecraft:diamond_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 104.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 228,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 103.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 229,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 104.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 230,
+          "lastContextLost": false
+        },
+        "revision": 228
+      },
+      {
+        "cycle": 343,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:diamond_block"
+        },
+        "target": {
+          "name": "minecraft:gold_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 103.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 346,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 105.29999999888241,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 347,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 100.40000000037253,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 348,
+          "lastContextLost": false
+        },
+        "revision": 346
+      },
+      {
+        "cycle": 460,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:gold_block"
+        },
+        "target": {
+          "name": "minecraft:diamond_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 103.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 465,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 120.40000000037253,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 466,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 103.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 467,
+          "lastContextLost": false
+        },
+        "revision": 465
+      },
+      {
+        "cycle": 576,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:diamond_block"
+        },
+        "target": {
+          "name": "minecraft:gold_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 101.90000000037253,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 584,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 102,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 585,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 101.5,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 586,
+          "lastContextLost": false
+        },
+        "revision": 584
+      },
+      {
+        "cycle": 693,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:gold_block"
+        },
+        "target": {
+          "name": "minecraft:diamond_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 101.20000000111759,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 700,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 119.80000000074506,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 701,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 100.89999999850988,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 702,
+          "lastContextLost": false
+        },
+        "revision": 700
+      },
+      {
+        "cycle": 816,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:diamond_block"
+        },
+        "target": {
+          "name": "minecraft:gold_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 104.29999999888241,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 813,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 105.30000000074506,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 814,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 105.09999999962747,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 815,
+          "lastContextLost": false
+        },
+        "revision": 813
+      },
+      {
+        "cycle": 937,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:gold_block"
+        },
+        "target": {
+          "name": "minecraft:diamond_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 103.69999999925494,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 926,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 104.79999999888241,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 927,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 100.5,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 928,
+          "lastContextLost": false
+        },
+        "revision": 926
+      },
+      {
+        "cycle": 1059,
+        "ok": true,
+        "previous": {
+          "name": "minecraft:diamond_block"
+        },
+        "target": {
+          "name": "minecraft:gold_block",
+          "properties": {}
+        },
+        "targetShown": {
+          "ok": true,
+          "waitedMs": 101.59999999962747,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 1038,
+          "lastContextLost": false
+        },
+        "restored": {
+          "ok": true,
+          "waitedMs": 104.20000000111759,
+          "lastBlock": {
+            "name": "minecraft:diamond_block"
+          },
+          "lastRevision": 1039,
+          "lastContextLost": false
+        },
+        "targetRestored": {
+          "ok": true,
+          "waitedMs": 107.80000000074506,
+          "lastBlock": {
+            "name": "minecraft:gold_block"
+          },
+          "lastRevision": 1040,
+          "lastContextLost": false
+        },
+        "revision": 1038
+      }
+    ],
+    "verificationFailures": []
+  },
+  "revisionMismatches": 0,
+  "contextLossCount": 0,
+  "rendererStable": true,
+  "samples": [
+    {
+      "atMs": 1363.4000000003725,
+      "wallElapsedMs": 1364,
+      "visibility": "visible",
+      "world": {
+        "revision": 1,
+        "blockCount": 3267,
+        "sectionCount": 216,
+        "chunkCount": 9,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1,
+        "loadedChunks": 9,
+        "loadedSections": 18,
+        "contextLost": false,
+        "calls": 11,
+        "triangles": 5148,
+        "geometries": 11,
+        "textures": 1,
+        "metrics": {
+          "fps": 76,
+          "frameMs": 8.8,
+          "drawCalls": 11,
+          "triangles": 5148,
+          "geometries": 11,
+          "textures": 1,
+          "loadedChunks": 9,
+          "renderedSections": 18,
+          "meshCount": 9,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 55928732,
+        "totalBytes": 63626696,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 10,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 1221,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "initial",
+      "at": "2026-11-19T15:09:47.006Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 9,
+            "sectionCount": 216,
+            "blockCount": 3267
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 9,
+        "sectionCount": 216,
+        "blockCount": 3267
+      }
+    },
+    {
+      "atMs": 11818.5,
+      "wallElapsedMs": 11819,
+      "visibility": "visible",
+      "world": {
+        "revision": 21,
+        "blockCount": 4397,
+        "sectionCount": 227,
+        "chunkCount": 20,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 21,
+        "loadedChunks": 20,
+        "loadedSections": 29,
+        "contextLost": false,
+        "calls": 33,
+        "triangles": 12976,
+        "geometries": 26,
+        "textures": 1,
+        "metrics": {
+          "fps": 72,
+          "frameMs": 9.7,
+          "drawCalls": 33,
+          "triangles": 12976,
+          "geometries": 26,
+          "textures": 1,
+          "loadedChunks": 20,
+          "renderedSections": 29,
+          "meshCount": 24,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 84370671,
+        "totalBytes": 132368443,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 35,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 3340,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-19",
+      "at": "2026-11-19T15:09:57.461Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 21,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 20,
+            "sectionCount": 227,
+            "blockCount": 4397
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 20,
+        "sectionCount": 227,
+        "blockCount": 4397
+      }
+    },
+    {
+      "atMs": 21996.799999998882,
+      "wallElapsedMs": 21997,
+      "visibility": "visible",
+      "world": {
+        "revision": 40,
+        "blockCount": 5378,
+        "sectionCount": 236,
+        "chunkCount": 29,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 40,
+        "loadedChunks": 29,
+        "loadedSections": 38,
+        "contextLost": false,
+        "calls": 51,
+        "triangles": 19800,
+        "geometries": 37,
+        "textures": 1,
+        "metrics": {
+          "fps": 140,
+          "frameMs": 7.4,
+          "drawCalls": 51,
+          "triangles": 19800,
+          "geometries": 37,
+          "textures": 1,
+          "loadedChunks": 29,
+          "renderedSections": 38,
+          "meshCount": 35,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 69659996,
+        "totalBytes": 134926124,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 56,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 5023,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-38",
+      "at": "2026-11-19T15:10:07.639Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 40,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 29,
+            "sectionCount": 236,
+            "blockCount": 5378
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 29,
+        "sectionCount": 236,
+        "blockCount": 5378
+      }
+    },
+    {
+      "atMs": 32328.900000000373,
+      "wallElapsedMs": 32329,
+      "visibility": "visible",
+      "world": {
+        "revision": 58,
+        "blockCount": 6495,
+        "sectionCount": 239,
+        "chunkCount": 32,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 58,
+        "loadedChunks": 32,
+        "loadedSections": 41,
+        "contextLost": false,
+        "calls": 61,
+        "triangles": 25564,
+        "geometries": 44,
+        "textures": 1,
+        "metrics": {
+          "fps": 51,
+          "frameMs": 18.2,
+          "drawCalls": 61,
+          "triangles": 25564,
+          "geometries": 44,
+          "textures": 1,
+          "loadedChunks": 32,
+          "renderedSections": 41,
+          "meshCount": 42,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 84696585,
+        "totalBytes": 139273365,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 85,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 7358,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-56",
+      "at": "2026-11-19T15:10:17.971Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 58,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 32,
+            "sectionCount": 239,
+            "blockCount": 6495
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 32,
+        "sectionCount": 239,
+        "blockCount": 6495
+      }
+    },
+    {
+      "atMs": 42831.699999999255,
+      "wallElapsedMs": 42832,
+      "visibility": "visible",
+      "world": {
+        "revision": 78,
+        "blockCount": 7239,
+        "sectionCount": 241,
+        "chunkCount": 34,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 78,
+        "loadedChunks": 34,
+        "loadedSections": 43,
+        "contextLost": false,
+        "calls": 65,
+        "triangles": 31276,
+        "geometries": 48,
+        "textures": 1,
+        "metrics": {
+          "fps": 155,
+          "frameMs": 5.6,
+          "drawCalls": 65,
+          "triangles": 31240,
+          "geometries": 48,
+          "textures": 1,
+          "loadedChunks": 34,
+          "renderedSections": 43,
+          "meshCount": 46,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 73040587,
+        "totalBytes": 141570407,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 107,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 8944,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-76",
+      "at": "2026-11-19T15:10:28.474Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 78,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 34,
+            "sectionCount": 241,
+            "blockCount": 7239
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 34,
+        "sectionCount": 241,
+        "blockCount": 7239
+      }
+    },
+    {
+      "atMs": 53364,
+      "wallElapsedMs": 53364,
+      "visibility": "visible",
+      "world": {
+        "revision": 98,
+        "blockCount": 8162,
+        "sectionCount": 242,
+        "chunkCount": 35,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 98,
+        "loadedChunks": 35,
+        "loadedSections": 44,
+        "contextLost": false,
+        "calls": 70,
+        "triangles": 34980,
+        "geometries": 52,
+        "textures": 1,
+        "metrics": {
+          "fps": 128,
+          "frameMs": 11.7,
+          "drawCalls": 70,
+          "triangles": 34932,
+          "geometries": 52,
+          "textures": 1,
+          "loadedChunks": 35,
+          "renderedSections": 44,
+          "meshCount": 50,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 67952044,
+        "totalBytes": 144310736,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 128,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 10417,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-96",
+      "at": "2026-11-19T15:10:39.006Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 98,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 35,
+            "sectionCount": 242,
+            "blockCount": 8162
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 35,
+        "sectionCount": 242,
+        "blockCount": 8162
+      }
+    },
+    {
+      "atMs": 63431,
+      "wallElapsedMs": 63431,
+      "visibility": "visible",
+      "world": {
+        "revision": 119,
+        "blockCount": 8782,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 119,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 78,
+        "triangles": 39628,
+        "geometries": 57,
+        "textures": 1,
+        "metrics": {
+          "fps": 150,
+          "frameMs": 7.7,
+          "drawCalls": 78,
+          "triangles": 39604,
+          "geometries": 57,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 55,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 92713991,
+        "totalBytes": 145388019,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 146,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 11741,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-114",
+      "at": "2026-11-19T15:10:49.073Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 119,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 8782
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 8782
+      }
+    },
+    {
+      "atMs": 73709.5,
+      "wallElapsedMs": 73710,
+      "visibility": "visible",
+      "world": {
+        "revision": 137,
+        "blockCount": 9340,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 137,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 80,
+        "triangles": 44048,
+        "geometries": 58,
+        "textures": 1,
+        "metrics": {
+          "fps": 91,
+          "frameMs": 7.6,
+          "drawCalls": 80,
+          "triangles": 44048,
+          "geometries": 58,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 56,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 92898636,
+        "totalBytes": 142202768,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 170,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 13314,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-134",
+      "at": "2026-11-19T15:10:59.352Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 137,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 9340
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 9340
+      }
+    },
+    {
+      "atMs": 84310.5,
+      "wallElapsedMs": 84311,
+      "visibility": "visible",
+      "world": {
+        "revision": 157,
+        "blockCount": 10023,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 157,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 86,
+        "triangles": 47912,
+        "geometries": 61,
+        "textures": 1,
+        "metrics": {
+          "fps": 78,
+          "frameMs": 26.4,
+          "drawCalls": 86,
+          "triangles": 48080,
+          "geometries": 61,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 59,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 87586636,
+        "totalBytes": 145694156,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 191,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 14965,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-154",
+      "at": "2026-11-19T15:11:09.953Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 157,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 10023
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 10023
+      }
+    },
+    {
+      "atMs": 94941.19999999925,
+      "wallElapsedMs": 94941,
+      "visibility": "visible",
+      "world": {
+        "revision": 177,
+        "blockCount": 10456,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 177,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 90,
+        "triangles": 51484,
+        "geometries": 63,
+        "textures": 1,
+        "metrics": {
+          "fps": 96,
+          "frameMs": 20.2,
+          "drawCalls": 90,
+          "triangles": 51484,
+          "geometries": 63,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 61,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 100498182,
+        "totalBytes": 148937418,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 213,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 16581,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-174",
+      "at": "2026-11-19T15:11:20.584Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 177,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 10456
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 10456
+      }
+    },
+    {
+      "atMs": 105199.90000000037,
+      "wallElapsedMs": 105200,
+      "visibility": "visible",
+      "world": {
+        "revision": 195,
+        "blockCount": 11113,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 195,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 93,
+        "triangles": 55880,
+        "geometries": 65,
+        "textures": 1,
+        "metrics": {
+          "fps": 140,
+          "frameMs": 6.8,
+          "drawCalls": 91,
+          "triangles": 54008,
+          "geometries": 64,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 62,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 79507635,
+        "totalBytes": 149339427,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 234,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 18128,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-193",
+      "at": "2026-11-19T15:11:30.842Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 195,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 11113
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 11113
+      }
+    },
+    {
+      "atMs": 115417.59999999963,
+      "wallElapsedMs": 115418,
+      "visibility": "visible",
+      "world": {
+        "revision": 214,
+        "blockCount": 11504,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 214,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 93,
+        "triangles": 57352,
+        "geometries": 65,
+        "textures": 1,
+        "metrics": {
+          "fps": 122,
+          "frameMs": 15.5,
+          "drawCalls": 93,
+          "triangles": 57060,
+          "geometries": 65,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 63,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 77753309,
+        "totalBytes": 145225993,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 257,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 19832,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-212",
+      "at": "2026-11-19T15:11:41.060Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 214,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 11504
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 11504
+      }
+    },
+    {
+      "atMs": 125589.5,
+      "wallElapsedMs": 125590,
+      "visibility": "visible",
+      "world": {
+        "revision": 234,
+        "blockCount": 11912,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 234,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 98,
+        "triangles": 60324,
+        "geometries": 68,
+        "textures": 1,
+        "metrics": {
+          "fps": 158,
+          "frameMs": 8.1,
+          "drawCalls": 98,
+          "triangles": 60324,
+          "geometries": 68,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 66,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 83959643,
+        "totalBytes": 150016571,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 276,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 21188,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-230",
+      "at": "2026-11-19T15:11:51.232Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 234,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 11912
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 11912
+      }
+    },
+    {
+      "atMs": 135991.29999999888,
+      "wallElapsedMs": 135991,
+      "visibility": "visible",
+      "world": {
+        "revision": 254,
+        "blockCount": 12382,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 254,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 100,
+        "triangles": 62788,
+        "geometries": 69,
+        "textures": 1,
+        "metrics": {
+          "fps": 112,
+          "frameMs": 5.8,
+          "drawCalls": 100,
+          "triangles": 62912,
+          "geometries": 69,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 67,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 97654324,
+        "totalBytes": 153300856,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 296,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 22575,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-250",
+      "at": "2026-11-19T15:12:01.634Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 254,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 12382
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 12382
+      }
+    },
+    {
+      "atMs": 146290.40000000037,
+      "wallElapsedMs": 146291,
+      "visibility": "visible",
+      "world": {
+        "revision": 274,
+        "blockCount": 12688,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 274,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 102,
+        "triangles": 65324,
+        "geometries": 70,
+        "textures": 1,
+        "metrics": {
+          "fps": 112,
+          "frameMs": 5.8,
+          "drawCalls": 102,
+          "triangles": 65324,
+          "geometries": 70,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 68,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 78427550,
+        "totalBytes": 151061842,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 316,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 23884,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-270",
+      "at": "2026-11-19T15:12:11.933Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 274,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 12688
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 12688
+      }
+    },
+    {
+      "atMs": 156563.09999999963,
+      "wallElapsedMs": 156563,
+      "visibility": "visible",
+      "world": {
+        "revision": 293,
+        "blockCount": 13264,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 293,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 102,
+        "triangles": 68228,
+        "geometries": 70,
+        "textures": 1,
+        "metrics": {
+          "fps": 70,
+          "frameMs": 12.7,
+          "drawCalls": 102,
+          "triangles": 68228,
+          "geometries": 70,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 68,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 96616663,
+        "totalBytes": 154287195,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 337,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 25285,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-290",
+      "at": "2026-11-19T15:12:22.206Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 293,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 13264
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 13264
+      }
+    },
+    {
+      "atMs": 166974.90000000037,
+      "wallElapsedMs": 166975,
+      "visibility": "visible",
+      "world": {
+        "revision": 313,
+        "blockCount": 13571,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 313,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 102,
+        "triangles": 68972,
+        "geometries": 70,
+        "textures": 1,
+        "metrics": {
+          "fps": 138,
+          "frameMs": 13.7,
+          "drawCalls": 102,
+          "triangles": 68972,
+          "geometries": 70,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 68,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 81274319,
+        "totalBytes": 162335635,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 358,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 26737,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-310",
+      "at": "2026-11-19T15:12:32.617Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 313,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 13571
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 13571
+      }
+    },
+    {
+      "atMs": 177464.09999999963,
+      "wallElapsedMs": 177464,
+      "visibility": "visible",
+      "world": {
+        "revision": 333,
+        "blockCount": 13919,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 333,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 104,
+        "triangles": 70768,
+        "geometries": 71,
+        "textures": 1,
+        "metrics": {
+          "fps": 97,
+          "frameMs": 15.8,
+          "drawCalls": 104,
+          "triangles": 70768,
+          "geometries": 71,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 69,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 87001790,
+        "totalBytes": 156816186,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 377,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 27987,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-331",
+      "at": "2026-11-19T15:12:43.106Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 333,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 13919
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 13919
+      }
+    },
+    {
+      "atMs": 187791.59999999963,
+      "wallElapsedMs": 187792,
+      "visibility": "visible",
+      "world": {
+        "revision": 355,
+        "blockCount": 14375,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 355,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 104,
+        "triangles": 73196,
+        "geometries": 71,
+        "textures": 1,
+        "metrics": {
+          "fps": 123,
+          "frameMs": 18.7,
+          "drawCalls": 104,
+          "triangles": 73196,
+          "geometries": 71,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 69,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 78676027,
+        "totalBytes": 157700435,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 397,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 29309,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-350",
+      "at": "2026-11-19T15:12:53.434Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 355,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 14375
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 14375
+      }
+    },
+    {
+      "atMs": 198065,
+      "wallElapsedMs": 198065,
+      "visibility": "visible",
+      "world": {
+        "revision": 375,
+        "blockCount": 14941,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 375,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 104,
+        "triangles": 75108,
+        "geometries": 71,
+        "textures": 1,
+        "metrics": {
+          "fps": 150,
+          "frameMs": 10.5,
+          "drawCalls": 104,
+          "triangles": 75040,
+          "geometries": 71,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 69,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 99536385,
+        "totalBytes": 153722901,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 420,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 30792,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-370",
+      "at": "2026-11-19T15:13:03.707Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 375,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 14941
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 14941
+      }
+    },
+    {
+      "atMs": 208493.5,
+      "wallElapsedMs": 208494,
+      "visibility": "visible",
+      "world": {
+        "revision": 395,
+        "blockCount": 15156,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 395,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 104,
+        "triangles": 76684,
+        "geometries": 71,
+        "textures": 1,
+        "metrics": {
+          "fps": 89,
+          "frameMs": 11.4,
+          "drawCalls": 104,
+          "triangles": 76684,
+          "geometries": 71,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 69,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 80839954,
+        "totalBytes": 155626810,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 440,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 32193,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-390",
+      "at": "2026-11-19T15:13:14.136Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 395,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 15156
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 15156
+      }
+    },
+    {
+      "atMs": 219044.19999999925,
+      "wallElapsedMs": 219044,
+      "visibility": "visible",
+      "world": {
+        "revision": 415,
+        "blockCount": 15335,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 415,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 104,
+        "triangles": 78168,
+        "geometries": 71,
+        "textures": 1,
+        "metrics": {
+          "fps": 145,
+          "frameMs": 5.6,
+          "drawCalls": 104,
+          "triangles": 78112,
+          "geometries": 71,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 69,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 81915643,
+        "totalBytes": 158861475,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 459,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 33432,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-411",
+      "at": "2026-11-19T15:13:24.686Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 415,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 15335
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 15335
+      }
+    },
+    {
+      "atMs": 229488.90000000037,
+      "wallElapsedMs": 229489,
+      "visibility": "visible",
+      "world": {
+        "revision": 435,
+        "blockCount": 15802,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 435,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 77936,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 126,
+          "frameMs": 16.6,
+          "drawCalls": 108,
+          "triangles": 78660,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 79499421,
+        "totalBytes": 157524069,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 481,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 34953,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-431",
+      "at": "2026-11-19T15:13:35.131Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 435,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 15802
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 15802
+      }
+    },
+    {
+      "atMs": 239888.69999999925,
+      "wallElapsedMs": 239889,
+      "visibility": "visible",
+      "world": {
+        "revision": 455,
+        "blockCount": 16128,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 455,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 79736,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 138,
+          "frameMs": 11.1,
+          "drawCalls": 108,
+          "triangles": 79656,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 82328661,
+        "totalBytes": 161704781,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 501,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 36397,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-451",
+      "at": "2026-11-19T15:13:45.531Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 455,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 16128
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 16128
+      }
+    },
+    {
+      "atMs": 250195.19999999925,
+      "wallElapsedMs": 250195,
+      "visibility": "visible",
+      "world": {
+        "revision": 477,
+        "blockCount": 16468,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 477,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 81336,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 155,
+          "frameMs": 5.6,
+          "drawCalls": 108,
+          "triangles": 81336,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 81771419,
+        "totalBytes": 160377575,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 525,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 37916,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-470",
+      "at": "2026-11-19T15:13:55.837Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 477,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 16468
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 16468
+      }
+    },
+    {
+      "atMs": 260567,
+      "wallElapsedMs": 260567,
+      "visibility": "visible",
+      "world": {
+        "revision": 497,
+        "blockCount": 16707,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 497,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 81948,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 85,
+          "frameMs": 10,
+          "drawCalls": 108,
+          "triangles": 81948,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 85994373,
+        "totalBytes": 161504489,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 548,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 39498,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-490",
+      "at": "2026-11-19T15:14:06.209Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 497,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 16707
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 16707
+      }
+    },
+    {
+      "atMs": 270907.4000000004,
+      "wallElapsedMs": 270908,
+      "visibility": "visible",
+      "world": {
+        "revision": 517,
+        "blockCount": 16909,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 517,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 83876,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 57,
+          "frameMs": 20.3,
+          "drawCalls": 108,
+          "triangles": 83876,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 106852719,
+        "totalBytes": 157237875,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 569,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 40893,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-510",
+      "at": "2026-11-19T15:14:16.549Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 517,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 16909
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 16909
+      }
+    },
+    {
+      "atMs": 281334.19999999925,
+      "wallElapsedMs": 281334,
+      "visibility": "visible",
+      "world": {
+        "revision": 537,
+        "blockCount": 17354,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 537,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 84964,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 124,
+          "frameMs": 17.5,
+          "drawCalls": 108,
+          "triangles": 84996,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 80052798,
+        "totalBytes": 154069582,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 592,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 42424,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-530",
+      "at": "2026-11-19T15:14:26.977Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 537,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 17354
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 17354
+      }
+    },
+    {
+      "atMs": 291616.5,
+      "wallElapsedMs": 291617,
+      "visibility": "visible",
+      "world": {
+        "revision": 557,
+        "blockCount": 17522,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 557,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 84816,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 143,
+          "frameMs": 11.1,
+          "drawCalls": 108,
+          "triangles": 84816,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 87592029,
+        "totalBytes": 158104197,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 616,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 43966,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-550",
+      "at": "2026-11-19T15:14:37.260Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 557,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 17522
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 17522
+      }
+    },
+    {
+      "atMs": 301969.19999999925,
+      "wallElapsedMs": 301969,
+      "visibility": "visible",
+      "world": {
+        "revision": 577,
+        "blockCount": 17752,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 577,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 85660,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 85,
+          "frameMs": 11,
+          "drawCalls": 108,
+          "triangles": 85660,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 85694160,
+        "totalBytes": 158392204,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 638,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 45403,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-570",
+      "at": "2026-11-19T15:14:47.612Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 577,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 17752
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 17752
+      }
+    },
+    {
+      "atMs": 312437.0999999996,
+      "wallElapsedMs": 312437,
+      "visibility": "visible",
+      "world": {
+        "revision": 599,
+        "blockCount": 17912,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 599,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 87424,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 106,
+          "frameMs": 18.8,
+          "drawCalls": 108,
+          "triangles": 87336,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 82646945,
+        "totalBytes": 151025353,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 658,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 46784,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-589",
+      "at": "2026-11-19T15:14:58.080Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 599,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 17912
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 17912
+      }
+    },
+    {
+      "atMs": 322840.4000000004,
+      "wallElapsedMs": 322841,
+      "visibility": "visible",
+      "world": {
+        "revision": 619,
+        "blockCount": 18237,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 619,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 108,
+        "triangles": 88628,
+        "geometries": 73,
+        "textures": 1,
+        "metrics": {
+          "fps": 78,
+          "frameMs": 18.5,
+          "drawCalls": 108,
+          "triangles": 88628,
+          "geometries": 73,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 71,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 86534258,
+        "totalBytes": 158460422,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 678,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 48166,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-609",
+      "at": "2026-11-19T15:15:08.485Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 619,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18237
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18237
+      }
+    },
+    {
+      "atMs": 333462.5,
+      "wallElapsedMs": 333463,
+      "visibility": "visible",
+      "world": {
+        "revision": 639,
+        "blockCount": 18517,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 639,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90608,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 111,
+          "frameMs": 20.9,
+          "drawCalls": 110,
+          "triangles": 90380,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 81706620,
+        "totalBytes": 155077852,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 699,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 49711,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-629",
+      "at": "2026-11-19T15:15:19.106Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 639,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18517
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18517
+      }
+    },
+    {
+      "atMs": 343843.5999999996,
+      "wallElapsedMs": 343844,
+      "visibility": "visible",
+      "world": {
+        "revision": 659,
+        "blockCount": 18777,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 659,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91372,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 85,
+          "frameMs": 8.7,
+          "drawCalls": 110,
+          "triangles": 91372,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 81266893,
+        "totalBytes": 155003337,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 720,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 51128,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-649",
+      "at": "2026-11-19T15:15:29.486Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 659,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18777
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18777
+      }
+    },
+    {
+      "atMs": 354107.5999999996,
+      "wallElapsedMs": 354108,
+      "visibility": "visible",
+      "world": {
+        "revision": 678,
+        "blockCount": 18597,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 678,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90416,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 95,
+          "frameMs": 19.6,
+          "drawCalls": 110,
+          "triangles": 90416,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 81307297,
+        "totalBytes": 157811997,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 740,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 52428,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-670",
+      "at": "2026-11-19T15:15:39.750Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 678,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18597
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18597
+      }
+    },
+    {
+      "atMs": 364356,
+      "wallElapsedMs": 364356,
+      "visibility": "visible",
+      "world": {
+        "revision": 697,
+        "blockCount": 18854,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 697,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90896,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 78,
+          "frameMs": 20.5,
+          "drawCalls": 110,
+          "triangles": 90896,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 80369493,
+        "totalBytes": 156516149,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 761,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 53823,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-690",
+      "at": "2026-11-19T15:15:49.999Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 697,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18854
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18854
+      }
+    },
+    {
+      "atMs": 374734.4000000004,
+      "wallElapsedMs": 374735,
+      "visibility": "visible",
+      "world": {
+        "revision": 717,
+        "blockCount": 18756,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 717,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90844,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 148,
+          "frameMs": 11.2,
+          "drawCalls": 110,
+          "triangles": 90844,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 94839682,
+        "totalBytes": 161420662,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 779,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 55105,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-710",
+      "at": "2026-11-19T15:16:00.377Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 717,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18756
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18756
+      }
+    },
+    {
+      "atMs": 385212.5999999996,
+      "wallElapsedMs": 385213,
+      "visibility": "visible",
+      "world": {
+        "revision": 737,
+        "blockCount": 18653,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 737,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91468,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 108,
+          "frameMs": 19.1,
+          "drawCalls": 110,
+          "triangles": 91588,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 84310168,
+        "totalBytes": 156447932,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 797,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 56330,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-731",
+      "at": "2026-11-19T15:16:10.855Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 737,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18653
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18653
+      }
+    },
+    {
+      "atMs": 395291.5999999996,
+      "wallElapsedMs": 395292,
+      "visibility": "visible",
+      "world": {
+        "revision": 755,
+        "blockCount": 18747,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 755,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91472,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 150,
+          "frameMs": 8.9,
+          "drawCalls": 110,
+          "triangles": 91472,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 83517844,
+        "totalBytes": 154327304,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 813,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 57393,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-752",
+      "at": "2026-11-19T15:16:20.934Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 755,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18747
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18747
+      }
+    },
+    {
+      "atMs": 405685.69999999925,
+      "wallElapsedMs": 405686,
+      "visibility": "visible",
+      "world": {
+        "revision": 774,
+        "blockCount": 18799,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 774,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 92304,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 160,
+          "frameMs": 8.6,
+          "drawCalls": 110,
+          "triangles": 92284,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 109707499,
+        "totalBytes": 159037739,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 834,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 58813,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-773",
+      "at": "2026-11-19T15:16:31.328Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 774,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18799
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18799
+      }
+    },
+    {
+      "atMs": 416103.0999999996,
+      "wallElapsedMs": 416103,
+      "visibility": "visible",
+      "world": {
+        "revision": 793,
+        "blockCount": 18790,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 793,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91440,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 115,
+          "frameMs": 5.8,
+          "drawCalls": 110,
+          "triangles": 91976,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 92838369,
+        "totalBytes": 164566321,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 854,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 60103,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-794",
+      "at": "2026-11-19T15:16:41.746Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 793,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18790
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18790
+      }
+    },
+    {
+      "atMs": 426297.9000000004,
+      "wallElapsedMs": 426298,
+      "visibility": "visible",
+      "world": {
+        "revision": 811,
+        "blockCount": 18743,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 811,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 89812,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 122,
+          "frameMs": 6.2,
+          "drawCalls": 110,
+          "triangles": 90560,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 96637341,
+        "totalBytes": 166448633,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 876,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 61480,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-815",
+      "at": "2026-11-19T15:16:51.941Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 811,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18743
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18743
+      }
+    },
+    {
+      "atMs": 436453.9000000004,
+      "wallElapsedMs": 436454,
+      "visibility": "visible",
+      "world": {
+        "revision": 832,
+        "blockCount": 18837,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 832,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90724,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 150,
+          "frameMs": 6.2,
+          "drawCalls": 110,
+          "triangles": 90776,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 88278525,
+        "totalBytes": 160229125,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 895,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 62804,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-834",
+      "at": "2026-11-19T15:17:02.097Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 832,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18837
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18837
+      }
+    },
+    {
+      "atMs": 446582.0999999996,
+      "wallElapsedMs": 446582,
+      "visibility": "visible",
+      "world": {
+        "revision": 850,
+        "blockCount": 18791,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 850,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90364,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 156,
+          "frameMs": 6.7,
+          "drawCalls": 110,
+          "triangles": 90928,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 85595807,
+        "totalBytes": 157518659,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 913,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 63948,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-855",
+      "at": "2026-11-19T15:17:12.225Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 850,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18791
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18791
+      }
+    },
+    {
+      "atMs": 456860.7999999989,
+      "wallElapsedMs": 456861,
+      "visibility": "visible",
+      "world": {
+        "revision": 868,
+        "blockCount": 18731,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 868,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91272,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 80,
+          "frameMs": 6.8,
+          "drawCalls": 110,
+          "triangles": 91272,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 112600694,
+        "totalBytes": 154438402,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 932,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 65227,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-876",
+      "at": "2026-11-19T15:17:22.504Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 868,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18731
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18731
+      }
+    },
+    {
+      "atMs": 467299.69999999925,
+      "wallElapsedMs": 467300,
+      "visibility": "visible",
+      "world": {
+        "revision": 887,
+        "blockCount": 18799,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 887,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91448,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 158,
+          "frameMs": 7.1,
+          "drawCalls": 110,
+          "triangles": 91728,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 104419544,
+        "totalBytes": 160253004,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 953,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 66612,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-897",
+      "at": "2026-11-19T15:17:32.942Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 887,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18799
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18799
+      }
+    },
+    {
+      "atMs": 477322,
+      "wallElapsedMs": 477322,
+      "visibility": "visible",
+      "world": {
+        "revision": 906,
+        "blockCount": 18794,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 906,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 92068,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 150,
+          "frameMs": 5.6,
+          "drawCalls": 110,
+          "triangles": 92056,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 93693516,
+        "totalBytes": 160057396,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 976,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 68087,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-917",
+      "at": "2026-11-19T15:17:42.965Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 906,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18794
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18794
+      }
+    },
+    {
+      "atMs": 488184,
+      "wallElapsedMs": 488184,
+      "visibility": "visible",
+      "world": {
+        "revision": 928,
+        "blockCount": 18850,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 928,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91928,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 104,
+          "frameMs": 12.6,
+          "drawCalls": 110,
+          "triangles": 91928,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 94860473,
+        "totalBytes": 160057581,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1000,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 69689,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-937",
+      "at": "2026-11-19T15:17:53.827Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 928,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18850
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18850
+      }
+    },
+    {
+      "atMs": 498413.5999999996,
+      "wallElapsedMs": 498414,
+      "visibility": "visible",
+      "world": {
+        "revision": 946,
+        "blockCount": 18647,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 946,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91228,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 122,
+          "frameMs": 7.9,
+          "drawCalls": 110,
+          "triangles": 91228,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 103047363,
+        "totalBytes": 163722063,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1019,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 70951,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-958",
+      "at": "2026-11-19T15:18:04.057Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 946,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18647
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18647
+      }
+    },
+    {
+      "atMs": 508562.5,
+      "wallElapsedMs": 508563,
+      "visibility": "visible",
+      "world": {
+        "revision": 965,
+        "blockCount": 18844,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 965,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91052,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 92,
+          "frameMs": 6.3,
+          "drawCalls": 110,
+          "triangles": 91020,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 91977559,
+        "totalBytes": 165066755,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1037,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 72099,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-979",
+      "at": "2026-11-19T15:18:14.205Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 965,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18844
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18844
+      }
+    },
+    {
+      "atMs": 518813.2999999989,
+      "wallElapsedMs": 518813,
+      "visibility": "visible",
+      "world": {
+        "revision": 983,
+        "blockCount": 18908,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 983,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90828,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 125,
+          "frameMs": 6.8,
+          "drawCalls": 110,
+          "triangles": 91416,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 104657696,
+        "totalBytes": 158475276,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1059,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 73579,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-999",
+      "at": "2026-11-19T15:18:24.456Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 983,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18908
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18908
+      }
+    },
+    {
+      "atMs": 529291.6999999993,
+      "wallElapsedMs": 529292,
+      "visibility": "visible",
+      "world": {
+        "revision": 1002,
+        "blockCount": 18750,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1002,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91060,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 113,
+          "frameMs": 11.8,
+          "drawCalls": 110,
+          "triangles": 91068,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 91594848,
+        "totalBytes": 159040892,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1079,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 74883,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1021",
+      "at": "2026-11-19T15:18:34.934Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1002,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18750
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18750
+      }
+    },
+    {
+      "atMs": 539886.2999999989,
+      "wallElapsedMs": 539887,
+      "visibility": "visible",
+      "world": {
+        "revision": 1022,
+        "blockCount": 18891,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1022,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91176,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 116,
+          "frameMs": 16.6,
+          "drawCalls": 110,
+          "triangles": 91156,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 86003619,
+        "totalBytes": 164414031,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1098,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 76177,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1042",
+      "at": "2026-11-19T15:18:45.529Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1022,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18891
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18891
+      }
+    },
+    {
+      "atMs": 550392.5999999996,
+      "wallElapsedMs": 550393,
+      "visibility": "visible",
+      "world": {
+        "revision": 1042,
+        "blockCount": 18828,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1042,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 92108,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 113,
+          "frameMs": 18.4,
+          "drawCalls": 110,
+          "triangles": 92108,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 97864472,
+        "totalBytes": 164452108,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1120,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 77636,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1062",
+      "at": "2026-11-19T15:18:56.035Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1042,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18828
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18828
+      }
+    },
+    {
+      "atMs": 560553.9000000004,
+      "wallElapsedMs": 560554,
+      "visibility": "visible",
+      "world": {
+        "revision": 1060,
+        "blockCount": 18850,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1060,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91996,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 154,
+          "frameMs": 8,
+          "drawCalls": 110,
+          "triangles": 92076,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 87232756,
+        "totalBytes": 160283972,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1140,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 79053,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1082",
+      "at": "2026-11-19T15:19:06.196Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1060,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18850
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18850
+      }
+    },
+    {
+      "atMs": 570721.1999999993,
+      "wallElapsedMs": 570721,
+      "visibility": "visible",
+      "world": {
+        "revision": 1078,
+        "blockCount": 18810,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1078,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 89940,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 124,
+          "frameMs": 17.4,
+          "drawCalls": 110,
+          "triangles": 90644,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 83606889,
+        "totalBytes": 160070501,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1157,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 80163,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1103",
+      "at": "2026-11-19T15:19:16.364Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1078,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18810
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18810
+      }
+    },
+    {
+      "atMs": 581154.9000000004,
+      "wallElapsedMs": 581155,
+      "visibility": "visible",
+      "world": {
+        "revision": 1098,
+        "blockCount": 18766,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1098,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90404,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 80,
+          "frameMs": 12.4,
+          "drawCalls": 110,
+          "triangles": 90404,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 101854952,
+        "totalBytes": 161398916,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1178,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 81681,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1123",
+      "at": "2026-11-19T15:19:26.797Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1098,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18766
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18766
+      }
+    },
+    {
+      "atMs": 591538.5999999996,
+      "wallElapsedMs": 591539,
+      "visibility": "visible",
+      "world": {
+        "revision": 1117,
+        "blockCount": 18874,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1117,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 90272,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 73,
+          "frameMs": 20.2,
+          "drawCalls": 110,
+          "triangles": 90272,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 98805134,
+        "totalBytes": 155874862,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1198,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 83023,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "cycle-1144",
+      "at": "2026-11-19T15:19:37.181Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1117,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18874
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18874
+      }
+    },
+    {
+      "atMs": 603369.5,
+      "wallElapsedMs": 603370,
+      "visibility": "visible",
+      "world": {
+        "revision": 1135,
+        "blockCount": 18648,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1135,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91140,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 162,
+          "frameMs": 6.7,
+          "drawCalls": 110,
+          "triangles": 91140,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 67108079,
+        "totalBytes": 73903167,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1219,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 84390,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "before-save",
+      "at": "2026-11-19T15:19:49.013Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1135,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18648
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18648
+      }
+    },
+    {
+      "atMs": 605120,
+      "wallElapsedMs": 605120,
+      "visibility": "visible",
+      "world": {
+        "revision": 1135,
+        "blockCount": 18648,
+        "sectionCount": 243,
+        "chunkCount": 36,
+        "status": "ready",
+        "error": null
+      },
+      "renderer": {
+        "present": true,
+        "sameInstance": true,
+        "revision": 1135,
+        "loadedChunks": 36,
+        "loadedSections": 45,
+        "contextLost": false,
+        "calls": 110,
+        "triangles": 91140,
+        "geometries": 74,
+        "textures": 1,
+        "metrics": {
+          "fps": 123,
+          "frameMs": 6.6,
+          "drawCalls": 110,
+          "triangles": 91140,
+          "geometries": 74,
+          "textures": 1,
+          "loadedChunks": 36,
+          "renderedSections": 45,
+          "meshCount": 72,
+          "pendingMeshJobs": 0,
+          "evictedChunks": 0
+        }
+      },
+      "memory": {
+        "usedBytes": 64904308,
+        "totalBytes": 103788772,
+        "limitBytes": 4395630592
+      },
+      "observers": {
+        "longTaskCount": 1222,
+        "longTaskMaxMs": 418,
+        "longTaskTotalMs": 84556,
+        "errorCount": 0,
+        "contextLossCount": 0
+      },
+      "label": "final",
+      "at": "2026-11-19T15:19:50.763Z",
+      "rust": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1135,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18648
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18648
+      }
+    }
+  ],
+  "console": {
+    "errors": [],
+    "warnings": [
+      {
+        "source": "log",
+        "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+        "url": "http://127.0.0.1:1420/favicon.ico",
+        "benign": true
+      }
+    ],
+    "exceptionCount": 0
+  },
+  "saveReopen": {
+    "folder": "M10.8 hardware-d3d11 1795100985642.furybuilder",
+    "before": {
+      "targetMinecraftVersion": "1.21.4",
+      "targetDataVersion": 4189,
+      "revision": 1135,
+      "dimensions": [
+        {
+          "id": "minecraft:overworld",
+          "kind": "overworld",
+          "minY": -64,
+          "maxY": 319,
+          "height": 384,
+          "chunkCount": 36,
+          "sectionCount": 243,
+          "blockCount": 18648
+        },
+        {
+          "id": "minecraft:the_end",
+          "kind": "end",
+          "minY": 0,
+          "maxY": 255,
+          "height": 256,
+          "chunkCount": 0,
+          "sectionCount": 0,
+          "blockCount": 0
+        },
+        {
+          "id": "minecraft:the_nether",
+          "kind": "nether",
+          "minY": 0,
+          "maxY": 255,
+          "height": 256,
+          "chunkCount": 0,
+          "sectionCount": 0,
+          "blockCount": 0
+        }
+      ],
+      "chunkCount": 36,
+      "sectionCount": 243,
+      "blockCount": 18648
+    },
+    "saved": true,
+    "saveMs": 120.40000000037253,
+    "lastSave": {
+      "project": {
+        "summary": {
+          "folder": "M10.8 hardware-d3d11 1795100985642.furybuilder",
+          "projectId": "571037fe-5a9d-445a-8e76-b11467ea8d52",
+          "name": "M10.8 hardware-d3d11 1795100985642",
+          "creationMode": "flat",
+          "targetMinecraftVersion": "1.21.4",
+          "targetDataVersion": 4189,
+          "worldRevision": 1135,
+          "updatedAtMs": 1795101589049,
+          "lastSavedAtMs": 1795101589049,
+          "lastSaveKind": "manual",
+          "bytes": 122773,
+          "schemaVersion": 1,
+          "recoverable": true
+        },
+        "editorState": {
+          "selectedDimension": "minecraft:overworld",
+          "loadRadius": 4
+        },
+        "source": {
+          "kind": "generated",
+          "immutable": true
+        },
+        "createdAtMs": 1795100985743,
+        "warnings": []
+      },
+      "checksum": "995801110f741a8dafcf7ff47440a1cb31a49bc6989daad075ad97b5ed29354f",
+      "snapshotFile": "data/world-00000000000000001135.fwl",
+      "bytesWritten": 122773,
+      "backupCreated": true,
+      "prunedSnapshots": 0
+    },
+    "saveError": null,
+    "closed": true,
+    "closeMs": 55.59999999962747,
+    "opened": true,
+    "openMs": 63,
+    "openError": null,
+    "after": {
+      "targetMinecraftVersion": "1.21.4",
+      "targetDataVersion": 4189,
+      "revision": 1135,
+      "dimensions": [
+        {
+          "id": "minecraft:overworld",
+          "kind": "overworld",
+          "minY": -64,
+          "maxY": 319,
+          "height": 384,
+          "chunkCount": 36,
+          "sectionCount": 243,
+          "blockCount": 18648
+        },
+        {
+          "id": "minecraft:the_end",
+          "kind": "end",
+          "minY": 0,
+          "maxY": 255,
+          "height": 256,
+          "chunkCount": 0,
+          "sectionCount": 0,
+          "blockCount": 0
+        },
+        {
+          "id": "minecraft:the_nether",
+          "kind": "nether",
+          "minY": 0,
+          "maxY": 255,
+          "height": 256,
+          "chunkCount": 0,
+          "sectionCount": 0,
+          "blockCount": 0
+        }
+      ],
+      "chunkCount": 36,
+      "sectionCount": 243,
+      "blockCount": 18648
+    },
+    "probe": {
+      "name": "minecraft:diamond_block"
+    },
+    "probeError": null,
+    "current": {
+      "folder": "M10.8 hardware-d3d11 1795100985642.furybuilder",
+      "name": "M10.8 hardware-d3d11 1795100985642",
+      "savedRevision": 1135,
+      "autosavedRevision": null,
+      "revision": 1135,
+      "dirty": false,
+      "editorState": {
+        "selectedDimension": "minecraft:overworld",
+        "loadRadius": 4
+      },
+      "availableCheckpoints": 0
+    },
+    "recovery": null,
+    "matches": true
+  },
+  "capture": {
+    "viewportPngBytes": 738047,
+    "viewportPngSha256": "7be45e2e5e06b92b8a280383f16619bf9ca8260dc30dd50c7f7004376d5c5fb8",
+    "appPngBytes": 689121,
+    "appPngSha256": "decc6927fd7a1d5ef8a6bc6dae6b13d1c63f9f509fce1ab347e21247e6a06ad9",
+    "metadata": {
+      "schemaVersion": 1,
+      "mode": "viewport",
+      "dimension": "minecraft:overworld",
+      "worldRevision": 1135,
+      "camera": {
+        "position": [
+          64,
+          88,
+          64
+        ],
+        "target": [
+          42.069587073596225,
+          80.11875785457364,
+          42.06958707359623
+        ],
+        "yaw": 0.7853981633974483,
+        "pitch": -0.24884924723746396,
+        "fov": 70
+      },
+      "resolution": [
+        1200,
+        825
+      ],
+      "renderer": "three-webgl2",
+      "rendererSchema": 1,
+      "legend": [
+        {
+          "state": "minecraft:gold_block",
+          "count": 3688,
+          "color": "#e8c447"
+        },
+        {
+          "state": "minecraft:glass",
+          "count": 3556,
+          "color": "#c8e8f0"
+        },
+        {
+          "state": "minecraft:dirt",
+          "count": 2680,
+          "color": "#6d4c33"
+        },
+        {
+          "state": "minecraft:stone",
+          "count": 2597,
+          "color": "#8b8b8b"
+        },
+        {
+          "state": "minecraft:red_wool",
+          "count": 1737,
+          "color": "#a43131"
+        },
+        {
+          "state": "minecraft:oak_planks",
+          "count": 1714,
+          "color": "#a97c4b"
+        },
+        {
+          "state": "minecraft:stone_bricks",
+          "count": 1325,
+          "color": "#8b8b8b"
+        },
+        {
+          "state": "minecraft:cobblestone",
+          "count": 1221,
+          "color": "#8b8b8b"
+        },
+        {
+          "state": "minecraft:grass_block",
+          "count": 129,
+          "color": "#5f8f3e"
+        },
+        {
+          "state": "minecraft:diamond_block",
+          "count": 1,
+          "color": "#b05fa0"
+        }
+      ],
+      "legendTruncated": false,
+      "requestedChunks": [
+        {
+          "x": -4,
+          "z": -4
+        },
+        {
+          "x": -4,
+          "z": -3
+        },
+        {
+          "x": -4,
+          "z": -2
+        },
+        {
+          "x": -4,
+          "z": -1
+        },
+        {
+          "x": -4,
+          "z": 0
+        },
+        {
+          "x": -4,
+          "z": 1
+        },
+        {
+          "x": -4,
+          "z": 2
+        },
+        {
+          "x": -4,
+          "z": 3
+        },
+        {
+          "x": -4,
+          "z": 4
+        },
+        {
+          "x": -3,
+          "z": -4
+        },
+        {
+          "x": -3,
+          "z": -3
+        },
+        {
+          "x": -3,
+          "z": -2
+        },
+        {
+          "x": -3,
+          "z": -1
+        },
+        {
+          "x": -3,
+          "z": 0
+        },
+        {
+          "x": -3,
+          "z": 1
+        },
+        {
+          "x": -3,
+          "z": 2
+        },
+        {
+          "x": -3,
+          "z": 3
+        },
+        {
+          "x": -3,
+          "z": 4
+        },
+        {
+          "x": -2,
+          "z": -4
+        },
+        {
+          "x": -2,
+          "z": -3
+        },
+        {
+          "x": -2,
+          "z": -2
+        },
+        {
+          "x": -2,
+          "z": -1
+        },
+        {
+          "x": -2,
+          "z": 0
+        },
+        {
+          "x": -2,
+          "z": 1
+        },
+        {
+          "x": -2,
+          "z": 2
+        },
+        {
+          "x": -2,
+          "z": 3
+        },
+        {
+          "x": -2,
+          "z": 4
+        },
+        {
+          "x": -1,
+          "z": -4
+        },
+        {
+          "x": -1,
+          "z": -3
+        },
+        {
+          "x": -1,
+          "z": -2
+        },
+        {
+          "x": -1,
+          "z": -1
+        },
+        {
+          "x": -1,
+          "z": 0
+        },
+        {
+          "x": -1,
+          "z": 1
+        },
+        {
+          "x": -1,
+          "z": 2
+        },
+        {
+          "x": -1,
+          "z": 3
+        },
+        {
+          "x": -1,
+          "z": 4
+        },
+        {
+          "x": 0,
+          "z": -4
+        },
+        {
+          "x": 0,
+          "z": -3
+        },
+        {
+          "x": 0,
+          "z": -2
+        },
+        {
+          "x": 0,
+          "z": -1
+        },
+        {
+          "x": 0,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "z": 1
+        },
+        {
+          "x": 0,
+          "z": 2
+        },
+        {
+          "x": 0,
+          "z": 3
+        },
+        {
+          "x": 0,
+          "z": 4
+        },
+        {
+          "x": 1,
+          "z": -4
+        },
+        {
+          "x": 1,
+          "z": -3
+        },
+        {
+          "x": 1,
+          "z": -2
+        },
+        {
+          "x": 1,
+          "z": -1
+        },
+        {
+          "x": 1,
+          "z": 0
+        },
+        {
+          "x": 1,
+          "z": 1
+        },
+        {
+          "x": 1,
+          "z": 2
+        },
+        {
+          "x": 1,
+          "z": 3
+        },
+        {
+          "x": 1,
+          "z": 4
+        },
+        {
+          "x": 2,
+          "z": -4
+        },
+        {
+          "x": 2,
+          "z": -3
+        },
+        {
+          "x": 2,
+          "z": -2
+        },
+        {
+          "x": 2,
+          "z": -1
+        },
+        {
+          "x": 2,
+          "z": 0
+        },
+        {
+          "x": 2,
+          "z": 1
+        },
+        {
+          "x": 2,
+          "z": 2
+        },
+        {
+          "x": 2,
+          "z": 3
+        },
+        {
+          "x": 2,
+          "z": 4
+        },
+        {
+          "x": 3,
+          "z": -4
+        },
+        {
+          "x": 3,
+          "z": -3
+        },
+        {
+          "x": 3,
+          "z": -2
+        },
+        {
+          "x": 3,
+          "z": -1
+        },
+        {
+          "x": 3,
+          "z": 0
+        },
+        {
+          "x": 3,
+          "z": 1
+        },
+        {
+          "x": 3,
+          "z": 2
+        },
+        {
+          "x": 3,
+          "z": 3
+        },
+        {
+          "x": 3,
+          "z": 4
+        },
+        {
+          "x": 4,
+          "z": -4
+        },
+        {
+          "x": 4,
+          "z": -3
+        },
+        {
+          "x": 4,
+          "z": -2
+        },
+        {
+          "x": 4,
+          "z": -1
+        },
+        {
+          "x": 4,
+          "z": 0
+        },
+        {
+          "x": 4,
+          "z": 1
+        },
+        {
+          "x": 4,
+          "z": 2
+        },
+        {
+          "x": 4,
+          "z": 3
+        },
+        {
+          "x": 4,
+          "z": 4
+        }
+      ],
+      "loadedChunks": [
+        {
+          "x": -3,
+          "z": -3
+        },
+        {
+          "x": -3,
+          "z": -2
+        },
+        {
+          "x": -3,
+          "z": -1
+        },
+        {
+          "x": -3,
+          "z": 0
+        },
+        {
+          "x": -3,
+          "z": 1
+        },
+        {
+          "x": -3,
+          "z": 2
+        },
+        {
+          "x": -2,
+          "z": -3
+        },
+        {
+          "x": -2,
+          "z": -2
+        },
+        {
+          "x": -2,
+          "z": -1
+        },
+        {
+          "x": -2,
+          "z": 0
+        },
+        {
+          "x": -2,
+          "z": 1
+        },
+        {
+          "x": -2,
+          "z": 2
+        },
+        {
+          "x": -1,
+          "z": -3
+        },
+        {
+          "x": -1,
+          "z": -2
+        },
+        {
+          "x": -1,
+          "z": -1
+        },
+        {
+          "x": -1,
+          "z": 0
+        },
+        {
+          "x": -1,
+          "z": 1
+        },
+        {
+          "x": -1,
+          "z": 2
+        },
+        {
+          "x": 0,
+          "z": -3
+        },
+        {
+          "x": 0,
+          "z": -2
+        },
+        {
+          "x": 0,
+          "z": -1
+        },
+        {
+          "x": 0,
+          "z": 0
+        },
+        {
+          "x": 0,
+          "z": 1
+        },
+        {
+          "x": 0,
+          "z": 2
+        },
+        {
+          "x": 1,
+          "z": -3
+        },
+        {
+          "x": 1,
+          "z": -2
+        },
+        {
+          "x": 1,
+          "z": -1
+        },
+        {
+          "x": 1,
+          "z": 0
+        },
+        {
+          "x": 1,
+          "z": 1
+        },
+        {
+          "x": 1,
+          "z": 2
+        },
+        {
+          "x": 2,
+          "z": -3
+        },
+        {
+          "x": 2,
+          "z": -2
+        },
+        {
+          "x": 2,
+          "z": -1
+        },
+        {
+          "x": 2,
+          "z": 0
+        },
+        {
+          "x": 2,
+          "z": 1
+        },
+        {
+          "x": 2,
+          "z": 2
+        }
+      ],
+      "missingChunks": [
+        {
+          "x": -4,
+          "z": -4
+        },
+        {
+          "x": -4,
+          "z": -3
+        },
+        {
+          "x": -4,
+          "z": -2
+        },
+        {
+          "x": -4,
+          "z": -1
+        },
+        {
+          "x": -4,
+          "z": 0
+        },
+        {
+          "x": -4,
+          "z": 1
+        },
+        {
+          "x": -4,
+          "z": 2
+        },
+        {
+          "x": -4,
+          "z": 3
+        },
+        {
+          "x": -4,
+          "z": 4
+        },
+        {
+          "x": -3,
+          "z": -4
+        },
+        {
+          "x": -3,
+          "z": 3
+        },
+        {
+          "x": -3,
+          "z": 4
+        },
+        {
+          "x": -2,
+          "z": -4
+        },
+        {
+          "x": -2,
+          "z": 3
+        },
+        {
+          "x": -2,
+          "z": 4
+        },
+        {
+          "x": -1,
+          "z": -4
+        },
+        {
+          "x": -1,
+          "z": 3
+        },
+        {
+          "x": -1,
+          "z": 4
+        },
+        {
+          "x": 0,
+          "z": -4
+        },
+        {
+          "x": 0,
+          "z": 3
+        },
+        {
+          "x": 0,
+          "z": 4
+        },
+        {
+          "x": 1,
+          "z": -4
+        },
+        {
+          "x": 1,
+          "z": 3
+        },
+        {
+          "x": 1,
+          "z": 4
+        },
+        {
+          "x": 2,
+          "z": -4
+        },
+        {
+          "x": 2,
+          "z": 3
+        },
+        {
+          "x": 2,
+          "z": 4
+        },
+        {
+          "x": 3,
+          "z": -4
+        },
+        {
+          "x": 3,
+          "z": -3
+        },
+        {
+          "x": 3,
+          "z": -2
+        },
+        {
+          "x": 3,
+          "z": -1
+        },
+        {
+          "x": 3,
+          "z": 0
+        },
+        {
+          "x": 3,
+          "z": 1
+        },
+        {
+          "x": 3,
+          "z": 2
+        },
+        {
+          "x": 3,
+          "z": 3
+        },
+        {
+          "x": 3,
+          "z": 4
+        },
+        {
+          "x": 4,
+          "z": -4
+        },
+        {
+          "x": 4,
+          "z": -3
+        },
+        {
+          "x": 4,
+          "z": -2
+        },
+        {
+          "x": 4,
+          "z": -1
+        },
+        {
+          "x": 4,
+          "z": 0
+        },
+        {
+          "x": 4,
+          "z": 1
+        },
+        {
+          "x": 4,
+          "z": 2
+        },
+        {
+          "x": 4,
+          "z": 3
+        },
+        {
+          "x": 4,
+          "z": 4
+        }
+      ],
+      "partial": true,
+      "capturedAt": "2026-11-19T15:19:50.498Z",
+      "notes": [
+        "Image is a derived view; authoritative block data lives in the Rust world core.",
+        "Textures are original FuryBuilder placeholders, not Minecraft assets.",
+        "Reproduce with the same worldRevision, camera pose, resolution and renderer schema.",
+        "GPU anti-aliasing and driver differences are not modelled by the metadata.",
+        "partial=true means requested chunks were not loaded when the image was captured."
+      ]
+    }
+  },
+  "failure": null,
+  "pass": true,
+  "summary": {
+    "probeOnly": false,
+    "backend": {
+      "id": "hardware-d3d11",
+      "label": "hardware / ANGLE D3D11",
+      "kind": "hardware",
+      "expectation": "The default WebView2 hardware path on the installed NVIDIA adapter.",
+      "browserArguments": [],
+      "commonBrowserArguments": [
+        "--remote-debugging-port=0",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-features=CalculateNativeWinOcclusion",
+        "--enable-precise-memory-info"
+      ]
+    },
+    "durationMs": 609035,
+    "operations": {
+      "attempted": 1165,
+      "succeeded": 1165,
+      "failed": 0,
+      "zeroChange": 59,
+      "changedBlocks": 120174,
+      "byKind": {
+        "fill_cuboid": 728,
+        "batch": 146,
+        "terrain_brush": 146,
+        "replace": 145
+      },
+      "undoRedoProbes": [
+        {
+          "cycle": 112,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:air"
+          },
+          "target": {
+            "name": "minecraft:gold_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 100.69999999925494,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 115,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 102.29999999888241,
+            "lastBlock": {
+              "name": "minecraft:air"
+            },
+            "lastRevision": 116,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 100.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 117,
+            "lastContextLost": false
+          },
+          "revision": 115
+        },
+        {
+          "cycle": 226,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:gold_block"
+          },
+          "target": {
+            "name": "minecraft:diamond_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 104.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 228,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 103.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 229,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 104.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 230,
+            "lastContextLost": false
+          },
+          "revision": 228
+        },
+        {
+          "cycle": 343,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:diamond_block"
+          },
+          "target": {
+            "name": "minecraft:gold_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 103.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 346,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 105.29999999888241,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 347,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 100.40000000037253,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 348,
+            "lastContextLost": false
+          },
+          "revision": 346
+        },
+        {
+          "cycle": 460,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:gold_block"
+          },
+          "target": {
+            "name": "minecraft:diamond_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 103.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 465,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 120.40000000037253,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 466,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 103.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 467,
+            "lastContextLost": false
+          },
+          "revision": 465
+        },
+        {
+          "cycle": 576,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:diamond_block"
+          },
+          "target": {
+            "name": "minecraft:gold_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 101.90000000037253,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 584,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 102,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 585,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 101.5,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 586,
+            "lastContextLost": false
+          },
+          "revision": 584
+        },
+        {
+          "cycle": 693,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:gold_block"
+          },
+          "target": {
+            "name": "minecraft:diamond_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 101.20000000111759,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 700,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 119.80000000074506,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 701,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 100.89999999850988,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 702,
+            "lastContextLost": false
+          },
+          "revision": 700
+        },
+        {
+          "cycle": 816,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:diamond_block"
+          },
+          "target": {
+            "name": "minecraft:gold_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 104.29999999888241,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 813,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 105.30000000074506,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 814,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 105.09999999962747,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 815,
+            "lastContextLost": false
+          },
+          "revision": 813
+        },
+        {
+          "cycle": 937,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:gold_block"
+          },
+          "target": {
+            "name": "minecraft:diamond_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 103.69999999925494,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 926,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 104.79999999888241,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 927,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 100.5,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 928,
+            "lastContextLost": false
+          },
+          "revision": 926
+        },
+        {
+          "cycle": 1059,
+          "ok": true,
+          "previous": {
+            "name": "minecraft:diamond_block"
+          },
+          "target": {
+            "name": "minecraft:gold_block",
+            "properties": {}
+          },
+          "targetShown": {
+            "ok": true,
+            "waitedMs": 101.59999999962747,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 1038,
+            "lastContextLost": false
+          },
+          "restored": {
+            "ok": true,
+            "waitedMs": 104.20000000111759,
+            "lastBlock": {
+              "name": "minecraft:diamond_block"
+            },
+            "lastRevision": 1039,
+            "lastContextLost": false
+          },
+          "targetRestored": {
+            "ok": true,
+            "waitedMs": 107.80000000074506,
+            "lastBlock": {
+              "name": "minecraft:gold_block"
+            },
+            "lastRevision": 1040,
+            "lastContextLost": false
+          },
+          "revision": 1038
+        }
+      ],
+      "verificationFailures": []
+    },
+    "fps": {
+      "samples": 60,
+      "min": 51,
+      "median": 116,
+      "p95": 158,
+      "max": 162
+    },
+    "frameMs": {
+      "samples": 60,
+      "median": 10.5,
+      "p95": 20.3,
+      "max": 26.4
+    },
+    "heap": {
+      "initialUsedBytes": 55913984,
+      "finalUsedBytes": 67102823,
+      "growthBytes": 11188839,
+      "maxUsedBytes": 112600694
+    },
+    "contextLossCount": 0,
+    "revisionMismatches": 0,
+    "verificationFailures": 0,
+    "consoleErrors": 0,
+    "consoleWarnings": 1,
+    "saveReopen": {
+      "saved": true,
+      "closed": true,
+      "opened": true,
+      "matches": true,
+      "before": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1135,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18648
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18648
+      },
+      "after": {
+        "targetMinecraftVersion": "1.21.4",
+        "targetDataVersion": 4189,
+        "revision": 1135,
+        "dimensions": [
+          {
+            "id": "minecraft:overworld",
+            "kind": "overworld",
+            "minY": -64,
+            "maxY": 319,
+            "height": 384,
+            "chunkCount": 36,
+            "sectionCount": 243,
+            "blockCount": 18648
+          },
+          {
+            "id": "minecraft:the_end",
+            "kind": "end",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          },
+          {
+            "id": "minecraft:the_nether",
+            "kind": "nether",
+            "minY": 0,
+            "maxY": 255,
+            "height": 256,
+            "chunkCount": 0,
+            "sectionCount": 0,
+            "blockCount": 0
+          }
+        ],
+        "chunkCount": 36,
+        "sectionCount": 243,
+        "blockCount": 18648
+      },
+      "probe": {
+        "name": "minecraft:diamond_block"
+      },
+      "saveMs": 120.40000000037253,
+      "closeMs": 55.59999999962747,
+      "openMs": 63,
+      "checksum": "995801110f741a8dafcf7ff47440a1cb31a49bc6989daad075ad97b5ed29354f",
+      "snapshotFile": "data/world-00000000000000001135.fwl",
+      "bytesWritten": 122773
+    },
+    "assertions": {
+      "handshake": true,
+      "longSessionCompleted": true,
+      "noFailedOperations": true,
+      "noFailedUndoRedoProbes": true,
+      "noRendererVerificationFailures": true,
+      "noRevisionMismatch": true,
+      "noContextLoss": true,
+      "rendererStable": true,
+      "saveReopenMatches": true,
+      "hardwareFrameRate": true,
+      "heapGrowthBounded": true
+    },
+    "physicalGpuLimitation": "Only 1 physical display adapter(s) detected (NVIDIA GeForce GTX 1060 3GB). No integrated or second discrete GPU is available in this environment. This run covers the \"hardware / ANGLE D3D11\" path only; cross-vendor and integrated/discrete hardware coverage is not claimed."
+  },
+  "stderr": ""
+}

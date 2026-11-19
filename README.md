@@ -251,7 +251,15 @@ M10.7 adds explicit import and MCP security boundaries: imported worlds, NBT,
 archives, templates and generated file names are bounded and fail closed, and
 MCP policies are re-checked after confirmation so a tightened selection or a
 switch to read-only cannot be bypassed. The limits and residual risks are
-documented in `docs/design/security.md`. The first interchange format,
+documented in `docs/design/security.md`. M10.8 adds a long-editing harness for
+the real desktop path: it edits a flat project for 10 minutes on the NVIDIA
+D3D11 adapter and 5 minutes each on Microsoft WARP and Google SwiftShader,
+checks the rendered block after every operation, probes undo/redo under load,
+and requires save/reopen revision, block-count and marker equality. Evidence
+and reproduction commands are in
+`docs/testing/evidence/2026-11-19-long-edit-gpu/`. The test machine has only one
+physical GPU, so integrated/discrete and cross-vendor hardware coverage is
+explicitly not claimed. The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
 1.21.4 server load. Block states and orientations are preserved; entities and
