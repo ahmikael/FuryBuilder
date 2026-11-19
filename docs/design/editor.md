@@ -258,6 +258,29 @@ read-only: no blocks, metadata, revision or history entry is changed by a map.
 - Maps never replace exact queries; coordinate-level decisions still use `get_block` and
   `get_region`.
 
+## Validation panel (M9.18)
+
+The `Validation` tab runs bounded read-only rules against the authoritative Rust world. It
+never writes during a scan, and every finding is bound to an exact `worldRevision`.
+
+| Rule                   | Behaviour                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| Floating blocks        | Structural blocks with air directly below; explicitly a heuristic, with an optional repair. |
+| Palette diversity      | Surface block names above the configured guideline.                                         |
+| Export compatibility   | States outside the verified 1.21.4 catalog or with unsupported properties.                  |
+| Block orientation      | Missing/invalid `facing`, `half`, `hinge` or `axis` on stairs, doors, trapdoors and logs.   |
+| Protected regions      | Intersections with the persisted workspace policy; the Core injects the regions.            |
+| Path corridor (opt-in) | Gaps and obstructions along a declared straight surface path at an explicit base Y.         |
+
+- Findings show severity, confidence, rule, bounds, position count and a bounded sample.
+- Simple findings include a suggested `batch` operation. The panel previews it through the
+  normal preview path and applies it through the shared confirmed transaction, then re-runs
+  validation. The validator itself never applies a fix.
+- The floating repair can be `support` (default), `remove` or `none`; fixes larger than 64
+  positions are left for manual review instead of being silently truncated.
+- Limits are 2,000,000 scanned blocks and 128 findings. Findings are sorted deterministically
+  (errors first, then rule, bounds and message) so repeated runs are stable.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

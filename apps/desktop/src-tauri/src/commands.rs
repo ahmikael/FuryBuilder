@@ -23,8 +23,8 @@ use world_application::{
     ObjectKind, Observation, ObservationRequest, Operation, OperationRequest, OperationResult,
     ParametricApplyResult, ParametricConflictPolicy, ParametricInspection, ParametricObjectSummary,
     ParametricScene, ParametricSpec, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks,
-    RenderSnapshot, SceneObjectInspection, SemanticObject, StructureSites, WorkspacePolicy,
-    WorldService,
+    RenderSnapshot, SceneObjectInspection, SemanticObject, StructureSites, ValidationQuery,
+    ValidationReport, WorkspacePolicy, WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -108,6 +108,20 @@ pub fn observe(
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     service.observe(&request)
+}
+
+/// Runs bounded, read-only build validators and returns structured findings plus suggested
+/// repair operations. Nothing is written; repairs use the normal preview/apply path.
+#[tauri::command]
+pub fn validate_region(
+    state: State<'_, AppState>,
+    request: ValidationQuery,
+) -> Result<ValidationReport, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    service.validate_region(&request)
 }
 
 #[tauri::command]

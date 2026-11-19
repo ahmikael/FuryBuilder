@@ -250,6 +250,7 @@ describe("MCP protocol negotiation", () => {
         "inspect_parametric_object",
         "preview_build_dsl",
         "observe",
+        "validate_region",
         "get_block",
         "get_biome",
         "find_structure_sites",
@@ -275,6 +276,7 @@ describe("MCP protocol negotiation", () => {
       "list_templates",
       "observe",
       "preview_build_dsl",
+      "validate_region",
       "world_info",
     ]);
     for (const tool of readTools) {

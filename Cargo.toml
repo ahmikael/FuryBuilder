@@ -11,6 +11,7 @@ members = [
     "crates/scene-model",
     "crates/build-dsl",
     "crates/observation",
+    "crates/validation",
     "crates/structure-library",
     "crates/asset-source",
     "crates/runtime-manager",

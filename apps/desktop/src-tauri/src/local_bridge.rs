@@ -23,8 +23,8 @@ use uuid::Uuid;
 use world_application::{
     app_info, apply_job_operation, compile_build_dsl, undo_job_operation_id, Actor, ActorSource,
     AppError, BuildRecipe, ErrorCode, JobStartRequest, JobState, ObservationRequest, Operation,
-    OperationRequest, OperationResult, PreviewResult, Query, UndoTarget, WorldService,
-    DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
+    OperationRequest, OperationResult, PreviewResult, Query, UndoTarget, ValidationQuery,
+    WorldService, DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
 };
 
 use crate::mcp_access::{McpAccessInput, McpAccessMode};
@@ -393,6 +393,15 @@ struct ObserveParams {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ValidateParams {
+    project_id: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
+    request: ValidationQuery,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct TemplateInsertParams {
     project_id: String,
     template_id: String,
@@ -729,6 +738,16 @@ fn dispatch_inner(
                 .lock()
                 .map_err(|_| AppError::internal("world state lock poisoned"))?;
             to_value(service.observe(&params.observation)?)
+        }
+        "validate_region" => {
+            let params: ValidateParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            let service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            to_value(service.validate_region(&params.request)?)
         }
         "list_templates" => {
             let params: ProjectParams = parse_params(params)?;
@@ -2482,6 +2501,89 @@ mod tests {
                             "max": { "x": 0, "y": 65, "z": 0 }
                         },
                         "mode": "material_map"
+                    }
+                }),
+            ),
+        );
+        assert!(!stale.ok);
+        assert_eq!(
+            stale.error.expect("stale error").code,
+            ErrorCode::RevisionMismatch
+        );
+    }
+
+    #[test]
+    fn serves_read_only_validation_findings_with_suggested_operations() {
+        let state = AppState::new(temp_root("validation"));
+        {
+            let mut service = state.service.lock().expect("service");
+            service
+                .execute(OperationRequest {
+                    project_id: LOCAL_PROJECT_ID.to_owned(),
+                    operation: Operation::SetBlock {
+                        dimension: "minecraft:overworld".to_owned(),
+                        pos: BlockPos::new(0, 64, 0),
+                        state: "minecraft:stone".parse().expect("state"),
+                    },
+                    expected_revision: None,
+                    idempotency_key: None,
+                    actor: Actor::ui("test-user"),
+                    linked_object_id: None,
+                    layer_id: None,
+                })
+                .expect("seed validation world");
+        }
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-validate",
+                "token",
+                "validate_region",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 1,
+                    "request": {
+                        "dimension": "minecraft:overworld",
+                        "bounds": {
+                            "min": { "x": 0, "y": 63, "z": 0 },
+                            "max": { "x": 0, "y": 64, "z": 0 }
+                        },
+                        "rules": ["floating_blocks"]
+                    }
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let report = response.result.expect("validation report");
+        assert_eq!(report["worldRevision"], 1);
+        assert_eq!(report["counts"]["warning"], 1);
+        assert_eq!(report["counts"]["error"], 0);
+        assert_eq!(report["findings"][0]["ruleId"], "floating_blocks");
+        assert_eq!(report["findings"][0]["positionCount"], 1);
+        let fix = &report["findings"][0]["suggestedFix"]["operation"];
+        assert_eq!(fix["type"], "batch");
+        assert_eq!(fix["changes"][0]["pos"]["y"], 63);
+        assert_eq!(fix["changes"][0]["state"]["name"], "minecraft:stone");
+
+        let stale = handle_request(
+            &state,
+            "token",
+            request(
+                "req-validate-stale",
+                "token",
+                "validate_region",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 0,
+                    "request": {
+                        "dimension": "minecraft:overworld",
+                        "bounds": {
+                            "min": { "x": 0, "y": 63, "z": 0 },
+                            "max": { "x": 0, "y": 64, "z": 0 }
+                        },
+                        "rules": ["floating_blocks"]
                     }
                 }),
             ),

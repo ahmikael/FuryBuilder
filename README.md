@@ -174,6 +174,12 @@ warnings; revision diff reconstructs prior state from retained section history a
 closed when that history is no longer available. The `Observation` tab previews the same
 maps, and MCP exposes the read-only `observe` tool. Exact block queries remain the
 authority; colour maps are summaries.
+M9.18 adds a bounded Validation/critic layer: floating-support heuristics, allowed-build
+bounds, path-corridor continuity, palette diversity, export-catalog compatibility, block
+state orientation and protected-region conflicts produce structured findings with
+`rule_id`, severity, confidence, bounds, position counts and the authoritative revision.
+Suggested repairs are ordinary operations: the `Validation` tab and MCP `validate_region`
+only report them, and every repair goes through preview and the confirmed transaction path.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

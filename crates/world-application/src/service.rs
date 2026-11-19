@@ -12,6 +12,7 @@ use scene_model::{
 };
 use serde_json::json;
 use uuid::Uuid;
+use validation::{ProtectedArea, Severity, ValidationRequest};
 use workspace_model::WorkspacePolicy;
 use world_domain::{BlockBox, BlockPos, BlockRegistry, BlockState, ChunkPos, World, WorldInfo};
 use world_operations::{
@@ -24,7 +25,8 @@ use crate::dto::{
     HistorySummary, Observation, ObservationMode, ObservationRequest, OperationRequest,
     OperationResult, PaletteEntry, ParametricApplyResult, ParametricConflict, ParametricInspection,
     PreviewResult, Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot,
-    SceneObjectInspection, SectionSnapshot, StructureSites, UndoTarget,
+    SceneObjectInspection, SectionSnapshot, StructureSites, UndoTarget, ValidationCounts,
+    ValidationQuery, ValidationReport,
 };
 use crate::error::{AppError, ErrorCode};
 
@@ -720,6 +722,82 @@ impl WorldService {
             counts: rendered.counts,
             from_revision: request.from_revision,
             slice: request.slice,
+        })
+    }
+
+    /// Runs bounded, explainable validators at the current authoritative revision. The
+    /// report is read-only; suggestions inside findings are ordinary operations that still
+    /// require preview and the confirmed transaction path.
+    pub fn validate_region(&self, query: &ValidationQuery) -> Result<ValidationReport, AppError> {
+        let dimension = self.world.dimension(&query.dimension)?;
+        let protected_regions = self
+            .workspace
+            .protected_regions
+            .iter()
+            .filter(|region| {
+                region.dimension == query.dimension && region.bounds.intersects(&query.bounds)
+            })
+            .map(|region| ProtectedArea {
+                id: region.id.clone(),
+                name: region.name.clone(),
+                bounds: region.bounds,
+            })
+            .collect();
+        let request = ValidationRequest {
+            bounds: query.bounds,
+            rules: query.rules.clone(),
+            allowed_bounds: query.allowed_bounds,
+            path: query.path.clone(),
+            max_surface_materials: query.max_surface_materials,
+            floating_fix: query.floating_fix,
+            support_state: None,
+            protected_regions,
+        };
+        let outcome = validation::validate(dimension, &request)?;
+        let counts =
+            outcome
+                .findings
+                .iter()
+                .fold(ValidationCounts::default(), |mut counts, finding| {
+                    match finding.severity {
+                        Severity::Error => counts.error += 1,
+                        Severity::Warning => counts.warning += 1,
+                        Severity::Info => counts.info += 1,
+                    }
+                    counts
+                });
+        let revision = self.world.revision();
+        let mut notes = vec![
+            "Validation is read-only and reports findings at the current authoritative revision."
+                .to_owned(),
+            format!(
+                "The same dimension, bounds and rules at worldRevision {revision} produce the same findings."
+            ),
+            "Floating-block support is a heuristic; Minecraft does not simulate structure stability."
+                .to_owned(),
+            "Suggested fixes are ordinary operations and must be previewed and applied through the confirmed transaction path."
+                .to_owned(),
+            "Absent chunks read as air in the world model; a finding is not proof of unloaded data."
+                .to_owned(),
+        ];
+        if query.rules.is_empty() {
+            notes.push(
+                "Default rules ran; out_of_bounds and path_continuity are included only when their inputs are supplied."
+                    .to_owned(),
+            );
+        }
+        Ok(ValidationReport {
+            schema_version: validation::VALIDATION_SCHEMA_VERSION,
+            dimension: query.dimension.clone(),
+            world_revision: revision,
+            bounds: query.bounds,
+            rules: outcome.rules,
+            findings: outcome.findings,
+            counts,
+            truncated: outcome.truncated,
+            scanned_blocks: outcome.scanned_blocks,
+            warnings: outcome.warnings,
+            notes,
         })
     }
 

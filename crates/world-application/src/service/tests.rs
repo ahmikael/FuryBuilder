@@ -1,8 +1,9 @@
 use super::*;
 use crate::dto::{
     Actor, DeltaCounts, ObservationMode, ObservationRequest, OperationRequest, Query, QueryResult,
-    Slice, SliceAxis,
+    Slice, SliceAxis, ValidationQuery,
 };
+use crate::{FloatingFix, Severity, ValidationRuleId};
 use world_domain::{BiomeSection, BiomeState, BlockBox, BlockPos, BlockState, ChunkPos};
 use world_operations::Operation;
 
@@ -1587,4 +1588,86 @@ fn observation_rejects_invalid_mode_combinations_and_missing_history() {
         })
         .unwrap_err();
     assert_eq!(newer_from.code, ErrorCode::InvalidArgument);
+}
+
+fn validation_query(bounds: BlockBox) -> ValidationQuery {
+    ValidationQuery {
+        dimension: "minecraft:overworld".to_owned(),
+        bounds,
+        rules: Vec::new(),
+        allowed_bounds: None,
+        path: None,
+        max_surface_materials: None,
+        floating_fix: FloatingFix::Support,
+    }
+}
+
+#[test]
+fn validation_reports_findings_at_the_authoritative_revision() {
+    let mut service = WorldService::new();
+    service
+        .execute(set_block(BlockPos::new(0, 64, 0), "minecraft:stone"))
+        .unwrap();
+    let bounds = BlockBox::new(BlockPos::new(0, 63, 0), BlockPos::new(0, 64, 0)).unwrap();
+    let mut query = validation_query(bounds);
+    query.rules = vec![ValidationRuleId::FloatingBlocks];
+
+    let report = service.validate_region(&query).unwrap();
+    assert_eq!(report.schema_version, 1);
+    assert_eq!(report.world_revision, 1);
+    assert_eq!(report.rules, vec![ValidationRuleId::FloatingBlocks]);
+    assert_eq!(report.findings.len(), 1);
+    assert_eq!(report.counts.warning, 1);
+    assert_eq!(report.counts.error, 0);
+    assert_eq!(report.findings[0].rule_id, ValidationRuleId::FloatingBlocks);
+    assert_eq!(report.findings[0].position_count, 1);
+    let fix = report.findings[0]
+        .suggested_fix
+        .as_ref()
+        .expect("support suggestion");
+    assert!(matches!(&fix.operation, Operation::Batch { .. }));
+    assert!(report.notes.iter().any(|note| note.contains("read-only")));
+    assert!(!report.truncated);
+}
+
+#[test]
+fn validation_injects_workspace_protection_and_rejects_missing_inputs() {
+    let mut service = WorldService::new();
+    let mut policy = service.workspace_policy();
+    policy
+        .push_protected_region(
+            "Spawn",
+            "minecraft:overworld",
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(8, 80, 8)).unwrap(),
+        )
+        .unwrap();
+    service.set_workspace_policy(policy).unwrap();
+    let bounds = BlockBox::new(BlockPos::new(0, 64, 0), BlockPos::new(4, 70, 4)).unwrap();
+
+    let mut query = validation_query(bounds);
+    query.rules = vec![ValidationRuleId::ProtectedRegion];
+    let report = service.validate_region(&query).unwrap();
+    assert_eq!(report.findings.len(), 1);
+    assert_eq!(
+        report.findings[0].rule_id,
+        ValidationRuleId::ProtectedRegion
+    );
+    assert_eq!(report.findings[0].severity, Severity::Error);
+    assert!(report.findings[0].message.contains("Spawn"));
+
+    let mut missing_envelope = validation_query(bounds);
+    missing_envelope.rules = vec![ValidationRuleId::OutOfBounds];
+    let error = service.validate_region(&missing_envelope).unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArgument);
+
+    let mut missing_path = validation_query(bounds);
+    missing_path.rules = vec![ValidationRuleId::PathContinuity];
+    let error = service.validate_region(&missing_path).unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArgument);
+
+    let mut bad_limit = validation_query(bounds);
+    bad_limit.rules = vec![ValidationRuleId::Palette];
+    bad_limit.max_surface_materials = Some(0);
+    let error = service.validate_region(&bad_limit).unwrap_err();
+    assert_eq!(error.code, ErrorCode::LimitExceeded);
 }

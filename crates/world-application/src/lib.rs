@@ -19,7 +19,8 @@ pub use dto::{
     ObservationMode, ObservationRequest, OperationRequest, OperationResult, PaletteEntry,
     ParametricApplyResult, ParametricConflict, ParametricInspection, PreviewResult, Query,
     QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SceneObjectInspection,
-    SectionSnapshot, Slice, SliceAxis, StructureSites, UndoTarget,
+    SectionSnapshot, Slice, SliceAxis, StructureSites, UndoTarget, ValidationCounts,
+    ValidationQuery, ValidationReport,
 };
 pub use error::{AppError, ErrorCode};
 pub use jobs::{
@@ -34,6 +35,14 @@ pub use scene_model::{
 pub use service::{
     WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_READ_BLOCKS,
     MAX_REGION_SUMMARY_BLOCKS, MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,
+};
+pub use validation::{
+    Confidence, Finding, FloatingFix, PathPoint, PathSpec as ValidationPath,
+    RuleId as ValidationRuleId, Severity, SuggestedFix,
+    DEFAULT_SURFACE_MATERIALS as DEFAULT_VALIDATION_MATERIALS,
+    MAX_FINDINGS as MAX_VALIDATION_FINDINGS, MAX_FINDING_POSITIONS as MAX_VALIDATION_POSITIONS,
+    MAX_PATH_STEPS, MAX_PATH_WIDTH, MAX_SURFACE_MATERIALS as MAX_VALIDATION_MATERIALS,
+    MAX_VALIDATION_BLOCKS, VALIDATION_SCHEMA_VERSION,
 };
 pub use workspace_model::{
     Layer, WorkspaceError, WorkspacePolicy, WorkspaceRegion, MAX_LAYERS, MAX_MASKS,

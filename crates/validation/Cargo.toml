@@ -1,0 +1,19 @@
+[package]
+name = "furybuilder-validation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Bounded, explainable build validation over authoritative voxel data"
+
+[lib]
+name = "validation"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
+world-operations = { path = "../world-operations", package = "furybuilder-world-operations" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

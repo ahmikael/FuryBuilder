@@ -127,18 +127,19 @@ If step 3 cannot connect, see the error table below before changing the client c
 
 ## Tool catalog
 
-Twenty-six tools are registered:
+Twenty-seven tools are registered:
 
-| Group      | Tools                                                                                                                                                                                                                                                                                                            |
-| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Diagnostic | `bridge_info`                                                                                                                                                                                                                                                                                                    |
-| Read-only  | `world_info`, `get_workspace_policy`, `list_templates`, `list_scene_objects`, `inspect_scene_object`, `list_parametric_objects`, `inspect_parametric_object`, `preview_build_dsl`, `observe`, `get_block`, `get_biome`, `find_structure_sites`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport` |
-| Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `insert_template`, `undo_operation`, `get_operation_status`                                                                                                                                                                                    |
-| Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                                                                                                                                                                                                                      |
+| Group      | Tools                                                                                                                                                                                                                                                                                                                               |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diagnostic | `bridge_info`                                                                                                                                                                                                                                                                                                                       |
+| Read-only  | `world_info`, `get_workspace_policy`, `list_templates`, `list_scene_objects`, `inspect_scene_object`, `list_parametric_objects`, `inspect_parametric_object`, `preview_build_dsl`, `observe`, `validate_region`, `get_block`, `get_biome`, `find_structure_sites`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport` |
+| Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `insert_template`, `undo_operation`, `get_operation_status`                                                                                                                                                                                                       |
+| Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                                                                                                                                                                                                                                         |
 
 `inspect_region`, `get_block`, `get_biome`, `get_workspace_policy`, `list_templates`,
 `list_scene_objects`, `inspect_scene_object`, `list_parametric_objects`,
-`inspect_parametric_object`, `preview_build_dsl`, `observe` and `find_structure_sites` always answer at an
+`inspect_parametric_object`, `preview_build_dsl`, `observe`, `validate_region` and
+`find_structure_sites` always answer at an
 explicit `worldRevision`. `get_workspace_policy`
 returns layers, the active layer, the active mask and protected regions; enforcement stays
 in the Core. `list_templates` returns metadata for verified project-local Java `.nbt`
@@ -153,6 +154,11 @@ Batch operation without writing; apply it only through the confirmed `apply_oper
 revision-diff PNG maps with bounds, scale, legend and warnings at the given revision. It
 is read-only, bounded to 512×512 pixels and 8,000,000 scanned blocks; revision diff fails
 closed with `no_history` when the requested revision is no longer reconstructable.
+`validate_region` runs bounded read-only rules (floating support, allowed bounds, path
+continuity, palette, export compatibility, orientation and protected regions) and returns
+structured findings with `rule_id`, severity, confidence, bounds, position counts and an
+optional suggested `batch` operation. It never writes and never auto-fixes: preview the
+suggested operation with `preview_operation`, then use the confirmed `apply_operation` path.
 `get_biome` returns
 the 4x4x4 cell covering the position, or `null` when the source has no biome data;
 `set_biome` refuses such sections instead of inventing a biome. `find_structure_sites` is a

@@ -1029,6 +1029,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "furybuilder-validation"
+version = "0.1.0"
+dependencies = [
+ "furybuilder-world-domain",
+ "furybuilder-world-operations",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "furybuilder-workspace-model"
 version = "0.1.0"
 dependencies = [
@@ -1046,6 +1057,7 @@ dependencies = [
  "furybuilder-build-dsl",
  "furybuilder-observation",
  "furybuilder-scene-model",
+ "furybuilder-validation",
  "furybuilder-workspace-model",
  "furybuilder-world-domain",
  "furybuilder-world-operations",

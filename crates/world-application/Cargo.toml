@@ -20,6 +20,7 @@ workspace-model = { path = "../workspace-model", package = "furybuilder-workspac
 scene-model = { path = "../scene-model", package = "furybuilder-scene-model" }
 build-dsl = { path = "../build-dsl", package = "furybuilder-build-dsl" }
 observation = { path = "../observation", package = "furybuilder-observation" }
+validation = { path = "../validation", package = "furybuilder-validation" }
 
 [[bench]]
 name = "world_ops"

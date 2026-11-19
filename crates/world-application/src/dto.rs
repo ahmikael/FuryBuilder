@@ -1,5 +1,6 @@
 use scene_model::{ParametricObjectSummary, SemanticObject};
 use serde::{Deserialize, Serialize};
+use validation::{Finding, FloatingFix, PathSpec, RuleId};
 use workspace_model::WorkspacePolicy;
 use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
 use world_operations::{Operation, StructureSite};
@@ -262,6 +263,53 @@ pub struct Observation {
     pub from_revision: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub slice: Option<Slice>,
+}
+
+/// Read-only validation request. Protected regions and catalog context are injected by the
+/// service; clients cannot override them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ValidationQuery {
+    pub dimension: String,
+    pub bounds: BlockBox,
+    /// Empty means the default local rule set. Optional rules are skipped in that case
+    /// unless their inputs are supplied.
+    #[serde(default)]
+    pub rules: Vec<RuleId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub allowed_bounds: Option<BlockBox>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<PathSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_surface_materials: Option<usize>,
+    #[serde(default)]
+    pub floating_fix: FloatingFix,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationCounts {
+    pub error: usize,
+    pub warning: usize,
+    pub info: usize,
+}
+
+/// Structured findings with the authoritative revision, executed rules and bounded scan
+/// metadata. Suggested fixes inside findings are ordinary operations, never implicit writes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ValidationReport {
+    pub schema_version: u32,
+    pub dimension: String,
+    pub world_revision: u64,
+    pub bounds: BlockBox,
+    pub rules: Vec<RuleId>,
+    pub findings: Vec<Finding>,
+    pub counts: ValidationCounts,
+    pub truncated: bool,
+    pub scanned_blocks: u64,
+    pub warnings: Vec<String>,
+    pub notes: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

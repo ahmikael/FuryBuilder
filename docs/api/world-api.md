@@ -261,6 +261,49 @@ for revision diffs.
 - `partial` is always false for these maps: they are computed from the authoritative world
   model, where absent chunks read as air. They do not claim game lighting or entity data.
 
+## Validation
+
+`validate_region` is a read-only application endpoint shared by the desktop UI and MCP. It
+runs bounded rules over the authoritative world at the current revision and never changes
+blocks, metadata, history or the revision.
+
+```ts
+ValidationQuery {
+  dimension: string,
+  bounds: { min, max },                                  // inclusive scan area
+  rules?: ValidationRuleId[]                             // empty = default local set
+  allowedBounds?: { min, max },                          // out_of_bounds only
+  path?: { from, to, baseY, width, material },           // path_continuity only
+  maxSurfaceMaterials?: number,                          // 1..=64, default 32
+  floatingFix?: "none" | "remove" | "support"            // default support
+}
+```
+
+Rules: `floating_blocks`, `out_of_bounds`, `path_continuity`, `palette`,
+`export_compatibility`, `block_state_orientation`, `protected_region`. In the default set,
+`out_of_bounds` and `path_continuity` run only when their inputs are supplied; an explicitly
+requested rule without its input fails with `invalid_argument` instead of silently passing.
+
+`ValidationReport` returns `schemaVersion: 1`, `dimension`, `worldRevision`, `bounds`, the
+executed `rules`, `findings`, severity `counts`, `truncated`, `scannedBlocks`, `warnings` and
+`notes`. Each finding contains `ruleId`, `severity` (`info`/`warning`/`error`), `confidence`
+(`certain`/`heuristic`), `message`, `bounds`, a bounded `positions` sample, the exact
+`positionCount` and an optional `suggestedFix`.
+
+- `suggestedFix.operation` is an ordinary reversible `Operation` (currently a `batch`). It is
+  never applied by validation. Preview it with `preview_operation` and submit it through the
+  confirmed `apply_operation`/UI transaction path; workspace masks, locked layers and
+  protected regions still apply.
+- `floating_blocks` is explicitly heuristic: Minecraft does not simulate structure stability.
+  Blocks at the minimum scan Y are treated as supported and the report says so.
+- `export_compatibility` checks names and properties against the verified 1.21.4 catalog.
+  `block_state_orientation` checks cardinal `facing`, `half`, `hinge` and `axis` domains.
+- `protected_region` is injected by the application from the persisted workspace policy;
+  clients cannot supply or override protected regions through this request.
+- Limits are 2,000,000 scanned blocks, 128 findings, 64 embedded positions per finding, 512
+  path points and path width 1..=16. Violations return `limit_exceeded`/`invalid_argument`
+  before any write is possible.
+
 ## Render snapshots
 
 The renderer receives derived, revisioned payloads from the same core:

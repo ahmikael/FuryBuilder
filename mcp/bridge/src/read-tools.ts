@@ -27,6 +27,11 @@ const bounds = z.object({
   max: blockPos,
 });
 
+const blockState = z.object({
+  name: z.string().min(1).max(128),
+  properties: z.record(z.string(), z.string()).default({}),
+});
+
 const project = {
   project_id: z
     .string()
@@ -561,6 +566,96 @@ export function registerReadTools(server: McpServer): void {
             },
           ],
         };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "validate_region",
+    {
+      title: "Validate region",
+      description:
+        "Runs bounded, read-only build validators against authoritative voxel data. Findings carry rule_id, severity, confidence, bounds, position samples and optional suggested fix operations. Nothing is written: apply a suggested operation only through preview_operation and the confirmed apply_operation path. Floating-block support is a heuristic, not a Minecraft simulation.",
+      inputSchema: z.object({
+        ...project,
+        dimension: z.string().min(1).max(128),
+        bounds,
+        rules: z
+          .array(
+            z.enum([
+              "floating_blocks",
+              "out_of_bounds",
+              "path_continuity",
+              "palette",
+              "export_compatibility",
+              "block_state_orientation",
+              "protected_region",
+            ]),
+          )
+          .min(1)
+          .max(7)
+          .optional()
+          .describe(
+            "Rules to run. Omit for the default set; out_of_bounds and path_continuity need their inputs.",
+          ),
+        allowed_bounds: bounds
+          .optional()
+          .describe("Required when running out_of_bounds explicitly."),
+        path: z
+          .object({
+            from: z.object({ x: z.number().int(), z: z.number().int() }),
+            to: z.object({ x: z.number().int(), z: z.number().int() }),
+            base_y: z.number().int(),
+            width: z.number().int().min(1).max(16).default(1),
+            material: blockState,
+          })
+          .optional()
+          .describe("Required when running path_continuity explicitly."),
+        max_surface_materials: z.number().int().min(1).max(64).optional(),
+        floating_fix: z
+          .enum(["none", "remove", "support"])
+          .optional()
+          .describe("Suggested repair mode for floating blocks; it is never auto-applied."),
+      }),
+      annotations: readOnly,
+    },
+    async ({
+      project_id,
+      world_revision,
+      dimension,
+      bounds,
+      rules,
+      allowed_bounds,
+      path,
+      max_surface_materials,
+      floating_fix,
+    }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        const request: Record<string, unknown> = { dimension, bounds };
+        if (rules !== undefined) request.rules = rules;
+        if (allowed_bounds !== undefined) request.allowedBounds = allowed_bounds;
+        if (path !== undefined) {
+          request.path = {
+            from: path.from,
+            to: path.to,
+            baseY: path.base_y,
+            width: path.width,
+            material: path.material,
+          };
+        }
+        if (max_surface_materials !== undefined) {
+          request.maxSurfaceMaterials = max_surface_materials;
+        }
+        if (floating_fix !== undefined) request.floatingFix = floating_fix;
+        return textResult(
+          await callDesktop(
+            "validate_region",
+            withRevision({ projectId, request }, world_revision),
+          ),
+        );
       } catch (error) {
         return errorResult(error);
       }
