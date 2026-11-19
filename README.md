@@ -7,7 +7,9 @@ Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
 - **Target game version:** Minecraft Java **1.21.4** (`DataVersion` 4189, Java 21).
-- **Project modes:** `Empty Project` and `Import World` (classic Java 1.21.4) are available; `Vanilla World` is a later phase.
+- **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.21.4)
+  and `Vanilla World` (official local 1.21.4 generator after explicit dependency setup)
+  are available.
 - **License:** MIT for FuryBuilder code. Minecraft game assets are **not** distributed with
   this repository; see `docs/legal/third-party-notices.md`.
 
@@ -51,7 +53,9 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-M0–M8 are complete. M9 is in progress: the read-only 1.21.4 classic reader
+M0–M9 are complete and M10 is in progress. The authoritative status is tracked in
+`FURYBUILDER_MASTER_PLAN.md`. The functional baseline below is implemented and verified: the
+read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
 coordinates and proto-chunks, then decodes block-state palettes, sections and
 biomes without writing to the source world. A byte-preserving, fail-closed copy
@@ -271,6 +275,13 @@ real confirmation dialog for writes. Milestone progress is tracked in
 guarantee that its whole milestone is complete.
 
 ## Documentation
+
+Start with [Getting started](docs/getting-started.md) for installation, the window tour,
+first edits, saving and structure export. [Advanced workflows](docs/advanced-workflow.md)
+covers precise area editing, landscape tools, layers, templates, semantic and parametric
+objects, Build DSL, observation, validation, MCP and the measured performance envelope. The
+[documentation index](docs/README.md) groups every guide, format note, runtime note, test
+record and ADR.
 
 - `docs/mcp-setup.md` — connect an MCP client, access modes, common errors and how to
   turn access off.
