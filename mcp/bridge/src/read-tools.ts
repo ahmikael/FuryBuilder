@@ -173,6 +173,58 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "list_parametric_objects",
+    {
+      title: "List parametric objects",
+      description:
+        "Lists editor-only parametric recipes (generator, version, bounds, rotation, parameters, layer and applied revision). These are metadata; the generated voxels are ordinary reversible world content.",
+      inputSchema: z.object({ ...project }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await queryDesktop(projectId, world_revision, { type: "parametric_objects" }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "inspect_parametric_object",
+    {
+      title: "Inspect parametric object",
+      description:
+        "Returns one parametric recipe plus bounded conflict details: positions where manual edits no longer match the generated overlay. Read-only; transform, bake and rollback are confirmed desktop actions.",
+      inputSchema: z.object({
+        ...project,
+        object_id: z
+          .string()
+          .min(1)
+          .max(64)
+          .describe("Parametric object id from list_parametric_objects."),
+      }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision, object_id }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await queryDesktop(projectId, world_revision, {
+            type: "inspect_parametric_object",
+            objectId: object_id,
+          }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "get_block",
     {
       title: "Get block",

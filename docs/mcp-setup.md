@@ -127,23 +127,26 @@ If step 3 cannot connect, see the error table below before changing the client c
 
 ## Tool catalog
 
-Twenty-two tools are registered:
+Twenty-four tools are registered:
 
-| Group      | Tools                                                                                                                                                                                                                    |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Diagnostic | `bridge_info`                                                                                                                                                                                                            |
-| Read-only  | `world_info`, `get_workspace_policy`, `list_templates`, `list_scene_objects`, `inspect_scene_object`, `get_block`, `get_biome`, `find_structure_sites`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport` |
-| Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `insert_template`, `undo_operation`, `get_operation_status`                                                                                            |
-| Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                                                                                                                              |
+| Group      | Tools                                                                                                                                                                                                                                                                            |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diagnostic | `bridge_info`                                                                                                                                                                                                                                                                    |
+| Read-only  | `world_info`, `get_workspace_policy`, `list_templates`, `list_scene_objects`, `inspect_scene_object`, `list_parametric_objects`, `inspect_parametric_object`, `get_block`, `get_biome`, `find_structure_sites`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport` |
+| Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `insert_template`, `undo_operation`, `get_operation_status`                                                                                                                                                    |
+| Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                                                                                                                                                                                      |
 
 `inspect_region`, `get_block`, `get_biome`, `get_workspace_policy`, `list_templates`,
-`list_scene_objects`, `inspect_scene_object` and `find_structure_sites` always answer at an
+`list_scene_objects`, `inspect_scene_object`, `list_parametric_objects`,
+`inspect_parametric_object` and `find_structure_sites` always answer at an
 explicit `worldRevision`. `get_workspace_policy`
 returns layers, the active layer, the active mask and protected regions; enforcement stays
 in the Core. `list_templates` returns metadata for verified project-local Java `.nbt`
 templates (size, SHA-256, non-air blocks, source), never the payload. `list_scene_objects`
 and `inspect_scene_object` read editor-only semantic metadata and bounded block statistics;
-they never create or change objects or blocks. `get_biome` returns
+they never create or change objects or blocks. `list_parametric_objects` returns recipe
+summaries without rollback baselines, and `inspect_parametric_object` adds the generated
+block count and bounded manual-edit conflicts; both are read-only. `get_biome` returns
 the 4x4x4 cell covering the position, or `null` when the source has no biome data;
 `set_biome` refuses such sections instead of inventing a biome. `find_structure_sites` is a
 bounded, read-only placement-rule query (2,000,000 checks, 64 sites) and never creates an

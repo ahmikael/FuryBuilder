@@ -38,6 +38,7 @@ fn end_to_end_reopen_matches_bytes_checksum_and_semantics() {
         load_radius: 4,
         workspace: Default::default(),
         scene: Default::default(),
+        parametric: Default::default(),
     };
     let saved = store
         .save(&folder, &world, editor_state.clone(), SaveKind::Manual)

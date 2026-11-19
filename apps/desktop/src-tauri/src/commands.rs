@@ -20,8 +20,10 @@ use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
     ErrorCode, HistoryState, HistorySummary, ObjectKind, Operation, OperationRequest,
-    OperationResult, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot,
-    SceneObjectInspection, SemanticObject, StructureSites, WorkspacePolicy, WorldService,
+    OperationResult, ParametricApplyResult, ParametricConflictPolicy, ParametricInspection,
+    ParametricObjectSummary, ParametricScene, ParametricSpec, PingResponse, PreviewResult, Query,
+    QueryResult, RegionBlocks, RenderSnapshot, SceneObjectInspection, SemanticObject,
+    StructureSites, WorkspacePolicy, WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -353,6 +355,7 @@ fn install_world_service(
     let mut replacement = WorldService::from_world(world);
     replacement.set_workspace_policy(editor_state.workspace.clone())?;
     replacement.set_scene(editor_state.scene.clone())?;
+    replacement.set_parametric_scene(editor_state.parametric.clone())?;
     let mut service = state
         .service
         .lock()
@@ -484,7 +487,7 @@ pub fn project_open(
 #[tauri::command]
 pub fn project_save(
     state: State<'_, AppState>,
-    editor_state: project_store::EditorState,
+    mut editor_state: project_store::EditorState,
 ) -> Result<project_store::SaveOutcome, AppError> {
     let mut projects = state
         .projects
@@ -493,6 +496,8 @@ pub fn project_save(
     let current = projects.current.clone().ok_or_else(|| {
         AppError::new(world_application::ErrorCode::NotFound, "no project is open")
     })?;
+    // Baselines are large and live only in Rust; never trust or require the UI to echo them.
+    editor_state.parametric = current.editor_state.parametric.clone();
     editor_state.validate().map_err(project_error)?;
     let world = {
         let service = state
@@ -522,7 +527,7 @@ pub fn project_save(
 #[tauri::command]
 pub fn project_autosave(
     state: State<'_, AppState>,
-    editor_state: project_store::EditorState,
+    mut editor_state: project_store::EditorState,
     reason: Option<String>,
 ) -> Result<u64, AppError> {
     let mut projects = state
@@ -532,6 +537,7 @@ pub fn project_autosave(
     let current = projects.current.clone().ok_or_else(|| {
         AppError::new(world_application::ErrorCode::NotFound, "no project is open")
     })?;
+    editor_state.parametric = current.editor_state.parametric.clone();
     editor_state.validate().map_err(project_error)?;
     let world = {
         let service = state
@@ -663,7 +669,7 @@ pub fn project_open_checkpoint(
 pub fn project_close(
     state: State<'_, AppState>,
     save: bool,
-    editor_state: project_store::EditorState,
+    mut editor_state: project_store::EditorState,
 ) -> Result<SessionStatus, AppError> {
     let mut projects = state
         .projects
@@ -674,6 +680,7 @@ pub fn project_close(
         return session_status(&state);
     };
     if save {
+        editor_state.parametric = current.editor_state.parametric.clone();
         editor_state.validate().map_err(project_error)?;
         let world = {
             let service = state
@@ -1792,6 +1799,183 @@ fn scene_delete_impl(state: &AppState, object_id: &str) -> Result<SemanticObject
     editor_state.validate().map_err(project_error)?;
     persist_editor_state(state, &current.folder, editor_state)?;
     Ok(object)
+}
+
+/// Persists the authoritative parametric catalog after a recipe change. The world block
+/// operation and the recipe update are separate, but both happen under the same command;
+/// a persistence failure is returned to the caller instead of being swallowed.
+fn persist_current_parametric(
+    state: &AppState,
+    folder: &str,
+    parametric: ParametricScene,
+) -> Result<(), AppError> {
+    let mut editor_state = {
+        let projects = state
+            .projects
+            .lock()
+            .map_err(|_| AppError::internal("project state lock poisoned"))?;
+        projects
+            .current
+            .as_ref()
+            .filter(|current| current.folder == folder)
+            .map(|current| current.editor_state.clone())
+            .ok_or_else(|| AppError::new(ErrorCode::NotFound, "the project is no longer open"))?
+    };
+    editor_state.parametric = parametric;
+    editor_state.validate().map_err(project_error)?;
+    persist_editor_state(state, folder, editor_state)
+}
+
+#[tauri::command]
+pub fn parametric_list(
+    state: State<'_, AppState>,
+) -> Result<Vec<ParametricObjectSummary>, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    service.parametric_summaries()
+}
+
+#[tauri::command]
+pub fn parametric_inspect(
+    state: State<'_, AppState>,
+    object_id: String,
+) -> Result<ParametricInspection, AppError> {
+    parametric_inspect_impl(&state, &object_id)
+}
+
+fn parametric_inspect_impl(
+    state: &AppState,
+    object_id: &str,
+) -> Result<ParametricInspection, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    service.inspect_parametric_object(object_id)
+}
+
+#[tauri::command]
+pub fn parametric_create(
+    state: State<'_, AppState>,
+    spec: ParametricSpec,
+) -> Result<ParametricApplyResult, AppError> {
+    parametric_create_impl(&state, spec)
+}
+
+fn parametric_create_impl(
+    state: &AppState,
+    spec: ParametricSpec,
+) -> Result<ParametricApplyResult, AppError> {
+    let current = current_project(state)?;
+    let (result, parametric) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let result = service.create_parametric_object(&current.project_id, ui_actor(), spec)?;
+        (result, service.parametric_scene().clone())
+    };
+    persist_current_parametric(state, &current.folder, parametric)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn parametric_update(
+    state: State<'_, AppState>,
+    object_id: String,
+    spec: ParametricSpec,
+    conflict_policy: Option<ParametricConflictPolicy>,
+) -> Result<ParametricApplyResult, AppError> {
+    parametric_update_impl(
+        &state,
+        &object_id,
+        spec,
+        conflict_policy.unwrap_or_default(),
+    )
+}
+
+fn parametric_update_impl(
+    state: &AppState,
+    object_id: &str,
+    spec: ParametricSpec,
+    conflict_policy: ParametricConflictPolicy,
+) -> Result<ParametricApplyResult, AppError> {
+    let current = current_project(state)?;
+    let (result, parametric) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let result = service.update_parametric_object(
+            &current.project_id,
+            ui_actor(),
+            object_id,
+            spec,
+            conflict_policy,
+        )?;
+        (result, service.parametric_scene().clone())
+    };
+    persist_current_parametric(state, &current.folder, parametric)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn parametric_bake(
+    state: State<'_, AppState>,
+    object_id: String,
+) -> Result<ParametricApplyResult, AppError> {
+    parametric_bake_impl(&state, &object_id)
+}
+
+fn parametric_bake_impl(
+    state: &AppState,
+    object_id: &str,
+) -> Result<ParametricApplyResult, AppError> {
+    let current = current_project(state)?;
+    let (result, parametric) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let result = service.bake_parametric_object(object_id)?;
+        (result, service.parametric_scene().clone())
+    };
+    persist_current_parametric(state, &current.folder, parametric)?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub fn parametric_rollback(
+    state: State<'_, AppState>,
+    object_id: String,
+    force: Option<bool>,
+) -> Result<ParametricApplyResult, AppError> {
+    parametric_rollback_impl(&state, &object_id, force.unwrap_or(false))
+}
+
+fn parametric_rollback_impl(
+    state: &AppState,
+    object_id: &str,
+    force: bool,
+) -> Result<ParametricApplyResult, AppError> {
+    let current = current_project(state)?;
+    let (result, parametric) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let result = service.rollback_parametric_object(
+            &current.project_id,
+            ui_actor(),
+            object_id,
+            force,
+        )?;
+        (result, service.parametric_scene().clone())
+    };
+    persist_current_parametric(state, &current.folder, parametric)?;
+    Ok(result)
 }
 
 #[tauri::command]
@@ -3166,6 +3350,187 @@ mod workspace_tests {
         assert_eq!(
             state.service.lock().expect("service").world_info().revision,
             revision_after_block
+        );
+    }
+
+    #[test]
+    fn parametric_recipes_persist_and_resolve_manual_conflicts() {
+        use world_application::{
+            GeneratorKind, HouseParams, ParametricConflictPolicy, ParametricSpec, Rotation,
+            HOUSE_GENERATOR_VERSION,
+        };
+
+        let (state, folder) = project_state("parametric");
+        let project_id = current_project(&state).expect("current").project_id;
+        {
+            let mut service = state.service.lock().expect("service");
+            service
+                .execute(OperationRequest {
+                    project_id: project_id.clone(),
+                    operation: Operation::SetBlock {
+                        dimension: "minecraft:overworld".to_owned(),
+                        pos: BlockPos::new(14, 65, 14),
+                        state: "minecraft:gold_block".parse().expect("state"),
+                    },
+                    expected_revision: None,
+                    idempotency_key: None,
+                    actor: ui_actor(),
+                    linked_object_id: None,
+                    layer_id: None,
+                })
+                .expect("gold");
+        }
+        let revision = state.service.lock().expect("service").world_info().revision;
+        let spec = ParametricSpec {
+            name: "Parametric House".to_owned(),
+            generator: GeneratorKind::House,
+            generator_version: HOUSE_GENERATOR_VERSION,
+            dimension: "minecraft:overworld".to_owned(),
+            origin: BlockPos::new(14, 64, 14),
+            rotation: Rotation::None,
+            params: HouseParams {
+                width: 5,
+                depth: 4,
+                height: 3,
+                wall: "minecraft:stone_bricks".to_owned(),
+                floor: "minecraft:oak_planks".to_owned(),
+                roof: "minecraft:dark_oak_planks".to_owned(),
+                window: Some("minecraft:glass".to_owned()),
+            },
+            layer_id: None,
+        };
+        let created = parametric_create_impl(&state, spec.clone()).expect("create");
+        assert_eq!(created.object.id, "parametric-house");
+        assert!(created.operation.is_some());
+        assert!(
+            state.service.lock().expect("service").world_info().revision > revision,
+            "the voxel overlay is a world edit"
+        );
+        assert_eq!(
+            state
+                .service
+                .lock()
+                .expect("service")
+                .world()
+                .get_block("minecraft:overworld", BlockPos::new(14, 65, 14))
+                .expect("block")
+                .to_string(),
+            "minecraft:stone_bricks"
+        );
+
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert_eq!(reopened.0.editor_state.parametric.objects().len(), 1);
+        assert_eq!(
+            reopened.0.editor_state.parametric.objects()[0]
+                .baseline
+                .len(),
+            created.object.generated_blocks as usize
+        );
+        assert_eq!(
+            reopened.0.editor_state.parametric.objects()[0].applied_revision,
+            created
+                .operation
+                .as_ref()
+                .expect("operation")
+                .world_revision
+        );
+
+        {
+            let mut service = state.service.lock().expect("service");
+            service
+                .execute(OperationRequest {
+                    project_id: project_id.clone(),
+                    operation: Operation::SetBlock {
+                        dimension: "minecraft:overworld".to_owned(),
+                        pos: BlockPos::new(14, 65, 14),
+                        state: "minecraft:glass".parse().expect("state"),
+                    },
+                    expected_revision: None,
+                    idempotency_key: None,
+                    actor: ui_actor(),
+                    linked_object_id: None,
+                    layer_id: None,
+                })
+                .expect("manual edit");
+        }
+        let revision = state.service.lock().expect("service").world_info().revision;
+        let mut taller = spec.clone();
+        taller.params.height = 4;
+        let error = parametric_update_impl(
+            &state,
+            "parametric-house",
+            taller.clone(),
+            ParametricConflictPolicy::Fail,
+        )
+        .expect_err("manual conflict");
+        assert_eq!(error.code, ErrorCode::Conflict);
+        assert_eq!(
+            state.service.lock().expect("service").world_info().revision,
+            revision
+        );
+        let conflict = parametric_inspect_impl(&state, "parametric-house").expect("inspect");
+        assert!(conflict.conflict_count >= 1);
+
+        let updated = parametric_update_impl(
+            &state,
+            "parametric-house",
+            taller,
+            ParametricConflictPolicy::Override,
+        )
+        .expect("override");
+        assert!(!updated.conflicts.is_empty());
+        assert_eq!(
+            state
+                .service
+                .lock()
+                .expect("service")
+                .world()
+                .get_block("minecraft:overworld", BlockPos::new(14, 65, 14))
+                .expect("block")
+                .to_string(),
+            "minecraft:stone_bricks"
+        );
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert_eq!(
+            reopened.0.editor_state.parametric.objects()[0]
+                .params
+                .height,
+            4
+        );
+
+        let baked = parametric_bake_impl(&state, "parametric-house").expect("bake");
+        assert!(baked.operation.is_none());
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert!(reopened.0.editor_state.parametric.is_empty());
+        assert_eq!(
+            state
+                .service
+                .lock()
+                .expect("service")
+                .world()
+                .get_block("minecraft:overworld", BlockPos::new(14, 64, 14))
+                .expect("block")
+                .to_string(),
+            "minecraft:oak_planks",
+            "bake keeps the voxel result"
         );
     }
 }

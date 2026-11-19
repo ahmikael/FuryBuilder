@@ -184,6 +184,33 @@ renaming or deleting an object never places or removes blocks.
 - MCP exposes `list_scene_objects` and `inspect_scene_object` as read-only tools. There is
   no MCP scene-write tool in M9.14; the desktop UI is the authority for scene creation.
 
+## Parametric scene graph (M9.15)
+
+The `Parametric` tab adds versioned recipe objects whose voxels are compiled by the Core.
+A house recipe stores its generator id/version, dimension, origin, rotation, materials and
+size; applying it is one reversible `Batch` operation. The tab can create a house from the
+current selection, transform the recipe in place, bake/detach it or roll it back.
+
+| Action        | Behaviour                                                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create        | Compiles the recipe, captures the pre-existing blocks at every generated position and applies the overlay as one operation.                                    |
+| Transform     | Restores the old footprint to its captured baseline and writes the new footprint in one operation. Rotation also turns `facing`, `axis` and `rotation` values. |
+| Bake/detach   | Forgets the recipe and baseline but keeps the blocks in the world. The voxels become ordinary history content.                                                 |
+| Rollback      | Writes the captured baseline back and removes the recipe. Traffic back to the pre-object terrain.                                                              |
+| Conflict view | Compares the generator output with the authoritative blocks and lists bounded samples of manual edits.                                                         |
+
+- The default conflict policy is fail-closed. Manual edits inside the overlay produce a
+  `conflict` with bounded details, and the transform/rollback is refused. The user can
+  explicitly choose `Override` in the panel to accept the loss.
+- The baseline is palette-compressed and stored with the recipe in `project.json`. The UI
+  never round-trips it: `project_save` and `project_autosave` take the Core's catalog.
+- The panel requires an existing JSON-valid recipe and never executes arbitrary code. The
+  only generator is `house` version 1; unknown generator versions are rejected.
+- Bake and recipe-only changes do not bump the revision. Create, transform and rollback
+  write blocks and therefore appear in history and undo/redo.
+- MCP exposes `list_parametric_objects` and `inspect_parametric_object` as read-only tools.
+  Creation, transform, bake and rollback stay in the desktop UI in M9.15.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

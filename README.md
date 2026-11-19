@@ -151,6 +151,15 @@ tags. The `Objects` tab creates an object from the current selection, shows its 
 and inspects the current block palette and non-air count at the authoritative revision.
 Scene edits never place blocks, bump the world revision or enter block history. MCP exposes
 `list_scene_objects` and `inspect_scene_object` as read-only tools.
+M9.15 adds a minimal parametric scene graph: a versioned house recipe (generator, version,
+dimension, origin, rotation and bounded materials) compiles deterministically into one
+reversible voxel overlay. The Rust Core captures the blocks that existed before the first
+apply, so rollback restores terrain instead of assuming air. Recipes persist in
+`project.json`; transform and rebake are blocked when manual edits no longer match the
+generated overlay unless the user explicitly chooses override. Bake detaches the recipe
+and keeps the blocks, while rollback restores the captured baseline. MCP exposes
+`list_parametric_objects` and `inspect_parametric_object` as read-only tools with conflict
+details; the desktop panel owns the mutating actions.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

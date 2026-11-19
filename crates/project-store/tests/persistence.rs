@@ -35,6 +35,7 @@ fn chunks_metadata_and_editor_state_survive_save_and_reopen() {
         load_radius: 3,
         workspace: Default::default(),
         scene: Default::default(),
+        parametric: Default::default(),
     };
     let outcome = store
         .save(&folder, &world, editor_state.clone(), SaveKind::Manual)

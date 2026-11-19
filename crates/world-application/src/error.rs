@@ -1,4 +1,4 @@
-use scene_model::SceneError;
+use scene_model::{ParametricError, SceneError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use workspace_model::WorkspaceError;
@@ -100,6 +100,19 @@ impl From<WorkspaceError> for AppError {
 
 impl From<SceneError> for AppError {
     fn from(error: SceneError) -> Self {
+        let code = match error.code() {
+            "limit_exceeded" => ErrorCode::LimitExceeded,
+            "unsupported_version" => ErrorCode::UnsupportedVersion,
+            "not_found" => ErrorCode::NotFound,
+            "conflict" => ErrorCode::Conflict,
+            _ => ErrorCode::InvalidArgument,
+        };
+        AppError::new(code, error.to_string())
+    }
+}
+
+impl From<ParametricError> for AppError {
+    fn from(error: ParametricError) -> Self {
         let code = match error.code() {
             "limit_exceeded" => ErrorCode::LimitExceeded,
             "unsupported_version" => ErrorCode::UnsupportedVersion,

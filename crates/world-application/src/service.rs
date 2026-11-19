@@ -1,10 +1,13 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
-use scene_model::{ObjectKind, Scene, SemanticObject};
+use scene_model::{
+    ObjectKind, ParametricBaseline, ParametricConflictPolicy, ParametricError, ParametricObject,
+    ParametricObjectSummary, ParametricScene, ParametricSpec, Scene, SemanticObject,
+};
 use serde_json::json;
 use uuid::Uuid;
 use workspace_model::WorkspacePolicy;
-use world_domain::{BlockBox, BlockRegistry, ChunkPos, World, WorldInfo};
+use world_domain::{BlockBox, BlockPos, BlockRegistry, BlockState, ChunkPos, World, WorldInfo};
 use world_operations::{
     self as operations, BlockChange, NoopObserver, Operation, OperationObserver, SectionDiff,
     StructureSiteRules,
@@ -12,9 +15,10 @@ use world_operations::{
 
 use crate::dto::{
     Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
-    HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
-    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SceneObjectInspection,
-    SectionSnapshot, StructureSites, UndoTarget,
+    HistorySummary, OperationRequest, OperationResult, PaletteEntry, ParametricApplyResult,
+    ParametricConflict, ParametricInspection, PreviewResult, Query, QueryResult, RegionBlocks,
+    RegionSummary, RenderSnapshot, SceneObjectInspection, SectionSnapshot, StructureSites,
+    UndoTarget,
 };
 use crate::error::{AppError, ErrorCode};
 
@@ -24,6 +28,7 @@ pub const MAX_IDEMPOTENCY_ENTRIES: usize = 256;
 pub const MAX_RENDER_RADIUS: u32 = 6;
 pub const MAX_RENDER_CHUNKS: usize = 256;
 pub const DEFAULT_MAX_HISTORY: usize = 100;
+pub const MAX_PARAMETRIC_CONFLICTS_REPORTED: usize = 32;
 const MAX_PROJECT_ID: usize = 128;
 const MAX_KEY_LENGTH: usize = 128;
 
@@ -64,6 +69,7 @@ pub struct WorldService {
     audit: Vec<AuditEntry>,
     workspace: WorkspacePolicy,
     scene: Scene,
+    parametric: ParametricScene,
     writes_enabled: bool,
     allow_unknown_targets: bool,
     max_history: usize,
@@ -87,6 +93,7 @@ impl WorldService {
             audit: Vec::new(),
             workspace: WorkspacePolicy::default(),
             scene: Scene::default(),
+            parametric: ParametricScene::default(),
             writes_enabled: true,
             allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
@@ -111,6 +118,7 @@ impl WorldService {
             audit: Vec::new(),
             workspace: WorkspacePolicy::default(),
             scene: Scene::default(),
+            parametric: ParametricScene::default(),
             writes_enabled: true,
             allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
@@ -192,6 +200,322 @@ impl WorldService {
     /// Removes a leaf semantic object. Objects with children are refused.
     pub fn remove_scene_object(&mut self, id: &str) -> Result<SemanticObject, AppError> {
         Ok(self.scene.remove(id)?)
+    }
+
+    /// Returns the persisted parametric catalog (recipes plus rollback baselines).
+    pub fn parametric_scene(&self) -> &ParametricScene {
+        &self.parametric
+    }
+
+    pub fn parametric_summaries(&self) -> Result<Vec<ParametricObjectSummary>, AppError> {
+        Ok(self.parametric.summaries()?)
+    }
+
+    /// Validates a parametric catalog against this world's dimensions without changing the
+    /// service. Opening or saving a project calls this fail-closed.
+    pub fn validate_parametric_scene(&self, scene: &ParametricScene) -> Result<(), AppError> {
+        scene.validate()?;
+        for object in scene.objects() {
+            let dimension = self.world.dimension(&object.dimension)?;
+            let bounds = object.bounds()?;
+            if !dimension.contains_y(bounds.min.y) || !dimension.contains_y(bounds.max.y) {
+                return Err(AppError::new(
+                    ErrorCode::OutOfBounds,
+                    format!(
+                        "parametric object `{}` spans Y {}..{} outside dimension `{}`",
+                        object.id, bounds.min.y, bounds.max.y, object.dimension
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Replaces the parametric catalog. Like the semantic scene, this is metadata and does
+    /// not bump the revision or enter block history.
+    pub fn set_parametric_scene(&mut self, scene: ParametricScene) -> Result<(), AppError> {
+        self.validate_parametric_scene(&scene)?;
+        self.parametric = scene;
+        Ok(())
+    }
+
+    /// Generates the object overlay into the world as one reversible Batch operation and
+    /// records the object recipe. The baseline capture happens before the write, so a
+    /// rollback can restore terrain and other pre-existing blocks.
+    pub fn create_parametric_object(
+        &mut self,
+        project_id: &str,
+        actor: Actor,
+        spec: ParametricSpec,
+    ) -> Result<ParametricApplyResult, AppError> {
+        spec.validate()?;
+        self.world.dimension(&spec.dimension)?;
+        let id = self.parametric.next_id(&spec.name)?;
+        let mut object = ParametricObject {
+            id: id.clone(),
+            name: spec.name.trim().to_owned(),
+            generator: spec.generator,
+            generator_version: spec.generator_version,
+            dimension: spec.dimension,
+            origin: spec.origin,
+            rotation: spec.rotation,
+            params: spec.params,
+            layer_id: spec.layer_id,
+            applied_revision: self.world.revision(),
+            last_operation_id: None,
+            baseline: ParametricBaseline::default(),
+        };
+        object.validate_shape()?;
+        let generated = generated_map(&object)?;
+        let mut baseline: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+        for pos in generated.keys() {
+            baseline.insert(*pos, self.world.get_block(&object.dimension, *pos)?);
+        }
+        object.baseline = ParametricBaseline::encode(&baseline)?;
+        object.validate()?;
+
+        // Validate catalog limits before mutating the world.
+        let mut catalog = self.parametric.clone();
+        catalog.insert(object.clone())?;
+
+        let changes: Vec<BlockChange> = generated
+            .into_iter()
+            .map(|(pos, state)| BlockChange { pos, state })
+            .collect();
+        if changes.is_empty() {
+            return Err(AppError::invalid_argument(
+                "parametric object generated no blocks",
+            ));
+        }
+        let result = self.execute(OperationRequest {
+            project_id: project_id.to_owned(),
+            operation: Operation::Batch {
+                dimension: object.dimension.clone(),
+                changes,
+            },
+            expected_revision: None,
+            idempotency_key: None,
+            actor,
+            linked_object_id: Some(id.clone()),
+            layer_id: object.layer_id.clone(),
+        })?;
+        object.applied_revision = result.world_revision;
+        object.last_operation_id = Some(result.operation_id.clone());
+        catalog.replace(object.clone())?;
+        self.parametric = catalog;
+        Ok(ParametricApplyResult {
+            object: object.summary()?,
+            operation: Some(result),
+            conflicts: Vec::new(),
+        })
+    }
+
+    /// Replaces a recipe or transform. The old overlay is checked for manual edits; without
+    /// `Override` any mismatch is reported and nothing is written. When accepted, the old
+    /// overlay is restored to its captured baseline and the new overlay is written in one
+    /// reversible Batch operation.
+    pub fn update_parametric_object(
+        &mut self,
+        project_id: &str,
+        actor: Actor,
+        id: &str,
+        spec: ParametricSpec,
+        policy: ParametricConflictPolicy,
+    ) -> Result<ParametricApplyResult, AppError> {
+        spec.validate()?;
+        let old = self
+            .parametric
+            .get(id)
+            .cloned()
+            .ok_or_else(|| ParametricError::NotFound(id.to_owned()))?;
+        if old.dimension != spec.dimension {
+            return Err(AppError::invalid_argument(
+                "a parametric object cannot change dimension; bake it and create a new object",
+            ));
+        }
+        let mut updated = ParametricObject {
+            id: old.id.clone(),
+            name: spec.name.trim().to_owned(),
+            generator: spec.generator,
+            generator_version: spec.generator_version,
+            dimension: old.dimension.clone(),
+            origin: spec.origin,
+            rotation: spec.rotation,
+            params: spec.params,
+            layer_id: spec.layer_id,
+            applied_revision: old.applied_revision,
+            last_operation_id: old.last_operation_id.clone(),
+            baseline: ParametricBaseline::default(),
+        };
+        updated.validate_shape()?;
+        self.world.dimension(&updated.dimension)?;
+
+        let old_generated = generated_map(&old)?;
+        let new_generated = generated_map(&updated)?;
+        let old_baseline = old.baseline.decode()?;
+        let mut new_baseline: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+        for pos in new_generated.keys() {
+            let state = match old_baseline.get(pos) {
+                Some(state) => state.clone(),
+                None => self.world.get_block(&updated.dimension, *pos)?,
+            };
+            new_baseline.insert(*pos, state);
+        }
+        updated.baseline = ParametricBaseline::encode(&new_baseline)?;
+        updated.validate()?;
+
+        let conflicts = self.parametric_conflicts(&old)?;
+        if !conflicts.is_empty() && policy == ParametricConflictPolicy::Fail {
+            return Err(parametric_conflict_error(&conflicts));
+        }
+
+        let mut changes: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+        for pos in old_generated.keys() {
+            if !new_generated.contains_key(pos) {
+                let state = old_baseline.get(pos).ok_or_else(|| {
+                    AppError::internal("parametric baseline is missing an old overlay position")
+                })?;
+                changes.insert(*pos, state.clone());
+            }
+        }
+        for (pos, state) in &new_generated {
+            changes.insert(*pos, state.clone());
+        }
+
+        let mut catalog = self.parametric.clone();
+        catalog.replace(updated.clone())?;
+
+        let operation = if changes.is_empty() {
+            None
+        } else {
+            let changes: Vec<BlockChange> = changes
+                .into_iter()
+                .map(|(pos, state)| BlockChange { pos, state })
+                .collect();
+            let result = self.execute(OperationRequest {
+                project_id: project_id.to_owned(),
+                operation: Operation::Batch {
+                    dimension: updated.dimension.clone(),
+                    changes,
+                },
+                expected_revision: None,
+                idempotency_key: None,
+                actor,
+                linked_object_id: Some(updated.id.clone()),
+                layer_id: updated.layer_id.clone(),
+            })?;
+            updated.applied_revision = result.world_revision;
+            updated.last_operation_id = Some(result.operation_id.clone());
+            catalog.replace(updated.clone())?;
+            Some(result)
+        };
+        self.parametric = catalog;
+        Ok(ParametricApplyResult {
+            object: updated.summary()?,
+            operation,
+            conflicts,
+        })
+    }
+
+    /// Detaches a parametric object while keeping the blocks it produced in the world.
+    /// The recipe, hierarchy and baseline are forgotten; the voxels become ordinary edits.
+    pub fn bake_parametric_object(&mut self, id: &str) -> Result<ParametricApplyResult, AppError> {
+        let removed = self.parametric.remove(id)?;
+        Ok(ParametricApplyResult {
+            object: removed.summary()?,
+            operation: None,
+            conflicts: Vec::new(),
+        })
+    }
+
+    /// Restores every block captured before the object was first applied and removes the
+    /// recipe. Manual edits inside the old overlay are reported unless `force` is set.
+    pub fn rollback_parametric_object(
+        &mut self,
+        project_id: &str,
+        actor: Actor,
+        id: &str,
+        force: bool,
+    ) -> Result<ParametricApplyResult, AppError> {
+        let object = self
+            .parametric
+            .get(id)
+            .cloned()
+            .ok_or_else(|| ParametricError::NotFound(id.to_owned()))?;
+        let conflicts = self.parametric_conflicts(&object)?;
+        if !conflicts.is_empty() && !force {
+            return Err(parametric_conflict_error(&conflicts));
+        }
+        let baseline = object.baseline.decode()?;
+        let changes: Vec<BlockChange> = baseline
+            .into_iter()
+            .map(|(pos, state)| BlockChange { pos, state })
+            .collect();
+        if changes.is_empty() {
+            self.parametric.remove(id)?;
+            return Ok(ParametricApplyResult {
+                object: object.summary()?,
+                operation: None,
+                conflicts,
+            });
+        }
+        let result = self.execute(OperationRequest {
+            project_id: project_id.to_owned(),
+            operation: Operation::Batch {
+                dimension: object.dimension.clone(),
+                changes,
+            },
+            expected_revision: None,
+            idempotency_key: None,
+            actor,
+            linked_object_id: Some(object.id.clone()),
+            layer_id: object.layer_id.clone(),
+        })?;
+        self.parametric.remove(id)?;
+        Ok(ParametricApplyResult {
+            object: object.summary()?,
+            operation: Some(result),
+            conflicts,
+        })
+    }
+
+    pub fn inspect_parametric_object(&self, id: &str) -> Result<ParametricInspection, AppError> {
+        let object = self
+            .parametric
+            .get(id)
+            .cloned()
+            .ok_or_else(|| ParametricError::NotFound(id.to_owned()))?;
+        let conflicts = self.parametric_conflicts(&object)?;
+        let conflict_count = conflicts.len() as u64;
+        let conflicts = conflicts
+            .into_iter()
+            .take(MAX_PARAMETRIC_CONFLICTS_REPORTED)
+            .collect();
+        Ok(ParametricInspection {
+            object: object.summary()?,
+            generated_blocks: object.baseline.len() as u64,
+            conflict_count,
+            conflicts,
+        })
+    }
+
+    fn parametric_conflicts(
+        &self,
+        object: &ParametricObject,
+    ) -> Result<Vec<ParametricConflict>, AppError> {
+        let generated = generated_map(object)?;
+        let mut conflicts = Vec::new();
+        for (pos, expected) in generated {
+            let found = self.world.get_block(&object.dimension, pos)?;
+            if found != expected {
+                conflicts.push(ParametricConflict {
+                    pos,
+                    expected,
+                    found,
+                });
+            }
+        }
+        Ok(conflicts)
     }
 
     fn enforce_workspace(
@@ -853,6 +1177,12 @@ impl WorldService {
                     children,
                 }))
             }
+            Query::ParametricObjects => {
+                Ok(QueryResult::ParametricObjects(self.parametric_summaries()?))
+            }
+            Query::InspectParametricObject { object_id } => Ok(QueryResult::ParametricObject(
+                self.inspect_parametric_object(&object_id)?,
+            )),
         }
     }
 
@@ -1197,6 +1527,37 @@ fn snapshot_chunk(dim: &world_domain::Dimension, chunk_pos: ChunkPos) -> ChunkSn
             sections: Vec::new(),
         },
     }
+}
+
+fn generated_map(object: &ParametricObject) -> Result<BTreeMap<BlockPos, BlockState>, AppError> {
+    Ok(object
+        .generate()?
+        .into_iter()
+        .map(|block| (block.pos, block.state))
+        .collect())
+}
+
+fn parametric_conflict_error(conflicts: &[ParametricConflict]) -> AppError {
+    let count = conflicts.len();
+    let sample: Vec<ParametricConflict> = conflicts
+        .iter()
+        .take(MAX_PARAMETRIC_CONFLICTS_REPORTED)
+        .cloned()
+        .collect();
+    let first = conflicts.first();
+    let location = first
+        .map(|conflict| format!(" at {:?}", conflict.pos))
+        .unwrap_or_default();
+    AppError::new(
+        ErrorCode::Conflict,
+        format!(
+            "{count} block(s) inside the parametric overlay were edited manually{location}; rebake with override, bake or roll back"
+        ),
+    )
+    .with_details(json!({
+        "count": count,
+        "conflicts": sample,
+    }))
 }
 
 fn now_ms() -> Result<u128, AppError> {

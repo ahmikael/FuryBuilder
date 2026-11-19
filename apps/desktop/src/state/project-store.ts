@@ -41,6 +41,7 @@ import { pushToast, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { useWorkspaceStore } from "@/state/workspace-store";
 import { useSceneStore } from "@/state/scene-store";
+import { useParametricStore } from "@/state/parametric-store";
 import { reloadViewport } from "@/features/viewport/viewport-bus";
 
 interface ProjectUiState {
@@ -131,6 +132,7 @@ function applyPayload(payload: OpenedProjectPayload): void {
   useWorldStore.getState().setLoadRadius(editorState.loadRadius);
   useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
   useSceneStore.getState().reset(editorState.scene ?? defaultScene());
+  void useParametricStore.getState().refresh();
   useWorldStore.getState().applySummary({
     source: "core",
     dimension: editorState.selectedDimension,
@@ -190,6 +192,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       useWorldStore.getState().setLoadRadius(editorState.loadRadius);
       useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
       useSceneStore.getState().reset(editorState.scene ?? defaultScene());
+      void useParametricStore.getState().refresh();
       useWorldStore.getState().applySummary({
         source: "core",
         dimension: editorState.selectedDimension,
@@ -534,6 +537,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       useToolStore.getState().resetTransient();
       useWorkspaceStore.getState().reset();
       useSceneStore.getState().reset();
+      useParametricStore.getState().reset();
       useToolStore.getState().setSelection(null);
       useHistoryStore.getState().reset();
       useWorldStore
@@ -600,6 +604,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
   reset: () => {
     useWorkspaceStore.getState().reset();
     useSceneStore.getState().reset();
+    useParametricStore.getState().reset();
     set(initial);
   },
 }));

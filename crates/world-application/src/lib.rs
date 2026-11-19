@@ -10,8 +10,9 @@ mod service;
 
 pub use dto::{
     Actor, ActorSource, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats,
-    HistoryState, HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult,
-    Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SceneObjectInspection,
+    HistoryState, HistorySummary, OperationRequest, OperationResult, PaletteEntry,
+    ParametricApplyResult, ParametricConflict, ParametricInspection, PreviewResult, Query,
+    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SceneObjectInspection,
     SectionSnapshot, StructureSites, UndoTarget,
 };
 pub use error::{AppError, ErrorCode};
@@ -19,7 +20,11 @@ pub use jobs::{
     apply_job_operation, undo_job_operation_id, JobQueue, JobSnapshot, JobStartRequest, JobState,
     DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT, MAX_QUEUED_JOBS, MAX_RETAINED_JOBS,
 };
-pub use scene_model::{ObjectKind, Scene, SceneError, SemanticObject};
+pub use scene_model::{
+    GeneratorKind, HouseParams, ObjectKind, ParametricConflictPolicy, ParametricError,
+    ParametricObject, ParametricObjectSummary, ParametricScene, ParametricSpec, Rotation, Scene,
+    SceneError, SemanticObject, HOUSE_GENERATOR_VERSION,
+};
 pub use service::{
     WorldService, DEFAULT_MAX_HISTORY, MAX_IDEMPOTENCY_ENTRIES, MAX_REGION_READ_BLOCKS,
     MAX_REGION_SUMMARY_BLOCKS, MAX_RENDER_CHUNKS, MAX_RENDER_RADIUS,

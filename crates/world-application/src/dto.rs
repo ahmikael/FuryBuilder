@@ -1,4 +1,4 @@
-use scene_model::SemanticObject;
+use scene_model::{ParametricObjectSummary, SemanticObject};
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
 use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
@@ -108,6 +108,37 @@ pub struct SceneObjectInspection {
     pub non_air_blocks: u64,
     pub palette: Vec<PaletteEntry>,
     pub children: Vec<SemanticObject>,
+}
+
+/// One block where the current world no longer matches the parametric recipe. A conflict
+/// means a manual edit or another operation touched the generated overlay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParametricConflict {
+    pub pos: BlockPos,
+    pub expected: BlockState,
+    pub found: BlockState,
+}
+
+/// Read-only inspection of a parametric object. The baseline is deliberately omitted: it
+/// is rollback metadata, not something UI or AI clients need for normal work.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParametricInspection {
+    pub object: ParametricObjectSummary,
+    pub generated_blocks: u64,
+    pub conflict_count: u64,
+    pub conflicts: Vec<ParametricConflict>,
+}
+
+/// Outcome of an object creation, rebake, transform or rollback. `operation` is absent
+/// when the request only changed metadata or produced an identical overlay.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParametricApplyResult {
+    pub object: ParametricObjectSummary,
+    pub operation: Option<OperationResult>,
+    pub conflicts: Vec<ParametricConflict>,
 }
 
 /// Sparse region payload for copy/paste. Air positions are implied, so a mostly empty
@@ -226,6 +257,11 @@ pub enum Query {
         #[serde(rename = "objectId")]
         object_id: String,
     },
+    ParametricObjects,
+    InspectParametricObject {
+        #[serde(rename = "objectId")]
+        object_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -249,6 +285,8 @@ pub enum QueryResult {
     WorkspacePolicy(WorkspacePolicy),
     SceneObjects(Vec<SemanticObject>),
     SceneObject(SceneObjectInspection),
+    ParametricObjects(Vec<ParametricObjectSummary>),
+    ParametricObject(ParametricInspection),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

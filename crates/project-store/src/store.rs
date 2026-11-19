@@ -1717,6 +1717,7 @@ mod workspace_tests {
             .expect("manifest");
         assert!(!raw.contains("\"workspace\""));
         assert!(!raw.contains("\"scene\""));
+        assert!(!raw.contains("\"parametric\""));
     }
 
     #[test]
@@ -1785,6 +1786,77 @@ mod workspace_tests {
         let raw = std::fs::read_to_string(root.join(&folder).join(PROJECT_FILE)).expect("manifest");
         assert!(raw.contains("\"scene\""));
         assert!(raw.contains("\"style\""));
+    }
+
+    #[test]
+    fn parametric_recipes_and_baselines_round_trip_without_world_changes() {
+        use scene_model::{
+            GeneratorKind, HouseParams, ParametricBaseline, ParametricObject, ParametricScene,
+            Rotation, HOUSE_GENERATOR_VERSION,
+        };
+        use std::collections::BTreeMap;
+        use world_domain::{BlockPos, BlockState};
+
+        let root = workspace_root("parametric");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Parametric", CreationMode::Flat, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let checksum_before = store.manifest(&root.join(&folder)).unwrap().world_checksum;
+
+        let mut scene = ParametricScene::new();
+        let id = scene.next_id("Stone House").expect("id");
+        let mut object = ParametricObject {
+            id,
+            name: "Stone House".to_owned(),
+            generator: GeneratorKind::House,
+            generator_version: HOUSE_GENERATOR_VERSION,
+            dimension: "minecraft:overworld".to_owned(),
+            origin: BlockPos::new(4, 64, 4),
+            rotation: Rotation::Cw90,
+            params: HouseParams {
+                width: 6,
+                depth: 5,
+                height: 3,
+                wall: "minecraft:stone_bricks".to_owned(),
+                floor: "minecraft:oak_planks".to_owned(),
+                roof: "minecraft:dark_oak_planks".to_owned(),
+                window: Some("minecraft:glass".to_owned()),
+            },
+            layer_id: Some("base".to_owned()),
+            applied_revision: 1,
+            last_operation_id: Some("op_house".to_owned()),
+            baseline: ParametricBaseline::default(),
+        };
+        let generated: BTreeMap<BlockPos, BlockState> = object
+            .generate()
+            .expect("generate")
+            .into_iter()
+            .map(|block| (block.pos, block.state))
+            .collect();
+        object.baseline = ParametricBaseline::encode(&generated).expect("baseline");
+        scene.insert(object.clone()).expect("insert");
+
+        let editor_state = EditorState {
+            parametric: scene.clone(),
+            ..EditorState::default()
+        };
+        store
+            .update_editor_state(&folder, editor_state)
+            .expect("update");
+        let (opened, _, _) = store.open(&folder).expect("open");
+        assert_eq!(opened.editor_state.parametric, scene);
+        assert_eq!(
+            opened.editor_state.parametric.objects()[0].baseline.len(),
+            object.baseline.len()
+        );
+        let manifest = store.manifest(&root.join(&folder)).unwrap();
+        assert_eq!(manifest.world_checksum, checksum_before);
+        let raw = std::fs::read_to_string(root.join(&folder).join(PROJECT_FILE)).expect("manifest");
+        assert!(raw.contains("\"parametric\""));
+        assert!(raw.contains("\"stone-house\""));
+        assert!(raw.contains("\"baseline\""));
     }
 
     #[test]

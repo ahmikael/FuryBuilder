@@ -1107,3 +1107,335 @@ fn scene_metadata_is_validated_and_replaced_without_history() {
     );
     assert_eq!(service.scene(), &scene);
 }
+
+fn parametric_spec(name: &str, origin: BlockPos) -> scene_model::ParametricSpec {
+    scene_model::ParametricSpec {
+        name: name.to_owned(),
+        generator: scene_model::GeneratorKind::House,
+        generator_version: scene_model::HOUSE_GENERATOR_VERSION,
+        dimension: "minecraft:overworld".to_owned(),
+        origin,
+        rotation: scene_model::Rotation::None,
+        params: scene_model::HouseParams {
+            width: 5,
+            depth: 4,
+            height: 3,
+            wall: "minecraft:stone_bricks".to_owned(),
+            floor: "minecraft:oak_planks".to_owned(),
+            roof: "minecraft:dark_oak_planks".to_owned(),
+            window: Some("minecraft:glass".to_owned()),
+        },
+        layer_id: None,
+    }
+}
+
+#[test]
+fn parametric_create_applies_deterministic_overlay_and_records_baseline() {
+    let mut service = WorldService::new();
+    service
+        .execute(set_block(
+            BlockPos::new(10, 65, -20),
+            "minecraft:gold_block",
+        ))
+        .unwrap();
+    let revision = service.world_info().revision;
+
+    let result = service
+        .create_parametric_object(
+            "test-project",
+            actor(),
+            parametric_spec("Stone House", BlockPos::new(10, 64, -20)),
+        )
+        .unwrap();
+    let object = result.object;
+    assert_eq!(object.id, "stone-house");
+    assert!(object.generated_blocks > 50);
+    assert_eq!(object.bounds.min, BlockPos::new(10, 64, -20));
+    assert_eq!(object.bounds.max, BlockPos::new(14, 68, -17));
+    let operation = result.operation.expect("operation");
+    assert_eq!(operation.world_revision, revision + 1);
+    assert!(operation.changed_blocks > 0);
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 64, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:oak_planks"
+    );
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:stone_bricks"
+    );
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(12, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:air"
+    );
+    let inspection = service.inspect_parametric_object("stone-house").unwrap();
+    assert_eq!(inspection.conflict_count, 0);
+    assert_eq!(inspection.generated_blocks, object.generated_blocks);
+    assert_eq!(inspection.object.rotation, scene_model::Rotation::None);
+    assert_eq!(service.parametric_summaries().unwrap().len(), 1);
+    assert_eq!(service.world_info().revision, revision + 1);
+    assert_eq!(
+        service
+            .audit_log()
+            .last()
+            .unwrap()
+            .linked_object_id
+            .as_deref(),
+        Some("stone-house")
+    );
+}
+
+#[test]
+fn parametric_manual_edits_are_reported_and_override_is_explicit() {
+    let mut service = WorldService::new();
+    service
+        .execute(set_block(
+            BlockPos::new(10, 65, -20),
+            "minecraft:gold_block",
+        ))
+        .unwrap();
+    service
+        .create_parametric_object(
+            "test-project",
+            actor(),
+            parametric_spec("Conflict House", BlockPos::new(10, 64, -20)),
+        )
+        .unwrap();
+    service
+        .execute(set_block(BlockPos::new(10, 65, -20), "minecraft:glass"))
+        .unwrap();
+    let revision = service.world_info().revision;
+    let inspection = service.inspect_parametric_object("conflict-house").unwrap();
+    assert!(inspection.conflict_count >= 1);
+    assert_eq!(inspection.conflicts[0].found.to_string(), "minecraft:glass");
+
+    let mut taller = parametric_spec("Conflict House", BlockPos::new(10, 64, -20));
+    taller.params.height = 4;
+    let error = service
+        .update_parametric_object(
+            "test-project",
+            actor(),
+            "conflict-house",
+            taller.clone(),
+            scene_model::ParametricConflictPolicy::Fail,
+        )
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert_eq!(service.world_info().revision, revision);
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:glass"
+    );
+
+    let result = service
+        .update_parametric_object(
+            "test-project",
+            actor(),
+            "conflict-house",
+            taller,
+            scene_model::ParametricConflictPolicy::Override,
+        )
+        .unwrap();
+    assert!(!result.conflicts.is_empty());
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:stone_bricks"
+    );
+    assert!(
+        service
+            .inspect_parametric_object("conflict-house")
+            .unwrap()
+            .conflict_count
+            == 0
+    );
+    let revision_after = service.world_info().revision;
+    assert!(revision_after > revision);
+
+    let rolled_back = service
+        .rollback_parametric_object("test-project", actor(), "conflict-house", false)
+        .unwrap();
+    assert!(rolled_back.operation.is_some());
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:gold_block"
+    );
+    assert!(service.parametric_summaries().unwrap().is_empty());
+    assert_eq!(
+        service
+            .inspect_parametric_object("conflict-house")
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
+}
+
+#[test]
+fn parametric_transform_restores_old_footprint_and_rollback_restores_baseline() {
+    let mut service = WorldService::new();
+    service
+        .create_parametric_object(
+            "test-project",
+            actor(),
+            parametric_spec("Moving House", BlockPos::new(10, 64, -20)),
+        )
+        .unwrap();
+    let revision = service.world_info().revision;
+    let mut moved = parametric_spec("Moving House", BlockPos::new(15, 64, -20));
+    moved.rotation = scene_model::Rotation::Cw90;
+    let result = service
+        .update_parametric_object(
+            "test-project",
+            actor(),
+            "moving-house",
+            moved,
+            scene_model::ParametricConflictPolicy::Fail,
+        )
+        .unwrap();
+    assert!(result.operation.is_some());
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:air",
+        "the old footprint is restored to its baseline"
+    );
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(15, 64, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:oak_planks"
+    );
+    assert_eq!(result.object.rotation, scene_model::Rotation::Cw90);
+    assert_eq!(result.object.bounds.max, BlockPos::new(18, 68, -16));
+
+    service
+        .rollback_parametric_object("test-project", actor(), "moving-house", false)
+        .unwrap();
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(15, 64, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:air"
+    );
+    assert!(service.parametric_summaries().unwrap().is_empty());
+    assert!(service.world_info().revision > revision);
+}
+
+#[test]
+fn parametric_bake_and_failed_rollback_leave_manual_blocks_intact() {
+    let mut service = WorldService::new();
+    service
+        .create_parametric_object(
+            "test-project",
+            actor(),
+            parametric_spec("Baked House", BlockPos::new(10, 64, -20)),
+        )
+        .unwrap();
+    let revision = service.world_info().revision;
+    let baked = service.bake_parametric_object("baked-house").unwrap();
+    assert!(baked.operation.is_none());
+    assert_eq!(service.world_info().revision, revision);
+    assert!(service.parametric_summaries().unwrap().is_empty());
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(10, 64, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:oak_planks"
+    );
+
+    service
+        .create_parametric_object(
+            "test-project",
+            actor(),
+            parametric_spec("Protected House", BlockPos::new(20, 64, -20)),
+        )
+        .unwrap();
+    service
+        .execute(set_block(
+            BlockPos::new(20, 65, -20),
+            "minecraft:diamond_block",
+        ))
+        .unwrap();
+    let revision = service.world_info().revision;
+    let error = service
+        .rollback_parametric_object("test-project", actor(), "protected-house", false)
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::Conflict);
+    assert_eq!(service.world_info().revision, revision);
+    service
+        .rollback_parametric_object("test-project", actor(), "protected-house", true)
+        .unwrap();
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(20, 65, -20))
+            .unwrap()
+            .to_string(),
+        "minecraft:air"
+    );
+    assert!(service.parametric_summaries().unwrap().is_empty());
+}
+
+#[test]
+fn parametric_rejects_invalid_recipes_and_unknown_dimensions() {
+    let mut service = WorldService::new();
+    let mut bad_material = parametric_spec("Bad Material", BlockPos::new(0, 64, 0));
+    bad_material.params.wall = "not-a-block".to_owned();
+    assert_eq!(
+        service
+            .create_parametric_object("test-project", actor(), bad_material)
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidArgument
+    );
+    let mut bad_dimension = parametric_spec("Bad Dimension", BlockPos::new(0, 64, 0));
+    bad_dimension.dimension = "minecraft:moon".to_owned();
+    assert_eq!(
+        service
+            .create_parametric_object("test-project", actor(), bad_dimension)
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
+    let mut bad_size = parametric_spec("Tiny", BlockPos::new(0, 64, 0));
+    bad_size.params.width = 2;
+    assert_eq!(
+        service
+            .create_parametric_object("test-project", actor(), bad_size)
+            .unwrap_err()
+            .code,
+        ErrorCode::InvalidArgument
+    );
+    assert!(service.parametric_summaries().unwrap().is_empty());
+}

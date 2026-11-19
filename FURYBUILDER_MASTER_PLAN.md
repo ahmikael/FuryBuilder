@@ -1008,7 +1008,7 @@ furybuilder/
 - [x] Добавить генераторы дорог, рек, растительности и правила размещения структур.
 - [x] Реализовать слои, маски, protected regions, reusable templates и библиотеку структур.
 - [x] Добавить семантические объекты (здания/районы/дороги) и их инспекцию через UI/MCP.
-- [ ] Реализовать минимальный параметрический Scene Graph: объект/границы/параметры/версия генератора → voxel overlay; поддержать transform, bake/detach, rollback и конфликты ручных правок.
+- [x] Реализовать минимальный параметрический Scene Graph: объект/границы/параметры/версия генератора → voxel overlay; поддержать transform, bake/detach, rollback и конфликты ручных правок.
 - [ ] Реализовать типизированный Build DSL (JSON/AST) с детерминированной компиляцией в общий Operation API, previews, бюджетами и без выполнения произвольного кода.
 - [ ] Расширить Observation: top-down, heightmap, material/biome map, cross-section, revision diff с легендой, bounds и world_revision.
 - [ ] Добавить Validation/critic: структурированные findings (позиции, severity, rule_id), ограниченные правила, ручное/AI исправление через preview/transaction.

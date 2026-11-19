@@ -98,6 +98,8 @@ maxSlope: 0..32, clearance: 0..32, limit: 1..64
 | { type: "workspace_policy" }
 | { type: "scene_objects" }
 | { type: "inspect_scene_object", objectId }
+| { type: "parametric_objects" }
+| { type: "inspect_parametric_object", objectId }
 
 QueryResult =
 | { type: "world_info", data: WorldInfo }
@@ -109,6 +111,8 @@ QueryResult =
 | { type: "workspace_policy", data: WorkspacePolicy }
 | { type: "scene_objects", data: SemanticObject[] }
 | { type: "scene_object", data: SceneObjectInspection }
+| { type: "parametric_objects", data: ParametricObjectSummary[] }
+| { type: "parametric_object", data: ParametricInspection }
 
 ````
 
@@ -149,6 +153,41 @@ SemanticObject {
   entry. Deleting a parent that still has children returns `conflict`.
 - Unknown objects and unknown dimensions return `not_found`; invalid kinds, names, tags
   or an unsupported scene schema return `invalid_argument` or `unsupported_version`.
+
+## Parametric objects
+
+A parametric object is a persisted recipe plus a captured rollback baseline. It is not a
+second world format: applying a recipe compiles a deterministic block overlay and submits
+it as one ordinary reversible `Batch` operation with `linked_object_id` set to the object
+id.
+
+```ts
+ParametricObjectSummary {
+  id, name, generator: "house", generatorVersion: 1, dimension,
+  bounds, origin, rotation: "none" | "cw90" | "cw180" | "cw270",
+  params: { width, depth, height, wall, floor, roof, window? },
+  layerId?, appliedRevision, lastOperationId?, generatedBlocks
+}
+```
+
+- Only version 1 of the `house` generator is supported. Unknown generators or versions are
+  rejected with `unsupported_version`; materials must be valid non-air block states.
+- Limits: 64 parametric objects, 32,768 generated blocks per object, 262,144 baseline
+  positions in total, footprint 3..32 and wall height 2..32. Ids are unique slug ids
+  assigned by the Core, never by a client.
+- The baseline stores the blocks that existed before the first apply in palette-compressed
+  form. Rollback restores those exact states. Transform and rebake refuse to overwrite
+  manual edits unless the caller passes `conflictPolicy: "override"`; the conflict response
+  carries bounded position/expected/found details.
+- `parametric_objects` returns summaries without the baseline. `inspect_parametric_object`
+  returns one summary, its generated block count, the conflict count and up to 32 sample
+  conflicts.
+- `bake` is metadata-only: the block overlay stays and the recipe is forgotten, so the
+  blocks become ordinary editable voxels. `rollback` writes the captured baseline and then
+  removes the recipe. Undo/redo still operate on the resulting block operations.
+- Scene recipe changes do not bump the revision by themselves; the overlay write does.
+  `project_save` and `project_autosave` take the authoritative parametric catalog from the
+  Core, so a UI client cannot omit or forge a baseline.
 
 ## Render snapshots
 

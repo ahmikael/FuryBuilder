@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use scene_model::Scene;
+use scene_model::{ParametricScene, Scene};
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
 use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
@@ -202,6 +202,9 @@ pub struct EditorState {
     /// projects written before M9.14 remain byte-compatible.
     #[serde(default, skip_serializing_if = "scene_is_default")]
     pub scene: Scene,
+    /// Parametric recipes and rollback baselines. Omitted while the catalog is empty.
+    #[serde(default, skip_serializing_if = "parametric_is_default")]
+    pub parametric: ParametricScene,
 }
 
 fn workspace_is_default(workspace: &WorkspacePolicy) -> bool {
@@ -212,6 +215,10 @@ fn scene_is_default(scene: &Scene) -> bool {
     scene == &Scene::default()
 }
 
+fn parametric_is_default(parametric: &ParametricScene) -> bool {
+    parametric == &ParametricScene::default()
+}
+
 impl Default for EditorState {
     fn default() -> Self {
         Self {
@@ -219,6 +226,7 @@ impl Default for EditorState {
             load_radius: DEFAULT_LOAD_RADIUS,
             workspace: WorkspacePolicy::default(),
             scene: Scene::default(),
+            parametric: ParametricScene::default(),
         }
     }
 }
@@ -241,6 +249,9 @@ impl EditorState {
         self.scene
             .validate()
             .map_err(|error| ProjectError::invalid_manifest(format!("scene: {error}")))?;
+        self.parametric
+            .validate()
+            .map_err(|error| ProjectError::invalid_manifest(format!("parametric: {error}")))?;
         Ok(())
     }
 }

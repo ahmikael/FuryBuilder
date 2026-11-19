@@ -2118,6 +2118,115 @@ mod tests {
     }
 
     #[test]
+    fn serves_parametric_recipes_and_conflicts_as_read_only_queries() {
+        use world_application::{
+            GeneratorKind, HouseParams, ParametricSpec, Rotation, HOUSE_GENERATOR_VERSION,
+        };
+
+        let state = AppState::new(temp_root("parametric-query"));
+        let spec = ParametricSpec {
+            name: "Bridge House".to_owned(),
+            generator: GeneratorKind::House,
+            generator_version: HOUSE_GENERATOR_VERSION,
+            dimension: "minecraft:overworld".to_owned(),
+            origin: BlockPos::new(8, 64, 8),
+            rotation: Rotation::None,
+            params: HouseParams {
+                width: 4,
+                depth: 4,
+                height: 3,
+                wall: "minecraft:stone_bricks".to_owned(),
+                floor: "minecraft:oak_planks".to_owned(),
+                roof: "minecraft:dark_oak_planks".to_owned(),
+                window: None,
+            },
+            layer_id: None,
+        };
+        {
+            let mut service = state.service.lock().expect("service");
+            service
+                .create_parametric_object(LOCAL_PROJECT_ID, Actor::ui("test"), spec)
+                .expect("parametric");
+            service
+                .execute(OperationRequest {
+                    project_id: LOCAL_PROJECT_ID.to_owned(),
+                    operation: Operation::SetBlock {
+                        dimension: "minecraft:overworld".to_owned(),
+                        pos: BlockPos::new(8, 65, 8),
+                        state: "minecraft:glass".parse().expect("state"),
+                    },
+                    expected_revision: None,
+                    idempotency_key: None,
+                    actor: Actor::ui("test"),
+                    linked_object_id: None,
+                    layer_id: None,
+                })
+                .expect("manual edit");
+        }
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-parametric-1",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": { "type": "parametric_objects" }
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let result = response.result.expect("result");
+        assert_eq!(result["type"], "parametric_objects");
+        assert_eq!(result["data"][0]["id"], "bridge-house");
+        assert_eq!(result["data"][0]["generator"], "house");
+        assert_eq!(result["data"][0]["generatorVersion"], 1);
+        assert!(result["data"][0].get("baseline").is_none());
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-parametric-2",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": { "type": "inspect_parametric_object", "objectId": "bridge-house" }
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let result = response.result.expect("result");
+        assert_eq!(result["type"], "parametric_object");
+        assert_eq!(result["data"]["object"]["name"], "Bridge House");
+        assert!(result["data"]["generatedBlocks"].as_u64().expect("count") > 0);
+        assert_eq!(result["data"]["conflictCount"], 1);
+        assert_eq!(
+            result["data"]["conflicts"][0]["found"]["name"],
+            "minecraft:glass"
+        );
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-parametric-3",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": { "type": "inspect_parametric_object", "objectId": "missing" }
+                }),
+            ),
+        );
+        assert!(!response.ok);
+        assert_eq!(response.error.expect("error").code, ErrorCode::NotFound);
+    }
+
+    #[test]
     fn serves_world_info_and_bounded_queries_for_the_open_project() {
         let state = AppState::new(temp_root("query"));
         let response = handle_request(
