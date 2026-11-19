@@ -57,6 +57,9 @@ jobs:
           python scripts/test_system_requirements.py
           python scripts/test_known_limitations.py
 
+      - name: Clean setup evidence
+        run: python scripts/test_clean_setup.py
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

@@ -27,6 +27,10 @@ project schema, the world snapshot format and the MCP tool schema; see
   normal world → real app import/edit/save/reopen → complete world export → server block checks
   → app re-import of the server-saved world. The recorded run and limits are in
   `docs/testing/java-server-interop.md`.
+- Isolated clean-user setup check: Empty Project without Java/Minecraft, explicit Vanilla
+  dependencies, a consentless-run rejection, offline metadata failure, launcher-root
+  discovery, and damaged/stale Java and server cache rejection. The recorded run and the
+  remaining clean-VM gap are in `docs/testing/clean-setup.md`.
 
 ### Changed
 
@@ -38,6 +42,9 @@ project schema, the world snapshot format and the MCP tool schema; see
 - Project schema migration now copies the original `project.json` byte for byte before
   applying the migration, instead of writing a rewritten document as the backup.
 - Per-save `project.json.bak-*` copies are now bounded to the newest five revisions.
+- Managed Java/server metadata and download requests honor the standard
+  `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` environment variables. Checksums are still verified;
+  a broken proxy produces an explicit network error instead of a silent fallback.
 
 ### Fixed
 

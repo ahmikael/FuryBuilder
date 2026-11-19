@@ -72,7 +72,9 @@ manual file that changes on disk is reported as stale instead of being silently 
 - `Clear managed server JARs` removes only directories carrying the FuryBuilder manifest and
   our temporary entries. A manually selected file outside the cache is never deleted.
 - Offline reuse is possible because the managed JAR and its manifest are local; no network
-  request is needed to select or report an already cached JAR.
+  request is needed to select or report an already cached JAR. Metadata and download requests
+  honor the standard `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` variables; a broken proxy fails
+  with an explicit network error and never skips SHA-1 verification.
 
 ## Commands and events
 

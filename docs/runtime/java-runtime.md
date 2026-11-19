@@ -53,7 +53,9 @@ its path in `<app-data>/runtime.json`; no environment variable or registry entry
 ## Managed Temurin
 
 The user must explicitly press **Check official Temurin download** and then
-**Download & install**. No request happens in the background.
+**Download & install**. No request happens in the background. Metadata and download requests
+honor the standard `HTTPS_PROXY`/`HTTP_PROXY`/`ALL_PROXY` variables; a broken proxy fails
+with an explicit network error and never skips SHA-256 verification.
 
 1. The backend calls the official Adoptium API v3
    (`/v3/assets/latest/21/hotspot?architecture=…&image_type=jre&os=…&vendor=eclipse&project=jdk`).

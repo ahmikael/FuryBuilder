@@ -1,0 +1,247 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M11",
+  "task": "clean-user-setup",
+  "recordedAt": "2026-11-19T18:47:38.083Z",
+  "pass": true,
+  "scope": "Isolated clean per-user environment on an existing Windows 11 machine, not a fresh OS install and not different launcher brands.",
+  "target": {
+    "minecraftVersion": "1.21.4",
+    "dataVersion": 4189,
+    "javaMajor": 21
+  },
+  "environment": {
+    "platform": "Windows",
+    "appVersion": "0.1.0",
+    "executable": "target/debug/furybuilder-desktop.exe",
+    "executableSha256": "2fed0d81c89ef966fc09a09a8407a61af61e78a5f607f369f924a4bff40488c5",
+    "isolatedAppData": true,
+    "isolatedWebView2Profiles": 2,
+    "sanitizedPathVariable": true,
+    "javaHomeRemoved": true,
+    "launcherRootsInCleanSession": 0,
+    "networkReachable": true,
+    "networkProbeError": null,
+    "offlineMode": "closed loopback proxy (http://127.0.0.1:9) for managed dependency requests"
+  },
+  "cleanStart": {
+    "assets": {
+      "defaultRootPresent": false,
+      "installations": 0,
+      "problemCount": 1,
+      "problemsMentionMissingLauncher": true
+    },
+    "java": {
+      "candidates": 0,
+      "compatible": 0,
+      "managed": 0,
+      "managedBytes": 0,
+      "problemCount": 1,
+      "problemsMentionNoJava": true
+    },
+    "server": {
+      "selected": null,
+      "managed": 0,
+      "problemCount": 0
+    },
+    "vanillaSetup": {
+      "ready": false,
+      "javaReady": false,
+      "serverReady": false,
+      "eulaMatchesSelected": false,
+      "blockerCount": 3
+    },
+    "managedCaches": {
+      "javaEntries": 0,
+      "serverEntries": 0,
+      "javaFiles": [],
+      "serverFiles": [],
+      "runFiles": []
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "optionalForEmptyProject": true,
+    "readiness": "setup_required",
+    "readinessText": " Vanilla World readinessMinecraft 1.21.4 · DV 4189 · Java 21 · datapack 61Reads the verified local Java, server JAR and EULA state. It never downloads, accepts the EULA or starts a server. Empty Project and Import World do not need any of these.Setup required3 blocker(s)JavaNot selectedServer JARNot selectedMinecraft EULANot acceptedSelect a compatible Java 21 runtime (Settings → Java runtime or this wizard).Select or download the official Minecraft 1.21.4 server.jar.Read and accept the Minecraft EULA for the selected server.jar in this wizard.",
+    "mentionsNeverDownloads": true
+  },
+  "emptyProject": {
+    "created": true,
+    "folder": "Clean Setup Empty.furybuilder",
+    "creationMode": "empty",
+    "targetMinecraftVersion": "1.21.4",
+    "targetDataVersion": 4189,
+    "worldRevision": 1,
+    "chunks": 0,
+    "sections": 0,
+    "blocks": 0,
+    "saved": true,
+    "reopened": true,
+    "manifestAfterReopen": {
+      "creationMode": "empty",
+      "worldRevision": 1,
+      "lastSaveKind": "manual"
+    }
+  },
+  "vanillaConsent": {
+    "wizard": {
+      "setupIncomplete": true,
+      "ready": false,
+      "noCompatibleJava": true,
+      "javaNotSelected": true,
+      "serverNotSelected": true,
+      "eulaRequired": true,
+      "generateDisabled": true,
+      "consentPresent": true,
+      "consentChecked": false,
+      "eulaChecked": false,
+      "downloadServerOffered": true,
+      "chooseJavaOffered": true,
+      "chooseServerOffered": true
+    },
+    "cleanBackend": {
+      "rejected": true,
+      "code": "invalid_argument",
+      "message": "Select a compatible Java 21 runtime before starting generation.",
+      "activeRun": null
+    },
+    "dependenciesAfterWizard": {
+      "javaFiles": [],
+      "serverFiles": [],
+      "runFiles": []
+    }
+  },
+  "offline": {
+    "networkReachable": true,
+    "mode": "closed loopback proxy",
+    "metadataRequests": [
+      {
+        "ok": false,
+        "message": "server JAR network request failed: https://piston-meta.mojang.com/mc/game/version_manifest_v2.json: Connection Failed: Connect error: No connection could be made because the target machine actively refused it. (os error 10061)"
+      },
+      {
+        "ok": false,
+        "message": "runtime network request failed: https://api.adoptium.net/v3/assets/latest/21/hotspot?architecture=x64&image_type=jre&os=windows&vendor=eclipse&project=jdk: Connection Failed: Connect error: No connection could be made because the target machine actively refused it. (os error 10061)"
+      }
+    ],
+    "dependencyFilesAfter": []
+  },
+  "launcherLayouts": {
+    "synthetic": {
+      "defaultRoot": true,
+      "profileGameDirs": 2,
+      "installations": 3,
+      "sources": ["default_root", "launcher_profile", "launcher_profile"],
+      "compatibleVersions": [["1.21.4"], ["1.21.4"], ["1.21.4"]],
+      "targetVersionsVerified": [
+        ["compatible"],
+        ["compatible"],
+        ["compatible"]
+      ],
+      "launcherRootsUnchanged": true,
+      "changedFiles": []
+    },
+    "realThirdPartyRoot": {
+      "present": true,
+      "valid": true,
+      "targetMatch": true,
+      "kind": "minecraft_root",
+      "versionCount": 13,
+      "error": null
+    }
+  },
+  "corruptedCache": {
+    "managedJava": {
+      "entries": 1,
+      "candidateCount": 2,
+      "statuses": {
+        "unreadable": 2
+      },
+      "compatible": 0,
+      "problemCount": 1
+    },
+    "managedServer": {
+      "entries": 0,
+      "problemCount": 1,
+      "problemsMentionChangedOnDisk": true
+    },
+    "staleJavaSelection": {
+      "savedStatus": "unreadable",
+      "savedError": "runtime request is not valid: <output>\\work\\sandbox\\app-data\\missing-java\\bin\\java.exe: The system cannot find the path specified. (os error 3)"
+    },
+    "staleServerSelection": {
+      "ready": false,
+      "error": "server JAR request is not valid: <output>\\work\\sandbox\\app-data\\missing-server\\server.jar: The system cannot find the path specified. (os error 3)"
+    },
+    "vanillaSetupReady": false,
+    "consentGate": {
+      "selectedJavaStatus": "compatible",
+      "withoutConsent": {
+        "rejected": true,
+        "code": "permission_denied",
+        "message": "explicit generation consent is required: confirm that the official server will be started locally for this run"
+      },
+      "withConsentButMissingServer": {
+        "rejected": true,
+        "code": "invalid_argument",
+        "message": "server JAR request is not valid: <output>\\work\\sandbox\\app-data\\missing-server\\server.jar: The system cannot find the path specified. (os error 3)"
+      },
+      "activeRun": null
+    },
+    "dependencyFiles": {
+      "java": [
+        "broken-java/.furybuilder-runtime.json",
+        "broken-java/bin/java.exe"
+      ],
+      "server": [
+        "minecraft-1.21.4/.furybuilder-server.json",
+        "minecraft-1.21.4/server.jar"
+      ],
+      "runs": []
+    },
+    "seededCacheKinds": [
+      "managed Java runtime with a non-executable bin/java.exe",
+      "managed server JAR whose size does not match its manifest",
+      "stale runtime.json selection pointing to a missing Java path",
+      "stale server.json selection pointing to a missing server JAR"
+    ]
+  },
+  "checks": {
+    "cleanDiscoveryFoundNoJava": true,
+    "cleanDiscoveryFoundNoMinecraft": true,
+    "cleanManagedCachesEmpty": true,
+    "cleanVanillaSetupBlocked": true,
+    "settingsSaysJavaOptionalForEmptyProject": true,
+    "emptyProjectCreatedWithoutJava": true,
+    "emptyProjectSavedAndReopened": true,
+    "vanillaWizardOffersButDoesNotAutoDownload": true,
+    "cleanBackendRefusedWithoutJava": true,
+    "noServerProcessOrRunDirectory": true,
+    "offlineMetadataFailed": true,
+    "offlineLeftNoDownloadsOrStaging": true,
+    "launcherDiscoveryFoundDefaultRoot": true,
+    "launcherDiscoveryFoundProfileRoots": true,
+    "launcherDiscoveryVerifiedTarget": true,
+    "launcherRootsWereReadOnly": true,
+    "corruptManagedJavaRejected": true,
+    "corruptManagedServerDetected": true,
+    "staleJavaSelectionReported": true,
+    "staleServerSelectionReported": true,
+    "corruptedVanillaSetupStillBlocked": true,
+    "consentGateRejectedBeforeServerJar": true,
+    "consentAloneDidNotStartMissingServer": true,
+    "corruptedCacheLeftNoDownloadsOrState": true,
+    "noConsoleErrors": true
+  },
+  "consoleErrors": [],
+  "limitations": [
+    "This is not a fresh Windows installation. It is an isolated per-user environment on an existing Windows 11 machine; a clean VM without Minecraft or Java is still required for the full M11.7 claim.",
+    "Launcher coverage is the conventional `.minecraft` root plus `launcher_profiles*.json` game directories with synthetic client JAR metadata. Different launcher brands are not emulated; a real third-party root is only inspected through manual selection when provided.",
+    "The synthetic client JARs contain only version metadata; they prove discovery and validation, not rendering or Minecraft client compatibility.",
+    "Offline is simulated by routing managed-dependency requests through a closed loopback proxy on a machine that may still have network access. It proves the failure/no-download path, not a physically disconnected network.",
+    "Corrupted caches are seeded test directories under isolated app data. They prove rejection of a broken managed runtime, a size-mismatched managed server JAR and stale selected paths; they are not the user's real cache.",
+    "No external beta user performed this setup; KL-43 stays open.",
+    "The synthetic launcher files and corrupted cache seeds stay in the harness output and are not committed."
+  ]
+}

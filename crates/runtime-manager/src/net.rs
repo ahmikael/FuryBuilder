@@ -13,6 +13,7 @@ pub(crate) fn agent() -> ureq::Agent {
         .timeout_connect(Duration::from_secs(15))
         .timeout_read(Duration::from_secs(120))
         .redirects(0)
+        .try_proxy_from_env(true)
         .user_agent("FuryBuilder/0.1 (managed Minecraft dependencies)")
         .build()
 }
