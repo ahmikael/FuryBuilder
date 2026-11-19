@@ -319,63 +319,24 @@ record and ADR.
 
 ## Known limitations (early development)
 
-- Minecraft game assets are not bundled. Without a verified 1.21.4 source the renderer
-  ships original placeholder textures and approximate shapes for slabs/stairs/torches.
-  With a verified source, blockstates/models/textures and up to 16 ordered resource packs
-  are used; missing assets show the missing checker. Fluid flow, animation timing,
-  `uvlock`, element `rescale`, builtin entity models and biome-accurate tints are not
-  implemented yet. See `docs/assets/minecraft-assets.md`.
-- Projects live in the app-data directory. `Empty Project`, a flat base, `Import World`
-  and `Vanilla World` (classic Java 1.21.4) are available. Vanilla World generation
-  requires a verified Java 21 runtime and official server JAR plus explicit EULA consent.
-- Imported worlds are analyzed read-only and copied byte for byte into the project source
-  layer. Block states and 4x4x4 biome cells are editable; untouched biomes, block
-  entities, entities, ticks, heightmaps, lighting and POI are preserved as raw source data
-  by default and are not recalculated after an edit. The opt-in `VanillaRebuild` writer policy instead
-  invalidates heightmaps, light, `isLightOn` and `PostProcessing` so the target
-  vanilla engine rebuilds them; this was verified with an official 1.21.4 server.
-  Placing or removing block-entity blocks and updating POI are still not semantically
-  supported: the server did not synthesize a missing block entity on load.
-- A single region `.mca` file or a bare `region/` directory is reported as an incomplete
-  selection, not as a world. Import, copy and export require `level.dat` plus the world
-  folder. Split 26.1+, mixed and legacy `.mcr` layouts are detected but not supported.
-- Minecraft asset discovery targets conventional launcher roots plus launcher profile
-  `gameDir` entries. Custom launchers are handled through manual selection. Modded
-  client profiles are reported but never used as vanilla assets. Resource packs are
-  validated as untrusted archives and applied only in the saved priority order.
-- Structure import/export is currently Java structure `.nbt` only. It refuses entities,
-  block entities and unknown tags; `.schem` support is not available yet.
-- Box selection uses two clicks (corner A, corner B), not drag-rubber-band selection.
-- Autosave runs every 30 seconds while dirty (plus visibility change and window close), so
-  a hard crash can lose up to half a minute of edits.
-- `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
-  official server JAR; FuryBuilder never accepts the Minecraft EULA for the user. M9.3
-  provides Java 21 discovery, manual selection and the managed Temurin download; M9.4
-  provides verified server JAR provisioning; M9.5-M9.7 provide the explicit EULA step,
-  the isolated loopback-only server process and import of a completed run as an immutable
-  vanilla project.
-- Import of full Java world saves is read-only. M8 implements version/layout
-  validation, region/NBT reading, block states and biomes, a byte-preserving copy
-  of unchanged worlds, an in-memory block-edit overlay with a versioned JSON
-  document and verified chunk NBT materialization, the `Import World` wizard
-  with an immutable source copy, and a verified writer for a new region file
-  limited to classic 1.21.4 `sections[].block_states` and `sections[].biomes` (biome
-  cells became editable in M9.11). M8.8 adds a read-only
-  inventory of heightmaps, light, ticks, block entities, POI and entity sidecars,
-  plus an official-server round-trip showing that a normal load/save does not
-  rebuild stale heightmaps or light and does not create missing block entities.
-  M8.9 adds the explicit `vanillaRebuild` policy and verifies with the official
-  server that invalidated heightmaps, light, `isLightOn` and `PostProcessing` are
-  rebuilt on the next load/save without changing the edited block states.
-  M8.10 adds a complete world-folder export: every source file is copied byte for
-  byte, only dirty regions are rebuilt, the staged folder is reopened and
-  re-validated, and the source tree is hashed before and after. The source world
-  is never written. M8.11 classifies the selection before import or copy: a
-  `.mca` region file and a bare `region/` directory are not complete saves, and
-  split, mixed and legacy layouts are detected and refused before any destination
-  is created. M8.12 adds an automated official-server fixture: the server
-  generates a fresh 1.21.4 world, FuryBuilder exports an edited copy, the same
-  server loads it, verifies the edited and neighbor blocks and saves, and
-  FuryBuilder decodes the saved block states again. A licensed client was not
-  launched. M8.13 adds a machine-readable support matrix by version and data
-  category; the same matrix is shown in the Import World wizard.
+The maintained, example-backed list is [docs/known-limitations.md](docs/known-limitations.md).
+It covers platform and distribution, the single supported Java version, import/export and
+derived-data boundaries, Vanilla World prerequisites and parity scope, editor workflow limits,
+the asset/renderer subset, the measured GPU envelope, MCP access/transport limits, recovery and
+diagnostics. Each entry has a status, a concrete example, a workaround and evidence.
+
+The most important current boundaries:
+
+- Windows-first alpha; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
+- Only Minecraft Java 1.21.4 (`DataVersion` 4189). Other versions, Bedrock and custom dimensions
+  are refused; a bare `.mca`/`region/` is not a complete world.
+- Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are
+  preserved raw, not recalculated or synthesized; the UI has no `VanillaRebuild` switch.
+- Structure interchange is Java `.nbt` only and refuses entities/block entities/unknown tags.
+  A complete world-folder export exists in the verified backend path but has no one-click UI.
+- Vanilla World needs Java 21, the official server JAR and explicit EULA consent; parity checks
+  cover an untouched revision-1 base's block states only.
+- MCP is read-only by default, resets on restart, uses a local Windows named pipe and needs a
+  visible viewport for screenshots.
+- Autosave runs every 30 seconds; a damaged autosave is not recovered. The renderer's large-map
+  envelope is machine-specific, and the tested hardware was one GTX 1060 plus software backends.

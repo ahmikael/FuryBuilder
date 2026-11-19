@@ -11,6 +11,8 @@ milestone is complete.
 - [Advanced workflows](advanced-workflow.md) — precise area editing, landscape tools,
   layers/masks, templates, semantic and parametric objects, Build DSL, observation,
   validation, MCP, performance and deliberate boundaries.
+- [Known limitations](known-limitations.md) — the maintained example-backed list of what is
+  unsupported, partial, environment-specific or pending release work.
 - [MCP setup](mcp-setup.md) — connect an AI client, access modes, confirmations, common
   errors and how to turn access off.
 
