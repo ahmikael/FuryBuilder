@@ -150,6 +150,8 @@ structure `.nbt` import/export. The complete world-folder export exists and is v
 Rust/backend path, but there is no one-click “export world copy” action in this alpha.
 **Workaround:** none in the UI; use the verified backend/test command only if you are
 developing and understand the output. **Evidence:** `docs/formats/java-world-export.md`,
+`docs/testing/java-server-interop.md`,
+`docs/testing/evidence/2026-11-19-java-server-interop/evidence.json` and
 `apps/desktop/src-tauri/src/lib.rs` command list.
 
 ### KL-11 — Structure interchange is `.nbt` only

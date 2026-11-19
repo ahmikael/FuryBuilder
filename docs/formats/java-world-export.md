@@ -135,6 +135,23 @@ This is a real server load/save proof for one generated flat fixture, not a
 universal parity claim. The client was not launched. See
 `docs/testing/minecraft-server-fixture.md`.
 
+## Release re-verification (M11.5)
+
+A second release-level run used a fresh fixed-seed **normal** 1.21.4 world instead of a
+flat fixture and exercised both directions through the real application:
+
+1. the official server generated 1,416 chunks;
+2. the desktop app imported the world, applied an air → gold-block edit at
+   `(0, 300, 0)`, saved and reopened it;
+3. the backend exported a complete new world folder with `VanillaRebuild`;
+4. the official server loaded the export and verified the edited block, an untouched
+   neighbor and bedrock;
+5. the app re-imported the server-saved world and read both persisted blocks.
+
+Evidence: `docs/testing/evidence/2026-11-19-java-server-interop/evidence.json`.
+Explanation and reproduction: `docs/testing/java-server-interop.md`. The run confirms the
+same one-version limit: only 1.21.4 classic Anvil, `DataVersion` 4189, is supported.
+
 ## Reproduce
 
 ```powershell

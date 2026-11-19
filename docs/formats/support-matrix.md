@@ -12,30 +12,30 @@ outside the verified field set or a supported write for an unsupported version.
 
 ## Legend
 
-| Value                          | Meaning                                                             |
-| ------------------------------ | ------------------------------------------------------------------- |
-| `supported`                    | Semantically decoded or exposed by a verified path                  |
-| `supported_subset`             | A verified subset is decoded/edited; not the whole save             |
-| `block_states_and_biomes`      | `sections[].block_states` and 4x4x4 `sections[].biomes` can be edited |
-| `verified`                     | Re-read, re-decoded and compared after writing                      |
+| Value                              | Meaning                                                                 |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `supported`                        | Semantically decoded or exposed by a verified path                      |
+| `supported_subset`                 | A verified subset is decoded/edited; not the whole save                 |
+| `block_states_and_biomes`          | `sections[].block_states` and 4x4x4 `sections[].biomes` can be edited   |
+| `verified`                         | Re-read, re-decoded and compared after writing                          |
 | `verified_block_states_and_biomes` | A new region/folder is written and verified for block states and biomes |
-| `preserved_raw`                | Copied unchanged; never interpreted or recalculated                 |
-| `byte_for_byte`                | File or untouched record is copied as exact bytes                   |
-| `preserve_or_invalidate`       | Policy-dependent: raw preserve, or explicit engine rebuild hand-off |
-| `inventoried`                  | Counted/inspected read-only; not editable                           |
-| `not_exposed`                  | Present and preserved if copied, but no public API/UI for it        |
-| `none` / `refused` / `skipped` | Not available, explicitly refused, or deliberately omitted          |
+| `preserved_raw`                    | Copied unchanged; never interpreted or recalculated                     |
+| `byte_for_byte`                    | File or untouched record is copied as exact bytes                       |
+| `preserve_or_invalidate`           | Policy-dependent: raw preserve, or explicit engine rebuild hand-off     |
+| `inventoried`                      | Counted/inspected read-only; not editable                               |
+| `not_exposed`                      | Present and preserved if copied, but no public API/UI for it            |
+| `none` / `refused` / `skipped`     | Not available, explicitly refused, or deliberately omitted              |
 
 ## By version
 
-| Version family      | DataVersion | Layout                            | Status                 | Read                        | Edit                | Write                   | Passthrough     | Note                                                                                                  |
-| ------------------- | ----------- | --------------------------------- | ---------------------- | --------------------------- | ------------------- | ----------------------- | --------------- | ----------------------------------------------------------------------------------------------------- |
+| Version family      | DataVersion | Layout                            | Status                 | Read                        | Edit                      | Write                              | Passthrough     | Note                                                                                                              |
+| ------------------- | ----------- | --------------------------------- | ---------------------- | --------------------------- | ------------------------- | ---------------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Java 1.21.4         | 4189        | classic Anvil                     | **supported**          | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` | Only target with verified decode, block/biome edit, region writer, full-folder export and official-server fixture |
-| Java 1.21.5–1.21.11 | 4325–4671   | classic Anvil                     | `detected_unsupported` | `version_refused`           | `none`              | `none`                  | `none`          | Layout is recognisable, version is refused                                                            |
-| Java 26.1–26.3      | 4786–5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`              | `none`                  | `none`          | Layout and region headers are inventoried read-only; no split chunk decoding                          |
-| Java 26.4 snapshots | 5119–5130+  | split                             | `out_of_scope`         | `none`                      | `none`              | `none`                  | `none`          | Moving target                                                                                         |
-| Pre-1.13            | varies      | McRegion (`region/*.mcr`)         | `detected_unsupported` | `legacy_marker`             | `none`              | `none`                  | `none`          | Legacy marker is detected and refused                                                                 |
-| Bedrock Edition     | n/a         | Bedrock                           | `out_of_scope`         | `none`                      | `none`              | `none`                  | `none`          | Different format family                                                                               |
+| Java 1.21.5–1.21.11 | 4325–4671   | classic Anvil                     | `detected_unsupported` | `version_refused`           | `none`                    | `none`                             | `none`          | Layout is recognisable, version is refused                                                                        |
+| Java 26.1–26.3      | 4786–5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`                    | `none`                             | `none`          | Layout and region headers are inventoried read-only; no split chunk decoding                                      |
+| Java 26.4 snapshots | 5119–5130+  | split                             | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          | Moving target                                                                                                     |
+| Pre-1.13            | varies      | McRegion (`region/*.mcr`)         | `detected_unsupported` | `legacy_marker`             | `none`                    | `none`                             | `none`          | Legacy marker is detected and refused                                                                             |
+| Bedrock Edition     | n/a         | Bedrock                           | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          | Different format family                                                                                           |
 
 A complete 26.1+ split save is structurally complete, but it is not readable,
 editable or comparable to a supported save. A bare `.mca` file or a `region/`
@@ -86,17 +86,18 @@ directory is not a complete save at all; see
 
 ## Evidence
 
-| Claim                                   | Evidence                                                                                                                    |
-| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Real 1.21.4 read/decode                 | `2026-11-18-anvil-read-1.21.4.json`, `2026-11-18-anvil-decode-1.21.4.json`, `2026-11-18-world-layout-1.21.4.json`           |
-| Real 1.21.4 passthrough and overlay     | `2026-11-18-anvil-passthrough-1.21.4.json`, `2026-11-18-anvil-overlay-1.21.4.json`                                          |
-| Real 1.21.4 import                      | `2026-11-18-world-import-1.21.4.json`                                                                                       |
-| Verified region write                   | `2026-11-18-region-write-1.21.4.json`                                                                                       |
-| Derived data inventory and policies     | `2026-11-18-derived-inventory-1.21.4.json`, `2026-11-18-derived-data-1.21.4.json`, `2026-11-18-derived-rebuild-1.21.4.json` |
-| Complete world-folder export            | `2026-11-18-world-export-1.21.4.json`                                                                                       |
-| Save vs region file vs region directory | `2026-11-18-world-selection-1.21.4.json`                                                                                    |
-| Official-server load/save fixture       | `2026-11-18-server-fixture-1.21.4.json`                                                                                     |
-| Real biome paint UI                     | `2026-11-19-biome-ui.json`, `.png`, `-applied.png`                                                                            |
+| Claim                                   | Evidence                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Real 1.21.4 read/decode                 | `2026-11-18-anvil-read-1.21.4.json`, `2026-11-18-anvil-decode-1.21.4.json`, `2026-11-18-world-layout-1.21.4.json`              |
+| Real 1.21.4 passthrough and overlay     | `2026-11-18-anvil-passthrough-1.21.4.json`, `2026-11-18-anvil-overlay-1.21.4.json`                                             |
+| Real 1.21.4 import                      | `2026-11-18-world-import-1.21.4.json`                                                                                          |
+| Verified region write                   | `2026-11-18-region-write-1.21.4.json`                                                                                          |
+| Derived data inventory and policies     | `2026-11-18-derived-inventory-1.21.4.json`, `2026-11-18-derived-data-1.21.4.json`, `2026-11-18-derived-rebuild-1.21.4.json`    |
+| Complete world-folder export            | `2026-11-18-world-export-1.21.4.json`                                                                                          |
+| Save vs region file vs region directory | `2026-11-18-world-selection-1.21.4.json`                                                                                       |
+| Official-server load/save fixture       | `2026-11-18-server-fixture-1.21.4.json`                                                                                        |
+| M11.5 app import/edit/export round trip | `2026-11-19-java-server-interop/evidence.json` — app import, edit, backend export, official-server verification, app re-import |
+| Real biome paint UI                     | `2026-11-19-biome-ui.json`, `.png`, `-applied.png`                                                                             |
 
 ## Reproduce
 
@@ -106,4 +107,5 @@ cargo test -p furybuilder-world-io --test world_selection --test world_export --
 cargo test -p furybuilder-project-store snapshot::tests
 cargo run -p furybuilder-world-io --example world_selection_probe -- <path>
 pwsh -File scripts/verify_java_world_export.ps1 -Java <java.exe> -ServerJar <server.jar> -ExpectedSha1 4707d00eb834b446575d89a61a11b5d548d8c001 -AcceptMinecraftEula
+node scripts/java-server-interop-webview2.mjs <new-output-directory> <java.exe> <server.jar> 4707d00eb834b446575d89a61a11b5d548d8c001 --accept-minecraft-eula
 ```

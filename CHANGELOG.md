@@ -23,6 +23,10 @@ project schema, the world snapshot format and the MCP tool schema; see
 - Bundled self-authored demo project (`examples/furybuilder-demo.furybuilder`), real WebView2
   screenshots, a deterministic observation map and a recorded read-only MCP probe in
   `docs/demo/`. The demo contains no Mojang assets and opens without Minecraft or Java.
+- Release-level import/export verification against the official 1.21.4 server: server-generated
+  normal world → real app import/edit/save/reopen → complete world export → server block checks
+  → app re-import of the server-saved world. The recorded run and limits are in
+  `docs/testing/java-server-interop.md`.
 
 ### Changed
 

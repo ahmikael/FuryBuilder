@@ -121,3 +121,15 @@ than merely opening the folder.
   FuryBuilder distribution.
 - The work root is deleted after a successful run unless `-Keep` is passed. The
   evidence file keeps hashes and server log excerpts.
+
+## Release re-verification (M11.5)
+
+A later release-level run used a normal fixed-seed world and the real desktop app:
+official server generation → app import → app edit/save/reopen → backend export →
+official server verification → app re-import of the server-saved export. It recorded
+1,416 chunks, a gold block at `(0, 300, 0)`, unchanged bedrock at `(0, -64, 0)`, 11
+files rewritten by the verifier server, and no chunk/command issue lines.
+
+See [`java-server-interop.md`](java-server-interop.md) and
+[`evidence/2026-11-19-java-server-interop/evidence.json`](evidence/2026-11-19-java-server-interop/evidence.json).
+The supported scope is still only Minecraft Java 1.21.4 classic Anvil.

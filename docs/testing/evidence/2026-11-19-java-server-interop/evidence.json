@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M11",
+  "task": "java-server-import-export",
+  "recordedAt": "2026-11-19T18:22:15.981Z",
+  "pass": true,
+  "target": {
+    "minecraftVersion": "1.21.4",
+    "dataVersion": 4189,
+    "layout": "classic_anvil",
+    "supportedVersions": ["1.21.4"]
+  },
+  "environment": {
+    "platform": "Windows",
+    "appVersion": "0.1.0",
+    "executable": "target/debug/furybuilder-desktop.exe",
+    "executableSha256": "209d4f0c849ad952494cbd4a7947f880cb2c1ac61402bf848b504014eae7eea9",
+    "javaVersion": "openjdk version \"21.0.12.1\" 2026-08-18 LTS\r\nOpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)\r\nOpenJDK 64-Bit Server VM Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS, mixed mode, sharing)",
+    "serverJarSha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
+    "isolatedAppData": true
+  },
+  "fixture": {
+    "generator": "minecraft:normal",
+    "seed": "4189",
+    "generateStructures": false,
+    "serverVersionLine": "[22:21:15] [Server thread/INFO]: Starting minecraft server version 1.21.4",
+    "doneLine": "[22:21:21] [Server thread/INFO]: Done (5.223s)! For help, type \"help\"",
+    "fileCount": 21,
+    "bytes": 6286738,
+    "sourceUnchangedAfterImport": true,
+    "generatedByOfficialServer": true
+  },
+  "appImport": {
+    "analysis": {
+      "supported": true,
+      "versionName": "1.21.4",
+      "dataVersion": 4189,
+      "layout": "classic_anvil",
+      "chunks": 1416,
+      "regions": 4,
+      "blockEntities": 0,
+      "entities": 0,
+      "warnings": [
+        "the selection is a complete classic 1.21.4 save; full chunk validation runs before import",
+        "the selected world is opened read-only and is never modified; importing copies it byte for byte into the project source layer",
+        "block states and 4x4x4 biome cells become editable; block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy",
+        "editable import limits: 20000 chunks, 2000000 sections, 50000000 non-air blocks"
+      ],
+      "blockers": []
+    },
+    "project": {
+      "folder": "Server Interop Import.furybuilder",
+      "creationMode": "import",
+      "targetMinecraftVersion": "1.21.4",
+      "targetDataVersion": 4189,
+      "worldRevision": 1,
+      "sourceImmutable": true,
+      "sourceKind": "imported"
+    },
+    "world": {
+      "revision": 1,
+      "chunks": 1416,
+      "sections": 33984,
+      "blocks": 6490689
+    },
+    "blockAtEditPositionBefore": "minecraft:air",
+    "sourceCopy": {
+      "files": 20,
+      "bytes": 6286735
+    }
+  },
+  "appEdit": {
+    "operation": "set_block",
+    "dimension": "minecraft:overworld",
+    "position": {
+      "x": 0,
+      "y": 300,
+      "z": 0
+    },
+    "state": "minecraft:gold_block",
+    "changedBlocks": 1,
+    "revisionAfterApply": 2,
+    "blockAfterApply": "minecraft:gold_block",
+    "savedWorldRevision": 2,
+    "reopenedWorldRevision": 2,
+    "blockAfterReopen": "minecraft:gold_block",
+    "manifestAfterSave": {
+      "worldRevision": 2,
+      "lastSaveKind": "manual"
+    }
+  },
+  "export": {
+    "backend": "world_export_probe",
+    "derivedDataPolicy": "vanillaRebuild",
+    "report": {
+      "files": 20,
+      "bytes": 6286735,
+      "regions": 4,
+      "chunks": 1416,
+      "replacedRegions": 1,
+      "replacedChunks": 1,
+      "copiedFilesMatchSource": true,
+      "outputRevalidated": true,
+      "sourceUnchanged": true,
+      "skippedFiles": [],
+      "exportedRegions": [
+        {
+          "dimension": "minecraft:overworld",
+          "regionX": 0,
+          "regionZ": 0,
+          "bytes": 835584,
+          "replacedChunks": 1,
+          "sha256": "c4d1041099008efd17bebaf50d14b84964e8a94d817a31578aa11c25ef305cb9"
+        }
+      ]
+    },
+    "verifiedBlocks": [
+      {
+        "biome": "minecraft:deep_lukewarm_ocean",
+        "dimension": "minecraft:overworld",
+        "state": "minecraft:gold_block",
+        "x": 0,
+        "y": 300,
+        "z": 0
+      }
+    ],
+    "sourceTreeUnchanged": true,
+    "exportedTree": {
+      "fileCount": 20,
+      "bytes": 6286735
+    }
+  },
+  "serverVerification": {
+    "versionLine": "[22:21:58] [Server thread/INFO]: Starting minecraft server version 1.21.4",
+    "doneLine": "[22:22:00] [Server thread/INFO]: Done (1.964s)! For help, type \"help\"",
+    "exitCode": 0,
+    "editMarker": true,
+    "staleAirMarkerAbsent": true,
+    "neighborAirMarker": true,
+    "terrainMarker": true,
+    "issueLines": [],
+    "errorLines": [
+      "[22:22:02] [Yggdrasil Key Fetcher/ERROR]: Failed to request yggdrasil public key"
+    ],
+    "filesChangedByServer": 11,
+    "changedFiles": [
+      "DIM-1/data/raids.dat",
+      "DIM1/data/raids_end.dat",
+      "data/raids.dat",
+      "entities/r.-1.-1.mca",
+      "level.dat",
+      "level.dat_old",
+      "region/r.-1.-1.mca",
+      "region/r.-1.0.mca",
+      "region/r.0.-1.mca",
+      "region/r.0.0.mca",
+      "session.lock"
+    ]
+  },
+  "reimport": {
+    "analysis": {
+      "supported": true,
+      "versionName": "1.21.4",
+      "dataVersion": 4189,
+      "chunks": 1416,
+      "regions": 4
+    },
+    "project": {
+      "folder": "Server Interop Reimport.furybuilder",
+      "creationMode": "import",
+      "worldRevision": 1
+    },
+    "world": {
+      "revision": 1,
+      "chunks": 1416,
+      "sections": 33984,
+      "blocks": 6490799
+    },
+    "editedBlock": "minecraft:gold_block",
+    "terrainBlock": "minecraft:bedrock"
+  },
+  "checks": {
+    "officialServerGeneratedTargetVersion": true,
+    "appAcceptedGeneratedWorld": true,
+    "appImportedAsImportProject": true,
+    "appReadFixtureBlock": true,
+    "appEditAppliedThroughCommandPath": true,
+    "appSavedAndReopenedEdit": true,
+    "appSourceCopyIsReadOnly": true,
+    "exportSourceUnchanged": true,
+    "exportRevalidated": true,
+    "exportReplacedOneChunk": true,
+    "serverLoadedExportedWorld": true,
+    "serverFoundEditedBlock": true,
+    "serverFoundUntouchedNeighbor": true,
+    "serverFoundTerrainBlock": true,
+    "serverRejectedStaleAir": true,
+    "serverSavedRewrittenFiles": true,
+    "serverLogHasNoChunkOrCommandIssues": true,
+    "appReimportedServerSavedWorld": true,
+    "reimportedEditPersisted": true,
+    "reimportedTerrainPersisted": true,
+    "noConsoleErrors": true
+  },
+  "consoleErrors": [],
+  "limitations": [
+    "Supported world format is only Minecraft Java 1.21.4 classic Anvil, DataVersion 4189; no other version is claimed.",
+    "The official dedicated server is the engine check; a licensed Minecraft client was not launched in this environment.",
+    "One fixed-seed normal world with structures disabled and one edited block are evidence, not a universal compatibility proof.",
+    "The world has no intentional block-entity, entity, scheduled-tick or POI edits; those categories stay preserved in the source copy.",
+    "The complete world-folder export is a backend path (KL-10); the beta UI exposes structure .nbt export, not a one-click world copy.",
+    "The server JAR and Java runtime are user-provided and are not distributed with FuryBuilder.",
+    "The generated/exported worlds and full server logs stay in the harness output; this evidence file contains counts, hashes, markers and sanitized summaries."
+  ]
+}
