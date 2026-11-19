@@ -589,7 +589,7 @@ describe("local generator planning", () => {
       clearance: 2,
       surface: bricks,
     });
-    expect(operationLabel(road!)).toBe("Generate road in 2496 blocks");
+    expect(operationLabel(road!)).toBe("Generate road in 2,496 blocks");
 
     const river = planRiver({
       dimension: "minecraft:overworld",
@@ -610,7 +610,7 @@ describe("local generator planning", () => {
       water,
       bed: sand,
     });
-    expect(operationLabel(river!)).toBe("Carve river in 2496 blocks");
+    expect(operationLabel(river!)).toBe("Carve river in 2,496 blocks");
 
     const vegetation = planVegetation({
       dimension: "minecraft:overworld",
@@ -629,7 +629,7 @@ describe("local generator planning", () => {
       treeChance: 0,
       treeSpacing: 1,
     });
-    expect(operationLabel(vegetation!)).toBe("Scatter vegetation in 2496 blocks");
+    expect(operationLabel(vegetation!)).toBe("Scatter vegetation in 2,496 blocks");
   });
 
   it("requires a selection for every generator and bounded site query", () => {

@@ -20,6 +20,13 @@ export const MAX_EDIT_VOLUME = 1_000_000;
 export const MIN_BRUSH_RADIUS = 1;
 export const MAX_BRUSH_RADIUS = 4;
 
+const blockCountFormatter = new Intl.NumberFormat("en-US");
+
+/** Locale-independent block counts keep labels and history stable across systems. */
+export function formatBlockCount(count: number): string {
+  return blockCountFormatter.format(count);
+}
+
 export const TOOL_SHORTCUTS: Record<string, EditorTool> = {
   Digit1: "select",
   Digit2: "place",
@@ -200,23 +207,23 @@ export function operationLabel(operation: EditorOperation): string {
     case "batch":
       return `Edit ${operation.changes.length} block${operation.changes.length === 1 ? "" : "s"}`;
     case "fill_cuboid":
-      return `Fill ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Fill ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
     case "replace":
-      return `Replace in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Replace in ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
     case "terrain_brush":
-      return `${TERRAIN_BRUSH_LABELS[operation.kind]} terrain in ${boundsVolume(
-        operation.bounds,
-      ).toLocaleString()} blocks`;
+      return `${TERRAIN_BRUSH_LABELS[operation.kind]} terrain in ${formatBlockCount(
+        boundsVolume(operation.bounds),
+      )} blocks`;
     case "generate_heightmap":
-      return `Generate heightmap in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Generate heightmap in ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
     case "set_biome":
-      return `Paint ${operation.biome} over ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Paint ${operation.biome} over ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
     case "generate_road":
-      return `Generate road in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Generate road in ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
     case "generate_river":
-      return `Carve river in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Carve river in ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
     case "generate_vegetation":
-      return `Scatter vegetation in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+      return `Scatter vegetation in ${formatBlockCount(boundsVolume(operation.bounds))} blocks`;
   }
 }
 
@@ -250,7 +257,7 @@ export function ghostForContext(context: GhostContext): GhostPreview | null {
       bounds: selection,
       kind: tool,
       blocks,
-      label: `${tool === "fill" ? "Fill" : "Replace"} ${blocks.toLocaleString()} blocks`,
+      label: `${tool === "fill" ? "Fill" : "Replace"} ${formatBlockCount(blocks)} blocks`,
     };
   }
 
@@ -279,7 +286,7 @@ export function ghostForContext(context: GhostContext): GhostPreview | null {
       bounds,
       kind: "box",
       blocks,
-      label: anchor ? `Select ${blocks.toLocaleString()} blocks` : "Select first corner",
+      label: anchor ? `Select ${formatBlockCount(blocks)} blocks` : "Select first corner",
     };
   }
 

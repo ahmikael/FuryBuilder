@@ -50,6 +50,8 @@ project schema, the world snapshot format and the MCP tool schema; see
 
 - A failed migration or interrupted save can no longer leave an unbounded pile of manifest
   backups or a non-verbatim migration backup.
+- Block counts in operation labels and editor previews now use deterministic `en-US`
+  grouping instead of the host locale, keeping history text and CI expectations stable.
 
 ### Security
 
