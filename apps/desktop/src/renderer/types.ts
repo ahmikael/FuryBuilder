@@ -70,6 +70,10 @@ export interface RenderMetrics {
   loadedChunks: number;
   renderedSections: number;
   meshCount: number;
+  /** Chunks waiting for a bounded mesh build. */
+  pendingMeshJobs?: number;
+  /** Chunks dropped by the residency budget since the renderer started. */
+  evictedChunks?: number;
 }
 
 export interface ChunkSnapshotBatch {

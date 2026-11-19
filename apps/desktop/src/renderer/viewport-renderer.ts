@@ -30,6 +30,13 @@ import { AssetModels } from "@/assets/model-assets";
 import type { AssetBundle } from "@/assets/render-types";
 import { createPlaceholderAtlasCanvas } from "@/renderer/assets";
 import { FlyCameraController } from "@/renderer/camera-controller";
+import {
+  ChunkMeshQueue,
+  DEFAULT_MESH_BUDGET,
+  normalizeMeshBudget,
+  selectChunksToEvict,
+  type MeshBudget,
+} from "@/renderer/mesh-queue";
 import { buildChunkMesh } from "@/renderer/mesher";
 import { raycastBlocks, type RayHit } from "@/renderer/raycast";
 import type {
@@ -44,7 +51,7 @@ import type {
 } from "@/renderer/types";
 import type { CaptureResult } from "@/renderer/observation";
 import { buildCaptureMetadata } from "@/renderer/observation";
-import { chunkKey, RenderWorld } from "@/renderer/world";
+import { chunkKey, floorDiv, RenderWorld } from "@/renderer/world";
 
 export type CameraMode = "fly" | "orbit";
 
@@ -54,6 +61,8 @@ export interface ViewportCallbacks {
   onPick?: (hit: RayHit | null) => void;
   onHover?: (hit: RayHit | null) => void;
   onContextLost?: () => void;
+  /** Reports chunks dropped by the residency budget; the caller may show a warning. */
+  onChunksEvicted?: (chunks: ChunkPos[]) => void;
 }
 
 const CHUNK_COLOR = 0x687385;
@@ -93,6 +102,9 @@ export class ViewportRenderer {
   private readonly raycaster = new Raycaster();
   private readonly chunkMeshes = new Map<string, Mesh[]>();
   private readonly requestedChunks: ChunkPos[] = [];
+  private readonly meshQueue = new ChunkMeshQueue();
+  private meshBudget: MeshBudget = DEFAULT_MESH_BUDGET;
+  private evictedChunks = 0;
   private readonly clock = { last: performance.now() };
   private animationId = 0;
   private disposed = false;
@@ -113,12 +125,16 @@ export class ViewportRenderer {
     loadedChunks: 0,
     renderedSections: 0,
     meshCount: 0,
+    pendingMeshJobs: 0,
+    evictedChunks: 0,
   };
 
   constructor(
     private readonly container: HTMLElement,
     private callbacks: ViewportCallbacks = {},
+    budget: Partial<MeshBudget> = {},
   ) {
+    this.meshBudget = normalizeMeshBudget(budget);
     const width = Math.max(1, container.clientWidth);
     const height = Math.max(1, container.clientHeight);
 
@@ -310,9 +326,95 @@ export class ViewportRenderer {
     atlas.needsUpdate = true;
   }
 
+  private cameraChunk(): ChunkPos {
+    return {
+      x: floorDiv(this.camera.position.x, 16),
+      z: floorDiv(this.camera.position.z, 16),
+    };
+  }
+
+  private enqueueChunk(pos: ChunkPos): void {
+    if (!this.world.isLoaded(pos)) return;
+    if (this.meshQueue.size >= this.meshBudget.maxPendingJobs) return;
+    this.meshQueue.enqueue(pos);
+  }
+
+  private enqueueChunks(chunks: readonly ChunkPos[], center?: ChunkPos): void {
+    if (this.meshQueue.size >= this.meshBudget.maxPendingJobs) return;
+    const remaining = this.meshBudget.maxPendingJobs - this.meshQueue.size;
+    this.meshQueue.enqueueAll(chunks, center, remaining);
+  }
+
+  private processMeshQueue(): void {
+    if (this.meshQueue.size === 0) return;
+    const jobs = this.meshQueue.take({
+      maxJobs: this.meshBudget.maxJobsPerFrame,
+      maxMs: this.meshBudget.maxFrameMs,
+    });
+    for (const pos of jobs) {
+      if (this.world.isLoaded(pos)) this.rebuildChunk(pos);
+    }
+  }
+
+  private flushMeshQueue(): void {
+    while (this.meshQueue.size > 0) {
+      const jobs = this.meshQueue.take({
+        maxJobs: Number.MAX_SAFE_INTEGER,
+        maxMs: Number.POSITIVE_INFINITY,
+      });
+      if (jobs.length === 0) break;
+      for (const pos of jobs) {
+        if (this.world.isLoaded(pos)) this.rebuildChunk(pos);
+      }
+    }
+  }
+
+  private enforceResidentBudget(): void {
+    const excess = this.world.loadedChunkCount() - this.meshBudget.maxResidentChunks;
+    if (excess <= 0) return;
+    const camera = this.cameraChunk();
+    const evicted = selectChunksToEvict(this.world.loadedChunks(), camera, excess);
+    if (evicted.length === 0) return;
+    const neighbours = new Map<string, ChunkPos>();
+    for (const pos of evicted) {
+      this.meshQueue.remove(pos);
+      this.world.removeChunk(pos);
+      this.removeChunkMesh(chunkKey(pos));
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dz = -1; dz <= 1; dz += 1) {
+          if (dx === 0 && dz === 0) continue;
+          const neighbour = { x: pos.x + dx, z: pos.z + dz };
+          if (this.world.isLoaded(neighbour)) {
+            neighbours.set(chunkKey(neighbour), neighbour);
+          }
+        }
+      }
+    }
+    this.evictedChunks += evicted.length;
+    this.enqueueChunks([...neighbours.values()], camera);
+    this.callbacks.onChunksEvicted?.(evicted);
+  }
+
+  private addDirtyWithNeighbours(pos: ChunkPos, dirty: Map<string, ChunkPos>): void {
+    dirty.set(chunkKey(pos), pos);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        const neighbour = { x: pos.x + dx, z: pos.z + dz };
+        if (this.world.isLoaded(neighbour)) {
+          dirty.set(chunkKey(neighbour), neighbour);
+        }
+      }
+    }
+  }
+
   private rebuildAllChunks(): void {
-    for (const chunk of this.world.loadedChunks()) {
-      this.rebuildChunk(chunk);
+    this.meshQueue.clear();
+    this.clearChunkMeshes();
+    this.enqueueChunks(this.world.loadedChunks(), this.cameraChunk());
+    if (this.meshQueue.size <= this.meshBudget.maxSynchronousSnapshotChunks) {
+      this.flushMeshQueue();
+    } else {
+      this.processMeshQueue();
     }
     this.rebuildBorders();
   }
@@ -321,9 +423,14 @@ export class ViewportRenderer {
     this.world.setSnapshot(snapshot);
     this.requestedChunks.length = 0;
     for (const chunk of snapshot.chunks) this.requestedChunks.push(chunk.chunk);
+    this.meshQueue.clear();
     this.clearChunkMeshes();
-    for (const chunk of this.world.loadedChunks()) {
-      this.rebuildChunk(chunk);
+    this.enforceResidentBudget();
+    this.enqueueChunks(this.world.loadedChunks(), snapshot.center);
+    if (this.world.loadedChunkCount() <= this.meshBudget.maxSynchronousSnapshotChunks) {
+      this.flushMeshQueue();
+    } else {
+      this.processMeshQueue();
     }
     this.rebuildBorders();
   }
@@ -331,58 +438,78 @@ export class ViewportRenderer {
   /** Updates a set of chunks and rebuilds neighbours whose faces can change. */
   updateChunks(snapshot: ChunkSnapshotBatch): void {
     this.world.setRevision(snapshot.revision);
-    const dirty = new Set<string>();
+    const dirty = new Map<string, ChunkPos>();
     for (const chunk of snapshot.chunks) {
       this.world.upsertChunk(chunk);
-      dirty.add(chunkKey(chunk.chunk));
-      for (let dx = -1; dx <= 1; dx += 1) {
-        for (let dz = -1; dz <= 1; dz += 1) {
-          const neighbour = { x: chunk.chunk.x + dx, z: chunk.chunk.z + dz };
-          if (this.world.isLoaded(neighbour)) dirty.add(chunkKey(neighbour));
-        }
-      }
+      this.addDirtyWithNeighbours(chunk.chunk, dirty);
     }
-    for (const key of dirty) {
-      const [x, z] = key.split(",").map(Number) as [number, number];
-      if (this.world.isLoaded({ x, z })) {
-        this.rebuildChunk({ x, z });
-      } else {
-        this.removeChunkMesh(key);
+    this.enforceResidentBudget();
+    if (dirty.size <= this.meshBudget.maxSynchronousUpdateChunks) {
+      for (const pos of dirty.values()) {
+        if (this.world.isLoaded(pos)) this.rebuildChunk(pos);
+        else this.removeChunkMesh(chunkKey(pos));
       }
+      this.processMeshQueue();
+    } else {
+      for (const pos of dirty.values()) {
+        if (this.world.isLoaded(pos)) this.enqueueChunk(pos);
+        else this.removeChunkMesh(chunkKey(pos));
+      }
+      this.processMeshQueue();
     }
     this.rebuildBorders();
   }
 
   /** Unloads chunks (for example when the view distance shrinks) and heals neighbours. */
   removeChunks(chunks: ChunkPos[]): void {
-    const dirty = new Set<string>();
+    const dirty = new Map<string, ChunkPos>();
     for (const chunk of chunks) {
       if (!this.world.isLoaded(chunk)) continue;
       this.world.removeChunk(chunk);
-      dirty.add(chunkKey(chunk));
+      this.meshQueue.remove(chunk);
+      this.removeChunkMesh(chunkKey(chunk));
       for (let dx = -1; dx <= 1; dx += 1) {
         for (let dz = -1; dz <= 1; dz += 1) {
+          if (dx === 0 && dz === 0) continue;
           const neighbour = { x: chunk.x + dx, z: chunk.z + dz };
-          if (this.world.isLoaded(neighbour)) dirty.add(chunkKey(neighbour));
+          if (this.world.isLoaded(neighbour)) {
+            dirty.set(chunkKey(neighbour), neighbour);
+          }
         }
       }
     }
-    for (const key of dirty) {
-      const [x, z] = key.split(",").map(Number) as [number, number];
-      if (this.world.isLoaded({ x, z })) {
-        this.rebuildChunk({ x, z });
-      } else {
-        this.removeChunkMesh(key);
-      }
+    if (dirty.size <= this.meshBudget.maxSynchronousUpdateChunks) {
+      for (const pos of dirty.values()) this.rebuildChunk(pos);
+      this.processMeshQueue();
+    } else {
+      for (const pos of dirty.values()) this.enqueueChunk(pos);
+      this.processMeshQueue();
     }
     this.rebuildBorders();
   }
 
   rebuildDirtyChunks(chunks: ChunkPos[]): void {
-    for (const chunk of chunks) {
-      if (this.world.isLoaded(chunk)) this.rebuildChunk(chunk);
+    this.enqueueChunks(chunks, this.cameraChunk());
+    if (this.meshQueue.size <= this.meshBudget.maxSynchronousUpdateChunks) {
+      this.flushMeshQueue();
+    } else {
+      this.processMeshQueue();
     }
     this.rebuildBorders();
+  }
+
+  setMeshBudget(budget: Partial<MeshBudget>): void {
+    this.meshBudget = normalizeMeshBudget(budget);
+    this.enforceResidentBudget();
+    this.processMeshQueue();
+  }
+
+  getMeshBudget(): MeshBudget {
+    return { ...this.meshBudget };
+  }
+
+  get pendingMeshJobs(): number {
+    return this.meshQueue.size;
   }
 
   pickAt(clientX: number, clientY: number): RayHit | null {
@@ -529,6 +656,9 @@ export class ViewportRenderer {
   }
 
   capture(): CaptureResult {
+    // A screenshot is an explicit synchronous request: finish pending meshes first so
+    // completeness metadata and pixels describe the same revision.
+    this.flushMeshQueue();
     this.renderer.render(this.scene, this.camera);
     const canvas = this.renderer.domElement;
     const dataUrl = canvas.toDataURL("image/png");
@@ -558,6 +688,7 @@ export class ViewportRenderer {
     if (this.disposed) return;
     this.disposed = true;
     cancelAnimationFrame(this.animationId);
+    this.meshQueue.clear();
     this.renderer.domElement.removeEventListener("webglcontextlost", this.onContextLost);
     this.fly.dispose();
     this.orbit.dispose();
@@ -694,6 +825,7 @@ export class ViewportRenderer {
 
   private animate = (now: number): void => {
     if (this.disposed) return;
+    this.processMeshQueue();
     const delta = Math.max(0, Math.min((now - this.clock.last) / 1000, 0.25));
     this.clock.last = now;
     if (this.cameraMode === "orbit") {
@@ -719,6 +851,8 @@ export class ViewportRenderer {
         loadedChunks: this.world.loadedChunkCount(),
         renderedSections: this.world.sectionCount(),
         meshCount: this.chunkGroup.children.length,
+        pendingMeshJobs: this.meshQueue.size,
+        evictedChunks: this.evictedChunks,
       };
       this.callbacks.onMetrics?.(this.metrics);
       this.frameCount = 0;

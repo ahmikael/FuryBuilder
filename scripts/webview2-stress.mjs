@@ -200,12 +200,18 @@ async function stressScene(config) {
   try {
     let metrics = null;
     let metricUpdates = 0;
-    renderer = new ViewportRenderer(host, {
-      onMetrics: (value) => {
-        metrics = value;
-        metricUpdates += 1;
+    renderer = new ViewportRenderer(
+      host,
+      {
+        onMetrics: (value) => {
+          metrics = value;
+          metricUpdates += 1;
+        },
       },
-    });
+      // The stress harness deliberately raises the residency cap so the 4,225-chunk
+      // ceiling is measured without eviction. Production uses the default budget.
+      { maxResidentChunks: 8192 },
+    );
     renderer.setChunkBordersVisible(false);
     renderer.setGridVisible(false);
     const gl = renderer.renderer.getContext();
@@ -248,17 +254,18 @@ async function stressScene(config) {
 
     const waitForMetrics = async (expectedChunks, timeoutMs) => {
       const deadline = performance.now() + timeoutMs;
-      while (
-        (!metrics || metrics.loadedChunks !== expectedChunks) &&
-        performance.now() < deadline
-      ) {
+      const settled = () =>
+        Boolean(metrics) &&
+        metrics.loadedChunks === expectedChunks &&
+        (metrics.pendingMeshJobs ?? 0) === 0;
+      while (!settled() && performance.now() < deadline) {
         await nextFrame();
       }
-      if (!metrics || metrics.loadedChunks !== expectedChunks)
+      if (!settled())
         throw new Error(
-          `metrics for ${expectedChunks} chunks did not settle (last ${metrics?.loadedChunks ?? "none"})`,
+          `metrics for ${expectedChunks} chunks did not settle (last ${metrics?.loadedChunks ?? "none"}, pending ${metrics?.pendingMeshJobs ?? "unknown"})`,
         );
-      // Let the short-window FPS average cover frames after the synchronous setup.
+      // Let the short-window FPS average cover frames after the mesh queue drained.
       await wait(1800);
       return metrics;
     };

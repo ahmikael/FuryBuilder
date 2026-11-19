@@ -213,6 +213,12 @@ chunk meshing (`buildChunkMesh`, `pushQuad`, `neighborName`), palette decoding
 (`readPackedIndex`, `blockAt`) and Three.js buffer/VAO/program setup; the Rust core stays
 well below those costs. The ranked profile, module shares and follow-up actions are in
 `docs/testing/perf-runs.md`.
+M10.2 adds explicit renderer budgets: 4,096 resident chunks with deterministic
+farthest-first eviction, a 256-chunk synchronous snapshot threshold, a 64-chunk
+synchronous edit threshold, 16 mesh jobs / 12 ms per animation frame and an 8,192-job
+queue cap. Large snapshots and asset changes now mesh incrementally, small edits stay
+immediate, captures flush pending work before claiming completeness, and the Performance
+panel reports `Mesh queue` and `Evicted`.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

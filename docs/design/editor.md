@@ -316,6 +316,41 @@ never writes during a scan, and every finding is bound to an exact `worldRevisio
 - Both paths commit one reversible `Operation::Batch`; Ctrl+Z restores the target exactly
   like any other edit.
 
+## Chunk residency and meshing budgets (M10.2)
+
+The viewport now has explicit limits instead of meshing and retaining every requested
+chunk without bound. The policy lives in `renderer/mesh-queue.ts` and is applied by
+`ViewportRenderer`:
+
+- **Resident chunks:** at most 4,096 decoded chunks by default. When a snapshot or update
+  exceeds the cap, the farthest chunks from the camera are removed first, with a
+  deterministic tie-break by X then Z. This bounds both the CPU mirror and its GPU
+  meshes. The callback `onChunksEvicted` reports what was removed; `requestedChunks`
+  still records the snapshot, so a capture honestly reports missing chunks instead of
+  pretending the area was fully rendered. The default is above the current UI load
+  radius; a future streaming controller can use the callback to request evicted chunks
+  again when the camera approaches them.
+- **Synchronous thresholds:** snapshots at or below 256 chunks and dirty sets at or below
+  64 chunks are still meshed synchronously, preserving the immediate feedback of normal
+  edits. Larger work is queued.
+- **Frame budget:** the animation loop builds at most 16 chunk meshes or about 12 ms of
+  work per frame, whichever comes first. One job always runs so a small time budget
+  cannot starve the queue. The queue de-duplicates positions and cancels work for chunks
+  that were removed or evicted.
+- **Queue cap:** at most 8,192 pending positions; a malformed caller cannot grow the
+  pending list without bound.
+- **Capture correctness:** `capture()` flushes the queue before rendering, so a
+  screenshot and its completeness metadata describe the same revision. This may take
+  longer for a large snapshot, but it never labels a partially meshed scene as complete.
+- **Observability:** `RenderMetrics` reports `pendingMeshJobs` and `evictedChunks`; the
+  viewport Performance panel shows both values.
+- **Asset changes:** applying or clearing an asset bundle re-enqueues all loaded chunks
+  through the same queue instead of blocking the UI for the whole scene.
+
+This is a bounded renderer policy, not a full streaming world manager. The UI currently
+loads a small radius, so eviction is not exercised in normal use; the policy prevents
+unbounded growth when the load radius or a future camera-driven streamer grows.
+
 ## Commit pipeline
 
 ```text

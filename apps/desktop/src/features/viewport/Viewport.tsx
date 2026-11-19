@@ -1016,7 +1016,11 @@ export function Viewport() {
             <span>Chunks</span>
             <span className="text-right">{metrics?.loadedChunks ?? "—"}</span>
             <span>Sections</span>
-            <span className="text-right">{metrics?.renderedSections ?? "—"}</span>
+            <span className="text-right">{metrics?.renderedSections ?? "-"}</span>
+            <span>Mesh queue</span>
+            <span className="text-right">{metrics?.pendingMeshJobs ?? "-"}</span>
+            <span>Evicted</span>
+            <span className="text-right">{metrics?.evictedChunks ?? "-"}</span>
             <span>Assets</span>
             <span
               className={cn(
