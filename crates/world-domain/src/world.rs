@@ -3,9 +3,10 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::biome::{BiomeSection, BiomeState};
 use crate::block::BlockState;
 use crate::coords::{BlockPos, ChunkPos};
-use crate::dimension::{BlockWrite, Dimension, DimensionError, DimensionInfo};
+use crate::dimension::{BiomeWrite, BlockWrite, Dimension, DimensionError, DimensionInfo};
 use crate::section::Section;
 use crate::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
 
@@ -101,6 +102,35 @@ impl World {
         state: &BlockState,
     ) -> Result<BlockWrite, WorldError> {
         Ok(self.dimension_mut(dimension)?.set_block(pos, state)?)
+    }
+
+    pub fn get_biome(
+        &self,
+        dimension: &str,
+        pos: BlockPos,
+    ) -> Result<Option<BiomeState>, WorldError> {
+        Ok(self.dimension(dimension)?.get_biome(pos)?)
+    }
+
+    pub fn set_biome(
+        &mut self,
+        dimension: &str,
+        pos: BlockPos,
+        biome: &BiomeState,
+    ) -> Result<Option<BiomeWrite>, WorldError> {
+        Ok(self.dimension_mut(dimension)?.set_biome(pos, biome)?)
+    }
+
+    pub fn install_biomes(
+        &mut self,
+        dimension: &str,
+        chunk: ChunkPos,
+        section_y: i32,
+        biomes: Option<BiomeSection>,
+    ) -> Result<(), WorldError> {
+        self.dimension_mut(dimension)?
+            .install_biomes(chunk, section_y, biomes);
+        Ok(())
     }
 
     pub fn section(

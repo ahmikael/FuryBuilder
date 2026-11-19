@@ -63,6 +63,27 @@ impl BiomeSection {
             .map(String::as_str)
     }
 
+    /// Converts the Java palette into the editable biome section. Decoding already
+    /// validated every id, so a failure here means the caller bypassed the strict reader.
+    pub fn to_domain(&self) -> Option<world_domain::BiomeSection> {
+        let palette = self
+            .palette
+            .iter()
+            .map(|biome| biome.parse::<world_domain::BiomeState>().ok())
+            .collect::<Option<Vec<_>>>()?;
+        world_domain::BiomeSection::from_palette(palette, self.cells.clone())
+    }
+
+    /// Converts an editable biome section back into the Java palette representation.
+    pub fn from_domain(section: &world_domain::BiomeSection) -> Option<Self> {
+        let palette = section
+            .palette()
+            .iter()
+            .map(|biome| biome.as_str().to_owned())
+            .collect::<Vec<_>>();
+        Self::from_palette(palette, section.cells().to_vec())
+    }
+
     /// Block coordinates are 0..=15 in each axis; the result is the covering biome cell.
     pub fn biome_at_block(&self, local_x: u8, local_y: u8, local_z: u8) -> Option<&str> {
         if local_x >= 16 || local_y >= 16 || local_z >= 16 {
@@ -120,18 +141,16 @@ impl DecodedChunk {
             .and_then(|section| section.biomes.biome_at_block(local_x, local_y, local_z))
     }
 
-    /// Converts non-empty sections into the editor's sparse chunk model.
-    ///
-    /// Biome data stays on `DecodedChunk`: `world-domain` does not store biomes yet, and
-    /// pretending that it does would hide the gap.
+    /// Converts the decoded sections into the editor's sparse chunk model, including the
+    /// 4x4x4 biome cells that belong to each section.
     pub fn to_chunk(&self) -> Chunk {
         let mut chunk = Chunk::new(ChunkPos::new(self.x, self.z));
         for (y, section) in &self.sections {
-            if section.blocks.is_empty() {
-                chunk.install_section(*y, None);
-            } else {
-                chunk.install_section(*y, Some(section.blocks.clone()));
+            let mut block_section = section.blocks.clone();
+            if let Some(biomes) = section.biomes.to_domain() {
+                block_section.set_biomes(Some(biomes));
             }
+            chunk.install_section(*y, Some(block_section));
         }
         chunk
     }

@@ -3,6 +3,7 @@
 //! This crate is independent of Tauri, React, Three.js and the operating system.
 //! It owns block-state identity, coordinates, chunks, sections, sparse storage and revisions.
 
+pub mod biome;
 pub mod block;
 pub mod bounds;
 pub mod chunk;
@@ -12,6 +13,7 @@ pub mod registry;
 pub mod section;
 pub mod world;
 
+pub use biome::{BiomeSection, BiomeState, BiomeStateError, BIOME_CELLS, MAX_BIOME_PALETTE};
 pub use block::{BlockState, BlockStateError};
 pub use bounds::{BlockBox, BoundsError};
 pub use chunk::Chunk;
@@ -19,7 +21,9 @@ pub use coords::{
     div_floor, mod_floor, BlockPos, ChunkPos, RegionPos, SectionPos, CHUNK_SIZE, REGION_CHUNKS,
     SECTION_SIZE,
 };
-pub use dimension::{BlockWrite, Dimension, DimensionError, DimensionInfo, DimensionKind};
+pub use dimension::{
+    BiomeWrite, BlockWrite, Dimension, DimensionError, DimensionInfo, DimensionKind,
+};
 pub use registry::{BlockDefinition, BlockRegistry, RegistryError, CATALOG_VERSION};
 pub use section::Section;
 pub use world::{World, WorldError, WorldInfo};

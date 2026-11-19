@@ -264,7 +264,7 @@ fn analysis_reports_supported_world_and_never_writes() {
     assert!(analysis
         .warnings
         .iter()
-        .any(|warning| warning.contains("biomes")));
+        .any(|warning| warning.contains("biome cells become editable")));
     assert_eq!(snapshot(&root), before, "analysis must be read-only");
 }
 
@@ -278,6 +278,7 @@ fn load_imports_block_states_and_preserves_the_source() {
     let (world, report) = load_java_world(&root).expect("load world");
     assert_eq!(report.chunks, 2);
     assert_eq!(report.sections, 3);
+    assert_eq!(report.biome_sections, 3);
     assert_eq!(report.non_air_blocks, 12_288);
     assert_eq!(report.block_entities, 2);
     assert_eq!(report.entities, 2);
@@ -296,6 +297,15 @@ fn load_imports_block_states_and_preserves_the_source() {
             .expect("stone")
             .to_string(),
         "minecraft:stone"
+    );
+    assert_eq!(
+        world
+            .get_biome(OVERWORLD, BlockPos::new(1, -46, 3))
+            .expect("biome")
+            .expect("biome data")
+            .as_str(),
+        "minecraft:plains",
+        "biome cells must enter the editable world"
     );
     assert_eq!(
         world

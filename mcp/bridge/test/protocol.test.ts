@@ -256,6 +256,7 @@ describe("MCP protocol negotiation", () => {
       [
         "world_info",
         "get_block",
+        "get_biome",
         "inspect_region",
         "get_region",
         "get_camera",
@@ -264,6 +265,7 @@ describe("MCP protocol negotiation", () => {
     );
     expect(readTools.map((tool) => tool.name).sort()).toEqual([
       "capture_viewport",
+      "get_biome",
       "get_block",
       "get_camera",
       "get_region",
@@ -323,6 +325,30 @@ describe("MCP protocol negotiation", () => {
       (tool) => tool.name === "preview_operation",
     );
     expect(preview?.annotations?.readOnlyHint).toBe(true);
+    expect(JSON.stringify(preview?.inputSchema)).toContain("set_biome");
+
+    const biomePreview = await client.callTool({
+      name: "preview_operation",
+      arguments: {
+        project_id: "project-write",
+        operation: {
+          type: "set_biome",
+          dimension: "minecraft:overworld",
+          bounds: {
+            min: { x: 0, y: 64, z: 0 },
+            max: { x: 3, y: 67, z: 3 },
+          },
+          biome: "minecraft:desert",
+        },
+      },
+    });
+    expect(biomePreview.isError).toBe(true);
+    const biomeText = biomePreview.content.find(
+      (entry) => entry.type === "text",
+    );
+    expect(biomeText?.type === "text" ? biomeText.text : "").toMatch(
+      /^runtime_file_missing:/,
+    );
 
     const previewResult = await client.callTool({
       name: "preview_operation",

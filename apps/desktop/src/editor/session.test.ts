@@ -7,10 +7,12 @@ import {
   editorShortcut,
   ghostForContext,
   heightmapBounds,
+  isValidBiomeId,
   linePoints,
   normalizeBounds,
   operationLabel,
   pasteChanges,
+  planBiome,
   planBlockTool,
   planHeightmap,
   planTerrainBrush,
@@ -501,5 +503,39 @@ describe("heightmap planning", () => {
     });
     expect(operation).not.toBeNull();
     expect(operationLabel(operation!)).toBe("Generate heightmap in 576 blocks");
+  });
+});
+
+describe("biome planning", () => {
+  const selection = { min: { x: -4, y: 64, z: 2 }, max: { x: 3, y: 70, z: 9 } };
+
+  it("requires a selection and a namespaced lowercase biome id", () => {
+    expect(
+      planBiome({ dimension: "minecraft:overworld", selection: null, biome: "minecraft:forest" }),
+    ).toBeNull();
+    expect(planBiome({ dimension: "minecraft:overworld", selection, biome: "forest" })).toBeNull();
+    expect(
+      planBiome({ dimension: "minecraft:overworld", selection, biome: "minecraft:Forest" }),
+    ).toBeNull();
+    expect(
+      planBiome({ dimension: "minecraft:overworld", selection, biome: "minecraft:" }),
+    ).toBeNull();
+    expect(isValidBiomeId(" minecraft:forest ")).toBe(true);
+    expect(isValidBiomeId("minecraft:nether_wastes")).toBe(true);
+  });
+
+  it("trims the id, keeps the selection and labels the paint", () => {
+    const operation = planBiome({
+      dimension: "minecraft:overworld",
+      selection,
+      biome: "  minecraft:desert  ",
+    });
+    expect(operation).toEqual({
+      type: "set_biome",
+      dimension: "minecraft:overworld",
+      bounds: selection,
+      biome: "minecraft:desert",
+    });
+    expect(operationLabel(operation!)).toBe("Paint minecraft:desert over 448 blocks");
   });
 });

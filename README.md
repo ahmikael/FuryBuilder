@@ -57,13 +57,13 @@ coordinates and proto-chunks, then decodes block-state palettes, sections and
 biomes without writing to the source world. A byte-preserving, fail-closed copy
 of an unchanged world - including unknown files and region containers - is
 implemented and verified against a real 841-chunk world. A copy-on-write overlay
-now keeps block edits in memory, persists them as a versioned document and
-materialises a patched chunk NBT while preserving unknown tags, biomes, block
-entities and entities; the source stays byte-identical. The `Import World` wizard
+now keeps block and biome edits in memory, persists them as a versioned document and
+materialises a patched chunk NBT while preserving unknown tags, untouched biome
+sections, block entities and entities; the source stays byte-identical. The `Import World` wizard
 finally analyzes a selected world read-only, reports blockers and limitations, and
 creates a project with a byte-for-byte immutable source copy plus an editable block
 snapshot. A verified writer now publishes a new region file for classic 1.21.4
-when only `sections[].block_states` changes; untouched chunk records stay
+when only `sections[].block_states` or `sections[].biomes` changes; untouched chunk records stay
 byte-identical and the source hash is rechecked. A read-only derived-data
 inventory and two official 1.21.4 server round-trips document the boundary:
 the default `preserve` policy copies stale heightmaps/light raw, while the
@@ -120,7 +120,14 @@ depth produce an integer fBm patch that is previewed by the Rust core and applie
 reversible operation. The surface and filler materials are chosen explicitly, above-surface
 blocks inside the bounds are cleared, and repeating the same parameters reproduces the same
 blocks. It is a construction tool, not a vanilla world generator, and it makes no worldgen
-parity claim.
+parity claim. M9.11 adds biome tools for the confirmed Java 1.21.4 layout. A box selection
+paints the 4x4x4 biome cells it covers as one reversible operation, with a 64-entry
+per-section palette; the same path is exposed in the UI and through MCP. Biome edits are
+stored in the world domain, snapshot format 2 and the overlay document, written into
+`sections[].biomes`, preserved through region and world-folder export, and covered by the
+standard undo/redo history. The tool refuses to invent biome data for a section that has
+none instead of silently assuming a default biome. Terrain brushes and the heightmap
+generator still change block states only and do not recalculate biomes or lighting.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
@@ -159,8 +166,9 @@ guarantee that its whole milestone is complete.
   loopback/resource/process-tree guarantees, progress, cancellation, generated-base
   verification and real evidence.
 - `docs/testing/worldgen-parity.md` — the independent JSON parity oracle, the implemented
-  M9.8 reference-chunk check, its real evidence and remaining limitations (biomes are not
-  modelled by the editable world).
+  M9.8 reference-chunk check, its real evidence and remaining limitations (parity
+  compares block states only; biome cells are modelled and editable but are not part of
+  the parity comparison).
 - `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
   server fixture, its markers, evidence and limits.
 - `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
@@ -175,13 +183,13 @@ guarantee that its whole milestone is complete.
   are used; missing assets show the missing checker. Fluid flow, animation timing,
   `uvlock`, element `rescale`, builtin entity models and biome-accurate tints are not
   implemented yet. See `docs/assets/minecraft-assets.md`.
-- Projects live in the app-data directory. `Empty Project`, a flat base and `Import World`
-  (classic Java 1.21.4) are available. Automatic vanilla world generation
-  (`Vanilla World`) is a later M9 task and is not enabled.
+- Projects live in the app-data directory. `Empty Project`, a flat base, `Import World`
+  and `Vanilla World` (classic Java 1.21.4) are available. Vanilla World generation
+  requires a verified Java 21 runtime and official server JAR plus explicit EULA consent.
 - Imported worlds are analyzed read-only and copied byte for byte into the project source
-  layer. Only block states are editable yet; biomes, block entities, entities, ticks,
-  heightmaps, lighting and POI are preserved as raw source data by default and are not
-  recalculated after an edit. The opt-in `VanillaRebuild` writer policy instead
+  layer. Block states and 4x4x4 biome cells are editable; untouched biomes, block
+  entities, entities, ticks, heightmaps, lighting and POI are preserved as raw source data
+  by default and are not recalculated after an edit. The opt-in `VanillaRebuild` writer policy instead
   invalidates heightmaps, light, `isLightOn` and `PostProcessing` so the target
   vanilla engine rebuilds them; this was verified with an official 1.21.4 server.
   Placing or removing block-entity blocks and updating POI are still not semantically
@@ -201,14 +209,16 @@ guarantee that its whole milestone is complete.
 - `Vanilla World` requires a user-provided or explicitly downloaded Java runtime and
   official server JAR; FuryBuilder never accepts the Minecraft EULA for the user. M9.3
   provides Java 21 discovery, manual selection and the managed Temurin download; M9.4
-  provides verified server JAR provisioning. EULA confirmation and the isolated server
-  process are not implemented yet.
+  provides verified server JAR provisioning; M9.5-M9.7 provide the explicit EULA step,
+  the isolated loopback-only server process and import of a completed run as an immutable
+  vanilla project.
 - Import of full Java world saves is read-only. M8 implements version/layout
   validation, region/NBT reading, block states and biomes, a byte-preserving copy
   of unchanged worlds, an in-memory block-edit overlay with a versioned JSON
   document and verified chunk NBT materialization, the `Import World` wizard
   with an immutable source copy, and a verified writer for a new region file
-  limited to classic 1.21.4 `sections[].block_states`. M8.8 adds a read-only
+  limited to classic 1.21.4 `sections[].block_states` and `sections[].biomes` (biome
+  cells became editable in M9.11). M8.8 adds a read-only
   inventory of heightmaps, light, ticks, block entities, POI and entity sidecars,
   plus an official-server round-trip showing that a normal load/save does not
   rebuild stale heightmaps or light and does not create missing block entities.

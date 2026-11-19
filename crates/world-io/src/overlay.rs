@@ -21,13 +21,21 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use world_domain::{BlockState, Section, CHUNK_SIZE, SECTION_SIZE, TARGET_DATA_VERSION};
+use world_domain::{
+    BiomeSection as DomainBiomeSection, BiomeState, BlockState, Section, BIOME_CELLS, CHUNK_SIZE,
+    MAX_BIOME_PALETTE, SECTION_SIZE, TARGET_DATA_VERSION,
+};
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, ANVIL_REGION_AXIS_CHUNKS};
-use crate::java_chunk::{DecodedChunk, DecodedSection, BLOCK_SECTION_VOLUME, MAX_BLOCK_PALETTE};
-use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND};
+use crate::java_chunk::{
+    BiomeSection as JavaBiomeSection, DecodedChunk, DecodedSection, BLOCK_SECTION_VOLUME,
+    MAX_BLOCK_PALETTE,
+};
+use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 
-pub const OVERLAY_SCHEMA_VERSION: u32 = 1;
+/// Overlay schema 2 adds editable biome cells. Schema 1 documents remain readable.
+pub const OVERLAY_SCHEMA_VERSION: u32 = 2;
+pub const OVERLAY_MIN_SCHEMA_VERSION: u32 = 1;
 pub const MAX_OVERLAY_CHUNKS: usize = 100_000;
 pub const MAX_OVERLAY_SECTIONS: usize = 1_000_000;
 pub const MAX_OVERLAY_JSON_BYTES: usize = 64 * 1024 * 1024;
@@ -73,6 +81,37 @@ impl BlockEdit {
     }
 }
 
+/// One requested biome-cell write in an overlay batch. The position must be a block
+/// coordinate; the 4x4x4 cell covering it is updated.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BiomeEdit {
+    pub dimension: String,
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub biome: BiomeState,
+}
+
+impl BiomeEdit {
+    pub fn new(dimension: impl Into<String>, x: i32, y: i32, z: i32, biome: BiomeState) -> Self {
+        Self {
+            dimension: dimension.into(),
+            x,
+            y,
+            z,
+            biome,
+        }
+    }
+}
+
+/// Result of a single `set_biome` call.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BiomeChange {
+    pub previous: BiomeState,
+    pub current: BiomeState,
+    pub changed: bool,
+}
+
 /// Result of a single `set_block` call.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockChange {
@@ -105,6 +144,7 @@ pub struct OverlayChunk {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct ChunkEdits {
     sections: BTreeMap<i32, Section>,
+    biomes: BTreeMap<i32, DomainBiomeSection>,
     changes: usize,
 }
 
@@ -134,6 +174,17 @@ pub enum OverlayError {
         y: i32,
         z: i32,
     },
+    #[error("duplicate biome edit for cell ({x}, {y}, {z}) in dimension `{dimension}`")]
+    DuplicateBiomeEdit {
+        dimension: String,
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    #[error("section Y {y} in chunk ({x}, {z}) has no biome data to edit")]
+    BiomeNotPresent { x: i32, z: i32, y: i32 },
+    #[error("biome palette is full in section Y {y} of chunk ({x}, {z})")]
+    BiomePaletteFull { x: i32, z: i32, y: i32 },
     #[error("section palette is full at block ({x}, {y}, {z}) in dimension `{dimension}`")]
     PaletteFull {
         dimension: String,
@@ -161,12 +212,17 @@ impl OverlayError {
             OverlayError::Anvil(error) => error.code(),
             OverlayError::UnknownDimension(_)
             | OverlayError::HeightOutOfRange { .. }
-            | OverlayError::DuplicateEdit { .. } => "invalid_argument",
-            OverlayError::ChunkNotPresent { .. } => "not_found",
+            | OverlayError::DuplicateEdit { .. }
+            | OverlayError::DuplicateBiomeEdit { .. } => "invalid_argument",
+            OverlayError::ChunkNotPresent { .. } | OverlayError::BiomeNotPresent { .. } => {
+                "not_found"
+            }
             OverlayError::SectionNotPresent { .. }
             | OverlayError::InvalidOverlay(_)
             | OverlayError::VerificationFailed(_) => "unsupported_format",
-            OverlayError::PaletteFull { .. } | OverlayError::LimitExceeded(_) => "limit_exceeded",
+            OverlayError::PaletteFull { .. }
+            | OverlayError::BiomePaletteFull { .. }
+            | OverlayError::LimitExceeded(_) => "limit_exceeded",
             OverlayError::UnsupportedDataVersion { .. }
             | OverlayError::UnsupportedSchema { .. } => "unsupported_version",
             OverlayError::Io(_) => "io_error",
@@ -205,7 +261,7 @@ impl WorldOverlay {
     }
 
     pub fn dirty_section_count(&self) -> usize {
-        self.chunks.values().map(|edits| edits.sections.len()).sum()
+        self.chunks.values().map(dirty_section_count).sum()
     }
 
     pub fn is_dirty(&self) -> bool {
@@ -265,6 +321,264 @@ impl WorldOverlay {
         })
     }
 
+    /// Returns the effective biome covering one block position.
+    pub fn get_biome(
+        &self,
+        dimension_id: &str,
+        x: i32,
+        y: i32,
+        z: i32,
+    ) -> Result<BiomeState, OverlayError> {
+        self.validate_position(dimension_id, x, y, z)?;
+        let key = chunk_key(dimension_id, x, z);
+        let section_y = y.div_euclid(SECTION_SIZE);
+        let local_y = y.rem_euclid(SECTION_SIZE) as u8;
+        let local_x = x.rem_euclid(CHUNK_SIZE) as u8;
+        let local_z = z.rem_euclid(CHUNK_SIZE) as u8;
+        if let Some(edits) = self.chunks.get(&key) {
+            if let Some(section) = edits.biomes.get(&section_y) {
+                return section
+                    .get(local_x / 4, local_y / 4, local_z / 4)
+                    .cloned()
+                    .ok_or_else(|| {
+                        OverlayError::InvalidOverlay(format!(
+                            "edited biome section {section_y} in chunk ({}, {}) is missing its cell ({}, {}, {})",
+                            key.x,
+                            key.z,
+                            local_x / 4,
+                            local_y / 4,
+                            local_z / 4
+                        ))
+                    });
+            }
+        }
+        let chunk = self.source_decoded(dimension_id, key.x, key.z)?;
+        let name = chunk
+            .biome_at(local_x, y, local_z)
+            .ok_or(OverlayError::BiomeNotPresent {
+                x: key.x,
+                z: key.z,
+                y: section_y,
+            })?;
+        name.parse::<BiomeState>()
+            .map_err(|error| OverlayError::VerificationFailed(error.to_string()))
+    }
+
+    /// Sets the biome cell covering one block and reports the previous and effective biome.
+    pub fn set_biome(
+        &mut self,
+        dimension_id: &str,
+        x: i32,
+        y: i32,
+        z: i32,
+        biome: &BiomeState,
+    ) -> Result<BiomeChange, OverlayError> {
+        let previous = self.get_biome(dimension_id, x, y, z)?;
+        let report = self.apply_biomes(&[BiomeEdit::new(
+            dimension_id.to_owned(),
+            x,
+            y,
+            z,
+            biome.clone(),
+        )])?;
+        Ok(BiomeChange {
+            previous,
+            current: biome.clone(),
+            changed: report.changed > 0,
+        })
+    }
+
+    /// Applies a biome-cell batch atomically. Duplicate cells and missing source biome data
+    /// are refused before any overlay state is committed.
+    pub fn apply_biomes(&mut self, edits: &[BiomeEdit]) -> Result<ApplyReport, OverlayError> {
+        if edits.is_empty() {
+            return Ok(ApplyReport {
+                requested: 0,
+                changed: 0,
+                chunks: self.chunks.len(),
+                sections: self.dirty_section_count(),
+            });
+        }
+
+        let mut cells = BTreeSet::new();
+        for edit in edits {
+            self.validate_position(&edit.dimension, edit.x, edit.y, edit.z)?;
+            let cell = (
+                edit.dimension.clone(),
+                edit.x.div_euclid(4),
+                edit.y.div_euclid(4),
+                edit.z.div_euclid(4),
+            );
+            if !cells.insert(cell) {
+                return Err(OverlayError::DuplicateBiomeEdit {
+                    dimension: edit.dimension.clone(),
+                    x: edit.x.div_euclid(4),
+                    y: edit.y.div_euclid(4),
+                    z: edit.z.div_euclid(4),
+                });
+            }
+        }
+
+        let mut grouped: BTreeMap<ChunkKey, Vec<&BiomeEdit>> = BTreeMap::new();
+        for edit in edits {
+            grouped
+                .entry(chunk_key(&edit.dimension, edit.x, edit.z))
+                .or_default()
+                .push(edit);
+        }
+
+        let mut staged: BTreeMap<ChunkKey, Option<ChunkEdits>> = BTreeMap::new();
+        let mut next_change_count = self.change_count;
+        let mut next_chunk_count = self.chunks.len();
+        let mut next_section_count = self.dirty_section_count();
+        let mut report = ApplyReport {
+            requested: edits.len(),
+            ..ApplyReport::default()
+        };
+
+        for (key, group) in grouped {
+            let source = self.source_decoded(&key.dimension, key.x, key.z)?;
+            let previous = self.chunks.get(&key).cloned().unwrap_or_default();
+            let previous_section_count = dirty_section_count(&previous);
+            let sections = previous.sections;
+            let mut biomes = previous.biomes;
+
+            for edit in group {
+                let section_y = edit.y.div_euclid(SECTION_SIZE);
+                let source_section =
+                    source
+                        .sections
+                        .get(&section_y)
+                        .ok_or(OverlayError::SectionNotPresent {
+                            x: key.x,
+                            z: key.z,
+                            y: section_y,
+                        })?;
+                let source_biomes =
+                    source_section
+                        .biomes
+                        .to_domain()
+                        .ok_or(OverlayError::BiomeNotPresent {
+                            x: key.x,
+                            z: key.z,
+                            y: section_y,
+                        })?;
+                let section = biomes.entry(section_y).or_insert(source_biomes);
+                let cell_x = (edit.x.rem_euclid(CHUNK_SIZE) as u8) / 4;
+                let cell_y = (edit.y.rem_euclid(SECTION_SIZE) as u8) / 4;
+                let cell_z = (edit.z.rem_euclid(CHUNK_SIZE) as u8) / 4;
+                let changed = section.set(cell_x, cell_y, cell_z, &edit.biome).ok_or(
+                    OverlayError::BiomePaletteFull {
+                        x: key.x,
+                        z: key.z,
+                        y: section_y,
+                    },
+                )?;
+                if changed {
+                    report.changed += 1;
+                }
+            }
+
+            let mut final_sections = BTreeMap::new();
+            let mut block_changes = 0usize;
+            for (section_y, section) in &sections {
+                let source_section = source.sections.get(section_y).ok_or_else(|| {
+                    OverlayError::InvalidOverlay(format!(
+                        "overlay section {section_y} is absent from source chunk ({}, {})",
+                        key.x, key.z
+                    ))
+                })?;
+                let difference = section_difference_count(section, &source_section.blocks);
+                if difference > 0 {
+                    final_sections.insert(*section_y, section.clone());
+                    block_changes += difference;
+                }
+            }
+            let mut final_biomes = BTreeMap::new();
+            let mut biome_changes = 0usize;
+            for (section_y, section) in &biomes {
+                let source_section = source.sections.get(section_y).ok_or_else(|| {
+                    OverlayError::InvalidOverlay(format!(
+                        "overlay biome section {section_y} is absent from source chunk ({}, {})",
+                        key.x, key.z
+                    ))
+                })?;
+                let difference = biome_difference_count(section, &source_section.biomes);
+                if difference > 0 {
+                    final_biomes.insert(*section_y, section.clone());
+                    biome_changes += difference;
+                }
+            }
+            let chunk_changes = block_changes + biome_changes;
+
+            let old_changes = self
+                .chunks
+                .get(&key)
+                .map(|edits| edits.changes)
+                .unwrap_or(0);
+            next_change_count = next_change_count
+                .checked_sub(old_changes)
+                .and_then(|value| value.checked_add(chunk_changes))
+                .ok_or_else(|| {
+                    OverlayError::LimitExceeded("overlay change counter overflow".to_owned())
+                })?;
+            next_section_count = next_section_count
+                .checked_sub(previous_section_count)
+                .and_then(|value| {
+                    value.checked_add(dirty_section_union(&final_sections, &final_biomes))
+                })
+                .ok_or_else(|| {
+                    OverlayError::LimitExceeded("overlay section counter overflow".to_owned())
+                })?;
+            let was_present = previous_section_count > 0;
+            let is_present = !final_sections.is_empty() || !final_biomes.is_empty();
+            next_chunk_count = next_chunk_count
+                .checked_sub(usize::from(was_present))
+                .and_then(|value| value.checked_add(usize::from(is_present)))
+                .ok_or_else(|| {
+                    OverlayError::LimitExceeded("overlay chunk counter overflow".to_owned())
+                })?;
+            if next_chunk_count > MAX_OVERLAY_CHUNKS {
+                return Err(OverlayError::LimitExceeded(format!(
+                    "overlay would contain {next_chunk_count} chunks, limit is {MAX_OVERLAY_CHUNKS}"
+                )));
+            }
+            if next_section_count > MAX_OVERLAY_SECTIONS {
+                return Err(OverlayError::LimitExceeded(format!(
+                    "overlay would contain {next_section_count} sections, limit is {MAX_OVERLAY_SECTIONS}"
+                )));
+            }
+
+            if is_present {
+                staged.insert(
+                    key,
+                    Some(ChunkEdits {
+                        sections: final_sections,
+                        biomes: final_biomes,
+                        changes: chunk_changes,
+                    }),
+                );
+            } else {
+                staged.insert(key, None);
+            }
+        }
+
+        for (key, edits) in staged {
+            match edits {
+                Some(edits) => {
+                    self.chunks.insert(key, edits);
+                }
+                None => {
+                    self.chunks.remove(&key);
+                }
+            }
+        }
+        self.change_count = next_change_count;
+        report.chunks = self.chunks.len();
+        report.sections = self.dirty_section_count();
+        Ok(report)
+    }
+
     /// Applies a batch atomically against the in-memory overlay.
     ///
     /// Every edit is validated before the first section is staged, duplicate positions are
@@ -312,8 +626,9 @@ impl WorldOverlay {
         for (key, group) in grouped {
             let source = self.source_decoded(&key.dimension, key.x, key.z)?;
             let previous = self.chunks.get(&key).cloned().unwrap_or_default();
-            let previous_section_count = previous.sections.len();
+            let previous_section_count = dirty_section_count(&previous);
             let mut sections = previous.sections;
+            let biomes = previous.biomes;
 
             for edit in group {
                 let local_x = edit.x.rem_euclid(CHUNK_SIZE) as u8;
@@ -360,6 +675,20 @@ impl WorldOverlay {
                     chunk_changes += difference;
                 }
             }
+            let mut final_biomes = BTreeMap::new();
+            for (section_y, section) in &biomes {
+                let source_section = source.sections.get(section_y).ok_or_else(|| {
+                    OverlayError::InvalidOverlay(format!(
+                        "overlay biome section {section_y} is absent from source chunk ({}, {})",
+                        key.x, key.z
+                    ))
+                })?;
+                let difference = biome_difference_count(section, &source_section.biomes);
+                if difference > 0 {
+                    final_biomes.insert(*section_y, section.clone());
+                    chunk_changes += difference;
+                }
+            }
 
             let old_changes = self
                 .chunks
@@ -375,12 +704,14 @@ impl WorldOverlay {
 
             next_section_count = next_section_count
                 .checked_sub(previous_section_count)
-                .and_then(|value| value.checked_add(final_sections.len()))
+                .and_then(|value| {
+                    value.checked_add(dirty_section_union(&final_sections, &final_biomes))
+                })
                 .ok_or_else(|| {
                     OverlayError::LimitExceeded("overlay section counter overflow".to_owned())
                 })?;
             let was_present = previous_section_count > 0;
-            let is_present = !final_sections.is_empty();
+            let is_present = !final_sections.is_empty() || !final_biomes.is_empty();
             next_chunk_count = next_chunk_count
                 .checked_sub(usize::from(was_present))
                 .and_then(|value| value.checked_add(usize::from(is_present)))
@@ -398,16 +729,17 @@ impl WorldOverlay {
                 )));
             }
 
-            if final_sections.is_empty() {
-                staged.insert(key, None);
-            } else {
+            if is_present {
                 staged.insert(
                     key,
                     Some(ChunkEdits {
                         sections: final_sections,
+                        biomes: final_biomes,
                         changes: chunk_changes,
                     }),
                 );
+            } else {
+                staged.insert(key, None);
             }
         }
 
@@ -454,6 +786,20 @@ impl WorldOverlay {
                         biomes: source_section.biomes.clone(),
                     },
                 );
+                dirty_sections.insert(*section_y);
+            }
+            for (section_y, section) in &edits.biomes {
+                let java_biomes = JavaBiomeSection::from_domain(section).ok_or_else(|| {
+                    OverlayError::InvalidOverlay(format!(
+                        "overlay biome section {section_y} cannot be converted for chunk ({x}, {z})"
+                    ))
+                })?;
+                let entry = chunk.sections.get_mut(section_y).ok_or_else(|| {
+                    OverlayError::InvalidOverlay(format!(
+                        "overlay biome section {section_y} is absent from source chunk ({x}, {z})"
+                    ))
+                })?;
+                entry.biomes = java_biomes;
                 dirty_sections.insert(*section_y);
             }
             changes = edits.changes;
@@ -535,10 +881,13 @@ impl WorldOverlay {
                     ))
                 }
             };
-            for (section_y, section) in &edits.sections {
+            let mut edited_sections = BTreeSet::new();
+            edited_sections.extend(edits.sections.keys().copied());
+            edited_sections.extend(edits.biomes.keys().copied());
+            for section_y in edited_sections {
                 let entry = items
                     .iter_mut()
-                    .find(|item| section_y_of(item) == Some(*section_y))
+                    .find(|item| section_y_of(item) == Some(section_y))
                     .ok_or_else(|| {
                         OverlayError::VerificationFailed(format!(
                             "source chunk ({x}, {z}) has no section {section_y}"
@@ -552,11 +901,22 @@ impl WorldOverlay {
                         ))
                     }
                 };
-                compound.insert("block_states".to_owned(), encode_block_states(section));
+                if let Some(section) = edits.sections.get(&section_y) {
+                    compound.insert("block_states".to_owned(), encode_block_states(section));
+                }
+                if let Some(section) = edits.biomes.get(&section_y) {
+                    compound.insert("biomes".to_owned(), encode_biomes(section));
+                }
             }
         }
 
         verify_preserved_fields(&source.nbt, &patched)?;
+        verify_edit_scope(
+            &source.nbt,
+            &patched,
+            edits.sections.keys().copied().collect(),
+            edits.biomes.keys().copied().collect(),
+        )?;
 
         let decoded = self.world.decode_chunk_nbt(dimension_id, x, z, &patched)?;
         for (section_y, section) in &edits.sections {
@@ -579,9 +939,48 @@ impl WorldOverlay {
                     "source lost section {section_y} during verification"
                 ))
             })?;
-            if decoded_section.biomes != source_section.biomes {
+            let expected_biomes = match edits.biomes.get(section_y) {
+                Some(edited) => JavaBiomeSection::from_domain(edited).ok_or_else(|| {
+                    OverlayError::VerificationFailed(format!(
+                        "edited biome section {section_y} cannot be represented"
+                    ))
+                })?,
+                None => source_section.biomes.clone(),
+            };
+            if decoded_section.biomes != expected_biomes {
                 return Err(OverlayError::VerificationFailed(format!(
-                    "section {section_y} biomes changed while editing blocks"
+                    "section {section_y} biomes changed without the expected biome edit"
+                )));
+            }
+        }
+        for (section_y, section) in &edits.biomes {
+            let decoded_section = decoded.sections.get(section_y).ok_or_else(|| {
+                OverlayError::VerificationFailed(format!(
+                    "re-decoded chunk lost biome section {section_y}"
+                ))
+            })?;
+            let decoded_biomes = decoded_section.biomes.to_domain().ok_or_else(|| {
+                OverlayError::VerificationFailed(format!(
+                    "re-decoded biome section {section_y} cannot be represented"
+                ))
+            })?;
+            if &decoded_biomes != section {
+                return Err(OverlayError::VerificationFailed(format!(
+                    "biome section {section_y} did not round-trip through NBT"
+                )));
+            }
+            let source_section = source_decoded.sections.get(section_y).ok_or_else(|| {
+                OverlayError::VerificationFailed(format!(
+                    "source lost biome section {section_y} during verification"
+                ))
+            })?;
+            let expected_blocks = match edits.sections.get(section_y) {
+                Some(edited) => edited,
+                None => &source_section.blocks,
+            };
+            if &decoded_section.blocks != expected_blocks {
+                return Err(OverlayError::VerificationFailed(format!(
+                    "section {section_y} blocks changed without the expected block edit"
                 )));
             }
         }
@@ -614,6 +1013,19 @@ impl WorldOverlay {
                                 .collect(),
                         })
                         .collect(),
+                    biomes: edits
+                        .biomes
+                        .iter()
+                        .map(|(y, section)| OverlayBiomeSectionDocument {
+                            y: *y,
+                            palette: section
+                                .palette()
+                                .iter()
+                                .map(|biome| biome.as_str().to_owned())
+                                .collect(),
+                            cells: section.cells().to_vec(),
+                        })
+                        .collect(),
                 })
                 .collect(),
         }
@@ -637,7 +1049,8 @@ impl WorldOverlay {
         world: JavaWorld,
         document: OverlayDocument,
     ) -> Result<Self, OverlayError> {
-        if document.schema_version != OVERLAY_SCHEMA_VERSION {
+        if !(OVERLAY_MIN_SCHEMA_VERSION..=OVERLAY_SCHEMA_VERSION).contains(&document.schema_version)
+        {
             return Err(OverlayError::UnsupportedSchema {
                 found: document.schema_version,
                 supported: OVERLAY_SCHEMA_VERSION,
@@ -674,10 +1087,16 @@ impl WorldOverlay {
                     key.x, key.z, key.dimension
                 )));
             }
-            if chunk_document.sections.is_empty() {
+            if chunk_document.sections.is_empty() && chunk_document.biomes.is_empty() {
                 return Err(OverlayError::InvalidOverlay(format!(
                     "chunk ({}, {}) has no sections",
                     key.x, key.z
+                )));
+            }
+            if document.schema_version < 2 && !chunk_document.biomes.is_empty() {
+                return Err(OverlayError::InvalidOverlay(format!(
+                    "chunk ({}, {}) has biomes in a schema {} document",
+                    key.x, key.z, document.schema_version
                 )));
             }
             overlay.validate_chunk_position(&key.dimension, key.x, key.z)?;
@@ -759,11 +1178,85 @@ impl WorldOverlay {
                 }
             }
 
-            if sections.is_empty() {
+            let mut biomes = BTreeMap::new();
+            let mut seen_biomes = BTreeSet::new();
+            for biome_document in chunk_document.biomes {
+                section_count += 1;
+                if section_count > MAX_OVERLAY_SECTIONS {
+                    return Err(OverlayError::LimitExceeded(format!(
+                        "overlay has more than {MAX_OVERLAY_SECTIONS} sections"
+                    )));
+                }
+                if !seen_biomes.insert(biome_document.y) {
+                    return Err(OverlayError::InvalidOverlay(format!(
+                        "duplicate biome section Y {} in chunk ({}, {})",
+                        biome_document.y, key.x, key.z
+                    )));
+                }
+                let source_section = source.sections.get(&biome_document.y).ok_or(
+                    OverlayError::SectionNotPresent {
+                        x: key.x,
+                        z: key.z,
+                        y: biome_document.y,
+                    },
+                )?;
+                if biome_document.palette.is_empty() {
+                    return Err(OverlayError::InvalidOverlay(format!(
+                        "biome section {} has an empty palette",
+                        biome_document.y
+                    )));
+                }
+                if biome_document.palette.len() > MAX_BIOME_PALETTE {
+                    return Err(OverlayError::LimitExceeded(format!(
+                        "biome section {} palette has {} entries, limit is {MAX_BIOME_PALETTE}",
+                        biome_document.y,
+                        biome_document.palette.len()
+                    )));
+                }
+                if biome_document.cells.len() != BIOME_CELLS {
+                    return Err(OverlayError::InvalidOverlay(format!(
+                        "biome section {} has {} cells, expected {BIOME_CELLS}",
+                        biome_document.y,
+                        biome_document.cells.len()
+                    )));
+                }
+                let palette = biome_document
+                    .palette
+                    .iter()
+                    .map(|value| {
+                        value.parse::<BiomeState>().map_err(|error| {
+                            OverlayError::InvalidOverlay(format!(
+                                "invalid biome state `{value}`: {error}"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                let section = DomainBiomeSection::from_palette(palette, biome_document.cells)
+                    .ok_or_else(|| {
+                        OverlayError::InvalidOverlay(format!(
+                            "biome section {} palette or cells are inconsistent",
+                            biome_document.y
+                        ))
+                    })?;
+                let difference = biome_difference_count(&section, &source_section.biomes);
+                if difference > 0 {
+                    changes += difference;
+                    biomes.insert(biome_document.y, section);
+                }
+            }
+
+            if sections.is_empty() && biomes.is_empty() {
                 continue;
             }
             overlay.change_count += changes;
-            overlay.chunks.insert(key, ChunkEdits { sections, changes });
+            overlay.chunks.insert(
+                key,
+                ChunkEdits {
+                    sections,
+                    biomes,
+                    changes,
+                },
+            );
         }
         Ok(overlay)
     }
@@ -881,6 +1374,21 @@ fn section_y_of(value: &NbtValue) -> Option<i32> {
     }
 }
 
+fn dirty_section_count(edits: &ChunkEdits) -> usize {
+    dirty_section_union(&edits.sections, &edits.biomes)
+}
+
+fn dirty_section_union(
+    sections: &BTreeMap<i32, Section>,
+    biomes: &BTreeMap<i32, DomainBiomeSection>,
+) -> usize {
+    sections
+        .keys()
+        .chain(biomes.keys())
+        .collect::<BTreeSet<_>>()
+        .len()
+}
+
 fn section_difference_count(a: &Section, b: &Section) -> usize {
     if a == b {
         return 0;
@@ -889,6 +1397,23 @@ fn section_difference_count(a: &Section, b: &Section) -> usize {
     for y in 0..16 {
         for z in 0..16 {
             for x in 0..16 {
+                if a.get(x, y, z) != b.get(x, y, z) {
+                    count += 1;
+                }
+            }
+        }
+    }
+    count
+}
+
+fn biome_difference_count(a: &DomainBiomeSection, b: &JavaBiomeSection) -> usize {
+    let Some(b) = b.to_domain() else {
+        return BIOME_CELLS;
+    };
+    let mut count = 0usize;
+    for y in 0..4 {
+        for z in 0..4 {
+            for x in 0..4 {
                 if a.get(x, y, z) != b.get(x, y, z) {
                     count += 1;
                 }
@@ -963,6 +1488,47 @@ fn block_bits(palette_len: usize) -> u8 {
     bits.max(4)
 }
 
+fn encode_biomes(section: &DomainBiomeSection) -> NbtValue {
+    let mut biomes = BTreeMap::new();
+    biomes.insert(
+        "palette".to_owned(),
+        NbtValue::List {
+            kind: TAG_STRING,
+            items: section
+                .palette()
+                .iter()
+                .map(|biome| NbtValue::String(biome.as_str().to_owned()))
+                .collect(),
+        },
+    );
+    if section.palette().len() > 1 {
+        biomes.insert(
+            "data".to_owned(),
+            NbtValue::LongArray(pack_biome_cells(section)),
+        );
+    }
+    NbtValue::Compound(biomes)
+}
+
+fn pack_biome_cells(section: &DomainBiomeSection) -> Vec<i64> {
+    let bits = biome_bits(section.palette().len());
+    let values_per_long = 64 / bits as usize;
+    let word_count = BIOME_CELLS.div_ceil(values_per_long);
+    let mut words = vec![0u64; word_count];
+    for (index, palette_index) in section.cells().iter().enumerate() {
+        let word = index / values_per_long;
+        let shift = ((index % values_per_long) * bits as usize) as u32;
+        words[word] |= (*palette_index as u64) << shift;
+    }
+    words.into_iter().map(|word| word as i64).collect()
+}
+
+fn biome_bits(palette_len: usize) -> u8 {
+    debug_assert!(palette_len >= 2);
+    let bits = (usize::BITS - (palette_len - 1).leading_zeros()) as u8;
+    bits.max(1)
+}
+
 pub(crate) fn verify_preserved_fields(
     source: &NbtFile,
     patched: &NbtFile,
@@ -1012,15 +1578,54 @@ pub(crate) fn verify_preserved_fields(
             .ok_or_else(|| OverlayError::VerificationFailed(format!("section {y} disappeared")))?;
         let source_rest = source_section
             .iter()
-            .filter(|(key, _)| key.as_str() != "block_states")
+            .filter(|(key, _)| key.as_str() != "block_states" && key.as_str() != "biomes")
             .collect::<Vec<_>>();
         let patched_rest = patched_section
             .iter()
-            .filter(|(key, _)| key.as_str() != "block_states")
+            .filter(|(key, _)| key.as_str() != "block_states" && key.as_str() != "biomes")
             .collect::<Vec<_>>();
         if source_rest != patched_rest {
             return Err(OverlayError::VerificationFailed(format!(
-                "section {y} non-block-state tags changed"
+                "section {y} non-editable tags changed"
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Verifies that only the explicitly edited fields changed: sections without a block
+/// edit keep their source `block_states`, sections without a biome edit keep their source
+/// `biomes`.
+fn verify_edit_scope(
+    source: &NbtFile,
+    patched: &NbtFile,
+    block_sections: BTreeSet<i32>,
+    biome_sections: BTreeSet<i32>,
+) -> Result<(), OverlayError> {
+    let source_root = source.root.as_compound().ok_or_else(|| {
+        OverlayError::VerificationFailed("source root is not a compound".to_owned())
+    })?;
+    let patched_root = patched.root.as_compound().ok_or_else(|| {
+        OverlayError::VerificationFailed("patched root is not a compound".to_owned())
+    })?;
+    let source_sections = section_compounds(source_root)?;
+    let patched_sections = section_compounds(patched_root)?;
+    for (y, source_section) in source_sections {
+        let patched_section = patched_sections
+            .get(&y)
+            .ok_or_else(|| OverlayError::VerificationFailed(format!("section {y} disappeared")))?;
+        if !block_sections.contains(&y)
+            && source_section.get("block_states") != patched_section.get("block_states")
+        {
+            return Err(OverlayError::VerificationFailed(format!(
+                "section {y} block_states changed without a block edit"
+            )));
+        }
+        if !biome_sections.contains(&y)
+            && source_section.get("biomes") != patched_section.get("biomes")
+        {
+            return Err(OverlayError::VerificationFailed(format!(
+                "section {y} biomes changed without a biome edit"
             )));
         }
     }
@@ -1098,6 +1703,9 @@ pub struct OverlayChunkDocument {
     pub x: i32,
     pub z: i32,
     pub sections: Vec<OverlaySectionDocument>,
+    /// Biome edits were added in schema 2. Older documents default to none.
+    #[serde(default)]
+    pub biomes: Vec<OverlayBiomeSectionDocument>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1107,4 +1715,12 @@ pub struct OverlaySectionDocument {
     pub palette: Vec<String>,
     pub bits_per_index: u8,
     pub data: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OverlayBiomeSectionDocument {
+    pub y: i32,
+    pub palette: Vec<String>,
+    pub cells: Vec<u16>,
 }

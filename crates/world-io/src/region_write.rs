@@ -5,7 +5,8 @@
 //!
 //! - the world is classic Java 1.21.4 (`DataVersion` 4189);
 //! - the dimension is one of the three standard classic dimensions;
-//! - the only changed chunk field is `sections[].block_states`;
+//! - the only changed chunk fields are `sections[].block_states` and
+//!   `sections[].biomes`;
 //! - every source chunk decodes with the same strict reader used for import;
 //! - the edited chunk has `Status = minecraft:full`;
 //! - the destination file does not exist and is not the source file.
@@ -48,13 +49,13 @@ pub const VERIFIED_WRITE_DATA_VERSION: i32 = TARGET_DATA_VERSION;
 ///
 /// `DerivedDataPolicy::VanillaRebuild` may additionally invalidate the fields listed
 /// by [`DerivedDataPolicy::invalidated_fields`]; it never writes block data into them.
-pub const VERIFIED_WRITE_FIELDS: &[&str] = &["sections[].block_states"];
+pub const VERIFIED_WRITE_FIELDS: &[&str] = &["sections[].block_states", "sections[].biomes"];
 
-/// What to do with derived fields that a block-state-only write cannot recalculate.
+/// What to do with derived fields that a block/biome write cannot recalculate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum DerivedDataPolicy {
-    /// Copy every non-block-state field unchanged. This is the backward-compatible default.
+    /// Copy every non-edited field unchanged. This is the backward-compatible default.
     #[default]
     Preserve,
     /// Remove or invalidate heightmaps and light so the vanilla engine rebuilds them on load.

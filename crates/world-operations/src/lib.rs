@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{
-    BlockBox, BlockPos, BlockState, BoundsError, ChunkPos, Section, World, WorldError,
+    BiomeState, BlockBox, BlockPos, BlockState, BoundsError, ChunkPos, Section, World, WorldError,
 };
 use world_generation::{generate_heightmap, HeightmapParams};
 
@@ -24,6 +24,8 @@ pub const MAX_HEIGHTMAP_OCTAVES: u32 = world_generation::MAX_HEIGHTMAP_OCTAVES;
 pub const MAX_HEIGHTMAP_AMPLITUDE: u32 = world_generation::MAX_HEIGHTMAP_AMPLITUDE;
 /// Largest supported number of surface layers in a generated heightmap patch.
 pub const MAX_HEIGHTMAP_SURFACE_DEPTH: u32 = 32;
+/// Biome cells cover 4x4x4 blocks in Minecraft Java 1.21.4.
+const BIOME_CELL_SIZE: i32 = 4;
 
 /// Deterministic surface brush. Each brush changes the topmost non-air block of every
 /// non-empty column inside the selection; it never invents or scales a whole world.
@@ -81,6 +83,8 @@ pub enum OperationError {
     InvalidBrush(String),
     #[error("invalid heightmap generator: {0}")]
     InvalidHeightmap(String),
+    #[error("invalid biome operation: {0}")]
+    InvalidBiome(String),
     #[error("operation was cancelled before it could be committed")]
     Cancelled,
     #[error(transparent)]
@@ -226,6 +230,13 @@ pub enum Operation {
         surface: BlockState,
         filler: BlockState,
     },
+    /// Paints the 4x4x4 biome cells covering the selection. Requires imported or generated
+    /// biome data; it never invents a biome for a world that has none.
+    SetBiome {
+        dimension: String,
+        bounds: BlockBox,
+        biome: BiomeState,
+    },
 }
 
 fn default_brush_amount() -> u32 {
@@ -260,7 +271,8 @@ impl Operation {
             | Operation::FillCuboid { dimension, .. }
             | Operation::Replace { dimension, .. }
             | Operation::TerrainBrush { dimension, .. }
-            | Operation::GenerateHeightmap { dimension, .. } => dimension,
+            | Operation::GenerateHeightmap { dimension, .. }
+            | Operation::SetBiome { dimension, .. } => dimension,
         }
     }
 
@@ -271,7 +283,8 @@ impl Operation {
             Operation::Batch { changes, .. } => changes.len() as u64,
             Operation::FillCuboid { bounds, .. }
             | Operation::Replace { bounds, .. }
-            | Operation::TerrainBrush { bounds, .. } => bounds.volume(),
+            | Operation::TerrainBrush { bounds, .. }
+            | Operation::SetBiome { bounds, .. } => bounds.volume(),
             Operation::GenerateHeightmap { bounds, base_y, .. } => {
                 let columns = (i64::from(bounds.max.x) - i64::from(bounds.min.x) + 1).max(0) as u64
                     * (i64::from(bounds.max.z) - i64::from(bounds.min.z) + 1).max(0) as u64;
@@ -297,7 +310,8 @@ impl Operation {
             Operation::FillCuboid { bounds, .. }
             | Operation::Replace { bounds, .. }
             | Operation::TerrainBrush { bounds, .. }
-            | Operation::GenerateHeightmap { bounds, .. } => Some(*bounds),
+            | Operation::GenerateHeightmap { bounds, .. }
+            | Operation::SetBiome { bounds, .. } => Some(*bounds),
         }
     }
 
@@ -388,6 +402,10 @@ fn prevalidate(world: &World, operation: &Operation) -> Result<(), OperationErro
             }
         }
         Operation::FillCuboid { bounds, .. } | Operation::Replace { bounds, .. } => {
+            check(bounds.min)?;
+            check(bounds.max)?;
+        }
+        Operation::SetBiome { bounds, .. } => {
             check(bounds.min)?;
             check(bounds.max)?;
         }
@@ -683,6 +701,11 @@ fn target_changes(
                 },
                 observer,
             );
+        }
+        Operation::SetBiome { .. } => {
+            return Err(OperationError::InvalidBiome(
+                "biome operations use the dedicated biome planning path".to_owned(),
+            ));
         }
     };
     Ok(PlannedChanges {
@@ -1059,8 +1082,207 @@ fn restore_sections(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct BiomeCell {
+    x: i32,
+    y: i32,
+    z: i32,
+}
+
+impl BiomeCell {
+    fn representative(self) -> BlockPos {
+        BlockPos::new(
+            self.x * BIOME_CELL_SIZE,
+            self.y * BIOME_CELL_SIZE,
+            self.z * BIOME_CELL_SIZE,
+        )
+    }
+}
+
+struct PlannedBiomes {
+    cells: Vec<BiomeCell>,
+    changed_blocks: u64,
+    warnings: Vec<String>,
+}
+
+/// Plans a biome paint cell by cell. Imported worlds always carry biome data; an empty or
+/// partially loaded world is refused instead of silently inventing a default biome.
+fn plan_biomes(
+    world: &World,
+    dimension: &str,
+    bounds: BlockBox,
+    biome: &BiomeState,
+    observer: &dyn OperationObserver,
+) -> Result<PlannedBiomes, OperationError> {
+    let min_cell_x = bounds.min.x.div_euclid(BIOME_CELL_SIZE);
+    let max_cell_x = bounds.max.x.div_euclid(BIOME_CELL_SIZE);
+    let min_cell_y = bounds.min.y.div_euclid(BIOME_CELL_SIZE);
+    let max_cell_y = bounds.max.y.div_euclid(BIOME_CELL_SIZE);
+    let min_cell_z = bounds.min.z.div_euclid(BIOME_CELL_SIZE);
+    let max_cell_z = bounds.max.z.div_euclid(BIOME_CELL_SIZE);
+    let total = (i64::from(max_cell_x) - i64::from(min_cell_x) + 1).max(0) as u64
+        * (i64::from(max_cell_y) - i64::from(min_cell_y) + 1).max(0) as u64
+        * (i64::from(max_cell_z) - i64::from(min_cell_z) + 1).max(0) as u64;
+    report(observer, OperationPhase::Planning, 0, total)?;
+
+    let mut cells = Vec::new();
+    let mut changed_blocks = 0u64;
+    let mut done = 0u64;
+    for cell_y in min_cell_y..=max_cell_y {
+        for cell_z in min_cell_z..=max_cell_z {
+            for cell_x in min_cell_x..=max_cell_x {
+                let cell = BiomeCell {
+                    x: cell_x,
+                    y: cell_y,
+                    z: cell_z,
+                };
+                let current = world.get_biome(dimension, cell.representative())?;
+                let Some(current) = current else {
+                    return Err(OperationError::InvalidBiome(format!(
+                        "biome data is missing at {dimension} {:?}; import a Java world or use a project with biome data before painting biomes",
+                        cell.representative()
+                    )));
+                };
+                if current != *biome {
+                    let x0 = bounds.min.x.max(cell_x * BIOME_CELL_SIZE);
+                    let x1 = bounds
+                        .max
+                        .x
+                        .min(cell_x * BIOME_CELL_SIZE + BIOME_CELL_SIZE - 1);
+                    let y0 = bounds.min.y.max(cell_y * BIOME_CELL_SIZE);
+                    let y1 = bounds
+                        .max
+                        .y
+                        .min(cell_y * BIOME_CELL_SIZE + BIOME_CELL_SIZE - 1);
+                    let z0 = bounds.min.z.max(cell_z * BIOME_CELL_SIZE);
+                    let z1 = bounds
+                        .max
+                        .z
+                        .min(cell_z * BIOME_CELL_SIZE + BIOME_CELL_SIZE - 1);
+                    let blocks = (i64::from(x1) - i64::from(x0) + 1).max(0) as u64
+                        * (i64::from(y1) - i64::from(y0) + 1).max(0) as u64
+                        * (i64::from(z1) - i64::from(z0) + 1).max(0) as u64;
+                    changed_blocks = changed_blocks.saturating_add(blocks);
+                    cells.push(cell);
+                }
+                done += 1;
+                if done == total || done % 64 == 0 {
+                    report(observer, OperationPhase::Planning, done, total)?;
+                }
+            }
+        }
+    }
+
+    Ok(PlannedBiomes {
+        cells,
+        changed_blocks,
+        warnings: Vec::new(),
+    })
+}
+
+fn apply_biomes(
+    world: &mut World,
+    dimension: &str,
+    biome: &BiomeState,
+    planned: &PlannedBiomes,
+    observer: &dyn OperationObserver,
+) -> Result<AppliedOperation, OperationError> {
+    if planned.cells.is_empty() {
+        return Ok(AppliedOperation {
+            dimension: dimension.to_owned(),
+            changed_blocks: 0,
+            dirty_chunks: Vec::new(),
+            diffs: Vec::new(),
+            warnings: planned.warnings.clone(),
+        });
+    }
+
+    let mut touched: BTreeSet<(ChunkPos, i32)> = BTreeSet::new();
+    let mut dirty_chunks = BTreeSet::new();
+    for cell in &planned.cells {
+        let pos = cell.representative();
+        touched.insert((pos.chunk_pos(), pos.section_y()));
+        dirty_chunks.insert(pos.chunk_pos());
+    }
+    let before: Vec<((ChunkPos, i32), Option<Section>)> = touched
+        .iter()
+        .map(|(chunk, section_y)| {
+            (
+                (*chunk, *section_y),
+                world
+                    .section(dimension, *chunk, *section_y)
+                    .ok()
+                    .flatten()
+                    .cloned(),
+            )
+        })
+        .collect();
+
+    let total = planned.cells.len() as u64;
+    report(observer, OperationPhase::Applying, 0, total)?;
+    for (index, cell) in planned.cells.iter().enumerate() {
+        let write = world
+            .set_biome(dimension, cell.representative(), biome)
+            .map_err(OperationError::World)?;
+        if write.is_none() {
+            restore_sections(world, dimension, &before);
+            return Err(OperationError::InvalidBiome(format!(
+                "biome data disappeared at {dimension} {:?} while applying the operation",
+                cell.representative()
+            )));
+        }
+        let done = index as u64 + 1;
+        if done == total || done % 64 == 0 {
+            if let Err(error) = report(observer, OperationPhase::Applying, done, total) {
+                restore_sections(world, dimension, &before);
+                return Err(error);
+            }
+        }
+    }
+
+    let mut diffs = Vec::new();
+    for ((chunk, section_y), before_section) in before {
+        let after_section = world.section(dimension, chunk, section_y)?.cloned();
+        if before_section != after_section {
+            diffs.push(SectionDiff {
+                dimension: dimension.to_owned(),
+                chunk,
+                section_y,
+                before: before_section,
+                after: after_section,
+            });
+        }
+    }
+
+    Ok(AppliedOperation {
+        dimension: dimension.to_owned(),
+        changed_blocks: planned.changed_blocks,
+        dirty_chunks: dirty_chunks.into_iter().collect(),
+        diffs,
+        warnings: planned.warnings.clone(),
+    })
+}
+
 pub fn preview(world: &World, operation: &Operation) -> Result<Preview, OperationError> {
     prevalidate(world, operation)?;
+    if let Operation::SetBiome {
+        dimension,
+        bounds,
+        biome,
+    } = operation
+    {
+        let planned = plan_biomes(world, dimension, *bounds, biome, &NoopObserver)?;
+        let mut chunks = BTreeSet::new();
+        for cell in &planned.cells {
+            chunks.insert(cell.representative().chunk_pos());
+        }
+        return Ok(Preview {
+            affected_blocks: operation.affected_blocks(),
+            changed_blocks: planned.changed_blocks,
+            dirty_chunks: chunks.into_iter().collect(),
+            warnings: planned.warnings,
+        });
+    }
     let planned = target_changes(world, operation, &NoopObserver)?;
     let mut chunks = BTreeSet::new();
     for change in &planned.changes {
@@ -1091,6 +1313,15 @@ pub fn apply_with_observer(
     report(observer, OperationPhase::Validating, 0, 1)?;
     prevalidate(world, operation)?;
     report(observer, OperationPhase::Validating, 1, 1)?;
+    if let Operation::SetBiome {
+        dimension,
+        bounds,
+        biome,
+    } = operation
+    {
+        let planned = plan_biomes(world, dimension, *bounds, biome, observer)?;
+        return apply_biomes(world, dimension, biome, &planned, observer);
+    }
     let planned = target_changes(world, operation, observer)?;
     if planned.changes.is_empty() {
         report(observer, OperationPhase::Applying, 0, 0)?;
@@ -2232,5 +2463,97 @@ mod tests {
             &heightmap_operation(bounds, HeightmapSpec::default())
         )
         .is_ok());
+    }
+
+    fn biome(name: &str) -> BiomeState {
+        name.parse().expect("valid biome")
+    }
+
+    fn world_with_biomes() -> World {
+        let mut world = World::new_empty();
+        world
+            .install_biomes(
+                DIM,
+                ChunkPos::new(0, 0),
+                0,
+                Some(world_domain::BiomeSection::uniform(biome(
+                    "minecraft:plains",
+                ))),
+            )
+            .unwrap();
+        world
+    }
+
+    #[test]
+    fn biome_paint_updates_covering_cells_and_reverts_exactly() {
+        let mut world = world_with_biomes();
+        let bounds = BlockBox::new(BlockPos::new(0, 0, 0), BlockPos::new(7, 7, 7)).unwrap();
+        let operation = Operation::SetBiome {
+            dimension: DIM.into(),
+            bounds,
+            biome: biome("minecraft:forest"),
+        };
+        let previewed = preview(&world, &operation).unwrap();
+        assert_eq!(previewed.affected_blocks, 512);
+        assert_eq!(previewed.changed_blocks, 512);
+        assert_eq!(previewed.dirty_chunks, vec![ChunkPos::new(0, 0)]);
+
+        let applied = apply(&mut world, &operation).unwrap();
+        assert_eq!(applied.changed_blocks, 512);
+        assert_eq!(
+            world.get_biome(DIM, BlockPos::new(0, 0, 0)).unwrap(),
+            Some(biome("minecraft:forest"))
+        );
+        assert_eq!(
+            world.get_biome(DIM, BlockPos::new(7, 7, 7)).unwrap(),
+            Some(biome("minecraft:forest"))
+        );
+        assert_eq!(
+            world.get_biome(DIM, BlockPos::new(8, 8, 8)).unwrap(),
+            Some(biome("minecraft:plains")),
+            "a cell outside the selection must stay untouched"
+        );
+
+        for diff in applied.diffs.iter().rev() {
+            diff.revert(&mut world).unwrap();
+        }
+        assert_eq!(
+            world.get_biome(DIM, BlockPos::new(0, 0, 0)).unwrap(),
+            Some(biome("minecraft:plains"))
+        );
+        assert_eq!(
+            world.get_biome(DIM, BlockPos::new(7, 7, 7)).unwrap(),
+            Some(biome("minecraft:plains"))
+        );
+
+        for diff in &applied.diffs {
+            diff.reapply(&mut world).unwrap();
+        }
+        assert_eq!(
+            world.get_biome(DIM, BlockPos::new(0, 0, 0)).unwrap(),
+            Some(biome("minecraft:forest"))
+        );
+    }
+
+    #[test]
+    fn biome_paint_counts_only_changed_cells_and_refuses_missing_data() {
+        let mut world = world_with_biomes();
+        world
+            .set_biome(DIM, BlockPos::new(0, 0, 0), &biome("minecraft:forest"))
+            .unwrap()
+            .expect("biome data");
+        let bounds = BlockBox::new(BlockPos::new(0, 0, 0), BlockPos::new(7, 7, 7)).unwrap();
+        let operation = Operation::SetBiome {
+            dimension: DIM.into(),
+            bounds,
+            biome: biome("minecraft:forest"),
+        };
+        let previewed = preview(&world, &operation).unwrap();
+        assert_eq!(previewed.changed_blocks, 448);
+
+        let empty = World::new_empty();
+        let error = preview(&empty, &operation).unwrap_err();
+        assert!(matches!(error, OperationError::InvalidBiome(_)));
+        assert!(error.to_string().contains("biome data is missing"));
     }
 }

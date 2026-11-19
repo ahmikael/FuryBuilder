@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use serde_json::Value;
-use world_domain::BlockState;
+use world_domain::{BiomeState, BlockState};
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::overlay::{ChunkKey, WorldOverlay};
 use world_io::{JavaWorld, RegionFile};
@@ -552,7 +552,7 @@ fn document_round_trips_and_rejects_tampering() {
         .expect("second edit");
 
     let json = overlay.to_json_pretty().expect("serialize overlay");
-    assert!(json.contains("\"schemaVersion\": 1"));
+    assert!(json.contains("\"schemaVersion\": 2"));
     assert!(json.contains("\"dataVersion\": 4189"));
     assert!(json.contains("\"bitsPerIndex\""));
     let loaded = WorldOverlay::from_json(&source, &json).expect("load overlay");
@@ -567,8 +567,45 @@ fn document_round_trips_and_rejects_tampering() {
         state("minecraft:oak_stairs[facing=east,half=top]")
     );
 
+    let mut legacy: Value = serde_json::from_str(&json).expect("JSON value");
+    legacy["schemaVersion"] = Value::from(1u64);
+    for chunk in legacy["chunks"].as_array_mut().expect("chunks") {
+        chunk
+            .as_object_mut()
+            .expect("chunk object")
+            .remove("biomes");
+    }
+    let legacy =
+        WorldOverlay::from_json(&source, &legacy.to_string()).expect("schema 1 remains readable");
+    assert_eq!(legacy.change_count(), overlay.change_count());
+    assert_eq!(
+        legacy
+            .get_block(OVERWORLD, 1, -64, 2)
+            .expect("legacy block"),
+        state("minecraft:dirt")
+    );
+    assert_eq!(
+        legacy
+            .get_biome(OVERWORLD, 1, -64, 2)
+            .expect("legacy biome")
+            .as_str(),
+        "minecraft:plains"
+    );
+
     let mut value: Value = serde_json::from_str(&json).expect("JSON value");
-    value["schemaVersion"] = Value::from(2u64);
+    value["schemaVersion"] = Value::from(1u64);
+    value["chunks"][0]["biomes"] = serde_json::json!([{
+        "y": -4,
+        "palette": ["minecraft:desert"],
+        "cells": vec![0u16; 64],
+    }]);
+    assert!(
+        WorldOverlay::from_json(&source, &value.to_string()).is_err(),
+        "a schema 1 document cannot carry biome edits"
+    );
+
+    let mut value: Value = serde_json::from_str(&json).expect("JSON value");
+    value["schemaVersion"] = Value::from(3u64);
     assert_eq!(
         WorldOverlay::from_json(&source, &value.to_string())
             .expect_err("schema")
@@ -773,4 +810,169 @@ fn region_helper_still_opens_the_fixture() {
     write_world(&source);
     let region = RegionFile::open(source.join("region").join("r.0.0.mca")).expect("region");
     assert_eq!(region.entries().len(), 2);
+}
+
+fn biome(name: &str) -> BiomeState {
+    name.parse().expect("valid biome")
+}
+
+#[test]
+fn edits_biome_cells_without_touching_blocks_and_round_trips() {
+    let dir = TempDir::new("biomes");
+    let source = dir.path().join("world");
+    write_world(&source);
+    let before = snapshot(&source);
+    let mut overlay = WorldOverlay::open(&source).expect("open overlay");
+
+    assert_eq!(
+        overlay
+            .get_biome(OVERWORLD, 1, -64, 2)
+            .expect("source biome")
+            .as_str(),
+        "minecraft:plains"
+    );
+    let change = overlay
+        .set_biome(OVERWORLD, 1, -64, 2, &biome("minecraft:desert"))
+        .expect("biome edit");
+    assert_eq!(change.previous, biome("minecraft:plains"));
+    assert!(change.changed);
+    assert_eq!(
+        overlay
+            .get_biome(OVERWORLD, 3, -61, 3)
+            .expect("same cell")
+            .as_str(),
+        "minecraft:desert",
+        "the whole 4x4x4 cell must change"
+    );
+    assert_eq!(
+        overlay
+            .get_biome(OVERWORLD, 4, -64, 2)
+            .expect("next cell")
+            .as_str(),
+        "minecraft:plains",
+        "a neighbouring cell must stay untouched"
+    );
+    assert_eq!(
+        overlay.get_block(OVERWORLD, 1, -64, 2).expect("block"),
+        state("minecraft:stone"),
+        "biome edits must not change block states"
+    );
+
+    // A second biome in the same section exercises a multi-entry biome palette.
+    overlay
+        .set_biome(OVERWORLD, 8, -64, 8, &biome("minecraft:forest"))
+        .expect("second biome");
+    assert_eq!(overlay.dirty_section_count(), 1);
+
+    let merged = overlay.read_chunk(OVERWORLD, 0, 0).expect("merged chunk");
+    assert_eq!(merged.chunk.biome_at(1, -64, 2), Some("minecraft:desert"));
+    assert_eq!(merged.chunk.biome_at(8, -64, 8), Some("minecraft:forest"));
+    assert_eq!(
+        merged.chunk.block_at(1, -64, 2),
+        Some(&state("minecraft:stone"))
+    );
+
+    let patched = overlay
+        .materialize_chunk_nbt(OVERWORLD, 0, 0)
+        .expect("materialize")
+        .expect("dirty chunk");
+    let decoded = overlay
+        .world()
+        .decode_chunk_nbt(OVERWORLD, 0, 0, &patched)
+        .expect("decode patched chunk");
+    assert_eq!(decoded.biome_at(1, -64, 2), Some("minecraft:desert"));
+    assert_eq!(decoded.biome_at(8, -64, 8), Some("minecraft:forest"));
+    assert_eq!(decoded.block_at(1, -64, 2), Some(&state("minecraft:stone")));
+
+    let json = overlay.to_json_pretty().expect("serialize overlay");
+    assert!(json.contains("\"biomes\""));
+    let loaded = WorldOverlay::from_json(&source, &json).expect("load overlay");
+    assert_eq!(
+        loaded
+            .get_biome(OVERWORLD, 1, -64, 2)
+            .expect("loaded biome")
+            .as_str(),
+        "minecraft:desert"
+    );
+    assert_eq!(
+        loaded.get_block(OVERWORLD, 1, -64, 2).expect("block"),
+        state("minecraft:stone")
+    );
+
+    overlay.clear();
+    assert_eq!(
+        overlay
+            .get_biome(OVERWORLD, 1, -64, 2)
+            .expect("source biome"),
+        biome("minecraft:plains")
+    );
+    assert_eq!(snapshot(&source), before);
+}
+
+#[test]
+fn reverting_a_block_edit_keeps_biome_edits() {
+    let dir = TempDir::new("biome-block-revert");
+    let source = dir.path().join("world");
+    write_world(&source);
+    let mut overlay = WorldOverlay::open(&source).expect("open overlay");
+
+    overlay
+        .set_biome(OVERWORLD, 1, -64, 2, &biome("minecraft:desert"))
+        .expect("biome edit");
+    overlay
+        .set_block(OVERWORLD, 1, -64, 2, &state("minecraft:gold_block"))
+        .expect("block edit");
+    overlay
+        .set_block(OVERWORLD, 1, -64, 2, &state("minecraft:stone"))
+        .expect("revert block edit");
+
+    assert_eq!(
+        overlay.get_block(OVERWORLD, 1, -64, 2).expect("block"),
+        state("minecraft:stone"),
+        "the block edit must be gone"
+    );
+    assert_eq!(
+        overlay
+            .get_biome(OVERWORLD, 1, -64, 2)
+            .expect("biome")
+            .as_str(),
+        "minecraft:desert",
+        "the independent biome edit must survive a block revert"
+    );
+    assert_eq!(overlay.dirty_section_count(), 1);
+    assert!(overlay.change_count() > 0);
+}
+
+#[test]
+fn rejects_duplicate_biome_cells_atomically() {
+    let dir = TempDir::new("biome-limits");
+    let source = dir.path().join("world");
+    write_world(&source);
+    let before = snapshot(&source);
+    let mut overlay = WorldOverlay::open(&source).expect("open overlay");
+
+    let error = overlay
+        .apply_biomes(&[
+            world_io::overlay::BiomeEdit::new(
+                OVERWORLD.to_owned(),
+                0,
+                -64,
+                0,
+                biome("minecraft:desert"),
+            ),
+            world_io::overlay::BiomeEdit::new(
+                OVERWORLD.to_owned(),
+                3,
+                -61,
+                3,
+                biome("minecraft:forest"),
+            ),
+        ])
+        .expect_err("duplicate cell");
+    assert!(matches!(
+        error,
+        world_io::overlay::OverlayError::DuplicateBiomeEdit { .. }
+    ));
+    assert_eq!(overlay.change_count(), 0);
+    assert_eq!(snapshot(&source), before);
 }

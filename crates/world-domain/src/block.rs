@@ -28,7 +28,7 @@ pub enum BlockStateError {
     InvalidPropertyValue(String),
 }
 
-fn is_lower_snake(value: &str) -> bool {
+pub(crate) fn is_lower_snake(value: &str) -> bool {
     !value.is_empty()
         && value.bytes().all(|b| {
             b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.' || b == b'-'

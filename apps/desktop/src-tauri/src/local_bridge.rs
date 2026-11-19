@@ -1154,6 +1154,12 @@ fn operation_summary(operation: &Operation) -> Value {
             "surface": surface.to_string(),
             "filler": filler.to_string(),
         }),
+        Operation::SetBiome { biome, .. } => json!({
+            "type": "set_biome",
+            "dimension": dimension,
+            "bounds": bounds,
+            "biome": biome.to_string(),
+        }),
     }
 }
 
@@ -3201,5 +3207,21 @@ mod tests {
         std::thread::sleep(Duration::from_millis(1));
         assert!(!path.exists());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn biome_operation_summary_names_the_painted_biome() {
+        let operation = Operation::SetBiome {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(-4, 60, 2), BlockPos::new(3, 67, 9))
+                .expect("bounds"),
+            biome: "minecraft:desert".parse().expect("biome"),
+        };
+        let summary = operation_summary(&operation);
+        assert_eq!(summary["type"], "set_biome");
+        assert_eq!(summary["dimension"], "minecraft:overworld");
+        assert_eq!(summary["biome"], "minecraft:desert");
+        assert_eq!(summary["bounds"]["min"]["x"], -4);
+        assert_eq!(summary["bounds"]["max"]["y"], 67);
     }
 }

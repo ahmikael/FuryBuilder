@@ -27,7 +27,7 @@ pub use manifest::{
     RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaDatapack,
     VanillaProvenance, PROJECT_EXTENSION, PROJECT_FILE, PROJECT_SCHEMA_VERSION,
 };
-pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION};
+pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION, SNAPSHOT_MIN_VERSION};
 pub use source::{SourceFile, SourceManifest};
 pub use store::{
     build_world, checksum, create_flat_base, migrate_manifest, snapshot_bytes, CheckpointMeta,

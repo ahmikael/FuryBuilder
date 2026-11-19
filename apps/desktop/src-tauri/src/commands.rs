@@ -21,7 +21,9 @@ use world_application::{
     ErrorCode, HistoryState, HistorySummary, Operation, OperationRequest, OperationResult,
     PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, WorldService,
 };
-use world_domain::{BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo};
+use world_domain::{
+    BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
+};
 use world_io::{
     self, JavaStructureError, JavaWorldAnalysis, PaletteCount, Structure, StructureImportPreview,
 };
@@ -203,6 +205,19 @@ pub fn get_block(
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     Ok(service.world().get_block(&dimension, pos)?)
+}
+
+#[tauri::command]
+pub fn get_biome(
+    state: State<'_, AppState>,
+    dimension: String,
+    pos: BlockPos,
+) -> Result<Option<BiomeState>, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    Ok(service.world().get_biome(&dimension, pos)?)
 }
 
 // ---------------------------------------------------------------------------------------

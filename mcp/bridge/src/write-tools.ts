@@ -106,6 +106,18 @@ const operation = z.discriminatedUnion("type", [
     surface: blockState,
     filler: blockState,
   }),
+  z.object({
+    type: z.literal("set_biome"),
+    dimension,
+    bounds,
+    biome: z
+      .string()
+      .min(1)
+      .max(128)
+      .describe(
+        "Namespaced lowercase biome id. The core refuses worlds without source biome data and never invents a default.",
+      ),
+  }),
 ]);
 
 const project = {

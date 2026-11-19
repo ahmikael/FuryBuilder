@@ -1,8 +1,12 @@
-use world_domain::{BlockState, ChunkPos, Section, World};
+use world_domain::{
+    BiomeSection, BiomeState, BlockState, ChunkPos, Section, World, BIOME_CELLS, MAX_BIOME_PALETTE,
+};
 
 use crate::error::ProjectError;
 
-pub const SNAPSHOT_FORMAT_VERSION: u16 = 1;
+pub const SNAPSHOT_FORMAT_VERSION: u16 = 2;
+/// Older snapshots without biome data remain readable.
+pub const SNAPSHOT_MIN_VERSION: u16 = 1;
 pub const SNAPSHOT_MAGIC: &[u8; 8] = b"FURYSNAP";
 pub const MAX_SNAPSHOT_BYTES: usize = 1024 * 1024 * 1024;
 const MAX_STRING_BYTES: usize = 512;
@@ -147,6 +151,19 @@ pub fn encode_world(world: &World) -> Result<Vec<u8>, ProjectError> {
                 for word in section.packed_data() {
                     writer.u64(*word);
                 }
+                match section.biomes() {
+                    Some(biomes) => {
+                        writer.u8(1);
+                        writer.u16(biomes.palette().len() as u16);
+                        for biome in biomes.palette() {
+                            writer.string(biome.as_str())?;
+                        }
+                        for cell in biomes.cells() {
+                            writer.u16(*cell);
+                        }
+                    }
+                    None => writer.u8(0),
+                }
             }
         }
     }
@@ -176,7 +193,7 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
         return Err(ProjectError::corrupt("snapshot magic does not match"));
     }
     let version = reader.u16()?;
-    if version != SNAPSHOT_FORMAT_VERSION {
+    if !(SNAPSHOT_MIN_VERSION..=SNAPSHOT_FORMAT_VERSION).contains(&version) {
         return Err(ProjectError::UnsupportedSchema {
             found: version as u32,
             supported: SNAPSHOT_FORMAT_VERSION as u32,
@@ -240,8 +257,45 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
                 for _ in 0..word_count {
                     data.push(reader.u64()?);
                 }
-                let section = Section::from_raw(palette, data, bits)
+                let mut section = Section::from_raw(palette, data, bits)
                     .ok_or_else(|| ProjectError::corrupt("snapshot section is invalid"))?;
+                if version >= 2 {
+                    match reader.u8()? {
+                        0 => {}
+                        1 => {
+                            let palette_len = reader.u16()? as usize;
+                            if palette_len == 0 || palette_len > MAX_BIOME_PALETTE {
+                                return Err(ProjectError::corrupt(
+                                    "snapshot biome palette size is invalid",
+                                ));
+                            }
+                            let mut palette = Vec::with_capacity(palette_len);
+                            for _ in 0..palette_len {
+                                let encoded = reader.string()?;
+                                let biome: BiomeState = encoded.parse().map_err(|_| {
+                                    ProjectError::corrupt(format!(
+                                        "invalid biome state `{encoded}`"
+                                    ))
+                                })?;
+                                palette.push(biome);
+                            }
+                            let mut cells = Vec::with_capacity(BIOME_CELLS);
+                            for _ in 0..BIOME_CELLS {
+                                cells.push(reader.u16()?);
+                            }
+                            let biomes =
+                                BiomeSection::from_palette(palette, cells).ok_or_else(|| {
+                                    ProjectError::corrupt("snapshot biome section is invalid")
+                                })?;
+                            section.set_biomes(Some(biomes));
+                        }
+                        _ => {
+                            return Err(ProjectError::corrupt(
+                                "snapshot biome presence flag is invalid",
+                            ))
+                        }
+                    }
+                }
                 let first_y = section_y
                     .checked_mul(16)
                     .ok_or_else(|| ProjectError::corrupt("section Y overflows"))?;
@@ -253,7 +307,7 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
                         "section {section_y} is outside dimension `{dimension_id}`"
                     )));
                 }
-                if !section.is_empty() {
+                if !section.is_void() {
                     world
                         .install_section(&dimension_id, chunk_pos, section_y, Some(section))
                         .map_err(|error| {
@@ -271,4 +325,85 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
         ));
     }
     Ok(world)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use world_domain::{BlockPos, ChunkPos, Section};
+
+    fn stone() -> BlockState {
+        "minecraft:stone".parse().expect("stone state")
+    }
+
+    fn plains() -> BiomeState {
+        "minecraft:plains".parse().expect("plains biome")
+    }
+
+    #[test]
+    fn decodes_a_version_1_snapshot_without_biome_data() {
+        let mut writer = Writer::new();
+        writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
+        writer.u16(1);
+        writer.u64(7);
+        writer.u32(1);
+        writer.string("minecraft:overworld").expect("dimension");
+        writer.i32(-64);
+        writer.i32(384);
+        writer.u32(1);
+        writer.i32(0);
+        writer.i32(0);
+        writer.u32(1);
+        writer.i32(0);
+        writer.u8(0);
+        writer.u32(1);
+        writer.string("minecraft:stone").expect("palette");
+        writer.u32(0);
+        let bytes = writer.finish();
+
+        let world = decode_world(&bytes).expect("v1 snapshot");
+        assert_eq!(world.revision(), 7);
+        assert_eq!(
+            world
+                .get_block("minecraft:overworld", BlockPos::new(0, 0, 0))
+                .expect("block"),
+            stone()
+        );
+        assert_eq!(
+            world
+                .get_biome("minecraft:overworld", BlockPos::new(0, 0, 0))
+                .expect("biome"),
+            None,
+            "a version 1 snapshot has no biome data and must not invent any"
+        );
+
+        let upgraded = encode_world(&world).expect("upgrade snapshot");
+        assert_eq!(u16::from_le_bytes([upgraded[8], upgraded[9]]), 2);
+        let reloaded = decode_world(&upgraded).expect("v2 snapshot");
+        assert_eq!(
+            reloaded
+                .get_biome("minecraft:overworld", BlockPos::new(0, 0, 0))
+                .expect("biome"),
+            None
+        );
+    }
+
+    #[test]
+    fn round_trips_biome_cells_in_a_version_2_snapshot() {
+        let mut world = World::new_empty();
+        let section = Section::single(stone()).with_biomes(BiomeSection::uniform(plains()));
+        world
+            .install_section("minecraft:overworld", ChunkPos::new(0, 0), 0, Some(section))
+            .expect("install section");
+
+        let bytes = encode_world(&world).expect("encode v2");
+        let decoded = decode_world(&bytes).expect("decode v2");
+        assert_eq!(
+            decoded
+                .get_biome("minecraft:overworld", BlockPos::new(5, 9, 15))
+                .expect("biome"),
+            Some(plains())
+        );
+        assert_eq!(encode_world(&decoded).expect("re-encode"), bytes);
+    }
 }

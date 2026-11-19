@@ -37,7 +37,7 @@ impl Chunk {
 
     pub fn install_section(&mut self, section_y: i32, section: Option<Section>) {
         match section {
-            Some(section) if !section.is_empty() => {
+            Some(section) if !section.is_void() => {
                 self.sections.insert(section_y, section);
             }
             _ => {
@@ -64,6 +64,51 @@ impl Chunk {
             .unwrap_or_default()
     }
 
+    /// Reads the biome covering a block, or `None` when the source had no biome data.
+    pub fn get_biome(&self, local_x: u8, local_z: u8, y: i32) -> Option<&crate::BiomeState> {
+        let section_y = y.div_euclid(16);
+        let local_y = y.rem_euclid(16) as u8;
+        self.sections
+            .get(&section_y)
+            .and_then(|section| section.biome_at(local_x, local_y, local_z))
+    }
+
+    /// Sets the biome cell covering a local block. Returns `None` when the section has no
+    /// biome data, so a missing source is never silently replaced with an invented biome.
+    pub fn set_biome(
+        &mut self,
+        local_x: u8,
+        local_z: u8,
+        y: i32,
+        biome: &crate::BiomeState,
+    ) -> Option<bool> {
+        let section_y = y.div_euclid(16);
+        let local_y = y.rem_euclid(16) as u8;
+        self.sections.get_mut(&section_y).and_then(|section| {
+            section.set_biome_cell(local_x / 4, local_y / 4, local_z / 4, biome)
+        })
+    }
+
+    /// Installs biome data for one section, keeping any existing block data.
+    pub fn install_biomes(&mut self, section_y: i32, biomes: Option<crate::BiomeSection>) {
+        match biomes {
+            Some(biomes) => {
+                self.sections
+                    .entry(section_y)
+                    .or_default()
+                    .set_biomes(Some(biomes));
+            }
+            None => {
+                if let Some(section) = self.sections.get_mut(&section_y) {
+                    section.set_biomes(None);
+                    if section.is_void() {
+                        self.sections.remove(&section_y);
+                    }
+                }
+            }
+        }
+    }
+
     /// Sets a block using a global Y. Returns true when the state changed.
     pub fn set_local(&mut self, local_x: u8, local_z: u8, y: i32, state: &BlockState) -> bool {
         let section_y = y.div_euclid(16);
@@ -75,7 +120,7 @@ impl Chunk {
             let changed = section
                 .set(local_x, local_y, local_z, state)
                 .unwrap_or(false);
-            if section.is_empty() {
+            if section.is_void() {
                 self.sections.remove(&section_y);
             }
             return changed;

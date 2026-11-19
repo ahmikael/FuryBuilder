@@ -81,6 +81,14 @@ export function readBlock(
   return invokeCommand<BlockState>("get_block", { dimension, pos });
 }
 
+/** Reads the biome covering a block; `null` means the source has no biome data. */
+export function readBiome(
+  dimension: string,
+  pos: { x: number; y: number; z: number },
+): Promise<string | null> {
+  return invokeCommand<string | null>("get_biome", { dimension, pos });
+}
+
 export function dirtyChunkList(result: { dirtyChunks: ChunkPos[] }): ChunkPos[] {
   return result.dirtyChunks;
 }

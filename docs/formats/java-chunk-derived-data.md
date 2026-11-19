@@ -183,9 +183,10 @@ derived field was copied raw, including stale heightmaps and stale light. The
 server trusted them and did not rebuild them.
 
 M8.9 adds an explicit second policy, `DerivedDataPolicy::VanillaRebuild`, to the
-verified region writer. It is still a block-state-only writer and still does not
-recompute anything in Rust. For every replaced full chunk it instead performs a
-bounded hand-off to the target vanilla engine:
+verified region writer. It still does not recompute derived data in Rust; since
+M9.11 the writer may also change explicitly painted `sections[].biomes`, but that
+does not recalculate heightmaps or light. For every replaced full chunk it performs
+a bounded hand-off to the target vanilla engine:
 
 | Field                   | Action under `VanillaRebuild`                                   |
 | ----------------------- | --------------------------------------------------------------- |
@@ -242,7 +243,7 @@ engine's answers for the edited terrain. The evidence is
 | Data            | Consequence of a block-state-only edit                                                                         | Current status                                                |
 | --------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Block states    | Intended change; properties default on load if omitted                                                         | Supported, verified                                           |
-| Biomes          | Unchanged; editing biomes is not exposed                                                                       | Preserved, not edited                                         |
+| Biomes          | Unchanged by a block edit; explicit biome painting writes whole 4x4x4 cells                                   | Supported via `set_biome` (M9.11)                             |
 | Block entities  | Existing records stay raw; missing records are **not** created; removed blocks can leave orphan records        | **Unsupported semantically**; avoid adding/removing BE blocks |
 | Entities        | `entities/` sidecars are copied byte for byte; an entity is not moved or removed when a block appears under it | Preserved, not edited                                         |
 | Scheduled ticks | Existing lists stay raw; new blocks are not scheduled; stale entries may be discarded by the game              | Preserved, not recomputed                                     |

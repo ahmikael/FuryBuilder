@@ -336,7 +336,15 @@ fn decodes_single_state_and_treats_absent_sections_as_missing() {
     assert_eq!(decoded.block_at(0, 200, 0), None);
     assert_eq!(decoded.missing_sections.len(), 22);
     let chunk = decoded.to_chunk();
-    assert_eq!(chunk.sections().len(), 1);
+    assert_eq!(
+        chunk.sections().len(),
+        2,
+        "a section with biome data but no blocks is kept"
+    );
+    assert_eq!(
+        chunk.get_biome(0, 0, 0).map(|biome| biome.as_str()),
+        Some("minecraft:the_void")
+    );
     assert_eq!(
         chunk.get_local(15, 15, -64),
         "minecraft:stone".parse::<BlockState>().unwrap()

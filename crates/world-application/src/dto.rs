@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use world_domain::{BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
+use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
 use world_operations::Operation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +161,7 @@ pub struct RenderSnapshot {
 pub enum Query {
     WorldInfo,
     GetBlock { dimension: String, pos: BlockPos },
+    GetBiome { dimension: String, pos: BlockPos },
     RegionSummary { dimension: String, bounds: BlockBox },
     RegionBlocks { dimension: String, bounds: BlockBox },
     ChunkStats { dimension: String, chunk: ChunkPos },
@@ -174,6 +175,11 @@ pub enum QueryResult {
         dimension: String,
         pos: BlockPos,
         state: BlockState,
+    },
+    Biome {
+        dimension: String,
+        pos: BlockPos,
+        biome: Option<BiomeState>,
     },
     RegionSummary(RegionSummary),
     RegionBlocks(RegionBlocks),

@@ -4,7 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
-use world_domain::{BlockPos, ChunkPos, World};
+use world_domain::{BiomeSection, BiomeState, BlockPos, ChunkPos, World};
 
 use crate::error::ProjectError;
 use crate::manifest::{
@@ -144,7 +144,9 @@ fn parse_snapshot_revision(name: &str) -> Option<u64> {
 }
 
 /// Builds a deterministic flat base: a 33x33 stone platform at y=63..=64 around the
-/// origin. It is deliberate manual geometry, not vanilla world generation.
+/// origin. It is deliberate manual geometry, not vanilla world generation. Every
+/// overworld section also receives a uniform `minecraft:plains` biome so the biome editor
+/// has an explicit, documented starting value instead of inventing one during an edit.
 pub fn create_flat_base(world: &mut World) -> Result<(), ProjectError> {
     let stone: world_domain::BlockState = "minecraft:stone"
         .parse()
@@ -162,6 +164,23 @@ pub fn create_flat_base(world: &mut World) -> Result<(), ProjectError> {
             world
                 .set_block("minecraft:overworld", BlockPos::new(x, 64, z), &grass)
                 .map_err(|error| ProjectError::corrupt(error.to_string()))?;
+        }
+    }
+    let plains: BiomeState = "minecraft:plains"
+        .parse()
+        .map_err(|_| ProjectError::corrupt("built-in plains biome is invalid"))?;
+    for chunk_x in -1..=1 {
+        for chunk_z in -1..=1 {
+            for section_y in -4..=19 {
+                world
+                    .install_biomes(
+                        "minecraft:overworld",
+                        ChunkPos::new(chunk_x, chunk_z),
+                        section_y,
+                        Some(BiomeSection::uniform(plains.clone())),
+                    )
+                    .map_err(|error| ProjectError::corrupt(error.to_string()))?;
+            }
         }
     }
     Ok(())

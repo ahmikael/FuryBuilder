@@ -4,6 +4,7 @@ import {
   Blocks,
   Grid3X3,
   History,
+  Leaf,
   Loader2,
   Mountain,
   Redo2,
@@ -23,6 +24,7 @@ import { TOOL_LABELS, TOOL_SHORTCUTS } from "@/editor/session";
 import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor/commands";
 import { TerrainPanel } from "@/features/workspace/TerrainPanel";
 import { HeightmapPanel } from "@/features/workspace/HeightmapPanel";
+import { BiomePanel } from "@/features/workspace/BiomePanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -630,6 +632,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="heightmap">
               <Grid3X3 className="size-3" /> Heightmap
             </TabsTrigger>
+            <TabsTrigger value="biomes">
+              <Leaf className="size-3" /> Biomes
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -659,6 +664,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="heightmap" className="m-0 p-2">
           <HeightmapPanel />
+        </TabsContent>
+
+        <TabsContent value="biomes" className="m-0 p-2">
+          <BiomePanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

@@ -77,6 +77,7 @@ pub fn run() {
             commands::history_state,
             commands::read_region,
             commands::get_block,
+            commands::get_biome,
             commands::project_status,
             commands::project_list,
             commands::project_create,

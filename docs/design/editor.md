@@ -46,8 +46,8 @@ surface without escaping the operation bounds.
   pillar from the selection floor.
 - The panel previews the exact Rust operation and applies it through the same revisioned
   pipeline as other edits, so it is one undoable history entry.
-- Brushes adjust block states only. Heightmaps, light, biomes and other derived data are
-  not recalculated yet; that is a separate M9 task.
+- Brushes adjust block states only. They do not recalculate heightmaps, light or biomes;
+  biome cells are painted explicitly in the `Biomes` tab.
 
 ## Heightmap generator (M9.10)
 
@@ -75,7 +75,30 @@ operation; it is not a whole-world generator and makes no vanilla worldgen parit
 - The panel previews the exact Rust operation and applies it through the same revisioned
   pipeline, so it is one undoable history entry.
 - This tool changes block states only. World heightmaps, light, biomes and other derived
-  data are not recalculated.
+  data are not recalculated; biome cells are painted explicitly in the `Biomes` tab.
+
+## Biome painter (M9.11)
+
+The `Biomes` tab paints Java 1.21.4 biome data for the box selection. Biomes in the
+editable world are a grid of 4x4x4 block cells per section, stored as a palette plus 64
+YZX cells. A cell touched anywhere by the selection is painted, so the operation reports
+the covered block volume while changing whole cells.
+
+| Input | Behaviour |
+|---|---|
+| Selection | Required box; every 4x4x4 cell it touches is painted. |
+| Biome id | Namespaced lowercase id such as `minecraft:forest`; the panel reads the current biome at the selection minimum corner. |
+
+- The operation is `set_biome`; the Rust core previews it, applies it through the
+  revisioned pipeline and records it as one reversible history entry. Undo restores the
+  previous palette and cells because section diffs include biome data.
+- The core refuses `InvalidBiome` when any touched section has no source biome data. It
+  never invents a default biome. A section palette is limited to 64 entries.
+- Block states are untouched by biome painting. Biome cells are written into
+  `sections[].biomes` by the overlay, verified region writer and complete world export;
+  unknown section tags and block entities/entities are preserved.
+- This tool edits existing biome data; it does not run vanilla biome generation or claim
+  biome parity with a seed.
 
 ## Selection and geometry
 

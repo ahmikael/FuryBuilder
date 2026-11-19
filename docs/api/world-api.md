@@ -30,6 +30,7 @@ Operation =
         baseY: i32, surfaceDepth: 1..32,
         surface: BlockState, filler: BlockState
     }
+  | { type: "set_biome", dimension, bounds, biome: BiomeId }
 
 OperationResult {
   operationId: string,
@@ -63,21 +64,24 @@ History stores section-level before/after snapshots (not full world copies).
 - History is bounded (default 100 entries); oldest entries are pruned first.
 
 ## Queries```ts
-Query =
+Query = 
   | { type: "world_info" }
   | { type: "get_block", dimension, pos }
+  | { type: "get_biome", dimension, pos }
   | { type: "region_summary", dimension, bounds }
   | { type: "chunk_stats", dimension, chunk }
 
-QueryResult =
+QueryResult = 
   | { type: "world_info", data: WorldInfo }
   | { type: "block", data: { dimension, pos, state } }
+  | { type: "biome", data: { dimension, pos, biome: BiomeId | null } }
   | { type: "region_summary", data: RegionSummary }
   | { type: "chunk_stats", data: ChunkStats }
 ```
 
 `region_summary` is bounded to 1,000,000 blocks and returns a palette sorted by count.
-Queries never mutate the world or bump revisions.
+`get_biome` reports the biome covering the block from the 4x4x4 editable cell grid, or
+`null` when the source has no biome data. Queries never mutate the world or bump revisions.
 
 ## Render snapshots
 
@@ -113,11 +117,17 @@ safe to expose to AI clients. Secrets and filesystem paths are never included.
 ## Errors
 
 See the error envelope above. M2 adds `out_of_bounds`, `limit_exceeded`, `no_history`,
-`revision_mismatch` and `permission_denied`.
+`revision_mismatch` and `permission_denied`. A biome operation on a section without
+source biome data is an `invalid_argument` error; FuryBuilder never substitutes a
+default biome.
 
 ## Invariants covered by tests
 
 - Block state property order is canonical; air variants are recognized.
+- Biome ids are namespaced lowercase; a biome operation touches only whole 4x4x4 cells,
+  refuses sections without source biome data and caps each section palette at 64 entries.
+- `set_biome` bumps the revision only when a cell actually changes; undo restores the
+  previous cells and palette through the same section snapshot used for block edits.
 - Negative coordinates use floor division for chunks, sections and regions.
 - Y outside the dimension is rejected before any write.
 - Batch edits are atomic; an invalid position leaves the world untouched.

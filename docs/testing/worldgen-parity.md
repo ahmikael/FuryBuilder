@@ -158,9 +158,10 @@ claim, and it says nothing about biomes or derived data.
 
 ## Remaining parity work
 
-- Biomes and derived data (heightmaps, lighting, entities, block entities, POI) are not
-  modelled by the editable world, so only their preserved source copy is verified. Do not
-  claim biome parity until the world model and comparator cover it.
+- Biome cells are modelled and editable since M9.11, but this comparator still checks block
+  states only. Derived data (heightmaps, lighting, entities, block entities, POI) is not
+  modelled by the editable world, so only its preserved source copy is verified. Do not
+  claim biome or derived-data parity until the comparator covers them.
 - Run an independent second generation with the same configuration and compare it with the
   first, to test generator determinism across separate runs and generation orders.
 - Extend real runs to negative coordinates, region/chunk boundaries, multiple biomes and

@@ -52,9 +52,10 @@ pub use java_structure::{
 };
 pub use nbt::{NbtError, NbtFile, NbtValue};
 pub use overlay::{
-    ApplyReport, BlockChange, BlockEdit, ChunkKey, OverlayChunk, OverlayChunkDocument,
-    OverlayDocument, OverlayError, OverlaySectionDocument, WorldOverlay, MAX_OVERLAY_CHUNKS,
-    MAX_OVERLAY_JSON_BYTES, MAX_OVERLAY_SECTIONS, OVERLAY_SCHEMA_VERSION,
+    ApplyReport, BiomeChange, BiomeEdit, BlockChange, BlockEdit, ChunkKey,
+    OverlayBiomeSectionDocument, OverlayChunk, OverlayChunkDocument, OverlayDocument, OverlayError,
+    OverlaySectionDocument, WorldOverlay, MAX_OVERLAY_CHUNKS, MAX_OVERLAY_JSON_BYTES,
+    MAX_OVERLAY_SECTIONS, OVERLAY_MIN_SCHEMA_VERSION, OVERLAY_SCHEMA_VERSION,
 };
 pub use parity::{
     compare_java_world_to_world, reference_chunks, ParityChunkRef, ParityError, ParityMismatch,

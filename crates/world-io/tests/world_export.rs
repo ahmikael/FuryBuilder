@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use world_domain::BlockState;
+use world_domain::{BiomeState, BlockState};
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::{
     export_java_world, export_java_world_with_options, region_file_name, DerivedDataPolicy,
@@ -339,6 +339,15 @@ fn exports_complete_world_and_preserves_source() {
             &"minecraft:gold_block".parse::<BlockState>().unwrap(),
         )
         .expect("set block");
+    overlay
+        .set_biome(
+            OVERWORLD,
+            0,
+            -64,
+            0,
+            &"minecraft:desert".parse::<BiomeState>().unwrap(),
+        )
+        .expect("set biome");
     let report = export_java_world(&overlay, &destination).expect("export world");
 
     assert_eq!(report.regions, 3);
@@ -398,6 +407,11 @@ fn exports_complete_world_and_preserves_source() {
             .to_string(),
         "minecraft:stone"
     );
+    assert_eq!(
+        source_decoded.biome_at(0, -64, 0),
+        Some("minecraft:plains"),
+        "the source biome must stay untouched"
+    );
 
     let exported_world = JavaWorld::open(&destination).expect("reopen exported world");
     let exported_dimension = exported_world
@@ -414,6 +428,16 @@ fn exports_complete_world_and_preserves_source() {
             .expect("edited block")
             .to_string(),
         "minecraft:gold_block"
+    );
+    assert_eq!(
+        decoded.biome_at(0, -64, 0),
+        Some("minecraft:desert"),
+        "the exported biome must match the edited cell"
+    );
+    assert_eq!(
+        decoded.biome_at(8, -64, 8),
+        Some("minecraft:plains"),
+        "neighbouring biome cells must stay untouched"
     );
     assert_eq!(edited.summary.block_entities, 1);
     assert_eq!(edited.summary.entities, 1);

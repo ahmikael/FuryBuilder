@@ -127,16 +127,16 @@ If step 3 cannot connect, see the error table below before changing the client c
 
 ## Tool catalog
 
-Fifteen tools are registered:
+Sixteen tools are registered:
 
 | Group      | Tools                                                                                                      |
 | ---------- | ---------------------------------------------------------------------------------------------------------- |
 | Diagnostic | `bridge_info`                                                                                              |
-| Read-only  | `world_info`, `get_block`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport`                |
+| Read-only  | `world_info`, `get_block`, `get_biome`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport`  |
 | Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `undo_operation`, `get_operation_status` |
 | Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                |
 
-`inspect_region` and `get_block` always answer at an explicit `worldRevision`. A supplied
+`inspect_region`, `get_block` and `get_biome` always answer at an explicit `worldRevision`. `get_biome` returns the 4x4x4 cell covering the position, or `null` when the source has no biome data; `set_biome` refuses such sections instead of inventing a biome. A supplied
 `world_revision` that no longer matches is rejected with `revision_mismatch` instead of
 silently reading newer data. `capture_viewport` returns a real PNG plus metadata; `partial`
 means requested chunks were not loaded and `stale` means the rendered revision is older than
@@ -217,7 +217,7 @@ also returns structured `details`). The table lists the actionable ones.
 | `out_of_bounds`                 | Coordinates are outside the dimension's Y range or world bounds.                            | Check `world_info.dimensions[].minY/maxY` and the target dimension.                                                                       |
 | `job_api_unavailable`           | The desktop Job API is not connected.                                                       | Use synchronous write tools, or start/restart the desktop app.                                                                            |
 | `no_history` / `not_found`      | The requested undo target or operation ID does not exist.                                   | Re-read `get_operation_status`/history; undo only a retained operation in the same dimension.                                             |
-| `invalid_argument`              | Invalid coordinates, bounds, block state or schema payload.                                 | Read the message; fix the tool arguments. Bounds are inclusive and minimum must not exceed maximum.                                       |
+| `invalid_argument`              | Invalid coordinates, bounds, block state, biome id or schema payload; also a biome edit where source biome data is missing. | Read the message; fix the tool arguments. Bounds are inclusive and minimum must not exceed maximum.                                       |
 | `cancelled`                     | The job was cancelled by the user, a policy change, or a project change.                    | Re-preview and restart if the work is still wanted. Nothing from a cancelled job is committed.                                            |
 
 `partial: true` on a screenshot is not an error: it names the chunks that were not loaded

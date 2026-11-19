@@ -169,10 +169,12 @@ Preconditions, all enforced in Rust:
   `world_io::parity` compares every block position in sections that are non-empty on either
   side, with a 50,000,000-position budget and up to 20 detailed differences.
 
-The comparison is **block-state only**. Biomes, heightmaps, lighting, block entities,
-entities and POI remain in the immutable source copy but are not modelled by the editable
-world, so the report never claims parity for them. A missing project chunk is a real
-difference; a missing reference chunk is an incomplete generator result and is refused.
+The comparison is **block-state only**. Biome cells are modelled and editable in the
+project since M9.11, but this comparator does not compare them; heightmaps, lighting,
+block entities, entities and POI remain in the immutable source copy and are not modelled
+by the editable world. The report never claims parity for them. A missing project chunk
+is a real difference; a missing reference chunk is an incomplete generator result and is
+refused.
 
 ## Run directory
 

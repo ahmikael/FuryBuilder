@@ -1,6 +1,6 @@
 use super::*;
 use crate::dto::{Actor, OperationRequest, Query, QueryResult};
-use world_domain::{BlockBox, BlockPos, BlockState};
+use world_domain::{BiomeSection, BiomeState, BlockBox, BlockPos, BlockState, ChunkPos};
 use world_operations::Operation;
 
 fn state(name: &str) -> BlockState {
@@ -583,6 +583,84 @@ fn invalid_heightmap_is_rejected_without_history_or_revision() {
         }))
         .unwrap_err();
     assert_eq!(error.code, ErrorCode::InvalidArgument);
+    assert_eq!(service.world_info().revision, 0);
+    assert!(service.history().is_empty());
+}
+
+fn biome(name: &str) -> BiomeState {
+    name.parse().expect("valid biome")
+}
+
+#[test]
+fn biome_paint_is_revisioned_audited_and_reversible() {
+    let mut service = WorldService::new();
+    service
+        .world
+        .install_biomes(
+            "minecraft:overworld",
+            ChunkPos::new(0, 0),
+            0,
+            Some(BiomeSection::uniform(biome("minecraft:plains"))),
+        )
+        .unwrap();
+    let applied = service
+        .execute(request(Operation::SetBiome {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 0, 0), BlockPos::new(7, 7, 7)).unwrap(),
+            biome: biome("minecraft:forest"),
+        }))
+        .unwrap();
+    assert_eq!(applied.changed_blocks, 512);
+    assert_eq!(applied.world_revision, 1);
+    assert_eq!(applied.dirty_chunks, vec![ChunkPos::new(0, 0)]);
+    let summary = &service.audit_log().last().expect("audit").parameter_summary;
+    assert_eq!(summary["type"], "set_biome");
+    assert_eq!(summary["biome"], "minecraft:forest");
+
+    match service
+        .query(Query::GetBiome {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 0, 0),
+        })
+        .unwrap()
+    {
+        QueryResult::Biome { biome, .. } => {
+            assert_eq!(biome, Some(self::biome("minecraft:forest")))
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+
+    let undo = service
+        .undo("project-1", actor(), Some(&applied.operation_id))
+        .unwrap();
+    assert_eq!(undo.changed_blocks, 512);
+    assert_eq!(service.world_info().revision, 2);
+    match service
+        .query(Query::GetBiome {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 0, 0),
+        })
+        .unwrap()
+    {
+        QueryResult::Biome { biome, .. } => {
+            assert_eq!(biome, Some(self::biome("minecraft:plains")))
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+}
+
+#[test]
+fn biome_paint_without_biome_data_is_rejected_without_side_effects() {
+    let mut service = WorldService::new();
+    let error = service
+        .execute(request(Operation::SetBiome {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 0, 0), BlockPos::new(7, 7, 7)).unwrap(),
+            biome: biome("minecraft:forest"),
+        }))
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArgument);
+    assert!(error.message.contains("biome data is missing"));
     assert_eq!(service.world_info().revision, 0);
     assert!(service.history().is_empty());
 }

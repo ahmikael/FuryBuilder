@@ -5,10 +5,10 @@
 //!
 //! - [`analyze_java_world`] validates `level.dat`, the layout, every region table and every
 //!   allocated chunk, then returns counts and explicit blockers;
-//! - [`load_java_world`] decodes block states into the sparse `world_domain::World` used by
-//!   the editor, under hard chunk/section/block limits.
+//! - [`load_java_world`] decodes block states and 4x4x4 biome cells into the sparse
+//!   `world_domain::World` used by the editor, under hard chunk/section/block limits.
 //!
-//! Biomes, block entities, entities, ticks, heightmaps, lighting and unknown tags are not
+//! Block entities, entities, ticks, heightmaps, lighting and unknown tags are not
 //! represented in the editable world. They stay in the byte-preserving source copy made by
 //! [`crate::passthrough`], and the analysis reports them as limitations instead of dropping
 //! them silently.
@@ -76,6 +76,7 @@ pub struct JavaWorldLoadReport {
     pub empty_chunks: usize,
     pub non_full_chunks: usize,
     pub sections: usize,
+    pub biome_sections: usize,
     pub non_air_blocks: usize,
     pub block_entities: usize,
     pub entities: usize,
@@ -240,7 +241,7 @@ fn finish_analysis(analysis: &mut JavaWorldAnalysis) {
             .to_owned(),
     );
     analysis.warnings.push(
-        "only block states become editable in this milestone; biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy"
+        "block states and 4x4x4 biome cells become editable; block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy"
             .to_owned(),
     );
     if analysis.block_entities > 0 || analysis.entities > 0 {
@@ -317,6 +318,7 @@ pub fn load_java_world_with_options(
         empty_chunks: 0,
         non_full_chunks: 0,
         sections: 0,
+        biome_sections: 0,
         non_air_blocks: 0,
         block_entities: 0,
         entities: 0,
@@ -350,19 +352,15 @@ pub fn load_java_world_with_options(
                     .all(|section| section.blocks.is_empty())
                 {
                     report.empty_chunks += 1;
-                    continue;
                 }
                 let chunk_pos = ChunkPos::new(decoded.x, decoded.z);
                 for (section_y, section) in decoded.sections {
-                    if section.blocks.is_empty() {
-                        continue;
-                    }
                     report.sections = report.sections.checked_add(1).ok_or_else(|| {
                         WorldImportError::LimitExceeded("section counter overflow".to_owned())
                     })?;
                     if report.sections > options.max_sections {
                         return Err(WorldImportError::LimitExceeded(format!(
-                            "more than {} non-empty sections",
+                            "more than {} sections",
                             options.max_sections
                         )));
                     }
@@ -378,12 +376,16 @@ pub fn load_java_world_with_options(
                             options.max_non_air_blocks
                         )));
                     }
-                    editable.install_section(
-                        &dimension.id,
-                        chunk_pos,
-                        section_y,
-                        Some(section.blocks),
-                    )?;
+                    let biomes = section.biomes.to_domain().ok_or_else(|| {
+                        WorldImportError::VerificationFailed(format!(
+                            "section {section_y} in chunk ({}, {}) has biome data that cannot be represented",
+                            decoded.x, decoded.z
+                        ))
+                    })?;
+                    report.biome_sections += 1;
+                    let mut blocks = section.blocks;
+                    blocks.set_biomes(Some(biomes));
+                    editable.install_section(&dimension.id, chunk_pos, section_y, Some(blocks))?;
                 }
             }
         }
@@ -396,7 +398,7 @@ pub fn load_java_world_with_options(
         ));
     }
     report.warnings.push(
-        "biomes, block entities, entities, ticks, heightmaps, lighting, POI and unknown tags are preserved only in the immutable source copy"
+        "block entities, entities, ticks, heightmaps, lighting, POI and unknown tags are preserved only in the immutable source copy; biome cells are editable"
             .to_owned(),
     );
     Ok((editable, report))

@@ -117,10 +117,10 @@ fn versions() -> &'static [VersionRow] {
             layout: "classic_anvil",
             status: "supported",
             read: "supported_subset",
-            edit: "block_states_only",
-            write: "verified_block_states",
+            edit: "block_states_and_biomes",
+            write: "verified_block_states_and_biomes",
             passthrough: "byte_for_byte",
-            note: "The only target with verified decoding, block editing, region writing and a complete-folder export plus official-server fixture.",
+            note: "The only target with verified decoding, block/biome editing, region writing and a complete-folder export plus official-server fixture.",
         },
         VersionRow {
             id: "java-1.21.5-1.21.11-classic",
@@ -218,10 +218,10 @@ fn categories() -> &'static [CategoryRow] {
             id: "biomes",
             label: "Biomes",
             read: "supported",
-            edit: "not_exposed",
-            write: "preserved_raw",
+            edit: "supported",
+            write: "verified",
             passthrough: "byte_for_byte",
-            note: "Biomes are decoded for display and verified unchanged during block edits; biome editing is not exposed.",
+            note: "4x4x4 biome cells are decoded, editable and verified through overlay/region/export; untouched cells and unknown section tags keep their source values.",
         },
         CategoryRow {
             id: "block_entities",
@@ -383,17 +383,19 @@ mod tests {
     }
 
     #[test]
-    fn block_states_are_the_only_verified_write_category() {
+    fn block_states_and_biomes_are_the_only_verified_write_categories() {
         let matrix = support_matrix();
-        let blocks = matrix
-            .categories
-            .iter()
-            .find(|category| category.id == "block_states")
-            .expect("block states row");
-        assert_eq!(blocks.edit, "supported");
-        assert_eq!(blocks.write, "verified");
+        for id in ["block_states", "biomes"] {
+            let row = matrix
+                .categories
+                .iter()
+                .find(|category| category.id == id)
+                .unwrap_or_else(|| panic!("missing {id}"));
+            assert_eq!(row.edit, "supported", "{id}");
+            assert_eq!(row.write, "verified", "{id}");
+        }
         for category in &matrix.categories {
-            if category.id == "block_states" {
+            if category.id == "block_states" || category.id == "biomes" {
                 continue;
             }
             assert_ne!(category.write, "verified", "{}", category.id);

@@ -42,9 +42,9 @@ M9.8 compares the saved imported base with the original generator's requested ov
 chunks after verifying seed, preset, center/radius, structures flag, ordered data-pack
 hashes, Java/server identity and generated counts. The real run compared 9 chunks,
 77 non-empty sections and 315,392 block positions with zero differences; a different run
-was refused. This is **block-state parity only**: biomes are preserved in the immutable
-source but are not modelled by the editable world, and the sample is not a general vanilla
-parity proof.
+was refused. This is **block-state parity only**: biome cells are modelled and editable
+since M9.11, but the parity comparator does not compare them, and the sample is not a
+general vanilla parity proof.
 
 ## Consequences
 

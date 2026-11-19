@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+use crate::biome::{BiomeSection, BiomeState};
 use crate::block::BlockState;
 use crate::chunk::Chunk;
 use crate::coords::{BlockPos, ChunkPos};
@@ -53,6 +54,12 @@ pub struct DimensionInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockWrite {
     pub previous: BlockState,
+    pub changed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BiomeWrite {
+    pub previous: BiomeState,
     pub changed: bool,
 }
 
@@ -198,13 +205,69 @@ impl Dimension {
         section: Option<Section>,
     ) {
         match section {
-            Some(section) if !section.is_empty() => {
+            Some(section) if !section.is_void() => {
                 self.ensure_chunk(chunk_pos)
                     .install_section(section_y, Some(section));
             }
             _ => {
                 if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
                     chunk.install_section(section_y, None);
+                    if chunk.is_empty() {
+                        self.chunks.remove(&chunk_pos);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn get_biome(&self, pos: BlockPos) -> Result<Option<BiomeState>, DimensionError> {
+        self.check_y(pos.y)?;
+        Ok(self
+            .chunks
+            .get(&pos.chunk_pos())
+            .and_then(|chunk| chunk.get_biome(pos.local_x() as u8, pos.local_z() as u8, pos.y))
+            .cloned())
+    }
+
+    /// Sets the 4x4x4 biome cell covering `pos`. Missing biome data is reported as `None`
+    /// instead of being replaced with an invented default.
+    pub fn set_biome(
+        &mut self,
+        pos: BlockPos,
+        biome: &BiomeState,
+    ) -> Result<Option<BiomeWrite>, DimensionError> {
+        self.check_y(pos.y)?;
+        let chunk_pos = pos.chunk_pos();
+        let Some(chunk) = self.chunks.get_mut(&chunk_pos) else {
+            return Ok(None);
+        };
+        let Some(previous) = chunk
+            .get_biome(pos.local_x() as u8, pos.local_z() as u8, pos.y)
+            .cloned()
+        else {
+            return Ok(None);
+        };
+        let changed = chunk
+            .set_biome(pos.local_x() as u8, pos.local_z() as u8, pos.y, biome)
+            .unwrap_or(false);
+        Ok(Some(BiomeWrite { previous, changed }))
+    }
+
+    /// Installs biome data for one section without touching block data.
+    pub fn install_biomes(
+        &mut self,
+        chunk_pos: ChunkPos,
+        section_y: i32,
+        biomes: Option<BiomeSection>,
+    ) {
+        match biomes {
+            Some(biomes) => {
+                self.ensure_chunk(chunk_pos)
+                    .install_biomes(section_y, Some(biomes));
+            }
+            None => {
+                if let Some(chunk) = self.chunks.get_mut(&chunk_pos) {
+                    chunk.install_biomes(section_y, None);
                     if chunk.is_empty() {
                         self.chunks.remove(&chunk_pos);
                     }

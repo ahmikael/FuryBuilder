@@ -645,6 +645,14 @@ impl WorldService {
                     state,
                 })
             }
+            Query::GetBiome { dimension, pos } => {
+                let biome = self.world.get_biome(&dimension, pos)?;
+                Ok(QueryResult::Biome {
+                    dimension,
+                    pos,
+                    biome,
+                })
+            }
             Query::RegionSummary { dimension, bounds } => {
                 let volume = bounds.volume();
                 if volume > MAX_REGION_SUMMARY_BLOCKS {
@@ -770,6 +778,9 @@ impl WorldService {
                 self.registry.validate(surface)?;
                 self.registry.validate(filler)?;
             }
+            // `BiomeState` is validated by its own deserializer; there is no block registry
+            // entry to check and no biomes are fabricated here.
+            Operation::SetBiome { .. } => {}
         }
         Ok(())
     }
@@ -885,6 +896,16 @@ fn summarize_operation(operation: &Operation) -> serde_json::Value {
             "surfaceDepth": surface_depth,
             "surface": surface.to_string(),
             "filler": filler.to_string()
+        }),
+        Operation::SetBiome {
+            dimension,
+            bounds,
+            biome,
+        } => json!({
+            "type": "set_biome",
+            "dimension": dimension,
+            "bounds": bounds,
+            "biome": biome.to_string()
         }),
     }
 }

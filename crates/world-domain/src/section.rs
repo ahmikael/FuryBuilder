@@ -1,5 +1,6 @@
 use std::sync::OnceLock;
 
+use crate::biome::{BiomeSection, BiomeState};
 use crate::block::BlockState;
 
 pub const SECTION_VOLUME: usize = 16 * 16 * 16;
@@ -22,6 +23,9 @@ pub struct Section {
     data: Vec<u64>,
     bits_per_index: u8,
     non_air: u16,
+    /// Optional 4x4x4 biome cells. Imported sections carry the source biome data; sections
+    /// created from scratch stay `None` until a biome operation explicitly writes them.
+    biomes: Option<BiomeSection>,
 }
 
 impl Default for Section {
@@ -37,6 +41,7 @@ impl Section {
             data: Vec::new(),
             bits_per_index: 0,
             non_air: 0,
+            biomes: None,
         }
     }
 
@@ -51,6 +56,7 @@ impl Section {
             data: Vec::new(),
             bits_per_index: 0,
             non_air,
+            biomes: None,
         }
     }
 
@@ -82,6 +88,7 @@ impl Section {
                 data,
                 bits_per_index,
                 non_air,
+                biomes: None,
             });
         }
         let expected_bits = bits_for(palette.len());
@@ -105,6 +112,7 @@ impl Section {
             data,
             bits_per_index,
             non_air,
+            biomes: None,
         })
     }
 
@@ -141,6 +149,7 @@ impl Section {
             data,
             bits_per_index: bits,
             non_air,
+            biomes: None,
         })
     }
 
@@ -150,6 +159,34 @@ impl Section {
 
     pub fn is_empty(&self) -> bool {
         self.non_air == 0
+    }
+
+    /// True when the section has neither blocks nor biome data and can be dropped.
+    pub fn is_void(&self) -> bool {
+        self.is_empty() && self.biomes.is_none()
+    }
+
+    pub fn biomes(&self) -> Option<&BiomeSection> {
+        self.biomes.as_ref()
+    }
+
+    pub fn set_biomes(&mut self, biomes: Option<BiomeSection>) {
+        self.biomes = biomes;
+    }
+
+    pub fn with_biomes(mut self, biomes: BiomeSection) -> Self {
+        self.biomes = Some(biomes);
+        self
+    }
+
+    /// Reads the biome covering a local block coordinate.
+    pub fn biome_at(&self, x: u8, y: u8, z: u8) -> Option<&BiomeState> {
+        self.biomes.as_ref()?.biome_at_block(x, y, z)
+    }
+
+    /// Sets one 4x4x4 biome cell. Returns `None` for invalid coordinates.
+    pub fn set_biome_cell(&mut self, x: u8, y: u8, z: u8, biome: &BiomeState) -> Option<bool> {
+        self.biomes.as_mut()?.set(x, y, z, biome)
     }
 
     pub fn palette_len(&self) -> usize {

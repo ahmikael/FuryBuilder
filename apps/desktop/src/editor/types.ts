@@ -34,6 +34,14 @@ export interface HeightmapOperation {
   filler: BlockState;
 }
 
+/** Paints the 4x4x4 biome cells covering a selection. */
+export interface BiomeOperation {
+  type: "set_biome";
+  dimension: string;
+  bounds: BoxBounds;
+  biome: string;
+}
+
 export type EditorOperation =
   | { type: "set_block"; dimension: string; pos: BlockPosition; state: BlockState }
   | { type: "batch"; dimension: string; changes: BlockChange[] }
@@ -50,7 +58,8 @@ export type EditorOperation =
       step: number;
       targetY?: number | null;
     }
-  | HeightmapOperation;
+  | HeightmapOperation
+  | BiomeOperation;
 
 export interface PreviewResult {
   affectedBlocks: number;

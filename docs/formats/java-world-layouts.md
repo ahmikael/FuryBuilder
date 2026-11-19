@@ -245,11 +245,12 @@ Refused explicitly instead of guessed:
   resource location, the wrong long-array length, or an out-of-range cell;
 - symlinked world files and region files.
 
-Biomes are decoded but not yet persisted in `world-domain`; they remain on
-`DecodedChunk`, and `to_chunk()` copies blocks only. Raw chunk NBT is also kept
-on `RegionChunk` for passthrough and overlay work. The byte-preserving copy and
-the in-memory block overlay are described below; import UI and any write path
-are later M8 stages.
+M9.11 persists biome data in `world-domain`: `Section` carries an optional
+`BiomeSection` (a 4x4x4 YZX cell grid), `to_chunk()` copies it, snapshot format 2
+stores it and the overlay/region/export paths write edited cells into
+`sections[].biomes`. Raw chunk NBT is also kept on `RegionChunk` for passthrough
+and overlay work. The byte-preserving copy and the in-memory overlay are described
+below.
 
 Probe and tests:
 
@@ -384,9 +385,9 @@ Guarantees and checks:
   recorded with its SHA-256 in `source/source.json`;
 - editable import limits are 20,000 chunks, 2,000,000 non-empty sections and
   50,000,000 non-air blocks; exceeding a limit fails before a project is kept;
-- only block states enter the editable project snapshot. Biomes, block entities,
-  entities, ticks, heightmaps, lighting, POI and unknown tags remain in the source
-  copy; the wizard lists these limitations instead of dropping them silently;
+- block states and 4x4x4 biome cells enter the editable project snapshot. Block
+  entities, entities, ticks, heightmaps, lighting, POI and unknown tags remain in the
+  source copy; the wizard lists these limitations instead of dropping them silently;
 - a failed copy or manifest write removes the half-created project folder.
 
 `Import World` itself does not write a new world or a region file; it creates the
@@ -410,7 +411,7 @@ anything outside this explicit combination:
 | --------------------- | ---------------------------------------------------------------------- |
 | Game version          | Minecraft Java 1.21.4, `DataVersion` 4189                              |
 | Layout                | classic Anvil (`region/`, `DIM-1/`, `DIM1/`), standard dimensions only |
-| Editable chunk fields | `sections[].block_states` only                                         |
+| Editable chunk fields | `sections[].block_states` and 4x4x4 `sections[].biomes` (M9.11)        |
 | Derived-data policy   | `preserve` (raw) or `vanillaRebuild` (explicit engine hand-off, M8.9)  |
 | Chunk status          | edited chunks must have `Status = minecraft:full`                      |
 | Source compression    | gzip, zlib or uncompressed; the writer emits zlib                      |
@@ -480,10 +481,11 @@ server round-trip over five edits found:
 | `poi/`                 | one `minecraft:fisherman` record for the placed barrel, written by the server, not by FuryBuilder |
 | source world           | all files byte-identical; server exited 0                                                         |
 
-This is evidence, not a universal parity proof. The default writer policy is
-therefore block-state-only: do not place or remove block-entity blocks, and do
-not claim that heightmaps or light are correct when the raw `preserve` policy is
-used. M8.9 adds an explicit `vanillaRebuild` policy; see below.
+This is evidence, not a universal parity proof. The default writer policy changes
+only `sections[].block_states` and, since M9.11, explicitly painted
+`sections[].biomes`; do not place or remove block-entity blocks, and do not claim
+that heightmaps or light are correct when the raw `preserve` policy is used. M8.9
+adds an explicit `vanillaRebuild` policy; see below.
 
 ## Vanilla rebuild policy (M8.9)
 
@@ -588,7 +590,7 @@ pwsh -File scripts/verify_java_world_export.ps1 `
 
 | World                                                      | DataVersion | Layout  | Read                                              | Passthrough                                                   | Overlay                                           | Write                                                                                                                                                                                                | Decision                        |
 | ---------------------------------------------------------- | ----------- | ------- | ------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4); selection classified (M8.11) | in-memory edits + Import World wizard (M8.5-M8.6) | new region file, block states only (M8.7); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10); save-vs-region classification (M8.11); official server load/save fixture (M8.12) | first implementation target     |
+| Java 1.21.4, classic                                       | 4189        | classic | `level.dat`, regions, block states, biomes (M8.3) | byte copy of whole files (M8.4); selection classified (M8.11) | in-memory block/biome edits + Import World wizard (M8.5-M8.6, M9.11) | new region file, block states and biomes (M8.7, M9.11); derived-data policies (M8.8-M8.9); complete world-folder export (M8.10); save-vs-region classification (M8.11); official server load/save fixture (M8.12) | first implementation target     |
 | Java 1.21.5–1.21.11, classic                               | 4325–4671   | classic | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | needs a separate tested adapter |
 | Java 26.1–26.3, split                                      | 4786–5023   | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | needs a new layout adapter      |
 | Java 26.4 snapshots                                        | 5119–5130+  | split   | no                                                | no                                                            | no                                                | no                                                                                                                                                                                                   | unsupported, moving target      |

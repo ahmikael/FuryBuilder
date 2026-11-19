@@ -113,6 +113,35 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "get_biome",
+    {
+      title: "Get biome",
+      description:
+        "Reads the biome covering one block position from the editable 4x4x4 cell grid, with the authoritative world revision. null means the source world has no biome data.",
+      inputSchema: z.object({
+        ...project,
+        dimension: z.string().min(1).max(128),
+        pos: blockPos,
+      }),
+      annotations: readOnly,
+    },
+    async ({ project_id, dimension, pos, world_revision }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await queryDesktop(projectId, world_revision, {
+            type: "get_biome",
+            dimension,
+            pos,
+          }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "inspect_region",
     {
       title: "Inspect region",
@@ -186,7 +215,9 @@ export function registerReadTools(server: McpServer): void {
           await callDesktop(
             "get_camera",
             withRevision({ projectId }, world_revision),
-            { timeoutMs: RENDER_TIMEOUT_MS },
+            {
+              timeoutMs: RENDER_TIMEOUT_MS,
+            },
           ),
         );
       } catch (error) {

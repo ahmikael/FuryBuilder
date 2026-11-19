@@ -16,9 +16,9 @@ outside the verified field set or a supported write for an unsupported version.
 | ------------------------------ | ------------------------------------------------------------------- |
 | `supported`                    | Semantically decoded or exposed by a verified path                  |
 | `supported_subset`             | A verified subset is decoded/edited; not the whole save             |
-| `block_states_only`            | Only `sections[].block_states` can be edited                        |
+| `block_states_and_biomes`      | `sections[].block_states` and 4x4x4 `sections[].biomes` can be edited |
 | `verified`                     | Re-read, re-decoded and compared after writing                      |
-| `verified_block_states`        | A new region/folder is written and verified for block states        |
+| `verified_block_states_and_biomes` | A new region/folder is written and verified for block states and biomes |
 | `preserved_raw`                | Copied unchanged; never interpreted or recalculated                 |
 | `byte_for_byte`                | File or untouched record is copied as exact bytes                   |
 | `preserve_or_invalidate`       | Policy-dependent: raw preserve, or explicit engine rebuild hand-off |
@@ -30,7 +30,7 @@ outside the verified field set or a supported write for an unsupported version.
 
 | Version family      | DataVersion | Layout                            | Status                 | Read                        | Edit                | Write                   | Passthrough     | Note                                                                                                  |
 | ------------------- | ----------- | --------------------------------- | ---------------------- | --------------------------- | ------------------- | ----------------------- | --------------- | ----------------------------------------------------------------------------------------------------- |
-| Java 1.21.4         | 4189        | classic Anvil                     | **supported**          | `supported_subset`          | `block_states_only` | `verified_block_states` | `byte_for_byte` | Only target with verified decode, edit, region writer, full-folder export and official-server fixture |
+| Java 1.21.4         | 4189        | classic Anvil                     | **supported**          | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` | Only target with verified decode, block/biome edit, region writer, full-folder export and official-server fixture |
 | Java 1.21.5–1.21.11 | 4325–4671   | classic Anvil                     | `detected_unsupported` | `version_refused`           | `none`              | `none`                  | `none`          | Layout is recognisable, version is refused                                                            |
 | Java 26.1–26.3      | 4786–5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`              | `none`                  | `none`          | Layout and region headers are inventoried read-only; no split chunk decoding                          |
 | Java 26.4 snapshots | 5119–5130+  | split                             | `out_of_scope`         | `none`                      | `none`              | `none`                  | `none`          | Moving target                                                                                         |
@@ -49,7 +49,7 @@ directory is not a complete save at all; see
 | `level.dat` metadata                 | `supported`     | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | `DataVersion`, `Version.Id`, `LevelName`, `WorldGenSettings` are validated; `level.dat` is not rewritten by the block writer |
 | Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; only dirty regions are rebuilt                                               |
 | Block states and palettes            | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Only `sections[].block_states` in fully generated `minecraft:full` chunks                                                    |
-| Biomes                               | `supported`     | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Decoded for display and verified unchanged; no biome editing                                                                 |
+| Biomes                               | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Whole 4x4x4 cells are editable; palette <= 64; sections without source biome data are refused; untouched cells are preserved |
 | Block entities                       | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Counted and preserved; missing block entities are not synthesized                                                            |
 | Chunk entities                       | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Legacy chunk entity lists are counted and preserved                                                                          |
 | `entities/` sidecars                 | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Read schema-neutrally and copied exactly                                                                                     |
@@ -76,6 +76,9 @@ directory is not a complete save at all; see
 - Block entities, entities, POI and ticks are not synthesized, moved or cleared.
   Placing or removing a chest/sign/barrel through the block-state writer is not
   semantically supported.
+- Biome edits write only the selected 4x4x4 cells into `sections[].biomes`. FuryBuilder
+  does not run vanilla biome generation or derive biomes from block states; a world
+  without biome data is refused instead of receiving a default biome.
 - The full-folder export must never be confused with a single `.mca` file. The
   destination is a new complete save folder, verified by reopening it and by an
   official-server load/save fixture:
@@ -93,12 +96,14 @@ directory is not a complete save at all; see
 | Complete world-folder export            | `2026-11-18-world-export-1.21.4.json`                                                                                       |
 | Save vs region file vs region directory | `2026-11-18-world-selection-1.21.4.json`                                                                                    |
 | Official-server load/save fixture       | `2026-11-18-server-fixture-1.21.4.json`                                                                                     |
+| Real biome paint UI                     | `2026-11-19-biome-ui.json`, `.png`, `-applied.png`                                                                            |
 
 ## Reproduce
 
 ```powershell
 cargo test -p furybuilder-world-io --lib support_matrix
-cargo test -p furybuilder-world-io --test world_selection --test world_export
+cargo test -p furybuilder-world-io --test world_selection --test world_export --test overlay --test region_write
+cargo test -p furybuilder-project-store snapshot::tests
 cargo run -p furybuilder-world-io --example world_selection_probe -- <path>
 pwsh -File scripts/verify_java_world_export.ps1 -Java <java.exe> -ServerJar <server.jar> -ExpectedSha1 4707d00eb834b446575d89a61a11b5d548d8c001 -AcceptMinecraftEula
 ```

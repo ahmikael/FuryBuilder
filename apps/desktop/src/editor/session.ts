@@ -1,4 +1,5 @@
 import type {
+  BiomeOperation,
   BlockChange,
   BoxBounds,
   ClipboardPayload,
@@ -204,6 +205,8 @@ export function operationLabel(operation: EditorOperation): string {
       ).toLocaleString()} blocks`;
     case "generate_heightmap":
       return `Generate heightmap in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+    case "set_biome":
+      return `Paint ${operation.biome} over ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
   }
 }
 
@@ -499,6 +502,35 @@ export function planHeightmap(context: HeightmapContext): HeightmapOperation | n
     surfaceDepth: clampSurfaceDepth(context.surfaceDepth),
     surface: context.surface,
     filler: context.filler,
+  };
+}
+
+const BIOME_ID_PATTERN = /^[a-z0-9_.-]+:[a-z0-9_.-]+$/;
+
+/** The Rust reader accepts the same namespaced lowercase grammar. */
+export function isValidBiomeId(value: string): boolean {
+  return BIOME_ID_PATTERN.test(value.trim());
+}
+
+export interface BiomeContext {
+  dimension: string;
+  selection: BoxBounds | null;
+  biome: string;
+}
+
+/**
+ * Builds the typed biome paint operation. The Rust core verifies that the selection has
+ * source biome data and that no cell palette overflows; the UI only normalizes the id.
+ */
+export function planBiome(context: BiomeContext): BiomeOperation | null {
+  if (!context.selection) return null;
+  const biome = context.biome.trim();
+  if (!isValidBiomeId(biome)) return null;
+  return {
+    type: "set_biome",
+    dimension: context.dimension,
+    bounds: context.selection,
+    biome,
   };
 }
 

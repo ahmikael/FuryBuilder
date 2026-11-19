@@ -295,7 +295,10 @@ fn writes_only_the_edited_chunk_and_preserves_everything_else() {
     assert!(report.output_redecoded);
     assert!(report.source_unchanged);
     assert_eq!(report.source_region_sha256.len(), 64);
-    assert_eq!(report.support.fields, ["sections[].block_states"]);
+    assert_eq!(
+        report.support.fields,
+        ["sections[].block_states", "sections[].biomes"]
+    );
     assert_eq!(report.support.data_version, TARGET);
     assert!(!report.support.recomputes_derived_metadata);
     assert_eq!(read_tree(&root), before, "the source world must not change");
@@ -385,7 +388,7 @@ fn refuses_a_destination_with_the_wrong_region_name() {
 }
 
 #[test]
-fn refuses_changes_outside_the_block_state_field() {
+fn accepts_biome_changes_and_refuses_other_fields() {
     let dir = TempDir::new("fields");
     let root = dir.path().join("world");
     write_world(&root, "minecraft:full");
@@ -404,19 +407,27 @@ fn refuses_changes_outside_the_block_state_field() {
             }
         }
     }
+    let biome_destination = output_dir(dir.path()).join(region_file_name(0, 0));
+    let report = write_verified_region(
+        &world,
+        OVERWORLD,
+        0,
+        0,
+        &[VerifiedChunkReplacement::new(0, 0, changed_biome)],
+        &biome_destination,
+    )
+    .expect("biome change is a verified write field");
+    assert_eq!(report.replaced, 1);
+    let written = RegionFile::open(&biome_destination).expect("open written region");
+    let decoded = world
+        .decode_chunk(OVERWORLD, &written.read_chunk(0, 0).expect("written chunk"))
+        .expect("decode written chunk");
+    assert_eq!(decoded.biome_at(0, -64, 0), Some("minecraft:desert"));
     assert_eq!(
-        write_verified_region(
-            &world,
-            OVERWORLD,
-            0,
-            0,
-            &[VerifiedChunkReplacement::new(0, 0, changed_biome)],
-            output_dir(dir.path()).join(region_file_name(0, 0)),
-        )
-        .expect_err("biome change")
-        .code(),
-        "unsupported_format"
+        decoded.block_at(0, -64, 0).map(ToString::to_string),
+        Some("minecraft:stone".to_owned())
     );
+    fs::remove_file(&biome_destination).expect("remove verified biome output");
 
     let mut changed_status = source.nbt.clone();
     if let NbtValue::Compound(root) = &mut changed_status.root {
