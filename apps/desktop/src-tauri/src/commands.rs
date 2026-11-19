@@ -1536,6 +1536,11 @@ fn sanitize_import_name(name: &str) -> String {
     } else if !cleaned.to_ascii_lowercase().ends_with(".nbt") {
         cleaned.push_str(".nbt");
     }
+    // `CON.nbt`, `NUL.nbt` and similar names address Windows devices even with an
+    // extension. Fall back to a neutral name instead of failing the import.
+    if !project_store::is_safe_file_name(&cleaned) {
+        cleaned = "structure.nbt".to_owned();
+    }
     cleaned
 }
 

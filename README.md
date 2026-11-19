@@ -247,7 +247,11 @@ it. A persistent banner offers Save/Discard, stale atomic-write temp files are c
 `Settings → Diagnostics` exposes a bounded, path-redacted JSON Lines log with explicit
 open/clear actions. Stable backend error codes now add actionable hints, and a render
 error boundary plus global handlers keep unexpected UI failures recoverable.
-The first interchange format,
+M10.7 adds explicit import and MCP security boundaries: imported worlds, NBT,
+archives, templates and generated file names are bounded and fail closed, and
+MCP policies are re-checked after confirmation so a tightened selection or a
+switch to read-only cannot be bypassed. The limits and residual risks are
+documented in `docs/design/security.md`. The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
 1.21.4 server load. Block states and orientations are preserved; entities and

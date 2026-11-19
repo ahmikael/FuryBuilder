@@ -28,6 +28,9 @@ use crate::world_selection::classify_world_selection;
 pub const MAX_PASSTHROUGH_FILES: usize = 100_000;
 pub const MAX_PASSTHROUGH_FILE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 pub const MAX_PASSTHROUGH_TOTAL_BYTES: u64 = 64 * 1024 * 1024 * 1024;
+/// Maximum directory nesting copied from an imported world. A save never needs more;
+/// the limit keeps a hostile tree from exhausting the stack in the recursive copy.
+pub const MAX_PASSTHROUGH_DEPTH: usize = 64;
 
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 
@@ -188,6 +191,7 @@ pub fn passthrough_java_world_with_options(
         &source_root,
         guard.path(),
         Path::new(""),
+        0,
         &options,
         &mut report,
         &mut total_bytes,
@@ -270,10 +274,17 @@ fn copy_dir(
     source_root: &Path,
     temp_root: &Path,
     relative: &Path,
+    depth: usize,
     options: &PassthroughOptions,
     report: &mut PassthroughReport,
     total_bytes: &mut u64,
 ) -> Result<(), PassthroughError> {
+    if depth > MAX_PASSTHROUGH_DEPTH {
+        return Err(PassthroughError::LimitExceeded(format!(
+            "directory nesting exceeds {MAX_PASSTHROUGH_DEPTH} levels at {}",
+            relative.display()
+        )));
+    }
     let source_dir = source_root.join(relative);
     let mut entries = fs::read_dir(&source_dir)
         .map_err(|error| io_error(&source_dir, &error))?
@@ -296,6 +307,7 @@ fn copy_dir(
                 source_root,
                 temp_root,
                 &entry_relative,
+                depth + 1,
                 options,
                 report,
                 total_bytes,
@@ -526,5 +538,43 @@ impl Drop for TempCopy {
         if !self.published {
             let _ = fs::remove_dir_all(&self.path);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn directory_copy_depth_is_bounded_before_traversal() {
+        let root = std::env::temp_dir().join(format!(
+            "furybuilder-passthrough-depth-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).expect("temp dir");
+        let mut report = PassthroughReport {
+            source: root.clone(),
+            destination: root.clone(),
+            files: Vec::new(),
+            skipped: Vec::new(),
+            regions: 0,
+            chunks: 0,
+            chunk_validation: false,
+        };
+        let mut total = 0u64;
+        let error = copy_dir(
+            &root,
+            &root,
+            Path::new(""),
+            MAX_PASSTHROUGH_DEPTH + 1,
+            &PassthroughOptions::default(),
+            &mut report,
+            &mut total,
+        )
+        .expect_err("depth guard");
+        assert!(matches!(error, PassthroughError::LimitExceeded(_)));
+        assert!(report.files.is_empty());
+        let _ = fs::remove_dir_all(&root);
     }
 }

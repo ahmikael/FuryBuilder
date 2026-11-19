@@ -1145,7 +1145,7 @@ fn start_job(
         "undo_operation" => {
             state.mcp_access.require_editing("undo_operation")?;
             let operation_id = undo_job_operation_id(&params.parameters)?;
-            let summary = {
+            let (summary, target_dimension, target_bounds) = {
                 let service = state
                     .service
                     .lock()
@@ -1154,7 +1154,7 @@ fn start_job(
                 state
                     .mcp_access
                     .authorize_undo(&target.dimension, target.bounds)?;
-                undo_confirmation_summary(
+                let summary = undo_confirmation_summary(
                     &UndoParams {
                         project_id: params.project_id.clone(),
                         world_revision: Some(revision),
@@ -1163,11 +1163,18 @@ fn start_job(
                     revision,
                     &target,
                     state.mcp_access.mode(),
-                )
+                );
+                (summary, target.dimension.clone(), target.bounds)
             };
             if state.mcp_access.require_confirmation() {
                 confirm_write(state, requester, summary)?;
+                // The user may have shrunk the selection or switched to read-only while
+                // the confirmation dialog was open. Re-check the same extent the summary
+                // described, exactly like the direct undo path.
                 state.mcp_access.require_editing("undo_operation")?;
+                state
+                    .mcp_access
+                    .authorize_undo(&target_dimension, target_bounds)?;
                 require_revision(state, Some(revision))?;
                 true
             } else {

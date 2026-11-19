@@ -42,6 +42,11 @@ fn exports_are_published_atomically_with_checksums_and_unique_names() {
         "no-extension",
         "bad.txt",
         "",
+        "CON.nbt",
+        "nul.nbt",
+        "com1.nbt",
+        "trailing.nbt.",
+        "trailing.nbt ",
     ] {
         assert!(
             matches!(
@@ -75,7 +80,12 @@ fn source_bytes_can_be_attached_without_a_filesystem_path() {
         .join("files")
         .join("imported.schem");
     assert_eq!(std::fs::read(copied).unwrap(), b"payload-bytes");
-    assert!(store
-        .attach_source_bytes(&folder, "../escape.schem", b"x")
-        .is_err());
+    for unsafe_name in ["../escape.schem", "CON.schem", "nul.schem", "x.schem."] {
+        assert!(
+            store
+                .attach_source_bytes(&folder, unsafe_name, b"x")
+                .is_err(),
+            "`{unsafe_name}` must be rejected"
+        );
+    }
 }

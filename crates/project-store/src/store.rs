@@ -29,6 +29,44 @@ pub const SOURCE_DIR: &str = "source";
 pub const EXPORTS_DIR: &str = "exports";
 pub const TEMPLATES_DIR: &str = "templates";
 
+/// Returns `true` when a user-supplied bare file name can be joined under a
+/// FuryBuilder-owned directory safely on every target platform.
+///
+/// This rejects traversal, absolute paths, control characters, trailing dots or
+/// spaces and Windows device names (`CON`, `NUL`, `COM1`, ...). Device names are
+/// rejected with any extension because Windows resolves `NUL.nbt` to the device.
+pub fn is_safe_file_name(name: &str) -> bool {
+    if name.is_empty() || name.len() > 120 || name.trim() != name {
+        return false;
+    }
+    if name == "." || name == ".." || name.contains("..") || name.contains('/') {
+        return false;
+    }
+    if name.contains('\\') || name.chars().any(char::is_control) {
+        return false;
+    }
+    if name.ends_with('.') || name.ends_with(' ') {
+        return false;
+    }
+    if Path::new(name).components().count() != 1 {
+        return false;
+    }
+    let stem = name
+        .split('.')
+        .next()
+        .unwrap_or(name)
+        .trim_end_matches([' ', '.']);
+    let stem = stem.to_ascii_uppercase();
+    if matches!(stem.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return false;
+    }
+    let device_suffix = |prefix: &str| {
+        stem.strip_prefix(prefix)
+            .is_some_and(|rest| rest.len() == 1 && rest.as_bytes()[0].is_ascii_digit())
+    };
+    !(device_suffix("COM") || device_suffix("LPT"))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AutosaveMeta {
@@ -1016,13 +1054,7 @@ impl ProjectStore {
         let dir = self.project_dir(folder)?;
         let mut manifest = self.manifest(&dir)?;
         manifest.validate()?;
-        let relative = Path::new(relative_name);
-        if relative.components().count() != 1
-            || relative_name.is_empty()
-            || relative_name.contains("..")
-            || relative_name.contains('/')
-            || relative_name.contains('\\')
-        {
+        if !is_safe_file_name(relative_name) {
             return Err(ProjectError::UnsafeSource(relative_name.to_owned()));
         }
         let source_dir = dir.join(SOURCE_DIR).join("files");
@@ -1150,14 +1182,7 @@ impl ProjectStore {
             .and_then(|extension| extension.to_str())
             .map(str::to_ascii_lowercase)
             .unwrap_or_default();
-        if file_name.is_empty()
-            || file_name.len() > 120
-            || path.components().count() != 1
-            || file_name.contains("..")
-            || file_name.contains('/')
-            || file_name.contains('\\')
-            || !matches!(extension.as_str(), "nbt" | "schem")
-        {
+        if !is_safe_file_name(file_name) || !matches!(extension.as_str(), "nbt" | "schem") {
             return Err(ProjectError::InvalidPath(file_name.to_owned()));
         }
         let stem = path

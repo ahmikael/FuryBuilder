@@ -16,6 +16,7 @@ use world_domain::BlockBox;
 pub const MAX_MCP_BLOCKS: u64 = 1_000_000;
 pub const MAX_MCP_BATCH_CHANGES: usize = 8192;
 pub const MAX_PENDING_CONFIRMATIONS: usize = 8;
+pub const MAX_SELECTION_DIMENSION: usize = 128;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -120,6 +121,19 @@ impl McpAccessState {
                 if selection.dimension.trim().is_empty() {
                     return Err(AppError::invalid_argument(
                         "selection dimension must not be empty",
+                    ));
+                }
+                if selection.dimension.len() > MAX_SELECTION_DIMENSION {
+                    return Err(AppError::new(
+                        ErrorCode::LimitExceeded,
+                        format!(
+                            "selection dimension must be at most {MAX_SELECTION_DIMENSION} characters"
+                        ),
+                    ));
+                }
+                if selection.dimension.chars().any(char::is_control) {
+                    return Err(AppError::invalid_argument(
+                        "selection dimension must not contain control characters",
                     ));
                 }
                 if selection.bounds.volume() > max_blocks {
@@ -570,6 +584,27 @@ mod tests {
                 BlockBox::single(BlockPos::new(4, 64, 4)),
             )
             .is_err());
+    }
+
+    #[test]
+    fn selection_dimension_is_bounded_and_clean() {
+        let state = state();
+        for dimension in [
+            "x".repeat(MAX_SELECTION_DIMENSION + 1),
+            "minecraft:over\nworld".to_owned(),
+        ] {
+            let result = state.update(McpAccessInput {
+                mode: McpAccessMode::EditInSelection,
+                selection: Some(Selection {
+                    dimension,
+                    bounds: BlockBox::single(BlockPos::new(0, 64, 0)),
+                }),
+                max_blocks: Some(10_000),
+                max_batch_changes: Some(100),
+                require_confirmation: true,
+            });
+            assert!(result.is_err());
+        }
     }
 
     #[test]

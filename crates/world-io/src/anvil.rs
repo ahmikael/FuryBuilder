@@ -35,6 +35,10 @@ pub const ANVIL_REGION_AXIS_CHUNKS: i32 = 32;
 pub const MAX_LEVEL_DAT_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_REGION_FILE_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_EXTERNAL_CHUNK_BYTES: u64 = 256 * 1024 * 1024;
+/// Maximum number of region files listed for one dimension. A supported import is capped
+/// at 20,000 chunks (about 20 fully populated region files); the much larger directory
+/// limit only prevents a hostile folder from making enumeration itself unbounded.
+pub const MAX_REGION_FILES: usize = 4096;
 
 const MAX_REGION_SECTORS: u64 = MAX_REGION_FILE_BYTES / ANVIL_SECTOR_BYTES;
 
@@ -898,6 +902,7 @@ fn list_region_coordinates(folder: &Path) -> Result<Vec<(i32, i32)>, AnvilError>
         }
         if entry.file_name().to_string_lossy().ends_with(".mca") {
             coordinates.push(parse_region_file_name(&entry.path())?);
+            ensure_region_file_limit(coordinates.len())?;
         }
     }
     coordinates.sort_unstable();
@@ -1037,10 +1042,32 @@ fn read_file_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, AnvilError> {
     Ok(bytes)
 }
 
+fn ensure_region_file_limit(count: usize) -> Result<(), AnvilError> {
+    if count > MAX_REGION_FILES {
+        return Err(AnvilError::LimitExceeded(format!(
+            "region folder contains more than {MAX_REGION_FILES} .mca files"
+        )));
+    }
+    Ok(())
+}
+
 fn io_error(path: &Path, error: &std::io::Error) -> AnvilError {
     if error.kind() == ErrorKind::NotFound {
         AnvilError::Missing(path.display().to_string())
     } else {
         AnvilError::Io(format!("{}: {error}", path.display()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn region_file_count_is_bounded() {
+        assert!(ensure_region_file_limit(0).is_ok());
+        assert!(ensure_region_file_limit(MAX_REGION_FILES).is_ok());
+        let error = ensure_region_file_limit(MAX_REGION_FILES + 1).expect_err("limit");
+        assert!(matches!(error, AnvilError::LimitExceeded(_)));
     }
 }
