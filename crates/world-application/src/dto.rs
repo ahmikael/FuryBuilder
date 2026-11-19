@@ -4,6 +4,8 @@ use workspace_model::WorkspacePolicy;
 use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
 use world_operations::{Operation, StructureSite};
 
+pub use observation::{DeltaCounts, ObservationLegendEntry, ObservationMode, Slice, SliceAxis};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ActorSource {
@@ -214,6 +216,52 @@ pub struct RenderSnapshot {
     pub center: ChunkPos,
     pub radius: u32,
     pub chunks: Vec<ChunkSnapshot>,
+}
+
+/// Read-only request for a deterministic spatial observation. `fromRevision` is required
+/// only for `revision_diff`; `slice` is required only for `cross_section`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ObservationRequest {
+    pub dimension: String,
+    pub bounds: BlockBox,
+    pub mode: ObservationMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slice: Option<Slice>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from_revision: Option<u64>,
+}
+
+/// Deterministic observation metadata plus a PNG data URL. The image is a derived view at
+/// exactly `worldRevision`; exact block queries remain authoritative for positions.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Observation {
+    pub schema_version: u32,
+    pub mode: ObservationMode,
+    pub dimension: String,
+    pub world_revision: u64,
+    pub bounds: BlockBox,
+    pub width: u32,
+    pub height: u32,
+    /// One block per pixel for every mode in schema 1.
+    pub blocks_per_pixel: u32,
+    /// `data:image/png;base64,...`
+    pub image: String,
+    pub image_bytes: usize,
+    pub legend: Vec<ObservationLegendEntry>,
+    pub legend_truncated: bool,
+    pub partial: bool,
+    pub warnings: Vec<String>,
+    pub notes: Vec<String>,
+    pub scanned_blocks: u64,
+    pub sampled_units: u64,
+    pub non_air_units: u64,
+    pub counts: DeltaCounts,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_revision: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slice: Option<Slice>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

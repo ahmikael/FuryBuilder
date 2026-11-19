@@ -249,6 +249,7 @@ describe("MCP protocol negotiation", () => {
         "list_parametric_objects",
         "inspect_parametric_object",
         "preview_build_dsl",
+        "observe",
         "get_block",
         "get_biome",
         "find_structure_sites",
@@ -272,6 +273,7 @@ describe("MCP protocol negotiation", () => {
       "list_parametric_objects",
       "list_scene_objects",
       "list_templates",
+      "observe",
       "preview_build_dsl",
       "world_info",
     ]);

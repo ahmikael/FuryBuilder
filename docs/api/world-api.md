@@ -221,6 +221,46 @@ ParametricObjectSummary {
   `project_save` and `project_autosave` take the authoritative parametric catalog from the
   Core, so a UI client cannot omit or forge a baseline.
 
+## Observation maps
+
+`observe` is a read-only application endpoint shared by the desktop UI and MCP. It renders
+deterministic PNG maps from the authoritative world at the current revision; it never
+writes blocks or metadata. Exact `get_block`/`get_region` queries remain the authority for
+positions.
+
+```ts
+ObservationRequest {
+  dimension: string,
+  bounds: { min, max },          // inclusive
+  mode: "top_down" | "heightmap" | "material_map" | "biome_map"
+      | "cross_section" | "revision_diff",
+  slice?: { axis: "x" | "y" | "z", coordinate: number },  // cross_section only
+  fromRevision?: number                                    // revision_diff only
+}
+```
+
+`Observation` returns `schemaVersion: 1`, `mode`, `dimension`, `worldRevision`, `bounds`,
+`width`, `height`, `blocksPerPixel`, `image` (`data:image/png;base64,...`), `imageBytes`,
+a bounded `legend`, `legendTruncated`, `partial`, `warnings`, `notes`, `scannedBlocks`,
+`sampledUnits`, `nonAirUnits`, optional `fromRevision`/`slice`, and block-level `counts`
+for revision diffs.
+
+- Surface modes (`top_down`, `heightmap`, `material_map`, `biome_map`) scan the Y range of
+  `bounds` for the top non-air block per X/Z column. Each pixel is one column; the image
+  width/height are the X/Z extents.
+- `heightmap` uses five deterministic elevation bands. `biome_map` reports missing biome
+  data explicitly instead of inventing a biome.
+- `cross_section` requires `slice`. X/Z planes render upright with row 0 at the highest Y.
+- `revision_diff` requires `fromRevision` and compares it with the current revision. It
+  reconstructs the prior state from retained section history and returns `no_history`
+  when an earlier revision can no longer be rebuilt. The image is a top-down projection;
+  `counts.added/removed/changed` are exact for the bounds.
+- Limits are 512×512 pixels, 262,144 pixels total, and 8,000,000 scanned/compared blocks.
+  Violations return `limit_exceeded` before rendering. Legends are capped at 16 entries
+  and say when they were truncated.
+- `partial` is always false for these maps: they are computed from the authoritative world
+  model, where absent chunks read as air. They do not claim game lighting or entity data.
+
 ## Render snapshots
 
 The renderer receives derived, revisioned payloads from the same core:

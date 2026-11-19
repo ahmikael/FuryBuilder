@@ -68,6 +68,7 @@ pub fn run() {
             commands::world_info,
             commands::load_demo_world,
             commands::render_snapshot,
+            commands::observe,
             commands::render_chunks,
             commands::preview_operation,
             commands::build_dsl_preview,

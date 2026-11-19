@@ -1,5 +1,11 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine as _;
+use observation::{
+    render_cross_section, render_revision_diff, render_surface, BlockDelta,
+    MAX_OBSERVATION_SCAN_BLOCKS, OBSERVATION_SCHEMA_VERSION,
+};
 use scene_model::{
     ObjectKind, ParametricBaseline, ParametricConflictPolicy, ParametricError, ParametricObject,
     ParametricObjectSummary, ParametricScene, ParametricSpec, Scene, SemanticObject,
@@ -15,10 +21,10 @@ use world_operations::{
 
 use crate::dto::{
     Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
-    HistorySummary, OperationRequest, OperationResult, PaletteEntry, ParametricApplyResult,
-    ParametricConflict, ParametricInspection, PreviewResult, Query, QueryResult, RegionBlocks,
-    RegionSummary, RenderSnapshot, SceneObjectInspection, SectionSnapshot, StructureSites,
-    UndoTarget,
+    HistorySummary, Observation, ObservationMode, ObservationRequest, OperationRequest,
+    OperationResult, PaletteEntry, ParametricApplyResult, ParametricConflict, ParametricInspection,
+    PreviewResult, Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot,
+    SceneObjectInspection, SectionSnapshot, StructureSites, UndoTarget,
 };
 use crate::error::{AppError, ErrorCode};
 
@@ -612,6 +618,238 @@ impl WorldService {
             revision: self.world.revision(),
             chunks,
         })
+    }
+
+    /// Deterministic spatial observation at the current authoritative revision. The image
+    /// is a derived view and never mutates the world. `revision_diff` reconstructs the
+    /// prior state from retained section history and fails closed when the requested
+    /// revision is no longer reconstructable.
+    pub fn observe(&self, request: &ObservationRequest) -> Result<Observation, AppError> {
+        let dimension = self.world.dimension(&request.dimension)?;
+        let revision = self.world.revision();
+        let rendered = match request.mode {
+            ObservationMode::TopDown
+            | ObservationMode::Heightmap
+            | ObservationMode::MaterialMap
+            | ObservationMode::BiomeMap => {
+                if request.slice.is_some() {
+                    return Err(AppError::invalid_argument(
+                        "slice is only valid for the cross_section mode",
+                    ));
+                }
+                if request.from_revision.is_some() {
+                    return Err(AppError::invalid_argument(
+                        "fromRevision is only valid for the revision_diff mode",
+                    ));
+                }
+                render_surface(dimension, request.bounds, request.mode)?
+            }
+            ObservationMode::CrossSection => {
+                if request.from_revision.is_some() {
+                    return Err(AppError::invalid_argument(
+                        "fromRevision is only valid for the revision_diff mode",
+                    ));
+                }
+                let slice = request.slice.ok_or_else(|| {
+                    AppError::invalid_argument("cross_section requires a slice plane")
+                })?;
+                render_cross_section(dimension, request.bounds, slice)?
+            }
+            ObservationMode::RevisionDiff => {
+                if request.slice.is_some() {
+                    return Err(AppError::invalid_argument(
+                        "slice is only valid for the cross_section mode",
+                    ));
+                }
+                let from_revision = request.from_revision.ok_or_else(|| {
+                    AppError::invalid_argument("revision_diff requires fromRevision")
+                })?;
+                let deltas =
+                    self.revision_deltas(&request.dimension, request.bounds, from_revision)?;
+                render_revision_diff(request.bounds, &deltas)?
+            }
+        };
+
+        let mut notes = vec![
+            "Image is a deterministic derived map rendered from the authoritative Rust world."
+                .to_owned(),
+            format!(
+                "Same dimension, bounds, mode and worldRevision {revision} produce the same image."
+            ),
+            "Use get_block/get_region for exact positions; a colour map is a summary.".to_owned(),
+            "Absent or unloaded chunks read as air in the world model; this is not a texture guess."
+                .to_owned(),
+        ];
+        match request.mode {
+            ObservationMode::TopDown
+            | ObservationMode::Heightmap
+            | ObservationMode::MaterialMap
+            | ObservationMode::BiomeMap => notes.push(
+                "Each pixel summarises one X/Z column; the Y range of bounds is scanned for the top non-air block."
+                    .to_owned(),
+            ),
+            ObservationMode::CrossSection => notes.push(
+                "Each pixel is one block on the requested orthogonal plane; X/Z planes use row 0 for the highest Y."
+                    .to_owned(),
+            ),
+            ObservationMode::RevisionDiff => notes.push(
+                "The image is a top-down projection of block-level changes between fromRevision and the current revision; counts are exact for the bounds."
+                    .to_owned(),
+            ),
+        }
+
+        Ok(Observation {
+            schema_version: OBSERVATION_SCHEMA_VERSION,
+            mode: request.mode,
+            dimension: request.dimension.clone(),
+            world_revision: revision,
+            bounds: request.bounds,
+            width: rendered.width,
+            height: rendered.height,
+            blocks_per_pixel: 1,
+            image: format!("data:image/png;base64,{}", BASE64.encode(&rendered.png)),
+            image_bytes: rendered.png.len(),
+            legend: rendered.legend,
+            legend_truncated: rendered.legend_truncated,
+            partial: false,
+            warnings: rendered.warnings,
+            notes,
+            scanned_blocks: rendered.scanned_blocks,
+            sampled_units: rendered.sampled_units,
+            non_air_units: rendered.non_air_units,
+            counts: rendered.counts,
+            from_revision: request.from_revision,
+            slice: request.slice,
+        })
+    }
+
+    /// Reconstructs a bounded block-level diff from the retained section history. The
+    /// reconstruction is only accepted when every revision transition between the
+    /// requested and current revision is still represented in the live history.
+    fn revision_deltas(
+        &self,
+        dimension: &str,
+        bounds: BlockBox,
+        from_revision: u64,
+    ) -> Result<BTreeMap<BlockPos, BlockDelta>, AppError> {
+        let current = self.world.revision();
+        if from_revision > current {
+            return Err(AppError::invalid_argument(format!(
+                "fromRevision {from_revision} is newer than the current revision {current}"
+            )));
+        }
+        let dim = self.world.dimension(dimension)?;
+        if !dim.contains_y(bounds.min.y) || !dim.contains_y(bounds.max.y) {
+            return Err(AppError::new(
+                ErrorCode::OutOfBounds,
+                format!(
+                    "observation Y range {}..={} is outside dimension `{dimension}` ({}..={})",
+                    bounds.min.y,
+                    bounds.max.y,
+                    dim.min_y(),
+                    dim.max_y()
+                ),
+            ));
+        }
+        let volume = bounds.volume();
+        if volume > MAX_OBSERVATION_SCAN_BLOCKS {
+            return Err(AppError::new(
+                ErrorCode::LimitExceeded,
+                format!(
+                    "observation compares {volume} positions, limit is {MAX_OBSERVATION_SCAN_BLOCKS}"
+                ),
+            ));
+        }
+        if from_revision == current {
+            return Ok(BTreeMap::new());
+        }
+
+        let earliest = self.min_reconstructable_revision();
+        if from_revision < earliest {
+            return Err(AppError::new(
+                ErrorCode::NoHistory,
+                format!(
+                    "revision {from_revision} is older than retained history (earliest reconstructable revision is {earliest})"
+                ),
+            )
+            .with_details(json!({
+                "fromRevision": from_revision,
+                "earliestRevision": earliest
+            })));
+        }
+
+        // Walk history backwards and collect the state before every touched position in
+        // the requested box. Reverse chronological order means the newest `before`
+        // snapshot wins for positions touched by several operations.
+        let mut previous: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+        for entry in self.history.iter().rev() {
+            if entry.revision_after <= from_revision {
+                break;
+            }
+            for diff in &entry.diffs {
+                if diff.dimension != dimension {
+                    continue;
+                }
+                for local_y in 0..16i32 {
+                    for local_z in 0..16i32 {
+                        for local_x in 0..16i32 {
+                            let pos = BlockPos::new(
+                                diff.chunk.x * 16 + local_x,
+                                diff.section_y * 16 + local_y,
+                                diff.chunk.z * 16 + local_z,
+                            );
+                            if !bounds.contains(pos) {
+                                continue;
+                            }
+                            let state = diff
+                                .before
+                                .as_ref()
+                                .and_then(|section| {
+                                    section.get(local_x as u8, local_y as u8, local_z as u8)
+                                })
+                                .cloned()
+                                .unwrap_or_default();
+                            previous.insert(pos, state);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut deltas = BTreeMap::new();
+        for pos in bounds.iter() {
+            let current_state = dim
+                .get_block(pos)
+                .map_err(|error| AppError::internal(error.to_string()))?;
+            let previous_state = previous
+                .get(&pos)
+                .cloned()
+                .unwrap_or_else(|| current_state.clone());
+            if previous_state == current_state {
+                continue;
+            }
+            let delta = if previous_state.is_air() {
+                BlockDelta::Added
+            } else if current_state.is_air() {
+                BlockDelta::Removed
+            } else {
+                BlockDelta::Changed
+            };
+            deltas.insert(pos, delta);
+        }
+        Ok(deltas)
+    }
+
+    /// Earliest revision whose state can be rebuilt by reverting retained history.
+    fn min_reconstructable_revision(&self) -> u64 {
+        let mut minimum = self.world.revision();
+        for entry in self.history.iter().rev() {
+            if entry.revision_after != minimum {
+                break;
+            }
+            minimum = entry.revision_before;
+        }
+        minimum
     }
 
     /// Seeds a small deterministic demo scene for the viewport milestone. This is

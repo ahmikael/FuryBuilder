@@ -15,10 +15,11 @@ pub use build_dsl::{
 };
 pub use dto::{
     Actor, ActorSource, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats,
-    HistoryState, HistorySummary, OperationRequest, OperationResult, PaletteEntry,
+    DeltaCounts, HistoryState, HistorySummary, Observation, ObservationLegendEntry,
+    ObservationMode, ObservationRequest, OperationRequest, OperationResult, PaletteEntry,
     ParametricApplyResult, ParametricConflict, ParametricInspection, PreviewResult, Query,
     QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SceneObjectInspection,
-    SectionSnapshot, StructureSites, UndoTarget,
+    SectionSnapshot, Slice, SliceAxis, StructureSites, UndoTarget,
 };
 pub use error::{AppError, ErrorCode};
 pub use jobs::{

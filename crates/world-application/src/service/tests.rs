@@ -1,5 +1,8 @@
 use super::*;
-use crate::dto::{Actor, OperationRequest, Query, QueryResult};
+use crate::dto::{
+    Actor, DeltaCounts, ObservationMode, ObservationRequest, OperationRequest, Query, QueryResult,
+    Slice, SliceAxis,
+};
 use world_domain::{BiomeSection, BiomeState, BlockBox, BlockPos, BlockState, ChunkPos};
 use world_operations::Operation;
 
@@ -1438,4 +1441,150 @@ fn parametric_rejects_invalid_recipes_and_unknown_dimensions() {
         ErrorCode::InvalidArgument
     );
     assert!(service.parametric_summaries().unwrap().is_empty());
+}
+
+#[test]
+fn observe_renders_deterministic_maps_and_an_exact_revision_diff() {
+    let mut service = WorldService::new();
+    service
+        .execute(set_block(BlockPos::new(0, 64, 0), "minecraft:stone"))
+        .unwrap();
+    service
+        .execute(set_block(BlockPos::new(0, 65, 0), "minecraft:grass_block"))
+        .unwrap();
+    let bounds = BlockBox::new(BlockPos::new(0, 64, 0), BlockPos::new(0, 65, 0)).unwrap();
+
+    let surface = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::MaterialMap,
+            slice: None,
+            from_revision: None,
+        })
+        .unwrap();
+    assert_eq!(surface.world_revision, 2);
+    assert_eq!((surface.width, surface.height), (1, 1));
+    assert_eq!(surface.blocks_per_pixel, 1);
+    assert!(surface.image.starts_with("data:image/png;base64,"));
+    assert!(surface.image_bytes > 0);
+    assert_eq!(surface.sampled_units, 1);
+    assert_eq!(surface.non_air_units, 1);
+    assert!(surface
+        .legend
+        .iter()
+        .any(|entry| entry.key == "minecraft:grass_block"));
+    assert!(!surface.partial);
+    assert!(surface
+        .notes
+        .iter()
+        .any(|note| note.contains("deterministic")));
+
+    let repeat = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::MaterialMap,
+            slice: None,
+            from_revision: None,
+        })
+        .unwrap();
+    assert_eq!(surface, repeat);
+
+    let cross = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::CrossSection,
+            slice: Some(Slice {
+                axis: SliceAxis::Y,
+                coordinate: 64,
+            }),
+            from_revision: None,
+        })
+        .unwrap();
+    assert_eq!((cross.width, cross.height), (1, 1));
+    assert_eq!(cross.non_air_units, 1);
+    assert!(cross
+        .legend
+        .iter()
+        .any(|entry| entry.key == "state:minecraft:stone"));
+
+    let diff = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::RevisionDiff,
+            slice: None,
+            from_revision: Some(1),
+        })
+        .unwrap();
+    assert_eq!(
+        diff.counts,
+        DeltaCounts {
+            added: 1,
+            removed: 0,
+            changed: 0
+        }
+    );
+    assert_eq!(diff.from_revision, Some(1));
+    assert_eq!(diff.world_revision, 2);
+}
+
+#[test]
+fn observation_rejects_invalid_mode_combinations_and_missing_history() {
+    let mut service = WorldService::new().with_max_history(1);
+    for y in 64..=66 {
+        service
+            .execute(set_block(BlockPos::new(0, y, 0), "minecraft:stone"))
+            .unwrap();
+    }
+    let bounds = BlockBox::new(BlockPos::new(0, 64, 0), BlockPos::new(0, 66, 0)).unwrap();
+
+    let missing_history = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::RevisionDiff,
+            slice: None,
+            from_revision: Some(0),
+        })
+        .unwrap_err();
+    assert_eq!(missing_history.code, ErrorCode::NoHistory);
+
+    let wrong_slice = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::MaterialMap,
+            slice: Some(Slice {
+                axis: SliceAxis::Y,
+                coordinate: 64,
+            }),
+            from_revision: None,
+        })
+        .unwrap_err();
+    assert_eq!(wrong_slice.code, ErrorCode::InvalidArgument);
+
+    let missing_from = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::RevisionDiff,
+            slice: None,
+            from_revision: None,
+        })
+        .unwrap_err();
+    assert_eq!(missing_from.code, ErrorCode::InvalidArgument);
+
+    let newer_from = service
+        .observe(&ObservationRequest {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            mode: ObservationMode::RevisionDiff,
+            slice: None,
+            from_revision: Some(99),
+        })
+        .unwrap_err();
+    assert_eq!(newer_from.code, ErrorCode::InvalidArgument);
 }

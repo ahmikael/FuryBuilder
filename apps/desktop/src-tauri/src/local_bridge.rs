@@ -22,9 +22,9 @@ use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use world_application::{
     app_info, apply_job_operation, compile_build_dsl, undo_job_operation_id, Actor, ActorSource,
-    AppError, BuildRecipe, ErrorCode, JobStartRequest, JobState, Operation, OperationRequest,
-    OperationResult, PreviewResult, Query, UndoTarget, WorldService, DEFAULT_JOB_LIST_LIMIT,
-    MAX_JOB_LIST_LIMIT,
+    AppError, BuildRecipe, ErrorCode, JobStartRequest, JobState, ObservationRequest, Operation,
+    OperationRequest, OperationResult, PreviewResult, Query, UndoTarget, WorldService,
+    DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
 };
 
 use crate::mcp_access::{McpAccessInput, McpAccessMode};
@@ -384,6 +384,15 @@ struct BuildDslParams {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ObserveParams {
+    project_id: String,
+    #[serde(default)]
+    world_revision: Option<u64>,
+    observation: ObservationRequest,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct TemplateInsertParams {
     project_id: String,
     template_id: String,
@@ -710,6 +719,16 @@ fn dispatch_inner(
             // instead of leaving the client to guess from an earlier call.
             value["worldRevision"] = json!(revision);
             Ok(value)
+        }
+        "observe" => {
+            let params: ObserveParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            let service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            to_value(service.observe(&params.observation)?)
         }
         "list_templates" => {
             let params: ProjectParams = parse_params(params)?;
@@ -2353,6 +2372,124 @@ mod tests {
                 .expect("block")
                 .to_string(),
             "minecraft:oak_planks"
+        );
+    }
+
+    #[test]
+    fn serves_deterministic_observation_maps_and_revision_diffs() {
+        let state = AppState::new(temp_root("observation"));
+        {
+            let mut service = state.service.lock().expect("service");
+            for (y, name) in [(64, "minecraft:stone"), (65, "minecraft:grass_block")] {
+                service
+                    .execute(OperationRequest {
+                        project_id: LOCAL_PROJECT_ID.to_owned(),
+                        operation: Operation::SetBlock {
+                            dimension: "minecraft:overworld".to_owned(),
+                            pos: BlockPos::new(0, y, 0),
+                            state: name.parse().expect("state"),
+                        },
+                        expected_revision: None,
+                        idempotency_key: None,
+                        actor: Actor::ui("test-user"),
+                        linked_object_id: None,
+                        layer_id: None,
+                    })
+                    .expect("seed observation world");
+            }
+        }
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-observe",
+                "token",
+                "observe",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 2,
+                    "observation": {
+                        "dimension": "minecraft:overworld",
+                        "bounds": {
+                            "min": { "x": 0, "y": 64, "z": 0 },
+                            "max": { "x": 0, "y": 65, "z": 0 }
+                        },
+                        "mode": "material_map"
+                    }
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let result = response.result.expect("observation");
+        assert_eq!(result["worldRevision"], 2);
+        assert_eq!(result["mode"], "material_map");
+        assert_eq!(result["width"], 1);
+        assert_eq!(result["height"], 1);
+        assert_eq!(result["partial"], false);
+        assert_eq!(result["sampledUnits"], 1);
+        assert!(result["image"]
+            .as_str()
+            .expect("image")
+            .starts_with("data:image/png;base64,"));
+        assert!(result["legend"]
+            .as_array()
+            .expect("legend")
+            .iter()
+            .any(|entry| entry["key"] == "minecraft:grass_block"));
+
+        let diff = handle_request(
+            &state,
+            "token",
+            request(
+                "req-observe-diff",
+                "token",
+                "observe",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 2,
+                    "observation": {
+                        "dimension": "minecraft:overworld",
+                        "bounds": {
+                            "min": { "x": 0, "y": 64, "z": 0 },
+                            "max": { "x": 0, "y": 65, "z": 0 }
+                        },
+                        "mode": "revision_diff",
+                        "fromRevision": 1
+                    }
+                }),
+            ),
+        );
+        assert!(diff.ok, "{:?}", diff.error);
+        let diff = diff.result.expect("diff observation");
+        assert_eq!(diff["counts"]["added"], 1);
+        assert_eq!(diff["fromRevision"], 1);
+
+        let stale = handle_request(
+            &state,
+            "token",
+            request(
+                "req-observe-stale",
+                "token",
+                "observe",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 1,
+                    "observation": {
+                        "dimension": "minecraft:overworld",
+                        "bounds": {
+                            "min": { "x": 0, "y": 64, "z": 0 },
+                            "max": { "x": 0, "y": 65, "z": 0 }
+                        },
+                        "mode": "material_map"
+                    }
+                }),
+            ),
+        );
+        assert!(!stale.ok);
+        assert_eq!(
+            stale.error.expect("stale error").code,
+            ErrorCode::RevisionMismatch
         );
     }
 

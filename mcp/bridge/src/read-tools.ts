@@ -477,6 +477,97 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "observe",
+    {
+      title: "Observe region",
+      description:
+        "Renders a deterministic PNG observation from authoritative voxel data at the given world revision. Modes: top_down, heightmap, material_map, biome_map, cross_section (requires slice) and revision_diff (requires from_revision). Returns the image plus legend, bounds, scale, completeness and warnings. Read-only; exact block queries remain authoritative.",
+      inputSchema: z.object({
+        ...project,
+        dimension: z.string().min(1).max(128),
+        bounds,
+        mode: z.enum([
+          "top_down",
+          "heightmap",
+          "material_map",
+          "biome_map",
+          "cross_section",
+          "revision_diff",
+        ]),
+        slice: z
+          .object({
+            axis: z.enum(["x", "y", "z"]),
+            coordinate: z.number().int(),
+          })
+          .optional()
+          .describe("Required for cross_section; ignored by other modes."),
+        from_revision: z
+          .number()
+          .int()
+          .nonnegative()
+          .optional()
+          .describe("Required for revision_diff; the current world revision is the upper bound."),
+      }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision, dimension, bounds, mode, slice, from_revision }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        const observation: Record<string, unknown> = { dimension, bounds, mode };
+        if (slice !== undefined) observation.slice = slice;
+        if (from_revision !== undefined) observation.fromRevision = from_revision;
+        const result = (await callDesktop(
+          "observe",
+          withRevision({ projectId, observation }, world_revision),
+          { timeoutMs: RENDER_TIMEOUT_MS },
+        )) as Record<string, unknown>;
+        const dataUrl = result.image;
+        if (typeof dataUrl !== "string" || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+          return {
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "invalid_response: the desktop endpoint did not return a PNG observation",
+              },
+            ],
+          };
+        }
+        const base64 = dataUrl.slice(PNG_DATA_URL_PREFIX.length);
+        const imageBytes = Buffer.from(base64, "base64");
+        const metadata: Record<string, unknown> = { ...result };
+        delete metadata.image;
+        return {
+          content: [
+            {
+              type: "image",
+              data: base64,
+              mimeType: "image/png",
+            },
+            {
+              type: "text",
+              text: JSON.stringify(
+                {
+                  ...metadata,
+                  image: {
+                    mimeType: "image/png",
+                    bytes: imageBytes.byteLength,
+                    sha256: createHash("sha256").update(imageBytes).digest("hex"),
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "capture_viewport",
     {
       title: "Capture viewport",

@@ -964,6 +964,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "furybuilder-observation"
+version = "0.1.0"
+dependencies = [
+ "furybuilder-world-domain",
+ "png 0.17.16",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "furybuilder-project-store"
 version = "0.1.0"
 dependencies = [
@@ -1031,7 +1042,9 @@ dependencies = [
 name = "furybuilder-world-application"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
  "furybuilder-build-dsl",
+ "furybuilder-observation",
  "furybuilder-scene-model",
  "furybuilder-workspace-model",
  "furybuilder-world-domain",

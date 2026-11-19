@@ -20,10 +20,11 @@ use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, compile_build_dsl, Actor, AppError, AppInfo, BlockChange,
     BuildDslSummary, BuildRecipe, ChunkSnapshotBatch, ErrorCode, HistoryState, HistorySummary,
-    ObjectKind, Operation, OperationRequest, OperationResult, ParametricApplyResult,
-    ParametricConflictPolicy, ParametricInspection, ParametricObjectSummary, ParametricScene,
-    ParametricSpec, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot,
-    SceneObjectInspection, SemanticObject, StructureSites, WorkspacePolicy, WorldService,
+    ObjectKind, Observation, ObservationRequest, Operation, OperationRequest, OperationResult,
+    ParametricApplyResult, ParametricConflictPolicy, ParametricInspection, ParametricObjectSummary,
+    ParametricScene, ParametricSpec, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks,
+    RenderSnapshot, SceneObjectInspection, SemanticObject, StructureSites, WorkspacePolicy,
+    WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -93,6 +94,20 @@ pub fn render_snapshot(
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     service.render_snapshot(&dimension, center, radius)
+}
+
+/// Renders a deterministic top-down, height, material, biome, cross-section or revision
+/// diff observation. It is read-only and returns a PNG data URL with bounded metadata.
+#[tauri::command]
+pub fn observe(
+    state: State<'_, AppState>,
+    request: ObservationRequest,
+) -> Result<Observation, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    service.observe(&request)
 }
 
 #[tauri::command]

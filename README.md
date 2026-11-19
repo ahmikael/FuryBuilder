@@ -167,6 +167,13 @@ The `Build DSL` tab compiles and previews the exact operation before applying it
 exposes `preview_build_dsl`, which returns the preview plus the same typed operation for the
 standard confirmed `apply_operation` path. Recipes cannot execute JavaScript, shell or file
 access.
+M9.17 adds deterministic observation maps: top-down, heightmap, material/biome maps,
+cross-sections and revision diffs are rendered by the Core at an exact world revision.
+Every observation returns a PNG data URL plus bounds, scale, legend, completeness and
+warnings; revision diff reconstructs prior state from retained section history and fails
+closed when that history is no longer available. The `Observation` tab previews the same
+maps, and MCP exposes the read-only `observe` tool. Exact block queries remain the
+authority; colour maps are summaries.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

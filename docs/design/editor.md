@@ -233,6 +233,31 @@ through the normal preview/apply and undo path.
 - Recipes are transient in M9.16. They are not written to `project.json`, and export formats
   do not claim to preserve DSL metadata.
 
+## Observation maps (M9.17)
+
+The `Observation` tab renders reproducible maps from the authoritative Rust world. It is
+read-only: no blocks, metadata, revision or history entry is changed by a map.
+
+| Mode          | Behaviour                                                                                                                              |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Top-down      | Surface material per X/Z column, shaded by elevation.                                                                                  |
+| Heightmap     | Five deterministic elevation bands for the top non-air block.                                                                          |
+| Material map  | Surface block colour per column with a bounded legend.                                                                                 |
+| Biome map     | Biome at the surface column; missing source data is shown as unknown.                                                                  |
+| Cross-section | One X, Y or Z plane; vertical planes keep row 0 at the highest Y.                                                                      |
+| Revision diff | Added/removed/changed blocks between `fromRevision` and the current revision, projected top-down with exact block counts and a legend. |
+
+- The panel uses the current viewport selection as inclusive bounds. It shows the image,
+  dimensions, blocks per pixel, sampled/non-air units, scanned blocks, revision, legend,
+  warnings and notes.
+- Revision diff relies on retained section history. If the requested revision is older
+  than what the live history can reconstruct, the Core returns `no_history` instead of
+  drawing a misleading diff.
+- All modes are bounded to 512×512 pixels and 8,000,000 scanned/compared blocks. Legends
+  keep the 16 most common entries and mark truncation.
+- Maps never replace exact queries; coordinate-level decisions still use `get_block` and
+  `get_region`.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

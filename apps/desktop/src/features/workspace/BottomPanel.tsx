@@ -10,6 +10,7 @@ import {
   Leaf,
   Library,
   Loader2,
+  Map,
   Mountain,
   Redo2,
   RotateCcw,
@@ -37,6 +38,7 @@ import { TemplateLibraryPanel } from "@/features/workspace/TemplateLibraryPanel"
 import { ScenePanel } from "@/features/workspace/ScenePanel";
 import { ParametricPanel } from "@/features/workspace/ParametricPanel";
 import { BuildDslPanel } from "@/features/workspace/BuildDslPanel";
+import { ObservationPanel } from "@/features/workspace/ObservationPanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -665,6 +667,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="dsl">
               <Braces className="size-3" /> Build DSL
             </TabsTrigger>
+            <TabsTrigger value="observation">
+              <Map className="size-3" /> Observation
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -722,6 +727,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="dsl" className="m-0 flex min-h-0 flex-col p-2">
           <BuildDslPanel />
+        </TabsContent>
+
+        <TabsContent value="observation" className="m-0 flex min-h-0 flex-col p-2">
+          <ObservationPanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">
