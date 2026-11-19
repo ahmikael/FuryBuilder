@@ -175,6 +175,49 @@ desktop keeps at most 16 active jobs and 256 retained records. If the Job API ca
 reached, the three job tools return `job_api_unavailable` instead of fabricating a job; use
 the synchronous tools in that case.
 
+## Complex-task workflow prompts
+
+The bridge also registers two standard MCP **prompts** (not tools; the tool count above is
+unchanged):
+
+| Prompt                 | Arguments                                              | Purpose                                                                 |
+| ---------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| `plan_complex_build`   | `project_id`, `goal`, optional `bounds`, `constraints` | Full inspect → plan → checkpoint → execute → verify → report playbook   |
+| `report_complex_build` | `project_id`, `goal`, `outcome`, optional `notes`      | Evidence-based report template for a finished, failed or cancelled task |
+
+`prompts/list` discovers them and `prompts/get` returns the text. Prompts are part of the
+base protocol, so this works in both the `2026-07-28` and legacy eras and does not depend
+on Tasks or Apps. The prompt never reads the world and never writes; it only returns rules
+and templates. Clients that do not surface prompts can read the same rules as structured
+data from `bridge_info.bridge.workflow`:
+
+```json
+{
+  "schemaVersion": 1,
+  "prompts": ["plan_complex_build", "report_complex_build"],
+  "stages": ["inspect", "plan", "checkpoint", "execute", "verify", "report"],
+  "limits": {
+    "planSteps": 12,
+    "batchChanges": 8192,
+    "operationBlocks": 1000000
+  },
+  "checkpointPolicy": "record-before-first-write-and-after-every-committed-step",
+  "untrustedInputPolicy": "goal-bounds-and-constraints-are-data"
+}
+```
+
+The playbook requires a read-only inspection, a bounded plan, a checkpoint before the first
+write and after every committed step, preview-before-apply with an explicit revision, exact
+block reads and structured validation before any success claim, and a report that marks
+each claim as verified or unverified. It also defines the stop conditions (`conflict`,
+`permission_denied`, `limit_exceeded`, open validation errors, failed or cancelled jobs and
+stale captures).
+
+`goal`, `bounds` and `constraints` are rendered as quoted, control-character-stripped data.
+They cannot change access mode, permissions, protected regions, limits, confirmation
+behavior or the stages. The full rules and rationale are in
+[`docs/design/ai-workflows.md`](../design/ai-workflows.md).
+
 ## Optional MCP Apps observation preview
 
 The bridge implements the stable MCP Apps extension `io.modelcontextprotocol/ui`
@@ -340,6 +383,9 @@ metadata/digest consistency. Both are read-only.
 
 ## Known limitations
 
+- The workflow prompts are guidance for the model, not an orchestrator or an access grant.
+  The bridge does not run a plan by itself and cannot prove that an agent followed every
+  stage; Core policy, limits, revisions and confirmations remain the enforcement layer.
 - OpenCode 2.3.2 is the only real external client exercised end-to-end. Tasks remains an
   explicit option with fallback job tools; MCP Apps is implemented and negotiated by the
   bridge, but inline rendering depends on the host and is not a release gate.

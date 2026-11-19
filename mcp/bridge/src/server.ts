@@ -31,6 +31,7 @@ import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
 import { createUnavailableJobApi, type JobApi } from "./jobs.js";
 import { probeDesktop } from "./desktop-client.js";
 import { registerReadTools } from "./read-tools.js";
+import { registerWorkflowPrompts, workflowSummary } from "./workflow.js";
 import { registerWriteTools } from "./write-tools.js";
 
 const bridgeInfoInput = z.object({
@@ -64,6 +65,7 @@ export function createFuryBuilderServer(
   registerJobTools(server, jobs);
   registerReadTools(server);
   registerWriteTools(server);
+  registerWorkflowPrompts(server);
   registerObservationApp(server);
   server.server.registerCapabilities({
     extensions: {
@@ -132,6 +134,7 @@ export function createFuryBuilderServer(
                   legacyFallback: true,
                   contextPolicy: "explicit-per-request",
                   optionalExtensions: OPTIONAL_EXTENSIONS,
+                  workflow: workflowSummary(),
                   apps: {
                     ...apps,
                     bridgeImplementsApps: BRIDGE_IMPLEMENTS_APPS,

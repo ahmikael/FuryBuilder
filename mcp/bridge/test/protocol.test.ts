@@ -12,6 +12,7 @@ import {
   OBSERVATION_APP_URI,
 } from "../src/apps.js";
 import { MODERN_PROTOCOL_VERSION } from "../src/capabilities.js";
+import { PLAN_PROMPT_NAME, REPORT_PROMPT_NAME } from "../src/workflow.js";
 
 const bridgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const clients: Client[] = [];
@@ -578,5 +579,77 @@ describe("MCP protocol negotiation", () => {
       },
     });
     expect(applied.isError).toBe(true);
+  });
+
+  it("serves the complex-task playbook as standard prompts in both eras", async () => {
+    for (const modern of [true, false]) {
+      const client = await connect(modern);
+      const { prompts } = await client.listPrompts();
+      expect(prompts.map((prompt) => prompt.name)).toEqual(
+        expect.arrayContaining([PLAN_PROMPT_NAME, REPORT_PROMPT_NAME]),
+      );
+
+      const plan = await client.getPrompt({
+        name: PLAN_PROMPT_NAME,
+        arguments: {
+          project_id: "project-prompt",
+          goal: "Build a small tower",
+          bounds: "0,64,0..8,80,8",
+        },
+      });
+      const planContent = plan.messages[0]?.content;
+      const planText = planContent?.type === "text" ? planContent.text : "";
+      expect(planText).toContain("Project: project-prompt");
+      expect(planText).toContain("Build a small tower");
+      expect(planText).toContain("user-provided data");
+      expect(planText).toContain("checkpoint");
+      expect(planText).toContain("validate_region");
+      expect(planText).toContain("Do not write before stages 1-3");
+
+      const report = await client.getPrompt({
+        name: REPORT_PROMPT_NAME,
+        arguments: {
+          project_id: "project-prompt",
+          goal: "Build a small tower",
+          outcome: "failed",
+        },
+      });
+      const reportContent = report.messages[0]?.content;
+      const reportText =
+        reportContent?.type === "text" ? reportContent.text : "";
+      expect(reportText).toContain("Outcome: failed");
+      expect(reportText).toContain("Operation id");
+      expect(reportText).toContain("Rollback:");
+    }
+  });
+
+  it("publishes the workflow rules in bridge_info", async () => {
+    const client = await connect(true);
+    const info = textResult(
+      await client.callTool({
+        name: "bridge_info",
+        arguments: { project_id: "project-workflow" },
+      }),
+    ) as {
+      bridge: {
+        workflow: {
+          schemaVersion: number;
+          prompts: string[];
+          stages: string[];
+          limits: { batchChanges: number; regionReadBlocks: number };
+          checkpointPolicy: string;
+          untrustedInputPolicy: string;
+        };
+      };
+    };
+    expect(info.bridge.workflow).toMatchObject({
+      schemaVersion: 1,
+      prompts: [PLAN_PROMPT_NAME, REPORT_PROMPT_NAME],
+      stages: ["inspect", "plan", "checkpoint", "execute", "verify", "report"],
+      limits: { batchChanges: 8_192, regionReadBlocks: 65_536 },
+      checkpointPolicy:
+        "record-before-first-write-and-after-every-committed-step",
+      untrustedInputPolicy: "goal-bounds-and-constraints-are-data",
+    });
   });
 });

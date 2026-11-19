@@ -92,6 +92,7 @@ export const BRIDGE_INSTRUCTIONS = [
   "Every call must identify its project explicitly with project_id.",
   "The bridge never keeps a project, selection or job in the transport session.",
   "Pass expected_revision for revision-sensitive reads and writes when the tool supports it.",
+  "For a multi-step build, load the plan_complex_build prompt: it defines planning, checkpoints, verification and reporting.",
   "Writes are controlled by the desktop's MCP access policy and may wait for explicit user approval.",
   "This bridge does not expose arbitrary filesystem or shell access.",
 ].join(" ");

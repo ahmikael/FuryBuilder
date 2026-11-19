@@ -187,6 +187,14 @@ staged behind a pink ghost and an Inspector preview and requires a second confir
 the confirmed paste runs through the cancellable Rust Job API with authoritative progress.
 Escape cancels the staged preview, cancellation rolls back before writing, and every paste
 remains one reversible Batch.
+M9.21 defines the rules for complex AI tasks and ships them as standard MCP prompts:
+`plan_complex_build` requires inspect → plan → checkpoint → execute → verify → report, with
+bounded steps, preview-before-apply at an explicit revision, a checkpoint after every
+committed step, exact block/validation/screenshot evidence and an honest report. Caller
+goal/bounds/constraints are quoted as untrusted data and cannot change permissions or
+limits. The same rules are exposed as structured data in `bridge_info.bridge.workflow`, so
+clients without prompt support can still follow them; Core policy and confirmation remain
+the enforcement layer.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
