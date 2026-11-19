@@ -55,3 +55,8 @@ that change is internal to `project_store`.
 contains `data/`, `changes/`, `source/` and `cache/`. Immutable imported source bytes live
 under `source/files/` with hashes in `source/source.json`; the editable overlay is the
 versioned snapshot.
+
+Schema migrations copy the original `project.json` byte for byte before changing it. Routine
+per-save manifest backups are bounded to five; migration backups are retained. The release
+policy and manual backup procedure are in `docs/release/versioning.md` and
+`docs/release/backup-policy.md`.

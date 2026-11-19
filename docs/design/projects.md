@@ -97,6 +97,7 @@ encode world → write data/.tmp → fsync
              → copy project.json to project.json.bak-<prevRev>
              → write project.json.tmp → rename project.json
              → prune snapshots beyond 8
+             → prune project.json.bak-* beyond 5
 ```
 
 - The manifest is never rewritten before the snapshot it references is durable. A crash
@@ -105,7 +106,9 @@ encode world → write data/.tmp → fsync
 - A manual save clears stale autosave artifacts. `project_close(save=false)` also removes
   them, because an explicit discard must not be resurrected by recovery.
 - Old snapshots are pruned to the newest eight revisions, so a save-heavy session cannot
-  grow without bound. `data/` is the only directory pruning touches.
+  grow without bound. `data/` is the only directory pruning touches. Per-save
+  `project.json.bak-*` copies are pruned to the newest five; migration backups
+  (`project.json.v<old>.bak`) are never pruned automatically.
 
 ## Autosave, checkpoints and recovery
 
@@ -134,12 +137,16 @@ encode world → write data/.tmp → fsync
 
 ## Migrations and unsupported versions
 
-- A manifest with a lower `projectSchemaVersion` is migrated in place after writing a
-  verbatim `project.json.v<old>.bak`; a failed migration never destroys the only copy.
+- A manifest with a lower `projectSchemaVersion` is copied byte for byte to
+  `project.json.v<old>.bak` before an in-place migration; if the backup copy fails, the
+  migration does not start. A failed migration never destroys the only copy.
 - A newer schema, or a newer snapshot format, is refused with `unsupported_version`. The
   app does not guess at unknown fields or downgrade data.
 - Target-version mismatches are refused rather than converted; a future installer/adapter
   will own that conversion.
+
+Release-level retention and user backup rules are documented in
+[versioning](../release/versioning.md) and [backup policy](../release/backup-policy.md).
 
 ## Source overlay
 
@@ -178,6 +185,8 @@ add source browsing.
 | Manual save / explicit discard clears autosave                     | `manual_save_clears_stale_autosave`                                  |
 | Checkpoints bounded and readable                                   | `checkpoints_are_bounded_and_readable`                               |
 | Newer schema refused, draft migrated with backup                   | `unsupported_newer_schema_is_refused`                                |
+| Migration backup is byte-identical to the pre-migration manifest   | `older_schema_is_migrated_with_a_verbatim_backup`                    |
+| Per-save manifest backups are bounded to five                      | `per_save_manifest_backups_are_bounded`                              |
 | Rename safety                                                      | `rename_updates_display_name_only_and_rejects_paths`                 |
 | Immutable source copies and path safety                            | `source_files_are_immutable_copies_with_hashes`                      |
 | Duplicate names get unique folders                                 | `duplicate_names_get_unique_folders`                                 |

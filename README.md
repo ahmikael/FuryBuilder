@@ -35,6 +35,10 @@ fixtures/              Small self-authored test structures (no Mojang assets)
 - Rust stable (MSVC toolchain) and Visual Studio Build Tools
 - WebView2 runtime (preinstalled on current Windows 10/11)
 
+For a packaged Windows beta (install, update, uninstall), see
+[docs/install-windows.md](docs/install-windows.md). The steps below are for development
+from source.
+
 ## Development
 
 ```powershell
@@ -53,9 +57,10 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 
 ## Current status
 
-M0–M9 are complete and M10 is in progress. The authoritative status is tracked in
-`FURYBUILDER_MASTER_PLAN.md`. The functional baseline below is implemented and verified: the
-read-only 1.21.4 classic reader
+M0–M10 are complete. M11 (public beta/release) is in progress; installer, versioning,
+changelog, migrations and backup policy are implemented and tested. The authoritative status
+is tracked in `FURYBUILDER_MASTER_PLAN.md`. The functional baseline below is implemented and
+verified. The read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
 coordinates and proto-chunks, then decodes block-state palettes, sections and
 biomes without writing to the source world. A byte-preserving, fail-closed copy

@@ -1,0 +1,62 @@
+# Changelog
+
+All notable user-visible changes to FuryBuilder are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the application follows
+[Semantic Versioning](https://semver.org/). The application version is independent from the
+project schema, the world snapshot format and the MCP tool schema; see
+[docs/release/versioning.md](docs/release/versioning.md).
+
+## [Unreleased]
+
+### Added
+
+- Verified Windows NSIS installer flow: clean per-user install, application startup,
+  0.1.0 → 0.1.1 update with user-data preservation, and uninstall that keeps projects.
+- MSI package integrity check by administrative extraction. A per-machine MSI install still
+  requires an elevated session and is documented as untested by the non-elevated harness.
+- Single-source application version in `version.json` with `pnpm version:check` and
+  `pnpm version:set`; CI rejects drifting manifests.
+- Release versioning, migration and backup policies under `docs/release/`.
+
+### Changed
+
+- Project schema migration now copies the original `project.json` byte for byte before
+  applying the migration, instead of writing a rewritten document as the backup.
+- Per-save `project.json.bak-*` copies are now bounded to the newest five revisions.
+
+### Fixed
+
+- A failed migration or interrupted save can no longer leave an unbounded pile of manifest
+  backups or a non-verbatim migration backup.
+
+## [0.1.0] - 2026-11-19
+
+First beta baseline, developed through milestones M0–M10 and the first M11 release tasks.
+
+### Added
+
+- Windows desktop editor for Minecraft Java Edition 1.21.4 (`DataVersion` 4189) built on
+  Tauri 2, React, TypeScript, Three.js and a Rust world core.
+- Empty and flat projects, read-only analysis and safe copy-on-write import of classic
+  1.21.4 worlds, and Vanilla World generation through the official local Java server engine.
+- Sparse chunk editing, selection tools, terrain brushes, biome tools, layers, masks,
+  templates, semantic objects, a typed Build DSL, deterministic observation maps and
+  validation findings.
+- Undo/redo, autosave, checkpoints, crash recovery and an eight-snapshot project history
+  with the previous manifest retained on every save.
+- Java structure `.nbt` round-trip, complete world-folder export with byte-preserving
+  passthrough, and official-server import/export smoke tests.
+- Local Minecraft asset discovery, verified client-version matching, ordered resource packs
+  and a documented placeholder fallback.
+- Managed Java runtime and official `server.jar` provisioning with explicit consent,
+  checksum verification, offline cache and isolated generation processes.
+- MCP stdio bridge over the same application API as the UI, with read-only default,
+  scoped writes, previews, confirmations, jobs, screenshots and observation tools.
+- Windows graphics-path stress evidence, cache budgets, diagnostics and beginner/advanced
+  documentation.
+
+### Security
+
+- Imported files, resource packs, worlds and MCP calls are bounded and fail closed.
+- FuryBuilder distributes no Mojang JARs, assets or game binaries; downloads happen only
+  after user action and are verified against official metadata.

@@ -5,6 +5,7 @@ import {
   APPS_RESOURCE_MIME_TYPE,
   OBSERVATION_APP_HTML,
   OBSERVATION_APP_URI,
+  OBSERVATION_APP_VERSION,
   OBSERVATION_RESOURCE_META,
   OBSERVATION_TOOL_META,
   resolveAppsSupport,
@@ -78,6 +79,9 @@ describe("observation app resource", () => {
     expect(OBSERVATION_APP_HTML).toContain("ui/notifications/initialized");
     expect(OBSERVATION_APP_HTML).toContain("ui/notifications/tool-result");
     expect(OBSERVATION_APP_HTML).toContain("ui/resource-teardown");
+    expect(OBSERVATION_APP_HTML).toContain(
+      `version: "${OBSERVATION_APP_VERSION}"`,
+    );
     expect(OBSERVATION_APP_HTML).not.toMatch(/https?:\/\//);
     expect(OBSERVATION_APP_HTML).not.toContain("<script src");
     expect(OBSERVATION_APP_HTML).not.toContain("<link");

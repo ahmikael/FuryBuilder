@@ -18,6 +18,11 @@ milestone is complete.
 - [MCP setup](mcp-setup.md) — connect an AI client, access modes, confirmations, common
   errors and how to turn access off.
 
+## Release
+
+- [Release documentation](release/README.md) — versioning, changelog, migrations and backup
+  policy for the Windows beta.
+
 ## Architecture and design
 
 - [Architecture decisions (ADR)](adr/README.md) — Java target, project format, meshing,

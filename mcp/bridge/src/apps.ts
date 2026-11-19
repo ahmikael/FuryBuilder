@@ -364,7 +364,7 @@ export const OBSERVATION_APP_HTML = `<!DOCTYPE html>
 
   request("ui/initialize", {
     protocolVersion: PROTOCOL_VERSION,
-    appInfo: { name: "furybuilder-observation", version: "0.1.0" },
+    appInfo: { name: "furybuilder-observation", version: "${OBSERVATION_APP_VERSION}" },
     appCapabilities: { availableDisplayModes: ["inline", "fullscreen"] }
   }).then(function () {
     initialized = true;

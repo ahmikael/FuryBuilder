@@ -18,6 +18,7 @@ fn older_schema_is_migrated_with_a_verbatim_backup() {
         serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     value["projectSchemaVersion"] = serde_json::Value::from(0);
     std::fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+    let original = std::fs::read(&path).unwrap();
 
     let (_, world, _) = store
         .open(&detail.summary.folder)
@@ -29,9 +30,13 @@ fn older_schema_is_migrated_with_a_verbatim_backup() {
         migrated["projectSchemaVersion"].as_u64(),
         Some(PROJECT_SCHEMA_VERSION as u64)
     );
-    assert!(dir.join("project.json.v0.bak").exists());
+    assert_eq!(
+        std::fs::read(dir.join("project.json.v0.bak")).unwrap(),
+        original,
+        "migration backup must be byte-identical to the pre-migration manifest"
+    );
 
-    let backup = migrate_manifest(value, &dir.join("extra.bak")).expect("public migration");
+    let backup = migrate_manifest(value).expect("public migration");
     assert_eq!(backup.project_schema_version, PROJECT_SCHEMA_VERSION);
 }
 

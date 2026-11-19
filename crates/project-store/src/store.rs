@@ -18,6 +18,7 @@ use crate::source::{read_source_manifest, SourceFile, SourceManifest};
 
 pub const MAX_SNAPSHOTS: usize = 8;
 pub const MAX_CHECKPOINTS: usize = 5;
+pub const MAX_MANIFEST_BACKUPS: usize = 5;
 pub const MAX_SOURCE_FILES: usize = 100_000;
 pub const SESSION_MARKER: &str = "session.lock";
 pub const AUTOSAVE_FILE: &str = "autosave.fwl";
@@ -346,10 +347,12 @@ impl ProjectStore {
             });
         }
         if version < PROJECT_SCHEMA_VERSION {
-            // Older drafts are migrated in place after writing a verbatim backup, so a
-            // failed migration never destroys the only copy of the manifest.
+            // Copy the manifest exactly as it exists on disk before migrating, so a failed
+            // migration never destroys the only copy and the backup is byte-identical.
             let backup = dir.join(format!("project.json.v{version}.bak"));
-            let manifest = migrate_manifest(raw, &backup)?;
+            fs::copy(&path, &backup)
+                .map_err(|error| io_error(format!("backing up {}", path.display()), error))?;
+            let manifest = migrate_manifest(raw)?;
             write_json(&path, &manifest)?;
             return Ok(manifest);
         }
@@ -859,6 +862,7 @@ impl ProjectStore {
             backup_created = true;
         }
         write_json(&previous_manifest, &manifest)?;
+        let _ = Self::prune_manifest_backups(&dir);
 
         if kind == SaveKind::Manual {
             // A manual save is authoritative; a stale autosave must not resurface.
@@ -1028,6 +1032,36 @@ impl ProjectStore {
             }
         }
         Ok(pruned)
+    }
+
+    /// Keeps only the newest `MAX_MANIFEST_BACKUPS` per-save manifest copies. Migration
+    /// backups named `project.json.v<version>.bak` are intentionally left untouched because
+    /// they are evidence of a schema transition, not routine saves.
+    fn prune_manifest_backups(dir: &Path) -> usize {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        let mut backups: Vec<(u64, PathBuf)> = entries
+            .flatten()
+            .map(|entry| entry.path())
+            .filter_map(|path| {
+                let name = path.file_name()?.to_str()?;
+                let revision = name
+                    .strip_prefix("project.json.bak-")?
+                    .parse::<u64>()
+                    .ok()?;
+                Some((revision, path))
+            })
+            .collect();
+        backups.sort_by_key(|(revision, _)| *revision);
+        let excess = backups.len().saturating_sub(MAX_MANIFEST_BACKUPS);
+        let mut pruned = 0;
+        for (_, path) in backups.into_iter().take(excess) {
+            if fs::remove_file(&path).is_ok() {
+                pruned += 1;
+            }
+        }
+        pruned
     }
 
     /// Copies immutable source files into the project. The overlay is the project snapshot;
@@ -1255,13 +1289,10 @@ fn valid_source_relative_path(value: &str) -> bool {
             .all(|component| !component.is_empty() && component != "." && component != "..")
 }
 
-/// Migrates a stored manifest to the current schema. Unknown/newer versions are refused
-/// with a backup path so a newer app can still open the folder; older draft versions gain
-/// the fields introduced after them.
-pub fn migrate_manifest(
-    raw: serde_json::Value,
-    backup_path: &Path,
-) -> Result<ProjectManifest, ProjectError> {
+/// Migrates a stored manifest to the current schema. Unknown/newer versions are refused;
+/// older draft versions gain the fields introduced after them. The caller is responsible
+/// for copying the original manifest bytes before calling this function.
+pub fn migrate_manifest(raw: serde_json::Value) -> Result<ProjectManifest, ProjectError> {
     let version = raw
         .get("projectSchemaVersion")
         .and_then(serde_json::Value::as_u64)
@@ -1300,8 +1331,6 @@ pub fn migrate_manifest(
                     .entry("lastSaveKind")
                     .or_insert_with(|| serde_json::Value::from("manual"));
             }
-            let bytes = serde_json::to_vec_pretty(&value)?;
-            write_atomic(backup_path, &bytes)?;
             let manifest: ProjectManifest = serde_json::from_value(value)?;
             manifest.validate()?;
             Ok(manifest)
@@ -1532,6 +1561,40 @@ mod tests {
             .filter(|entry| parse_snapshot_revision(&entry.file_name().to_string_lossy()).is_some())
             .count();
         assert_eq!(snapshots, 2);
+    }
+
+    #[test]
+    fn per_save_manifest_backups_are_bounded() {
+        let root = temp_root("manifest-backups");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Backups", CreationMode::Empty, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let (_, mut world, _) = store.open(&folder).expect("open");
+        for index in 0..(MAX_MANIFEST_BACKUPS as i32 + 4) {
+            world
+                .set_block(
+                    "minecraft:overworld",
+                    BlockPos::new(index, 70, 0),
+                    &"minecraft:stone".parse().unwrap(),
+                )
+                .unwrap();
+            world.bump_revision();
+            store
+                .save(&folder, &world, EditorState::default(), SaveKind::Manual)
+                .expect("save");
+        }
+        let dir = root.join(&folder);
+        let mut backups: Vec<String> = fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .filter_map(|entry| entry.file_name().to_str().map(str::to_owned))
+            .filter(|name| name.starts_with("project.json.bak-"))
+            .collect();
+        backups.sort();
+        assert_eq!(backups.len(), MAX_MANIFEST_BACKUPS);
+        assert!(!backups.contains(&"project.json.bak-1".to_owned()));
     }
 
     #[test]
