@@ -1,4 +1,5 @@
 mod commands;
+mod diagnostics;
 mod local_bridge;
 mod mcp_access;
 mod mcp_activity;
@@ -30,7 +31,14 @@ pub fn run() {
             let data_dir = app_data_dir(app.handle())?;
             let projects_root = data_dir.join("projects");
             std::fs::create_dir_all(&projects_root)?;
-            app.manage(state::AppState::new(projects_root));
+            let diagnostics =
+                std::sync::Arc::new(diagnostics::Diagnostics::new(data_dir.join("logs")));
+            diagnostics.install_panic_hook();
+            diagnostics.record_startup();
+            app.manage(state::AppState::with_diagnostics(
+                projects_root,
+                diagnostics.clone(),
+            ));
             app.manage(asset_source::AssetSettingsStore::new(
                 data_dir.join("assets.json"),
             ));
@@ -51,6 +59,11 @@ pub fn run() {
                     // The editor stays usable; the MCP bridge reports that the desktop
                     // endpoint is unavailable instead of pretending to be connected.
                     eprintln!("FuryBuilder MCP bridge endpoint unavailable: {error}");
+                    diagnostics.write(
+                        "error",
+                        "mcp_bridge.start_failed",
+                        serde_json::json!({ "message": error.to_string() }),
+                    );
                 }
             }
             Ok(())
@@ -64,6 +77,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::ping,
+            commands::diagnostics_info,
+            commands::diagnostics_clear,
+            commands::diagnostics_open_folder,
+            commands::diagnostics_record_ui_error,
             commands::block_catalog,
             commands::world_info,
             commands::load_demo_world,
@@ -168,6 +185,11 @@ pub fn run() {
         .expect("error while building FuryBuilder")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                if let Some(state) = app.try_state::<state::AppState>() {
+                    state
+                        .diagnostics
+                        .write("info", "app.exit", serde_json::json!({}));
+                }
                 if let Some(runtime) = app.try_state::<local_bridge::LocalBridgeRuntime>() {
                     runtime.cleanup();
                 }

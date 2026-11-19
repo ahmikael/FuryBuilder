@@ -484,6 +484,34 @@ pub fn project_status(state: State<'_, AppState>) -> Result<SessionStatus, AppEr
     session_status(&state)
 }
 
+#[tauri::command]
+pub fn diagnostics_info(state: State<'_, AppState>) -> crate::diagnostics::DiagnosticsInfo {
+    state.diagnostics.info()
+}
+
+#[tauri::command]
+pub fn diagnostics_clear(
+    state: State<'_, AppState>,
+) -> Result<crate::diagnostics::DiagnosticsInfo, AppError> {
+    state.diagnostics.clear().map_err(AppError::internal)
+}
+
+#[tauri::command]
+pub fn diagnostics_open_folder(state: State<'_, AppState>) -> Result<(), AppError> {
+    state.diagnostics.open_folder().map_err(AppError::internal)
+}
+
+/// Accepts a sanitized UI-level crash/error report. It never contains world payloads;
+/// absolute paths and control characters are removed by the diagnostics sink.
+#[tauri::command]
+pub fn diagnostics_record_ui_error(state: State<'_, AppState>, message: String, source: String) {
+    state.diagnostics.write(
+        "error",
+        "ui.error",
+        serde_json::json!({ "message": message, "source": source }),
+    );
+}
+
 /// Ends a clean open session before switching projects. Unsaved work is never discarded
 /// implicitly: the caller must save or close it first.
 fn ensure_current_closed(state: &AppState, projects: &mut ProjectSession) -> Result<(), AppError> {
@@ -555,6 +583,15 @@ pub fn project_create(
     });
     projects.refresh_checkpoints(&folder);
     drop(projects);
+    state.diagnostics.write(
+        "info",
+        "project.create",
+        serde_json::json!({
+            "folder": folder,
+            "revision": detail.summary.world_revision,
+            "mode": format!("{:?}", detail.summary.creation_mode).to_lowercase(),
+        }),
+    );
     current_payload(&state, detail, info, recovery)
 }
 
@@ -586,6 +623,16 @@ pub fn project_open(
     });
     projects.refresh_checkpoints(&folder);
     drop(projects);
+    state.diagnostics.write(
+        "info",
+        "project.open",
+        serde_json::json!({
+            "folder": folder,
+            "revision": info.revision,
+            "recoveryAvailable": recovery.as_ref().map(|entry| entry.available),
+            "recoveryReason": recovery.as_ref().map(|entry| entry.reason.clone()),
+        }),
+    );
     current_payload(&state, detail, info, recovery)
 }
 
@@ -626,6 +673,17 @@ pub fn project_save(
         active.editor_state = editor_state;
     }
     projects.refresh_checkpoints(&current.folder);
+    state.diagnostics.write(
+        "info",
+        "project.save",
+        serde_json::json!({
+            "folder": current.folder,
+            "revision": outcome.project.summary.world_revision,
+            "bytes": outcome.bytes_written,
+            "backupCreated": outcome.backup_created,
+            "prunedSnapshots": outcome.pruned_snapshots,
+        }),
+    );
     Ok(outcome)
 }
 
@@ -665,6 +723,15 @@ pub fn project_autosave(
         active.editor_state = editor_state;
     }
     projects.refresh_checkpoints(&current.folder);
+    state.diagnostics.write(
+        "debug",
+        "project.autosave",
+        serde_json::json!({
+            "folder": current.folder,
+            "revision": revision,
+            "reason": reason.unwrap_or_default(),
+        }),
+    );
     Ok(revision)
 }
 

@@ -273,12 +273,35 @@ describe("project activation", () => {
           recoveredRevision: 6,
           recoveredAtMs: 1_700_000_100_000,
           fromBackup: false,
+          available: true,
+          autosaveRevision: 6,
         },
       }),
     );
     await useProjectStore.getState().open(summary.folder);
     expect(useProjectStore.getState().recovery?.recoveredRevision).toBe(6);
     expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ kind: "warning" });
+  });
+
+  it("does not claim a damaged autosave was restored", async () => {
+    api.open.mockResolvedValue(
+      payload({
+        recovery: {
+          reason: "The crash autosave does not match its recorded checksum.",
+          recoveredRevision: 4,
+          recoveredAtMs: 1_700_000_100_000,
+          fromBackup: false,
+          available: false,
+          autosaveRevision: 7,
+        },
+      }),
+    );
+    await useProjectStore.getState().open(summary.folder);
+    const toast = useToastStore.getState().toasts.at(-1);
+    expect(toast?.kind).toBe("warning");
+    expect(toast?.title).toContain("recovery warning");
+    expect(toast?.description).toContain("Opened saved revision 4");
+    expect(toast?.description).not.toContain("restored from the autosave");
   });
 });
 

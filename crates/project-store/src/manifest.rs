@@ -431,9 +431,16 @@ pub struct ProjectDetail {
 #[serde(rename_all = "camelCase")]
 pub struct RecoveryInfo {
     pub reason: String,
+    /// Revision of the world actually opened by the caller.
     pub recovered_revision: u64,
     pub recovered_at_ms: u64,
     pub from_backup: bool,
+    /// True only when a newer autosave passed checksum and round-trip verification and was
+    /// loaded into memory. A damaged autosave is reported with `false` and never blocks the
+    /// last saved revision from opening.
+    pub available: bool,
+    /// Revision recorded in the autosave metadata, even when it could not be applied.
+    pub autosave_revision: Option<u64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

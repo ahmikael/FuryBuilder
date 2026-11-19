@@ -13,6 +13,7 @@ import { MinecraftAssetsSection } from "@/features/settings/MinecraftAssetsSecti
 import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
 import { MinecraftServerSection } from "@/features/settings/MinecraftServerSection";
 import { DependencyReadiness } from "@/features/settings/DependencyReadiness";
+import { DiagnosticsSection } from "@/features/settings/DiagnosticsSection";
 import type { BackendState } from "@/hooks/use-backend";
 import { MAX_UI_SCALE, MIN_UI_SCALE, type ThemeMode, useEditorStore } from "@/state/editor-store";
 import { cn } from "@/lib/utils";
@@ -135,6 +136,10 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
           <MinecraftServerSection />
         </div>
+
+        <Separator />
+
+        <DiagnosticsSection />
 
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

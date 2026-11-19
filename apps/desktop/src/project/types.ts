@@ -170,6 +170,10 @@ export interface RecoveryInfo {
   recoveredRevision: number;
   recoveredAtMs: number;
   fromBackup: boolean;
+  /** True only when the newer autosave passed verification and was loaded. */
+  available: boolean;
+  /** Revision recorded by the autosave metadata, even when it could not be applied. */
+  autosaveRevision: number | null;
 }
 
 export interface SessionStatus {

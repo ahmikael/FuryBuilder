@@ -68,6 +68,15 @@ struct SessionMarker {
     revision: u64,
 }
 
+/// Outcome of inspecting crash-recovery artifacts. `Unavailable` still exposes a reason so
+/// the UI can explain why the last saved revision was opened instead of the autosave.
+#[derive(Debug)]
+enum RecoveryCheck {
+    None,
+    Ready { info: RecoveryInfo, autosave: World },
+    Unavailable(RecoveryInfo),
+}
+
 /// A project folder manager rooted at a single directory. Every mutating operation is
 /// serialized by the caller (the Tauri app holds one service lock) and every publish is
 /// atomic: bytes are written to a temporary file, verified by decoding and re-encoding,
@@ -120,6 +129,51 @@ fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), Project
     let mut bytes = serde_json::to_vec_pretty(value)?;
     bytes.push(b'\n');
     write_atomic(path, &bytes)
+}
+
+fn unavailable_recovery(
+    recovered_revision: u64,
+    recovered_at_ms: u64,
+    autosave_revision: Option<u64>,
+    reason: &str,
+) -> RecoveryInfo {
+    RecoveryInfo {
+        reason: reason.to_owned(),
+        recovered_revision,
+        recovered_at_ms,
+        from_backup: false,
+        available: false,
+        autosave_revision,
+    }
+}
+
+fn read_session_started_at(dir: &Path) -> Option<u64> {
+    read_json::<SessionMarker>(&dir.join(SESSION_MARKER))
+        .ok()
+        .map(|marker| marker.started_at_ms)
+}
+
+/// Removes half-written files from a process that died during an atomic publish. Only
+/// `.tmp` files inside FuryBuilder-owned directories are touched, so opening a project can
+/// never delete a user file.
+fn cleanup_temporary_files(dir: &Path) {
+    for candidate in [
+        dir.to_path_buf(),
+        dir.join(DATA_DIR),
+        dir.join(CHECKPOINT_DIR),
+        dir.join(SOURCE_DIR),
+        dir.join(EXPORTS_DIR),
+    ] {
+        let Ok(entries) = fs::read_dir(&candidate) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && path.extension().is_some_and(|extension| extension == "tmp") {
+                let _ = fs::remove_file(path);
+            }
+        }
+    }
 }
 
 fn verify_round_trip(bytes: &[u8]) -> Result<World, ProjectError> {
@@ -550,12 +604,14 @@ impl ProjectStore {
 
     /// Opens a project. If a crashed session left a newer verified autosave behind, the
     /// caller receives it together with a `RecoveryInfo`; the on-disk project is untouched
-    /// until the user explicitly saves.
+    /// until the user explicitly saves. A damaged autosave is reported but never prevents
+    /// the last verified save from opening.
     pub fn open(
         &self,
         folder: &str,
     ) -> Result<(ProjectDetail, World, Option<RecoveryInfo>), ProjectError> {
         let dir = self.project_dir(folder)?;
+        cleanup_temporary_files(&dir);
         let manifest = self.manifest(&dir)?;
         manifest.validate()?;
         let snapshot_path = dir.join(&manifest.world_file);
@@ -571,78 +627,109 @@ impl ProjectStore {
         let mut world = verify_round_trip(&bytes)?;
         let marker_present = dir.join(SESSION_MARKER).exists();
         let recovery = if marker_present {
-            self.recovery_for(&dir, &manifest)?
+            match self.inspect_recovery(&dir, &manifest)? {
+                RecoveryCheck::None => None,
+                RecoveryCheck::Ready { info, autosave } => {
+                    world = autosave;
+                    Some(info)
+                }
+                RecoveryCheck::Unavailable(info) => Some(info),
+            }
         } else {
             None
         };
-        if let Some(info) = &recovery {
-            let autosave = dir.join(DATA_DIR).join(AUTOSAVE_FILE);
-            let bytes = fs::read(&autosave)
-                .map_err(|error| io_error(format!("reading {}", autosave.display()), error))?;
-            world = verify_round_trip(&bytes)?;
-            if world.revision() != info.recovered_revision {
-                return Err(ProjectError::corrupt(
-                    "autosave revision does not match its metadata",
-                ));
-            }
-        }
         let detail = self.detail(folder)?;
         Ok((detail, world, recovery))
     }
 
-    fn recovery_for(
+    /// Verifies recovery artifacts before adopting them. Any failure becomes an explicit
+    /// `available: false` report rather than an error that hides the last saved project.
+    fn inspect_recovery(
         &self,
         dir: &Path,
         manifest: &ProjectManifest,
-    ) -> Result<Option<RecoveryInfo>, ProjectError> {
+    ) -> Result<RecoveryCheck, ProjectError> {
         let meta_path = dir.join(DATA_DIR).join(AUTOSAVE_META);
         if !meta_path.exists() {
-            return Ok(None);
+            return Ok(RecoveryCheck::None);
         }
+        let marker_started_at = read_session_started_at(dir).unwrap_or_else(now_ms);
         let meta: AutosaveMeta = match read_json(&meta_path) {
             Ok(meta) => meta,
             Err(_) => {
-                return Ok(Some(RecoveryInfo {
-                    reason: "the crashed session left an unreadable autosave record".to_owned(),
-                    recovered_revision: manifest.world_revision,
-                    recovered_at_ms: now_ms(),
-                    from_backup: false,
-                }))
+                return Ok(RecoveryCheck::Unavailable(unavailable_recovery(
+                    manifest.world_revision,
+                    marker_started_at,
+                    None,
+                    "The previous session left an unreadable autosave record. The last saved revision was opened and nothing was overwritten.",
+                )))
             }
         };
         if meta.revision <= manifest.world_revision {
-            return Ok(None);
+            return Ok(RecoveryCheck::None);
         }
+        let unavailable = |reason: &str, autosave_revision: Option<u64>| {
+            RecoveryCheck::Unavailable(unavailable_recovery(
+                manifest.world_revision,
+                meta.saved_at_ms,
+                autosave_revision,
+                reason,
+            ))
+        };
         if !is_hex_sha256(&meta.checksum) {
-            return Ok(Some(RecoveryInfo {
-                reason: "autosave metadata has an invalid checksum".to_owned(),
-                recovered_revision: meta.revision,
-                recovered_at_ms: meta.saved_at_ms,
-                from_backup: false,
-            }));
+            return Ok(unavailable(
+                "The crash autosave metadata contains an invalid checksum. The last saved revision was opened.",
+                Some(meta.revision),
+            ));
         }
         let autosave = dir.join(DATA_DIR).join(AUTOSAVE_FILE);
         if !autosave.exists() {
-            return Ok(None);
+            return Ok(unavailable(
+                "The crash autosave file is missing. The last saved revision was opened.",
+                Some(meta.revision),
+            ));
         }
-        let bytes = fs::read(&autosave)
-            .map_err(|error| io_error(format!("reading {}", autosave.display()), error))?;
-        let checksum = sha256_hex(&bytes);
-        if checksum != meta.checksum {
-            return Ok(Some(RecoveryInfo {
-                reason: "autosave checksum does not match its metadata; save again from the editor"
-                    .to_owned(),
-                recovered_revision: manifest.world_revision,
+        let bytes = match fs::read(&autosave) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                return Ok(unavailable(
+                    "The crash autosave could not be read. The last saved revision was opened; the autosave is preserved for diagnostics.",
+                    Some(meta.revision),
+                ))
+            }
+        };
+        if sha256_hex(&bytes) != meta.checksum {
+            return Ok(unavailable(
+                "The crash autosave does not match its recorded checksum. The last saved revision was opened; the autosave is preserved for diagnostics.",
+                Some(meta.revision),
+            ));
+        }
+        let world = match verify_round_trip(&bytes) {
+            Ok(world) => world,
+            Err(_) => {
+                return Ok(unavailable(
+                    "The crash autosave failed structural verification. The last saved revision was opened; the autosave is preserved for diagnostics.",
+                    Some(meta.revision),
+                ))
+            }
+        };
+        if world.revision() != meta.revision {
+            return Ok(unavailable(
+                "The crash autosave revision does not match its metadata. The last saved revision was opened.",
+                Some(meta.revision),
+            ));
+        }
+        Ok(RecoveryCheck::Ready {
+            info: RecoveryInfo {
+                reason: "The previous session ended without closing the project. A newer autosave passed checksum and structural verification and was opened in memory.".to_owned(),
+                recovered_revision: meta.revision,
                 recovered_at_ms: meta.saved_at_ms,
                 from_backup: false,
-            }));
-        }
-        Ok(Some(RecoveryInfo {
-            reason: "the previous session ended without closing the project".to_owned(),
-            recovered_revision: meta.revision,
-            recovered_at_ms: meta.saved_at_ms,
-            from_backup: false,
-        }))
+                available: true,
+                autosave_revision: Some(meta.revision),
+            },
+            autosave: world,
+        })
     }
 
     /// Starts a session. The marker records enough context to explain a crash on the next
@@ -1455,6 +1542,8 @@ mod tests {
         );
         let info = recovery.expect("recovery info");
         assert_eq!(info.recovered_revision, 3);
+        assert!(info.available);
+        assert_eq!(info.autosave_revision, Some(3));
         assert!(detail.summary.recoverable);
         let listed = store.list();
         assert!(listed.projects[0].recoverable);
@@ -1463,6 +1552,80 @@ mod tests {
         let (_, plain, recovery) = store.open(&folder).expect("open after end");
         assert_eq!(plain.revision(), 1);
         assert!(recovery.is_none());
+    }
+
+    #[test]
+    fn damaged_autosave_opens_last_saved_revision_and_reports_unavailable() {
+        let root = temp_root("damaged-autosave");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Damaged", CreationMode::Empty, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        store.begin_session(&folder, 1).expect("begin");
+        let (_, mut world, _) = store.open(&folder).expect("open");
+        world.bump_revision();
+        store
+            .autosave(&folder, &world, EditorState::default(), "")
+            .expect("autosave");
+        let autosave = root.join(&folder).join(DATA_DIR).join(AUTOSAVE_FILE);
+        let mut bytes = fs::read(&autosave).unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 0xff;
+        fs::write(&autosave, bytes).unwrap();
+
+        let (_, opened, recovery) = store.open(&folder).expect("open despite damage");
+        assert_eq!(opened.revision(), 1);
+        let info = recovery.expect("recovery information");
+        assert!(!info.available);
+        assert_eq!(info.recovered_revision, 1);
+        assert_eq!(info.autosave_revision, Some(2));
+        assert!(info.reason.contains("checksum"));
+    }
+
+    #[test]
+    fn unreadable_autosave_metadata_does_not_block_open() {
+        let root = temp_root("unreadable-autosave");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Unreadable", CreationMode::Empty, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        store.begin_session(&folder, 1).expect("begin");
+        fs::write(
+            root.join(&folder).join(DATA_DIR).join(AUTOSAVE_META),
+            b"{ not json",
+        )
+        .unwrap();
+
+        let (_, opened, recovery) = store.open(&folder).expect("open");
+        assert_eq!(opened.revision(), 1);
+        let info = recovery.expect("recovery information");
+        assert!(!info.available);
+        assert!(info.reason.contains("unreadable autosave record"));
+    }
+
+    #[test]
+    fn open_removes_stale_atomic_write_temporary_files() {
+        let root = temp_root("stale-temp");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Temporary", CreationMode::Empty, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let dir = root.join(&folder);
+        let orphan = dir
+            .join(DATA_DIR)
+            .join("world-00000000000000000001.fwl.tmp");
+        fs::write(&orphan, b"partial").unwrap();
+        fs::write(dir.join("project.json.tmp"), b"partial").unwrap();
+        fs::write(dir.join("unrelated.txt"), b"keep").unwrap();
+
+        store.open(&folder).expect("open");
+        assert!(!orphan.exists());
+        assert!(!dir.join("project.json.tmp").exists());
+        assert!(dir.join("unrelated.txt").exists());
+        assert!(dir.join(PROJECT_FILE).exists());
     }
 
     #[test]

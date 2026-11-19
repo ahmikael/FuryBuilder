@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { recordUiError } from "@/lib/diagnostics-client";
 import type { AppErrorShape } from "@/lib/contracts";
 
 export class BackendError extends Error {
@@ -48,6 +49,8 @@ export async function invokeCommand<T>(
   try {
     return await invoke<T>(command, args);
   } catch (error) {
-    throw normalizeError(error);
+    const normalized = normalizeError(error);
+    recordUiError(normalized.message, `invoke:${command}`);
+    throw normalized;
   }
 }

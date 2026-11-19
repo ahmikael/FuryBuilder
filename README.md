@@ -240,6 +240,13 @@ explicit two-step download previews with progress and integrity errors. A read-o
 Vanilla World readiness card lists Java/JAR/EULA blockers without downloading or accepting
 anything. Derived asset bundles and managed Java/server caches can be cleared separately,
 and missing assets or offline failures explain the placeholder/Empty Project fallback.
+M10.6 hardens crash recovery and support diagnostics: autosaves are adopted only after
+checksum, round-trip and revision verification; a damaged autosave opens the last saved
+revision with an explicit warning instead of blocking the project or pretending to restore
+it. A persistent banner offers Save/Discard, stale atomic-write temp files are cleaned, and
+`Settings → Diagnostics` exposes a bounded, path-redacted JSON Lines log with explicit
+open/clear actions. Stable backend error codes now add actionable hints, and a render
+error boundary plus global handlers keep unexpected UI failures recoverable.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

@@ -115,9 +115,17 @@ encode world → write data/.tmp → fsync
 - Autosave never changes `worldRevision` in the manifest. It writes `data/autosave.fwl`
   plus checksum metadata and updates editor state.
 - On the next open, a `session.lock` plus a newer, checksum-verified autosave is adopted
-  automatically and reported as `RecoveryInfo`. The UI shows a banner with **Keep recovered
-  data** (saves later) and **Discard and reload saved** (clears autosave + marker and opens
-  the manifest snapshot).
+  automatically and reported as `RecoveryInfo` with `available: true`. Every autosave is
+  read, SHA-256 checked, decoded and re-encoded before adoption; its revision must match
+  the metadata. The UI keeps a persistent banner with **Save now** and **Discard recovered
+  changes** until the recovered state is saved or dismissed.
+- A damaged autosave (unreadable metadata, missing file, checksum mismatch, failed
+  round-trip or revision mismatch) is never loaded. The last verified snapshot opens,
+  `RecoveryInfo.available` is `false`, and the reason is shown without pretending that
+  anything was restored. The artifacts stay on disk for diagnostics; a successful save or
+  an explicit discard replaces them.
+- On open, only `*.tmp` files inside FuryBuilder-owned directories are removed, cleaning up
+  a half-written atomic publish without touching user files.
 - An autosave that fails its checksum is never silently loaded; the safe saved revision is
   opened instead with a warning.
 - Checkpoints are explicit full snapshots with a reason, kept to five per project under
@@ -158,23 +166,27 @@ add source browsing.
 
 ## Testing
 
-| Requirement | Evidence |
-|---|---|
-| Create/list/open round trip incl. negative Y and flat base | `project-store` `create_list_open_round_trips_world_and_manifest` |
-| Corrupt bytes rejected by checksum | `corrupt_snapshot_is_rejected_by_checksum` |
-| Atomic save keeps the previous revision and verifies | `save_is_atomic_and_keeps_previous_snapshot` |
-| Crash recovery adopts only a newer verified autosave | `crash_recovery_uses_newer_verified_autosave` |
-| Manual save / explicit discard clears autosave | `manual_save_clears_stale_autosave` |
-| Checkpoints bounded and readable | `checkpoints_are_bounded_and_readable` |
-| Newer schema refused, draft migrated with backup | `unsupported_newer_schema_is_refused` |
-| Rename safety | `rename_updates_display_name_only_and_rejects_paths` |
-| Immutable source copies and path safety | `source_files_are_immutable_copies_with_hashes` |
-| Duplicate names get unique folders | `duplicate_names_get_unique_folders` |
-| Cache cleared without touching data | `end_session_clears_only_recreatable_cache` |
-| Snapshot determinism across dimensions | `snapshot_round_trip_preserves_states_across_dimensions` |
-| UI list/create/rename/open, unsaved warning, recovery, checkpoints | `features/project/ProjectManager.test.tsx` |
-| Client session state, autosave and close | `state/project-store.test.ts` |
-| IPC argument contract | `lib/project-api.test.ts` |
+| Requirement                                                        | Evidence                                                             |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| Create/list/open round trip incl. negative Y and flat base         | `project-store` `create_list_open_round_trips_world_and_manifest`    |
+| Corrupt bytes rejected by checksum                                 | `corrupt_snapshot_is_rejected_by_checksum`                           |
+| Atomic save keeps the previous revision and verifies               | `save_is_atomic_and_keeps_previous_snapshot`                         |
+| Crash recovery adopts only a newer verified autosave               | `crash_recovery_uses_newer_verified_autosave`                        |
+| Damaged autosave falls back without blocking open                  | `damaged_autosave_opens_last_saved_revision_and_reports_unavailable` |
+| Unreadable autosave metadata keeps the saved revision available    | `unreadable_autosave_metadata_does_not_block_open`                   |
+| Stale atomic-write temp files are cleaned safely                   | `open_removes_stale_atomic_write_temporary_files`                    |
+| Manual save / explicit discard clears autosave                     | `manual_save_clears_stale_autosave`                                  |
+| Checkpoints bounded and readable                                   | `checkpoints_are_bounded_and_readable`                               |
+| Newer schema refused, draft migrated with backup                   | `unsupported_newer_schema_is_refused`                                |
+| Rename safety                                                      | `rename_updates_display_name_only_and_rejects_paths`                 |
+| Immutable source copies and path safety                            | `source_files_are_immutable_copies_with_hashes`                      |
+| Duplicate names get unique folders                                 | `duplicate_names_get_unique_folders`                                 |
+| Cache cleared without touching data                                | `end_session_clears_only_recreatable_cache`                          |
+| Snapshot determinism across dimensions                             | `snapshot_round_trip_preserves_states_across_dimensions`             |
+| UI list/create/rename/open, unsaved warning, recovery, checkpoints | `features/project/ProjectManager.test.tsx`                           |
+| Recovery banner distinguishes verified and unavailable autosaves   | `features/project/RecoveryBanner.test.tsx`                           |
+| Client session state, autosave and close                           | `state/project-store.test.ts`                                        |
+| IPC argument contract                                              | `lib/project-api.test.ts`                                            |
 
 ## Limitations (M5)
 
@@ -182,6 +194,10 @@ add source browsing.
 - `Vanilla World` and `Import World` creation modes are schema placeholders until M7/M8.
 - Autosave is interval/visibility/close driven, not every edit; a crash can lose up to the
   last 30 seconds.
+- Recovery adoption is explicit and verified; a damaged autosave is preserved for
+  diagnostics but cannot be inspected block-by-block in the UI.
+- Live concurrent sessions of FuryBuilder are not detected with an OS file lock; the
+  single-instance desktop workflow is assumed.
 - Checkpoints are manual and bounded to five; there is no checkpoint browser for projects
   that are not open.
 - Source attachment is backend-only; import UI and validation of source formats arrive in

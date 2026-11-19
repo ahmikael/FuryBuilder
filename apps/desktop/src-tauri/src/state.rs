@@ -6,6 +6,7 @@ use project_store::{EditorState, ProjectStore};
 use serde::Serialize;
 use world_application::{AppError, JobQueue, WorldService};
 
+use crate::diagnostics::Diagnostics;
 use crate::local_bridge::RendererBridge;
 use crate::mcp_access::{McpAccessState, McpConfirmationBridge};
 use crate::mcp_activity::McpActivityLog;
@@ -75,10 +76,19 @@ pub struct AppState {
     pub mcp_access: McpAccessState,
     pub mcp_confirmations: McpConfirmationBridge,
     pub mcp_activity: McpActivityLog,
+    pub diagnostics: Arc<Diagnostics>,
 }
 
 impl AppState {
+    /// Test/utility constructor: diagnostics stay inside the supplied project root so they
+    /// never touch the user's real application data.
+    #[cfg(test)]
     pub fn new(projects_root: PathBuf) -> Self {
+        let diagnostics = Arc::new(Diagnostics::new(projects_root.join(".diagnostics")));
+        Self::with_diagnostics(projects_root, diagnostics)
+    }
+
+    pub fn with_diagnostics(projects_root: PathBuf, diagnostics: Arc<Diagnostics>) -> Self {
         let service = Arc::new(Mutex::new(WorldService::new()));
         Self {
             service: service.clone(),
@@ -88,6 +98,7 @@ impl AppState {
             mcp_access: McpAccessState::default(),
             mcp_confirmations: McpConfirmationBridge::default(),
             mcp_activity: McpActivityLog::default(),
+            diagnostics,
         }
     }
 }
@@ -149,10 +160,33 @@ pub fn autosave_on_exit(state: &AppState) {
         return;
     };
     if world.revision() != current.saved_revision {
-        let _ = projects
+        match projects
             .store
-            .autosave(&current.folder, &world, current.editor_state.clone(), "");
+            .autosave(&current.folder, &world, current.editor_state.clone(), "")
+        {
+            Ok(revision) => state.diagnostics.write(
+                "warn",
+                "project.exit_autosave",
+                serde_json::json!({ "folder": current.folder, "revision": revision }),
+            ),
+            Err(error) => state.diagnostics.write(
+                "error",
+                "project.exit_autosave_failed",
+                serde_json::json!({ "folder": current.folder, "code": error.code() }),
+            ),
+        }
     } else {
-        let _ = projects.store.end_session(&current.folder);
+        match projects.store.end_session(&current.folder) {
+            Ok(()) => state.diagnostics.write(
+                "info",
+                "project.exit_clean",
+                serde_json::json!({ "folder": current.folder }),
+            ),
+            Err(error) => state.diagnostics.write(
+                "warn",
+                "project.exit_marker_failed",
+                serde_json::json!({ "folder": current.folder, "code": error.code() }),
+            ),
+        }
     }
 }

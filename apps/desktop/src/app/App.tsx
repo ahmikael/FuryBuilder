@@ -11,6 +11,7 @@ import { McpAccessDialog } from "@/features/mcp/McpAccessDialog";
 import { McpConfirmationHost } from "@/features/mcp/McpConfirmationHost";
 import { McpWorldChangeHost } from "@/features/mcp/McpWorldChangeHost";
 import { ProjectManager, useProjectAutosave } from "@/features/project/ProjectManager";
+import { RecoveryBanner } from "@/features/project/RecoveryBanner";
 import { Toaster } from "@/components/ui/toaster";
 import { useBackendInfo } from "@/hooks/use-backend";
 import { useAppliedScale, useAppliedTheme } from "@/app/theme";
@@ -55,6 +56,7 @@ export function App() {
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenMcpAccess={() => setMcpAccessOpen(true)}
         />
+        <RecoveryBanner />
         <div className="flex min-h-0 flex-1">
           {leftPanelOpen ? <WorldTree /> : null}
           <Viewport />

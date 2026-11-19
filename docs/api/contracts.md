@@ -27,7 +27,7 @@ interface AppInfo {
   name: string;
   version: string;
   targetMinecraftVersion: string; // "1.21.4"
-  targetDataVersion: number;      // 4189
+  targetDataVersion: number; // 4189
 }
 ```
 
@@ -37,7 +37,7 @@ Request: `{ name?: string }` (max 64 chars).
 
 ```ts
 interface PingResponse {
-  message: string;   // "pong, <name>"
+  message: string; // "pong, <name>"
   appVersion: string;
   timestampMs: number;
 }
@@ -72,8 +72,8 @@ interface ChunkSnapshot {
   loaded: boolean;
   sections: Array<{
     sectionY: number;
-    palette: BlockState[];       // one entry = implicit fill
-    data: number[];              // u64 words as [lo32, hi32, ...]
+    palette: BlockState[]; // one entry = implicit fill
+    data: number[]; // u64 words as [lo32, hi32, ...]
     bitsPerIndex: number;
     nonAir: number;
   }>;
@@ -103,7 +103,7 @@ Returns `BlockDefinition[]` sorted by block id:
 
 ```ts
 interface BlockDefinition {
-  name: string;                       // "minecraft:oak_stairs"
+  name: string; // "minecraft:oak_stairs"
   properties: Record<string, string>; // canonical defaults for 1.21.4
 }
 ```
@@ -163,7 +163,7 @@ Request: `{ dimension: string, bounds: { min: {x,y,z}, max: {x,y,z} } }`.
 interface RegionBlocks {
   dimension: string;
   bounds: BoxBounds;
-  volume: number;              // inclusive volume, bounded to 65,536
+  volume: number; // inclusive volume, bounded to 65,536
   blocks: Array<{ pos: BlockPos; state: BlockState }>; // non-air only
 }
 ```
@@ -183,7 +183,7 @@ folders become warnings instead of breaking the list.
 
 ```ts
 interface ProjectSummary {
-  folder: string;                 // validated single path component, ends in .furybuilder
+  folder: string; // validated single path component, ends in .furybuilder
   projectId: string;
   name: string;
   creationMode: "empty" | "flat" | "vanilla" | "import";
@@ -195,7 +195,7 @@ interface ProjectSummary {
   lastSaveKind: "manual" | "autosave" | "checkpoint";
   bytes: number;
   schemaVersion: number;
-  recoverable: boolean;           // session marker or a newer verified autosave
+  recoverable: boolean; // session marker or a newer verified autosave
 }
 ```
 
@@ -217,7 +217,34 @@ world service.
 Request `{ folder }`. Verifies the manifest and SHA-256, decodes and re-encodes the
 snapshot, adopts a newer verified autosave if a crash marker exists, starts a session and
 replaces the world service. Returns `{ detail, info, recovery, session }`; `recovery` is
-`null` or `{ reason, recoveredRevision, recoveredAtMs, fromBackup }`.
+`null` or:
+
+```ts
+interface RecoveryInfo {
+  reason: string;
+  recoveredRevision: number; // revision actually opened
+  recoveredAtMs: number;
+  fromBackup: boolean;
+  available: boolean; // false when the newer autosave was rejected
+  autosaveRevision: number | null; // revision recorded by the artifacts
+}
+```
+
+`available: false` means the last saved snapshot was opened; the autosave was preserved and
+never claimed as restored.
+
+### Diagnostics commands
+
+| Command                       | Request / result                                                                         |
+| ----------------------------- | ---------------------------------------------------------------------------------------- |
+| `diagnostics_info`            | Returns `{ appVersion, logDir, fileName, files, totalBytes, maxBytesPerFile, maxFiles }` |
+| `diagnostics_clear`           | Removes only FuryBuilder-owned `furybuilder*.log` files and returns the empty info       |
+| `diagnostics_open_folder`     | Opens the fixed application log directory in the OS file manager                         |
+| `diagnostics_record_ui_error` | Request `{ message, source }`; appends a sanitized UI error without world data           |
+
+Logs are local JSON Lines, bounded to 2 MiB per file and four files. They contain event
+names, error codes and short messages; absolute path-like text and control characters are
+redacted before writing.
 
 ### `project_save`
 

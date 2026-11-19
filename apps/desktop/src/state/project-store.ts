@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { normalizeError } from "@/lib/ipc";
+import { presentError } from "@/lib/error-messages";
 import {
   analyzeJavaWorld,
   autosaveProject,
@@ -106,11 +107,13 @@ export function currentEditorState(): EditorState {
 }
 
 function reportError(error: unknown, title: string): void {
-  const normalized = normalizeError(error);
+  const presented = presentError(error);
   pushToast({
     kind: "error",
     title,
-    description: `${normalized.message}${normalized.code !== "unknown" ? ` [${normalized.code}]` : ""}`,
+    description: `${presented.message}${presented.hint ? ` ${presented.hint}` : ""}${
+      presented.code !== "unknown" ? ` [${presented.code}]` : ""
+    }`,
   });
 }
 
@@ -384,10 +387,14 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       pushToast({
         kind: payload.recovery ? "warning" : "success",
         title: payload.recovery
-          ? `Recovered “${payload.detail.summary.name}”`
-          : `Opened “${payload.detail.summary.name}”`,
+          ? payload.recovery.available
+            ? `Recovered "${payload.detail.summary.name}"`
+            : `Opened "${payload.detail.summary.name}" with a recovery warning`
+          : `Opened "${payload.detail.summary.name}"`,
         description: payload.recovery
-          ? `${payload.recovery.reason} Revision ${payload.recovery.recoveredRevision} restored from the autosave; save to keep it.`
+          ? payload.recovery.available
+            ? `${payload.recovery.reason} Revision ${payload.recovery.recoveredRevision} is loaded in memory; save to keep it.`
+            : `${payload.recovery.reason} Opened saved revision ${payload.recovery.recoveredRevision}.`
           : `Revision ${payload.detail.summary.worldRevision}`,
       });
       void get().refreshList();

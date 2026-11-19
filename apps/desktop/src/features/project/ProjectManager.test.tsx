@@ -202,6 +202,8 @@ function seed(overrides: { revision?: number; recovery?: boolean } = {}): void {
           recoveredRevision: 6,
           recoveredAtMs: 1_700_000_200_000,
           fromBackup: false,
+          available: true,
+          autosaveRevision: 6,
         }
       : null,
     checkpoints: [],
