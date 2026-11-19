@@ -195,6 +195,11 @@ goal/bounds/constraints are quoted as untrusted data and cannot change permissio
 limits. The same rules are exposed as structured data in `bridge_info.bridge.workflow`, so
 clients without prompt support can still follow them; Core policy and confirmation remain
 the enforcement layer.
+M9.22 researched non-destructive reference overlays: a PNG-first 2D blueprint plane and a
+verified `.nbt` schematic ghost. The findings, threat model, storage/transform design,
+limits and test plan are in `docs/research/reference-overlays.md`. The overlay UI and
+commands are intentionally not enabled yet; references remain editor-only guides and must
+never enter world history or export.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
