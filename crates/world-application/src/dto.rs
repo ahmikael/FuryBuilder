@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use workspace_model::WorkspacePolicy;
 use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
 use world_operations::{Operation, StructureSite};
 
@@ -46,6 +47,9 @@ pub struct OperationRequest {
     pub actor: Actor,
     #[serde(default)]
     pub linked_object_id: Option<String>,
+    /// Edit layer for this operation. Omitted means the active workspace layer.
+    #[serde(default)]
+    pub layer_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -203,6 +207,7 @@ pub enum Query {
         clearance: u32,
         limit: u32,
     },
+    WorkspacePolicy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -223,6 +228,7 @@ pub enum QueryResult {
     RegionBlocks(RegionBlocks),
     ChunkStats(ChunkStats),
     StructureSites(StructureSites),
+    WorkspacePolicy(WorkspacePolicy),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -236,6 +242,7 @@ pub struct HistorySummary {
     pub revision_after: u64,
     pub changed_blocks: u64,
     pub timestamp_ms: u128,
+    pub layer_id: Option<String>,
 }
 
 /// Bounded editor history state for undo/redo buttons and the history panel.
@@ -271,4 +278,5 @@ pub struct AuditEntry {
     pub parameter_summary: serde_json::Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub linked_object_id: Option<String>,
+    pub layer_id: Option<String>,
 }

@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use workspace_model::WorkspacePolicy;
 use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
 
 use crate::error::ProjectError;
@@ -192,6 +193,14 @@ impl VanillaProvenance {
 pub struct EditorState {
     pub selected_dimension: String,
     pub load_radius: u8,
+    /// Layers, masks and protected regions. Omitted when the default policy is used,
+    /// so projects written before M9.13 stay byte-identical until the user changes it.
+    #[serde(default, skip_serializing_if = "workspace_is_default")]
+    pub workspace: WorkspacePolicy,
+}
+
+fn workspace_is_default(workspace: &WorkspacePolicy) -> bool {
+    workspace == &WorkspacePolicy::default()
 }
 
 impl Default for EditorState {
@@ -199,6 +208,7 @@ impl Default for EditorState {
         Self {
             selected_dimension: "minecraft:overworld".to_owned(),
             load_radius: DEFAULT_LOAD_RADIUS,
+            workspace: WorkspacePolicy::default(),
         }
     }
 }
@@ -215,6 +225,9 @@ impl EditorState {
                 "selectedDimension is empty or too long",
             ));
         }
+        self.workspace
+            .validate()
+            .map_err(|error| ProjectError::invalid_manifest(format!("workspace: {error}")))?;
         Ok(())
     }
 }

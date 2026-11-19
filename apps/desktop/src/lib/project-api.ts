@@ -10,6 +10,7 @@ import type {
   SaveOutcome,
   SessionStatus,
   VanillaParityReport,
+  WorkspacePolicy,
 } from "@/project/types";
 
 export function fetchProjects(): Promise<ProjectList> {
@@ -18,6 +19,14 @@ export function fetchProjects(): Promise<ProjectList> {
 
 export function fetchProjectStatus(): Promise<SessionStatus> {
   return invokeCommand<SessionStatus>("project_status");
+}
+
+export function fetchWorkspacePolicy(): Promise<WorkspacePolicy> {
+  return invokeCommand<WorkspacePolicy>("workspace_policy");
+}
+
+export function setWorkspacePolicy(policy: WorkspacePolicy): Promise<WorkspacePolicy> {
+  return invokeCommand<WorkspacePolicy>("workspace_set_policy", { policy });
 }
 
 export function createProject(

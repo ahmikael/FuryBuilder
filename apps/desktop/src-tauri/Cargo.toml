@@ -27,3 +27,4 @@ runtime-manager = { path = "../../../crates/runtime-manager", package = "furybui
 world-application = { path = "../../../crates/world-application", package = "furybuilder-world-application" }
 world-domain = { path = "../../../crates/world-domain", package = "furybuilder-world-domain" }
 world-io = { path = "../../../crates/world-io", package = "furybuilder-world-io" }
+structure-library = { path = "../../../crates/structure-library", package = "furybuilder-structure-library" }

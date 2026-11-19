@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
 import { ProjectManager } from "@/features/project/ProjectManager";
 import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
+import { defaultWorkspacePolicy } from "@/project/types";
 import { useProjectStore } from "@/state/project-store";
 import { useToastStore, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
@@ -284,6 +285,7 @@ describe("project manager", () => {
       expect(api.create).toHaveBeenCalledWith("New World", "flat", {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
+        workspace: defaultWorkspacePolicy(),
       }),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
@@ -387,6 +389,7 @@ describe("project manager", () => {
       expect(api.importWorld).toHaveBeenCalledWith("Imported World", "C:\\saves\\World", {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
+        workspace: defaultWorkspacePolicy(),
       }),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));

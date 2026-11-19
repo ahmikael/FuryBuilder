@@ -36,6 +36,7 @@ fn end_to_end_reopen_matches_bytes_checksum_and_semantics() {
     let editor_state = EditorState {
         selected_dimension: "minecraft:overworld".to_owned(),
         load_radius: 4,
+        workspace: Default::default(),
     };
     let saved = store
         .save(&folder, &world, editor_state.clone(), SaveKind::Manual)

@@ -24,6 +24,7 @@ fn audit_records_actor_source_object_and_timestamps() {
             source: ActorSource::Mcp,
         },
         linked_object_id: Some("object-42".to_owned()),
+        layer_id: None,
     };
     let result = service.execute(request).unwrap();
     let audit = &service.audit_log()[0];
@@ -59,6 +60,7 @@ fn batch_parameter_summary_is_bounded() {
         idempotency_key: None,
         actor: Actor::ui("ui"),
         linked_object_id: None,
+        layer_id: None,
     };
     service.execute(request).unwrap();
     let audit = &service.audit_log()[0];

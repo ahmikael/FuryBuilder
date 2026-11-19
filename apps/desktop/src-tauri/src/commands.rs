@@ -15,12 +15,13 @@ use runtime_manager::{
     ServerJarReport, ServerManager, ServerProgress, ServerReleaseInfo, TARGET_DATAPACK_FORMAT,
     TARGET_DATA_VERSION, TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION,
 };
+use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
     ErrorCode, HistoryState, HistorySummary, Operation, OperationRequest, OperationResult,
     PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, StructureSites,
-    WorldService,
+    WorkspacePolicy, WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -135,6 +136,7 @@ pub fn apply_operation(
         idempotency_key,
         actor: ui_actor(),
         linked_object_id: None,
+        layer_id: None,
     })
 }
 
@@ -340,6 +342,34 @@ fn current_payload(
     })
 }
 
+/// Replaces the authoritative service for a newly opened world and installs the
+/// project's persisted workspace policy before any command can run. Doing this in one
+/// place prevents a project from briefly opening with default layers/protection.
+fn install_world_service(
+    state: &AppState,
+    world: World,
+    workspace: WorkspacePolicy,
+) -> Result<(), AppError> {
+    let mut replacement = WorldService::from_world(world);
+    replacement.set_workspace_policy(workspace)?;
+    let mut service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    *service = replacement;
+    Ok(())
+}
+
+fn current_project(state: &AppState) -> Result<CurrentProject, AppError> {
+    state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?
+        .current
+        .clone()
+        .ok_or_else(|| AppError::new(ErrorCode::NotFound, "no project is open"))
+}
+
 #[tauri::command]
 pub fn project_status(state: State<'_, AppState>) -> Result<SessionStatus, AppError> {
     session_status(&state)
@@ -405,13 +435,7 @@ pub fn project_create(
         .map_err(project_error)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    {
-        let mut service = state
-            .service
-            .lock()
-            .map_err(|_| AppError::internal("world state lock poisoned"))?;
-        *service = WorldService::from_world(world);
-    }
+    install_world_service(&state, world, editor_state.workspace.clone())?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -442,13 +466,7 @@ pub fn project_open(
         .map_err(project_error)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    {
-        let mut service = state
-            .service
-            .lock()
-            .map_err(|_| AppError::internal("world state lock poisoned"))?;
-        *service = WorldService::from_world(world);
-    }
+    install_world_service(&state, world, detail.editor_state.workspace.clone())?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -623,13 +641,13 @@ pub fn project_open_checkpoint(
     state
         .jobs
         .cancel_all("the world was replaced by a checkpoint");
-    {
-        let mut service = state
-            .service
-            .lock()
-            .map_err(|_| AppError::internal("world state lock poisoned"))?;
-        *service = WorldService::from_world(world);
-    }
+    let workspace = projects
+        .current
+        .as_ref()
+        .filter(|current| current.folder == folder)
+        .map(|current| current.editor_state.workspace.clone())
+        .unwrap_or_default();
+    install_world_service(&state, world, workspace)?;
     if let Some(current) = projects.current.as_mut() {
         if current.folder == folder {
             current.autosaved_revision = Some(revision);
@@ -880,13 +898,7 @@ fn import_world_project(
     match built {
         Ok(detail) => {
             state.jobs.cancel_all("the open project changed");
-            {
-                let mut service = state
-                    .service
-                    .lock()
-                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
-                *service = WorldService::from_world(world);
-            }
+            install_world_service(state, world, editor_state.workspace.clone())?;
             projects.current = Some(CurrentProject {
                 folder: folder.clone(),
                 project_id: detail.summary.project_id.clone(),
@@ -1264,6 +1276,17 @@ pub struct StructureInsertOutcome {
     pub session: SessionStatus,
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateInsertPreview {
+    pub entry: TemplateEntry,
+    pub preview: StructureImportPreview,
+    pub bounds: BlockBox,
+    pub affected_blocks: u64,
+    pub changed_blocks: u64,
+    pub warnings: Vec<String>,
+}
+
 fn structure_error(error: JavaStructureError) -> AppError {
     let code = match error.code() {
         "unsupported_format" => ErrorCode::UnsupportedFormat,
@@ -1440,6 +1463,290 @@ fn import_changes(
         .map_err(structure_modification_error)
 }
 
+pub(crate) fn template_error(error: LibraryError) -> AppError {
+    let code = match error.code() {
+        "not_found" => ErrorCode::NotFound,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "invalid_argument" => ErrorCode::InvalidArgument,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+pub(crate) fn current_template_library(state: &AppState) -> Result<StructureLibrary, AppError> {
+    let projects = state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?;
+    let current = projects.current.as_ref().ok_or_else(|| {
+        AppError::new(
+            ErrorCode::NotFound,
+            "no project is open; open a project before using templates",
+        )
+    })?;
+    let directory = projects
+        .store
+        .templates_dir(&current.folder)
+        .map_err(project_error)?;
+    Ok(StructureLibrary::new(directory))
+}
+
+/// Loads and re-verifies a template, then turns it into an ordinary bounded Batch
+/// operation. The payload is never trusted just because it was indexed earlier.
+pub(crate) fn prepare_template_insert(
+    state: &AppState,
+    template_id: &str,
+    dimension: &str,
+    origin: [i32; 3],
+    include_air: bool,
+) -> Result<(TemplateEntry, StructureImportPreview, BlockBox, Operation), AppError> {
+    let library = current_template_library(state)?;
+    let (bytes, entry) = library.load_bytes(template_id).map_err(template_error)?;
+    let parsed = world_io::read_verified_import(&bytes).map_err(structure_error)?;
+    let preview = world_io::preview_from_structure(&parsed.structure, &parsed.inspection);
+    if !preview.compatible {
+        return Err(AppError::new(
+            ErrorCode::UnsupportedFormat,
+            preview.warnings.join("; "),
+        ));
+    }
+    let origin = placement_origin(dimension, origin, preview.size)?;
+    let changes = import_changes(&parsed.structure, origin, include_air)?;
+    let bounds = operation_bounds(origin, preview.size)?;
+    let operation = Operation::Batch {
+        dimension: dimension.to_owned(),
+        changes,
+    };
+    Ok((entry, preview, bounds, operation))
+}
+
+fn operation_bounds(origin: BlockPos, size: [i32; 3]) -> Result<BlockBox, AppError> {
+    let max = BlockPos::new(
+        origin
+            .x
+            .checked_add(size[0] - 1)
+            .ok_or_else(|| AppError::invalid_argument("template origin overflows X"))?,
+        origin
+            .y
+            .checked_add(size[1] - 1)
+            .ok_or_else(|| AppError::invalid_argument("template origin overflows Y"))?,
+        origin
+            .z
+            .checked_add(size[2] - 1)
+            .ok_or_else(|| AppError::invalid_argument("template origin overflows Z"))?,
+    );
+    BlockBox::new(origin, max).map_err(|error| AppError::invalid_argument(error.to_string()))
+}
+
+fn template_preview_impl(
+    state: &AppState,
+    template_id: &str,
+    dimension: &str,
+    origin: [i32; 3],
+    include_air: bool,
+) -> Result<TemplateInsertPreview, AppError> {
+    let (entry, preview, bounds, operation) =
+        prepare_template_insert(state, template_id, dimension, origin, include_air)?;
+    let current = current_project(state)?;
+    let result = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        service.set_allow_unknown_targets(true);
+        let result = service.preview(&current.project_id, &operation);
+        service.set_allow_unknown_targets(false);
+        result?
+    };
+    Ok(TemplateInsertPreview {
+        entry,
+        preview,
+        bounds,
+        affected_blocks: result.affected_blocks,
+        changed_blocks: result.changed_blocks,
+        warnings: result.warnings,
+    })
+}
+
+fn template_insert_impl(
+    state: &AppState,
+    template_id: &str,
+    dimension: &str,
+    origin: [i32; 3],
+    include_air: bool,
+    layer_id: Option<String>,
+) -> Result<StructureInsertOutcome, AppError> {
+    let (_entry, preview, _bounds, operation) =
+        prepare_template_insert(state, template_id, dimension, origin, include_air)?;
+    let current = current_project(state)?;
+    let has_changes = matches!(&operation, Operation::Batch { changes, .. } if !changes.is_empty());
+    let (operation, info) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let operation = if has_changes {
+            service.set_allow_unknown_targets(true);
+            let result = service.execute(OperationRequest {
+                project_id: current.project_id.clone(),
+                operation,
+                expected_revision: None,
+                idempotency_key: None,
+                actor: ui_actor(),
+                linked_object_id: None,
+                layer_id,
+            });
+            service.set_allow_unknown_targets(false);
+            Some(result?)
+        } else {
+            None
+        };
+        (operation, service.world_info())
+    };
+    let session = session_status(state)?;
+    Ok(StructureInsertOutcome {
+        preview,
+        operation,
+        info,
+        session,
+    })
+}
+
+#[tauri::command]
+pub fn workspace_policy(state: State<'_, AppState>) -> Result<WorkspacePolicy, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    Ok(service.workspace_policy())
+}
+
+#[tauri::command]
+pub fn workspace_set_policy(
+    state: State<'_, AppState>,
+    policy: WorkspacePolicy,
+) -> Result<WorkspacePolicy, AppError> {
+    workspace_set_policy_impl(&state, policy)
+}
+
+fn workspace_set_policy_impl(
+    state: &AppState,
+    policy: WorkspacePolicy,
+) -> Result<WorkspacePolicy, AppError> {
+    let current = current_project(state)?;
+    // Validate against the authoritative dimensions before touching project.json.
+    {
+        let service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        service.validate_workspace_policy(&policy)?;
+    }
+    let mut editor_state = current.editor_state.clone();
+    editor_state.workspace = policy.clone();
+    editor_state.validate().map_err(project_error)?;
+    {
+        let mut projects = state
+            .projects
+            .lock()
+            .map_err(|_| AppError::internal("project state lock poisoned"))?;
+        projects
+            .store
+            .update_editor_state(&current.folder, editor_state.clone())
+            .map_err(project_error)?;
+        if let Some(active) = projects.current.as_mut() {
+            if active.folder == current.folder {
+                active.editor_state = editor_state;
+            }
+        }
+    }
+    let mut service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    service.set_workspace_policy(policy.clone())?;
+    Ok(policy)
+}
+
+#[tauri::command]
+pub fn template_list(state: State<'_, AppState>) -> Result<Vec<TemplateEntry>, AppError> {
+    current_template_library(&state)?
+        .list()
+        .map_err(template_error)
+}
+
+#[tauri::command]
+pub fn template_save_selection(
+    state: State<'_, AppState>,
+    name: String,
+    dimension: String,
+    bounds: BlockBox,
+) -> Result<TemplateEntry, AppError> {
+    let library = current_template_library(&state)?;
+    let world = {
+        let service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        service.world().clone()
+    };
+    library
+        .save_from_world(&name, &world, &dimension, bounds, TemplateSource::Selection)
+        .map_err(template_error)
+}
+
+#[tauri::command]
+pub fn template_import(
+    state: State<'_, AppState>,
+    name: String,
+    payload: String,
+) -> Result<TemplateEntry, AppError> {
+    let bytes = decode_structure_payload(&payload)?;
+    current_template_library(&state)?
+        .save_bytes(&name, &bytes, TemplateSource::Import)
+        .map_err(template_error)
+}
+
+#[tauri::command]
+pub fn template_delete(
+    state: State<'_, AppState>,
+    template_id: String,
+) -> Result<TemplateEntry, AppError> {
+    current_template_library(&state)?
+        .delete(&template_id)
+        .map_err(template_error)
+}
+
+#[tauri::command]
+pub fn template_preview(
+    state: State<'_, AppState>,
+    template_id: String,
+    dimension: String,
+    origin: [i32; 3],
+    include_air: bool,
+) -> Result<TemplateInsertPreview, AppError> {
+    template_preview_impl(&state, &template_id, &dimension, origin, include_air)
+}
+
+#[tauri::command]
+pub fn template_insert(
+    state: State<'_, AppState>,
+    template_id: String,
+    dimension: String,
+    origin: [i32; 3],
+    include_air: bool,
+    layer_id: Option<String>,
+) -> Result<StructureInsertOutcome, AppError> {
+    template_insert_impl(
+        &state,
+        &template_id,
+        &dimension,
+        origin,
+        include_air,
+        layer_id,
+    )
+}
+
 #[tauri::command]
 pub fn structure_import_preview(payload: String) -> Result<StructureImportPreview, AppError> {
     let bytes = decode_structure_payload(&payload)?;
@@ -1513,6 +1820,7 @@ pub fn structure_import_project(
                 idempotency_key: None,
                 actor: ui_actor(),
                 linked_object_id: None,
+                layer_id: None,
             })?;
         }
         // Unknown states are accepted only for the imported payload. Leaving this flag on
@@ -1618,6 +1926,7 @@ pub fn structure_insert(
                 idempotency_key: None,
                 actor: ui_actor(),
                 linked_object_id: None,
+                layer_id: None,
             });
             service.set_allow_unknown_targets(false);
             Some(result?)
@@ -2374,4 +2683,230 @@ fn asset_bundle_error(error: asset_source::BundleError) -> AppError {
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+    use project_store::CreationMode;
+
+    fn project_state(label: &str) -> (AppState, String) {
+        let root = std::env::temp_dir().join(format!(
+            "furybuilder-commands-{label}-{}",
+            uuid::Uuid::new_v4().simple()
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        let state = AppState::new(root);
+        let (folder, detail, world) = {
+            let mut projects = state.projects.lock().expect("projects");
+            let created = projects
+                .store
+                .create(
+                    "Workspace",
+                    CreationMode::Flat,
+                    project_store::EditorState::default(),
+                )
+                .expect("create");
+            let folder = created.summary.folder.clone();
+            let (detail, world, _) = projects.store.open(&folder).expect("open");
+            projects.current = Some(CurrentProject {
+                folder: folder.clone(),
+                project_id: detail.summary.project_id.clone(),
+                name: detail.summary.name.clone(),
+                saved_revision: detail.summary.world_revision,
+                autosaved_revision: None,
+                editor_state: detail.editor_state.clone(),
+            });
+            (folder, detail, world)
+        };
+        let _ = detail;
+        install_world_service(&state, world, WorkspacePolicy::default()).expect("service");
+        (state, folder)
+    }
+
+    fn floor_template_bytes() -> Vec<u8> {
+        let stone: BlockState = "minecraft:stone".parse().expect("state");
+        let structure = Structure::new(
+            world_domain::TARGET_DATA_VERSION,
+            [2, 1, 2],
+            vec![stone],
+            vec![
+                world_io::StructureBlock {
+                    pos: [0, 0, 0],
+                    palette_index: 0,
+                },
+                world_io::StructureBlock {
+                    pos: [1, 0, 0],
+                    palette_index: 0,
+                },
+                world_io::StructureBlock {
+                    pos: [0, 0, 1],
+                    palette_index: 0,
+                },
+                world_io::StructureBlock {
+                    pos: [1, 0, 1],
+                    palette_index: 0,
+                },
+            ],
+        )
+        .expect("structure");
+        world_io::write_java_structure(&structure, "Test").expect("bytes")
+    }
+
+    fn save_template(state: &AppState) -> TemplateEntry {
+        current_template_library(state)
+            .expect("library")
+            .save_bytes("Floor", &floor_template_bytes(), TemplateSource::Selection)
+            .expect("save")
+    }
+
+    #[test]
+    fn template_insert_is_one_reversible_batch_on_the_active_layer() {
+        let (state, folder) = project_state("template-insert");
+        let initial_revision = state.service.lock().expect("service").world_info().revision;
+        let previous = state
+            .service
+            .lock()
+            .expect("service")
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(4, 64, 4))
+            .expect("previous block");
+        let entry = save_template(&state);
+        assert_eq!(entry.non_air_blocks, 4);
+
+        let outcome = template_insert_impl(
+            &state,
+            &entry.id,
+            "minecraft:overworld",
+            [4, 64, 4],
+            false,
+            None,
+        )
+        .expect("insert");
+        let operation = outcome.operation.expect("operation");
+        assert_eq!(operation.world_revision, initial_revision + 1);
+        assert_eq!(operation.changed_blocks, 4);
+        {
+            let service = state.service.lock().expect("service");
+            let installed = service
+                .world()
+                .get_block("minecraft:overworld", BlockPos::new(4, 64, 4))
+                .expect("block");
+            assert_eq!(installed, "minecraft:stone".parse().expect("state"));
+            assert_eq!(
+                service
+                    .history()
+                    .last()
+                    .expect("history")
+                    .layer_id
+                    .as_deref(),
+                Some("base")
+            );
+        }
+        let undone = {
+            let mut service = state.service.lock().expect("service");
+            service
+                .undo("workspace", Actor::ui("test"), None)
+                .expect("undo")
+        };
+        assert_eq!(undone.world_revision, initial_revision + 2);
+        assert_eq!(
+            state
+                .service
+                .lock()
+                .expect("service")
+                .world()
+                .get_block("minecraft:overworld", BlockPos::new(4, 64, 4))
+                .expect("block"),
+            previous
+        );
+
+        // The library is project-local and survives reopening the project.
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert_eq!(
+            reopened.0.editor_state.workspace,
+            WorkspacePolicy::default()
+        );
+        let library = StructureLibrary::new(
+            state
+                .projects
+                .lock()
+                .expect("projects")
+                .store
+                .templates_dir(&folder)
+                .expect("templates"),
+        );
+        assert_eq!(library.list().expect("list").len(), 1);
+    }
+
+    #[test]
+    fn protected_regions_and_locked_layers_block_template_inserts_and_persist() {
+        let (state, folder) = project_state("template-protection");
+        let initial_revision = state.service.lock().expect("service").world_info().revision;
+        let entry = save_template(&state);
+
+        let mut policy = WorkspacePolicy::default();
+        policy
+            .push_protected_region(
+                "Spawn",
+                "minecraft:overworld",
+                BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(8, 70, 8)).expect("box"),
+            )
+            .expect("protected");
+        workspace_set_policy_impl(&state, policy).expect("policy");
+        let error = template_insert_impl(
+            &state,
+            &entry.id,
+            "minecraft:overworld",
+            [4, 64, 4],
+            false,
+            None,
+        )
+        .expect_err("protected");
+        assert_eq!(error.code, ErrorCode::PermissionDenied);
+        assert!(error.message.contains("protected region `Spawn`"));
+        assert_eq!(
+            state.service.lock().expect("service").world_info().revision,
+            initial_revision
+        );
+
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert_eq!(
+            reopened.0.editor_state.workspace.protected_regions[0].name,
+            "Spawn"
+        );
+
+        let mut policy = reopened.0.editor_state.workspace;
+        policy.layers[0].locked = true;
+        workspace_set_policy_impl(&state, policy).expect("locked policy");
+        let error = template_insert_impl(
+            &state,
+            &entry.id,
+            "minecraft:overworld",
+            [4, 64, 4],
+            false,
+            None,
+        )
+        .expect_err("locked");
+        assert_eq!(error.code, ErrorCode::PermissionDenied);
+        assert!(error.message.contains("is locked"));
+
+        // A policy update is metadata: it does not bump the world revision.
+        assert_eq!(
+            state.service.lock().expect("service").world_info().revision,
+            initial_revision
+        );
+    }
 }

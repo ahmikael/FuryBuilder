@@ -29,8 +29,10 @@ pub use manifest::{
 };
 pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION, SNAPSHOT_MIN_VERSION};
 pub use source::{SourceFile, SourceManifest};
+pub use store::TEMPLATES_DIR;
 pub use store::{
     build_world, checksum, create_flat_base, migrate_manifest, snapshot_bytes, CheckpointMeta,
     ExportOutcome, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR, DATA_DIR, EXPORTS_DIR,
     MAX_CHECKPOINTS, MAX_SNAPSHOTS, MAX_SOURCE_FILES, SESSION_MARKER, SOURCE_DIR,
 };
+pub use workspace_model::WorkspacePolicy;

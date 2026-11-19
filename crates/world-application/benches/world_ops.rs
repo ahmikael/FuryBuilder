@@ -23,6 +23,7 @@ fn request(operation: Operation) -> OperationRequest {
         idempotency_key: None,
         actor: Actor::ui("bench"),
         linked_object_id: None,
+        layer_id: None,
     }
 }
 

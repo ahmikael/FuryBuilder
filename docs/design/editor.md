@@ -125,6 +125,38 @@ whole-world generators and make no vanilla worldgen or vanilla structure-placeme
 - The selected materials come from the curated 1.21.4 registry. Block states only are
   changed; heightmaps, light and biomes are not recalculated.
 
+## Layers, masks, protection and templates (M9.13)
+
+The `Layers` tab manages editor-only policy stored in `project.json`; it is not Minecraft
+world data and never changes block states by itself. The `Templates` tab stores reusable
+Java `.nbt` payloads inside the same project.
+
+| Concept          | Behaviour                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Layer            | Named edit layer with visibility and lock state. Edits record the layer id; the active layer is used when a request omits it.                                   |
+| Active mask      | At most one mask is active. Preview and apply must fit entirely inside it, and only operations in the mask's own dimension are constrained.                     |
+| Protected region | Any intersection with a protected region is refused for preview and apply, regardless of the active layer or mask.                                              |
+| Template library | Project-local `templates/index.json` plus `templates/objects/<uuid>.nbt`. Save a selection, import a verified `.nbt`, preview at the selection minimum, insert. |
+
+- The Core re-validates the whole policy: 64 layers, 64 masks, 64 protected regions,
+  64-character names, unique slug ids and a 16 MiB volume limit per region. The last layer
+  and the active layer cannot be deleted.
+- A locked layer blocks writes, including an implicit active layer. Removing a mask clears
+  the active mask; the UI never sends a half-applied policy.
+- Policy updates are metadata. They do not bump the world revision and are not recorded in
+  block history. Undo/redo still restore the previous block snapshots, so a policy change
+  cannot make earlier work unrecoverable.
+- Template ids are UUIDs and never become file paths. Every read re-verifies the SHA-256
+  recorded in the index; tampered or truncated payloads, traversal names and duplicate ids
+  are refused. Limits: 128 templates, 32 MiB per file, 256 MiB total.
+- Insertion is one reversible `Batch` operation on the chosen or active layer, so it uses
+  the same preview, revision, audit, mask and protected-region path as any other write.
+  Templates are construction data, not vanilla structure-placement parity.
+
+MCP exposes `get_workspace_policy` and `list_templates` as read-only tools and
+`insert_template` as a confirmed write. The template is re-read and re-verified by the
+desktop before the confirmation dialog is shown.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

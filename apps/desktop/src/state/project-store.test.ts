@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenedProjectPayload, ProjectSummary, SessionStatus } from "@/project/types";
+import { defaultWorkspacePolicy } from "@/project/types";
 import type { StructureInsertOutcome } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
@@ -57,6 +58,8 @@ vi.mock("@/lib/structure-api", () => ({
 
 const { currentEditorState, projectIsDirty, useProjectStore } =
   await import("@/state/project-store");
+
+const workspace = defaultWorkspacePolicy();
 
 const summary: ProjectSummary = {
   folder: "My Castle.furybuilder",
@@ -225,6 +228,7 @@ describe("project activation", () => {
       expect(api.create).toHaveBeenCalledWith("My Castle", "flat", {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
+        workspace,
       });
       expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
       expect(useWorldStore.getState().loadRadius).toBe(2);
@@ -284,6 +288,7 @@ describe("save and autosave", () => {
     expect(api.save).toHaveBeenCalledWith({
       selectedDimension: "minecraft:overworld",
       loadRadius: 1,
+      workspace,
     });
     const current = useProjectStore.getState().current!;
     expect(current.savedRevision).toBe(4);
@@ -309,7 +314,7 @@ describe("save and autosave", () => {
     useWorldStore.setState({ revision: 6 });
     expect(await useProjectStore.getState().autosave("edit")).toBe(true);
     expect(api.autosave).toHaveBeenCalledWith(
-      { selectedDimension: "minecraft:overworld", loadRadius: 1 },
+      { selectedDimension: "minecraft:overworld", loadRadius: 1, workspace },
       "edit",
     );
     expect(useProjectStore.getState().current?.autosavedRevision).toBe(5);
@@ -322,6 +327,7 @@ describe("save and autosave", () => {
     expect(currentEditorState()).toEqual({
       selectedDimension: "minecraft:the_nether",
       loadRadius: 3,
+      workspace,
     });
   });
 });
@@ -337,6 +343,7 @@ describe("close, checkpoints and rename", () => {
       expect(api.close).toHaveBeenCalledWith(false, {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
+        workspace,
       });
       expect(useProjectStore.getState().current).toBeNull();
       expect(useWorldStore.getState().revision).toBe(0);

@@ -15,3 +15,4 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
+workspace-model = { path = "../workspace-model", package = "furybuilder-workspace-model" }

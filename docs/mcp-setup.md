@@ -127,16 +127,25 @@ If step 3 cannot connect, see the error table below before changing the client c
 
 ## Tool catalog
 
-Seventeen tools are registered:
+Twenty tools are registered:
 
-| Group      | Tools                                                                                                                            |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Diagnostic | `bridge_info`                                                                                                                    |
-| Read-only  | `world_info`, `get_block`, `get_biome`, `find_structure_sites`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport` |
-| Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `undo_operation`, `get_operation_status`                       |
-| Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                                      |
+| Group      | Tools                                                                                                                                                                      |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Diagnostic | `bridge_info`                                                                                                                                                              |
+| Read-only  | `world_info`, `get_workspace_policy`, `list_templates`, `get_block`, `get_biome`, `find_structure_sites`, `get_region`, `inspect_region`, `get_camera`, `capture_viewport` |
+| Write      | `preview_operation`, `apply_operation`, `apply_operations_batch`, `insert_template`, `undo_operation`, `get_operation_status`                                              |
+| Long jobs  | `start_job`, `get_job_status`, `cancel_job`                                                                                                                                |
 
-`inspect_region`, `get_block`, `get_biome` and `find_structure_sites` always answer at an explicit `worldRevision`. `get_biome` returns the 4x4x4 cell covering the position, or `null` when the source has no biome data; `set_biome` refuses such sections instead of inventing a biome. `find_structure_sites` is a bounded, read-only placement-rule query (2,000,000 checks, 64 sites) and never creates an operation. `preview_operation` accepts the typed `generate_road`, `generate_river` and `generate_vegetation` operations; preview always reports the exact diff before an apply. A supplied
+`inspect_region`, `get_block`, `get_biome`, `get_workspace_policy`, `list_templates` and
+`find_structure_sites` always answer at an explicit `worldRevision`. `get_workspace_policy`
+returns layers, the active layer, the active mask and protected regions; enforcement stays
+in the Core. `list_templates` returns metadata for verified project-local Java `.nbt`
+templates (size, SHA-256, non-air blocks, source), never the payload. `get_biome` returns
+the 4x4x4 cell covering the position, or `null` when the source has no biome data;
+`set_biome` refuses such sections instead of inventing a biome. `find_structure_sites` is a
+bounded, read-only placement-rule query (2,000,000 checks, 64 sites) and never creates an
+operation. `preview_operation` accepts the typed `generate_road`, `generate_river` and
+`generate_vegetation` operations; preview always reports the exact diff before an apply. A supplied
 `world_revision` that no longer matches is rejected with `revision_mismatch` instead of
 silently reading newer data. `capture_viewport` returns a real PNG plus metadata; `partial`
 means requested chunks were not loaded and `stale` means the rendered revision is older than
@@ -153,7 +162,8 @@ Click **AI / MCP** in the FuryBuilder toolbar. The dialog says that the window i
 authority: the bridge cannot raise its own access.
 
 - **Read-only** (default): every tool may read, but `apply_operation`,
-  `apply_operations_batch`, `undo_operation` and write jobs return `permission_denied`.
+  `apply_operations_batch`, `insert_template`, `undo_operation` and write jobs return
+  `permission_denied`.
 - **Edit in selection**: writes and undos must stay inside one dimension and one inclusive
   box. The box volume must fit the current max-blocks limit when the policy is saved.
 - **Full project**: the box restriction is removed, but the same per-operation and batch

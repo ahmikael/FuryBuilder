@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use serde_json::json;
 use uuid::Uuid;
+use workspace_model::WorkspacePolicy;
 use world_domain::{BlockBox, BlockRegistry, ChunkPos, World, WorldInfo};
 use world_operations::{
     self as operations, BlockChange, NoopObserver, Operation, OperationObserver, SectionDiff,
@@ -36,6 +37,7 @@ struct HistoryEntry {
     changed_blocks: u64,
     parameter_summary: serde_json::Value,
     linked_object_id: Option<String>,
+    layer_id: Option<String>,
     /// Dimension and exact operation extent, kept so an access policy can bound undo
     /// without exposing section payloads.
     extent: Option<(String, BlockBox)>,
@@ -59,6 +61,7 @@ pub struct WorldService {
     idempotency: BTreeMap<String, StoredOutcome>,
     idempotency_order: VecDeque<String>,
     audit: Vec<AuditEntry>,
+    workspace: WorkspacePolicy,
     writes_enabled: bool,
     allow_unknown_targets: bool,
     max_history: usize,
@@ -80,6 +83,7 @@ impl WorldService {
             idempotency: BTreeMap::new(),
             idempotency_order: VecDeque::new(),
             audit: Vec::new(),
+            workspace: WorkspacePolicy::default(),
             writes_enabled: true,
             allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
@@ -102,6 +106,7 @@ impl WorldService {
             idempotency: BTreeMap::new(),
             idempotency_order: VecDeque::new(),
             audit: Vec::new(),
+            workspace: WorkspacePolicy::default(),
             writes_enabled: true,
             allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
@@ -114,6 +119,44 @@ impl WorldService {
 
     pub fn registry(&self) -> &BlockRegistry {
         &self.registry
+    }
+
+    /// Returns the persisted workspace policy currently enforced by this service.
+    pub fn workspace_policy(&self) -> WorkspacePolicy {
+        self.workspace.clone()
+    }
+
+    /// Validates a workspace policy against this world's dimensions without changing
+    /// the service. Used by save/open paths that need to reject inconsistent metadata.
+    pub fn validate_workspace_policy(&self, policy: &WorkspacePolicy) -> Result<(), AppError> {
+        policy.validate()?;
+        for region in policy.masks.iter().chain(policy.protected_regions.iter()) {
+            self.world.dimension(&region.dimension)?;
+        }
+        Ok(())
+    }
+
+    /// Replaces the editing policy. Policy changes do not bump the world revision or
+    /// enter block history; they are project metadata.
+    pub fn set_workspace_policy(&mut self, policy: WorkspacePolicy) -> Result<(), AppError> {
+        self.validate_workspace_policy(&policy)?;
+        self.workspace = policy;
+        Ok(())
+    }
+
+    fn enforce_workspace(
+        &self,
+        requested_layer: Option<&str>,
+        operation: &Operation,
+    ) -> Result<(), AppError> {
+        self.workspace.check_operation(
+            requested_layer,
+            operation.dimension(),
+            &operation
+                .bounds()
+                .ok_or_else(|| AppError::invalid_argument("operation has no block extent"))?,
+        )?;
+        Ok(())
     }
 
     pub fn writes_enabled(&self) -> bool {
@@ -328,6 +371,7 @@ impl WorldService {
                 revision_after: entry.revision_after,
                 changed_blocks: entry.changed_blocks,
                 timestamp_ms: entry.timestamp_ms,
+                layer_id: entry.layer_id.clone(),
             })
             .collect()
     }
@@ -360,6 +404,7 @@ impl WorldService {
     ) -> Result<PreviewResult, AppError> {
         self.validate_project(project_id)?;
         self.validate_target_states(operation)?;
+        self.enforce_workspace(None, operation)?;
         let preview = operations::preview(&self.world, operation)?;
         Ok(PreviewResult {
             affected_blocks: preview.affected_blocks,
@@ -424,6 +469,11 @@ impl WorldService {
         }
 
         self.validate_target_states(&request.operation)?;
+        self.enforce_workspace(request.layer_id.as_deref(), &request.operation)?;
+        let layer_id = match request.layer_id.clone() {
+            Some(id) => Some(id),
+            None => self.workspace.active_layer_id.clone(),
+        };
         let timestamp_ms = now_ms()?;
         let revision_before = self.world.revision();
         let extent = request
@@ -459,6 +509,7 @@ impl WorldService {
                 changed_blocks: applied.changed_blocks,
                 parameter_summary: summarize_operation(&request.operation),
                 linked_object_id: request.linked_object_id.clone(),
+                layer_id: layer_id.clone(),
                 extent,
                 diffs: applied.diffs,
             });
@@ -480,6 +531,7 @@ impl WorldService {
             timestamp_ms,
             parameter_summary: summarize_operation(&request.operation),
             linked_object_id: request.linked_object_id.clone(),
+            layer_id,
         });
 
         if let Some(key) = &request.idempotency_key {
@@ -529,6 +581,7 @@ impl WorldService {
                 "summary": entry.parameter_summary
             }),
             linked_object_id: entry.linked_object_id.clone(),
+            layer_id: entry.layer_id.clone(),
         });
 
         let result = OperationResult {
@@ -619,6 +672,7 @@ impl WorldService {
                 "summary": entry.parameter_summary
             }),
             linked_object_id: entry.linked_object_id.clone(),
+            layer_id: entry.layer_id.clone(),
         });
 
         let result = OperationResult {
@@ -754,6 +808,7 @@ impl WorldService {
                     limit,
                 }))
             }
+            Query::WorkspacePolicy => Ok(QueryResult::WorkspacePolicy(self.workspace.clone())),
         }
     }
 

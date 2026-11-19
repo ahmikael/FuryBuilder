@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+use workspace_model::WorkspaceError;
 use world_domain::{BoundsError, RegistryError, WorldError};
 use world_operations::OperationError;
 
@@ -80,6 +81,19 @@ impl From<BoundsError> for AppError {
 impl From<RegistryError> for AppError {
     fn from(error: RegistryError) -> Self {
         AppError::invalid_argument(error.to_string())
+    }
+}
+
+impl From<WorkspaceError> for AppError {
+    fn from(error: WorkspaceError) -> Self {
+        let code = match error.code() {
+            "permission_denied" => ErrorCode::PermissionDenied,
+            "limit_exceeded" => ErrorCode::LimitExceeded,
+            "unsupported_version" => ErrorCode::UnsupportedVersion,
+            "internal" => ErrorCode::Internal,
+            _ => ErrorCode::InvalidArgument,
+        };
+        AppError::new(code, error.to_string())
     }
 }
 

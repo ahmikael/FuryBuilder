@@ -19,6 +19,7 @@ fn request(operation: Operation) -> OperationRequest {
         idempotency_key: None,
         actor: actor(),
         linked_object_id: None,
+        layer_id: None,
     }
 }
 
@@ -800,4 +801,153 @@ fn invalid_generator_parameters_are_rejected_without_history() {
     assert!(error.message.contains("river depth"));
     assert_eq!(service.world_info().revision, 0);
     assert!(service.history().is_empty());
+}
+
+#[test]
+fn workspace_policy_is_queryable_and_protected_regions_block_writes() {
+    use workspace_model::WorkspacePolicy;
+
+    let mut service = WorldService::new();
+    let first = service
+        .execute(set_block(BlockPos::new(0, 64, 0), "minecraft:stone"))
+        .unwrap();
+    assert_eq!(first.world_revision, 1);
+
+    let mut policy = WorkspacePolicy::default();
+    policy
+        .push_protected_region(
+            "Spawn",
+            "minecraft:overworld",
+            BlockBox::new(BlockPos::new(-1, 63, -1), BlockPos::new(1, 65, 1)).unwrap(),
+        )
+        .unwrap();
+    service.set_workspace_policy(policy.clone()).unwrap();
+    assert_eq!(
+        service.world_info().revision,
+        1,
+        "policy changes are not world edits"
+    );
+
+    match service.query(Query::WorkspacePolicy).unwrap() {
+        QueryResult::WorkspacePolicy(returned) => assert_eq!(returned, policy),
+        other => panic!("unexpected query result: {other:?}"),
+    }
+
+    let blocked = service
+        .execute(set_block(BlockPos::new(0, 64, 0), "minecraft:glass"))
+        .unwrap_err();
+    assert_eq!(blocked.code, ErrorCode::PermissionDenied);
+    assert!(blocked.message.contains("protected region `Spawn`"));
+    assert_eq!(service.world_info().revision, 1);
+    assert_eq!(service.history().len(), 1);
+    assert_eq!(service.audit_log().len(), 1);
+    assert_eq!(
+        service
+            .preview(
+                "project-1",
+                &Operation::SetBlock {
+                    dimension: "minecraft:overworld".to_owned(),
+                    pos: BlockPos::new(0, 64, 0),
+                    state: state("minecraft:glass"),
+                }
+            )
+            .unwrap_err()
+            .code,
+        ErrorCode::PermissionDenied
+    );
+
+    // Undo is a restoration, not a new construction decision; protection does not
+    // strand existing history.
+    let undone = service.undo("project-1", actor(), None).unwrap();
+    assert_eq!(undone.world_revision, 2);
+    assert_eq!(
+        service
+            .world()
+            .get_block("minecraft:overworld", BlockPos::new(0, 64, 0))
+            .unwrap(),
+        state("minecraft:air")
+    );
+
+    // A second layer is recorded on new operations and can be locked independently.
+    let mut policy = service.workspace_policy();
+    policy.push_layer("Details").unwrap();
+    policy.layers[0].locked = true;
+    service.set_workspace_policy(policy).unwrap();
+    let blocked = service
+        .execute(set_block(BlockPos::new(3, 64, 3), "minecraft:stone"))
+        .unwrap_err();
+    assert_eq!(blocked.code, ErrorCode::PermissionDenied);
+    assert!(blocked.message.contains("locked"));
+
+    let mut policy = service.workspace_policy();
+    policy.layers[0].locked = false;
+    policy.active_layer_id = Some("details".to_owned());
+    service.set_workspace_policy(policy).unwrap();
+    service
+        .execute(set_block(BlockPos::new(3, 64, 3), "minecraft:stone"))
+        .unwrap();
+    let history = service.history();
+    assert_eq!(history.last().unwrap().layer_id.as_deref(), Some("details"));
+    assert_eq!(
+        service.audit_log().last().unwrap().layer_id.as_deref(),
+        Some("details")
+    );
+
+    let mut policy = service.workspace_policy();
+    policy.active_mask_id = Some("missing".to_owned());
+    assert_eq!(
+        service.set_workspace_policy(policy).unwrap_err().code,
+        ErrorCode::InvalidArgument
+    );
+}
+
+#[test]
+fn active_mask_bounds_operations_and_unknown_layers_are_rejected() {
+    use workspace_model::WorkspacePolicy;
+
+    let mut service = WorldService::new();
+    let mut policy = WorkspacePolicy::default();
+    let mask = policy
+        .push_mask(
+            "Allowed",
+            "minecraft:overworld",
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(15, 70, 15)).unwrap(),
+        )
+        .unwrap()
+        .id
+        .clone();
+    policy.active_mask_id = Some(mask);
+    service.set_workspace_policy(policy).unwrap();
+
+    let outside = service
+        .execute(set_block(BlockPos::new(20, 64, 0), "minecraft:stone"))
+        .unwrap_err();
+    assert_eq!(outside.code, ErrorCode::PermissionDenied);
+    assert!(outside.message.contains("active mask `Allowed`"));
+    assert_eq!(service.world_info().revision, 0);
+
+    service
+        .execute(set_block(BlockPos::new(5, 64, 5), "minecraft:stone"))
+        .unwrap();
+    assert_eq!(service.world_info().revision, 1);
+
+    let mut request = set_block(BlockPos::new(6, 64, 6), "minecraft:stone");
+    request.layer_id = Some("missing-layer".to_owned());
+    let unknown = service.execute(request).unwrap_err();
+    assert_eq!(unknown.code, ErrorCode::InvalidArgument);
+    assert!(unknown.message.contains("does not exist"));
+    assert_eq!(service.world_info().revision, 1);
+
+    let mut policy = service.workspace_policy();
+    policy
+        .push_mask(
+            "Wrong dimension",
+            "minecraft:moon",
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(1, 70, 1)).unwrap(),
+        )
+        .unwrap();
+    assert_eq!(
+        service.set_workspace_policy(policy).unwrap_err().code,
+        ErrorCode::NotFound
+    );
 }

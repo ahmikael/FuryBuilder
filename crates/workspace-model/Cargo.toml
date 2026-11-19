@@ -1,0 +1,17 @@
+[package]
+name = "furybuilder-workspace-model"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Layers, masks and protected regions for the FuryBuilder editor"
+[lib]
+name = "workspace_model"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

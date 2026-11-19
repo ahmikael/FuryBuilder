@@ -610,6 +610,8 @@ struct ApplyJobParameters {
     operation: Operation,
     #[serde(default)]
     linked_object_id: Option<String>,
+    #[serde(default)]
+    layer_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -673,6 +675,7 @@ fn execute_job(
                     idempotency_key: Some(request.idempotency_key.clone()),
                     actor: request.actor.clone(),
                     linked_object_id: parameters.linked_object_id,
+                    layer_id: parameters.layer_id,
                 },
                 control,
             )

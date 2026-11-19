@@ -1,12 +1,51 @@
 import type { WorldInfo } from "@/lib/contracts";
+import type { Bounds3 } from "@/renderer/types";
 
 export type CreationMode = "empty" | "flat" | "vanilla" | "import";
 export type SaveKind = "manual" | "autosave" | "checkpoint";
 export type SourceKind = "generated" | "imported";
 
+export interface WorkspaceLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+}
+
+export interface WorkspaceRegion {
+  id: string;
+  name: string;
+  dimension: string;
+  bounds: Bounds3;
+}
+
+/** Editor-only policy persisted in project.json; not Minecraft world data. */
+export interface WorkspacePolicy {
+  schemaVersion: number;
+  layers: WorkspaceLayer[];
+  activeLayerId: string | null;
+  masks: WorkspaceRegion[];
+  activeMaskId: string | null;
+  protectedRegions: WorkspaceRegion[];
+}
+
+export const WORKSPACE_SCHEMA_VERSION = 1;
+
+export function defaultWorkspacePolicy(): WorkspacePolicy {
+  return {
+    schemaVersion: WORKSPACE_SCHEMA_VERSION,
+    layers: [{ id: "base", name: "Base", visible: true, locked: false }],
+    activeLayerId: "base",
+    masks: [],
+    activeMaskId: null,
+    protectedRegions: [],
+  };
+}
+
 export interface EditorState {
   selectedDimension: string;
   loadRadius: number;
+  workspace?: WorkspacePolicy;
 }
 
 export interface SourceInfo {

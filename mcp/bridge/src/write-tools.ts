@@ -299,6 +299,55 @@ export function registerWriteTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "insert_template",
+    {
+      title: "Insert structure template",
+      description:
+        "Inserts one verified template from the project library as a single reversible Batch operation. Requires explicit MCP write access and confirmation; the template is re-verified from disk and workspace masks/protected regions are enforced by the Core.",
+      inputSchema: z.object({
+        ...writeProject,
+        template_id: z.string().uuid(),
+        dimension,
+        origin: z.tuple([z.number().int(), z.number().int(), z.number().int()]),
+        include_air: z.boolean().default(false),
+        layer_id: z.string().min(1).max(64).optional(),
+        idempotency_key: idempotencyKey,
+      }),
+      annotations: modifiesWorld,
+    },
+    async ({
+      project_id,
+      template_id,
+      dimension: targetDimension,
+      origin,
+      include_air,
+      layer_id,
+      world_revision,
+      idempotency_key,
+    }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        const payload: Record<string, unknown> = {
+          projectId,
+          templateId: template_id,
+          dimension: targetDimension,
+          origin,
+          includeAir: include_air,
+          idempotencyKey: idempotency_key,
+        };
+        if (layer_id !== undefined) payload.layerId = layer_id;
+        return textResult(
+          await callDesktop("insert_template", withRevision(payload, world_revision), {
+            timeoutMs: WRITE_TIMEOUT_MS,
+          }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "undo_operation",
     {
       title: "Undo operation",

@@ -13,6 +13,7 @@ OperationRequest {
   idempotencyKey?: string,
   actor: { id: string, source: "ui" | "mcp" | "api" | "system" },
   linkedObjectId?: string,
+  layerId?: string,
 }
 
 Operation =
@@ -66,6 +67,9 @@ registry validation → bounds/limits → apply atomically → bump revision →
 - Reusing a key with a different payload returns `conflict`.
 - A no-op operation returns `changedBlocks: 0` and does not bump the revision or history.
 - Operation limits: 1,000,000 affected blocks per operation.
+- `layerId` records which editor layer produced the edit. Omitting it uses the active
+  layer. A missing, locked or policy-blocked layer is rejected with `permission_denied`
+  before any write; undo/redo restore snapshots and bypass this policy check.
 
 ## Undo / redo
 
@@ -91,6 +95,7 @@ type: "find_structure_sites", dimension, bounds,
 width: 1..32, depth: 1..32, step: 1..64,
 maxSlope: 0..32, clearance: 0..32, limit: 1..64
 }
+| { type: "workspace_policy" }
 
 QueryResult =
 | { type: "world_info", data: WorldInfo }
@@ -99,6 +104,7 @@ QueryResult =
 | { type: "region_summary", data: RegionSummary }
 | { type: "chunk_stats", data: ChunkStats }
 | { type: "structure_sites", data: StructureSites }
+| { type: "workspace_policy", data: WorkspacePolicy }
 
 ````
 

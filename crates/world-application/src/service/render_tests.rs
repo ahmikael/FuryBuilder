@@ -159,6 +159,7 @@ fn render_chunks_reflects_dirty_edits_and_revision() {
             idempotency_key: None,
             actor: Actor::ui("ui"),
             linked_object_id: None,
+            layer_id: None,
         })
         .unwrap();
     assert_eq!(result.changed_blocks, 1);

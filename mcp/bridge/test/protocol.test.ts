@@ -242,6 +242,8 @@ describe("MCP protocol negotiation", () => {
     const readTools = tools.filter((tool) =>
       [
         "world_info",
+        "get_workspace_policy",
+        "list_templates",
         "get_block",
         "get_biome",
         "find_structure_sites",
@@ -258,7 +260,9 @@ describe("MCP protocol negotiation", () => {
       "get_block",
       "get_camera",
       "get_region",
+      "get_workspace_policy",
       "inspect_region",
+      "list_templates",
       "world_info",
     ]);
     for (const tool of readTools) {
@@ -295,6 +299,7 @@ describe("MCP protocol negotiation", () => {
         "preview_operation",
         "apply_operation",
         "apply_operations_batch",
+        "insert_template",
         "undo_operation",
         "get_operation_status",
       ].includes(tool.name),
@@ -303,6 +308,7 @@ describe("MCP protocol negotiation", () => {
       "apply_operation",
       "apply_operations_batch",
       "get_operation_status",
+      "insert_template",
       "preview_operation",
       "undo_operation",
     ]);

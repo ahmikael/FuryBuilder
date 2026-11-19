@@ -4,7 +4,9 @@ import {
   Blocks,
   Grid3X3,
   History,
+  Layers,
   Leaf,
+  Library,
   Loader2,
   Mountain,
   Redo2,
@@ -27,6 +29,8 @@ import { TerrainPanel } from "@/features/workspace/TerrainPanel";
 import { HeightmapPanel } from "@/features/workspace/HeightmapPanel";
 import { BiomePanel } from "@/features/workspace/BiomePanel";
 import { GeneratorsPanel } from "@/features/workspace/GeneratorsPanel";
+import { WorkspacePanel } from "@/features/workspace/WorkspacePanel";
+import { TemplateLibraryPanel } from "@/features/workspace/TemplateLibraryPanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -640,6 +644,12 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="generators">
               <Route className="size-3" /> Generators
             </TabsTrigger>
+            <TabsTrigger value="layers">
+              <Layers className="size-3" /> Layers
+            </TabsTrigger>
+            <TabsTrigger value="templates">
+              <Library className="size-3" /> Templates
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -677,6 +687,14 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="generators" className="m-0 p-2">
           <GeneratorsPanel />
+        </TabsContent>
+
+        <TabsContent value="layers" className="m-0 flex min-h-0 flex-col p-2">
+          <WorkspacePanel />
+        </TabsContent>
+
+        <TabsContent value="templates" className="m-0 flex min-h-0 flex-col p-2">
+          <TemplateLibraryPanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

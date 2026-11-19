@@ -374,6 +374,23 @@ struct OperationParams {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TemplateInsertParams {
+    project_id: String,
+    template_id: String,
+    dimension: String,
+    origin: [i32; 3],
+    #[serde(default)]
+    include_air: bool,
+    #[serde(default)]
+    layer_id: Option<String>,
+    #[serde(default)]
+    world_revision: Option<u64>,
+    #[serde(default)]
+    idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UndoParams {
     project_id: String,
     #[serde(default)]
@@ -684,6 +701,13 @@ fn dispatch_inner(
             value["worldRevision"] = json!(revision);
             Ok(value)
         }
+        "list_templates" => {
+            let params: ProjectParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            let library = crate::commands::current_template_library(state)?;
+            to_value(library.list().map_err(crate::commands::template_error)?)
+        }
         "project_status" => {
             let params: ProjectParams = parse_params(params)?;
             authorize_project(state, &params.project_id)?;
@@ -764,6 +788,7 @@ fn dispatch_inner(
                     idempotency_key: params.idempotency_key,
                     actor: Actor::mcp("mcp-bridge"),
                     linked_object_id: None,
+                    layer_id: None,
                 })?;
                 let change = world_change_payload("apply", &project_id, None, &result);
                 (to_value(result)?, change)
@@ -771,6 +796,89 @@ fn dispatch_inner(
             if confirmed {
                 value["confirmation"] = json!({ "approved": true });
             }
+            requester.world_changed(change);
+            Ok(value)
+        }
+        "insert_template" => {
+            let params: TemplateInsertParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            let revision = require_write_revision(params.world_revision)?;
+            state.mcp_access.require_editing("insert_template")?;
+            let (entry, template_preview, bounds, operation) =
+                crate::commands::prepare_template_insert(
+                    state,
+                    &params.template_id,
+                    &params.dimension,
+                    params.origin,
+                    params.include_air,
+                )?;
+            state.mcp_access.authorize_operation(&operation)?;
+            require_revision(state, Some(revision))?;
+            let preview = {
+                let mut service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                service.set_allow_unknown_targets(true);
+                let result = service.preview(&params.project_id, &operation);
+                service.set_allow_unknown_targets(false);
+                result?
+            };
+            let mut confirmed = false;
+            if state.mcp_access.require_confirmation() {
+                let summary = json!({
+                    "kind": "apply",
+                    "projectId": params.project_id.clone(),
+                    "worldRevision": revision,
+                    "accessMode": state.mcp_access.mode(),
+                    "operation": {
+                        "type": "insert_template",
+                        "templateId": params.template_id.clone(),
+                        "templateName": entry.name.clone(),
+                        "dimension": params.dimension.clone(),
+                        "origin": params.origin,
+                        "size": template_preview.size,
+                        "nonAirBlocks": template_preview.non_air_blocks,
+                        "includeAir": params.include_air,
+                        "bounds": bounds,
+                    },
+                    "affectedBlocks": preview.affected_blocks,
+                    "changedBlocks": preview.changed_blocks,
+                    "dirtyChunks": preview.dirty_chunks.len(),
+                    "warnings": preview.warnings,
+                    "idempotencyKey": params.idempotency_key.clone(),
+                });
+                confirm_write(state, requester, summary)?;
+                confirmed = true;
+                state.mcp_access.authorize_operation(&operation)?;
+                require_revision(state, Some(revision))?;
+            }
+            let project_id = params.project_id.clone();
+            let (mut value, change) = {
+                let mut service = state
+                    .service
+                    .lock()
+                    .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                service.set_allow_unknown_targets(true);
+                let result = service.execute(OperationRequest {
+                    project_id: project_id.clone(),
+                    operation,
+                    expected_revision: Some(revision),
+                    idempotency_key: params.idempotency_key.clone(),
+                    actor: Actor::mcp("mcp-bridge"),
+                    linked_object_id: None,
+                    layer_id: params.layer_id.clone(),
+                });
+                service.set_allow_unknown_targets(false);
+                let result = result?;
+                let change = world_change_payload("apply", &project_id, None, &result);
+                (to_value(result)?, change)
+            };
+            if confirmed {
+                value["confirmation"] = json!({ "approved": true });
+            }
+            value["template"] = to_value(&entry)?;
+            value["bounds"] = to_value(bounds)?;
             requester.world_changed(change);
             Ok(value)
         }

@@ -135,6 +135,16 @@ fills free air with configurable ground cover, tree chance and spacing. The pane
 and applies each edit through the same reversible history as every other operation, and
 the `find_structure_sites` query is read-only, capped at 2,000,000 checks and 64 sites.
 None of these tools claims vanilla worldgen or vanilla structure placement parity.
+M9.13 adds editor-only workspace layers, an active edit mask, protected regions and a
+project-local structure-template library. Layers, visibility and lock state are stored in
+`project.json`; every preview and apply checks the locked layer, requires the operation to
+fit fully inside the active mask of its dimension, and rejects any intersection with a
+protected region. Policy changes are metadata: they do not bump the world revision and are
+not part of block history, while undo/redo still restores earlier snapshots. Templates are
+verified Java `.nbt` payloads stored per project with SHA-256 and bounded size; a selection
+can be saved as a template, an `.nbt` file can be imported, and either can be inserted as
+one reversible Batch operation through the same layer/mask/protection checks. MCP exposes
+the policy and library read-only plus a confirmed `insert_template` write.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

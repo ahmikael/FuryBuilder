@@ -81,6 +81,48 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "get_workspace_policy",
+    {
+      title: "Get workspace policy",
+      description:
+        "Returns edit layers, the active layer, the optional active mask and protected regions. Enforcement stays in the Core; locked layers, mask violations and protected regions are returned as permission_denied.",
+      inputSchema: z.object({ ...project }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await queryDesktop(projectId, world_revision, { type: "workspace_policy" }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "list_templates",
+    {
+      title: "List structure templates",
+      description:
+        "Lists verified reusable Java .nbt templates in the open project's library with size, checksum, non-air block count and creation time. Read-only; insertion uses insert_template with explicit access and confirmation.",
+      inputSchema: z.object({ ...project }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await callDesktop("list_templates", withRevision({ projectId }, world_revision)),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "get_block",
     {
       title: "Get block",

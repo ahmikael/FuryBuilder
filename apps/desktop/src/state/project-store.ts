@@ -32,11 +32,13 @@ import type {
   SaveOutcome,
   SessionStatus,
 } from "@/project/types";
+import { defaultWorkspacePolicy } from "@/project/types";
 import type { StructureImportProjectArgs, StructureInsertArgs } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
 import { pushToast, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+import { useWorkspaceStore } from "@/state/workspace-store";
 import { reloadViewport } from "@/features/viewport/viewport-bus";
 
 interface ProjectUiState {
@@ -95,6 +97,7 @@ export function currentEditorState(): EditorState {
   return {
     selectedDimension: useEditorStore.getState().selectedDimension,
     loadRadius: useWorldStore.getState().loadRadius,
+    workspace: useWorkspaceStore.getState().policy,
   };
 }
 
@@ -123,6 +126,7 @@ function applyPayload(payload: OpenedProjectPayload): void {
   const editorState = detail.editorState;
   useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
   useWorldStore.getState().setLoadRadius(editorState.loadRadius);
+  useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
   useWorldStore.getState().applySummary({
     source: "core",
     dimension: editorState.selectedDimension,
@@ -180,6 +184,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       const editorState = session.editorState ?? currentEditorState();
       useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
       useWorldStore.getState().setLoadRadius(editorState.loadRadius);
+      useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
       useWorldStore.getState().applySummary({
         source: "core",
         dimension: editorState.selectedDimension,
@@ -522,6 +527,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       });
       useToolStore.getState().markSaved();
       useToolStore.getState().resetTransient();
+      useWorkspaceStore.getState().reset();
       useToolStore.getState().setSelection(null);
       useHistoryStore.getState().reset();
       useWorldStore
@@ -585,7 +591,10 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     }
   },
 
-  reset: () => set(initial),
+  reset: () => {
+    useWorkspaceStore.getState().reset();
+    set(initial);
+  },
 }));
 
 /** True while unsaved edits exist in the open project. */

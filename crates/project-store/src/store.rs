@@ -27,6 +27,7 @@ pub const DATA_DIR: &str = "data";
 pub const CACHE_DIR: &str = "cache";
 pub const SOURCE_DIR: &str = "source";
 pub const EXPORTS_DIR: &str = "exports";
+pub const TEMPLATES_DIR: &str = "templates";
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -207,6 +208,31 @@ impl ProjectStore {
     fn project_dir(&self, folder: &str) -> Result<PathBuf, ProjectError> {
         validate_folder(folder)?;
         Ok(self.root.join(folder))
+    }
+
+    /// Resolves and creates the project-local template library directory.
+    pub fn templates_dir(&self, folder: &str) -> Result<PathBuf, ProjectError> {
+        let dir = self.project_dir(folder)?.join(TEMPLATES_DIR);
+        fs::create_dir_all(&dir)
+            .map_err(|error| io_error(format!("creating {}", dir.display()), error))?;
+        Ok(dir)
+    }
+
+    /// Persists editor metadata (currently the workspace policy) without rewriting the
+    /// world snapshot. Used when layers, masks or protected regions change, so protection
+    /// survives an app restart even if the user never presses Save.
+    pub fn update_editor_state(
+        &self,
+        folder: &str,
+        editor_state: EditorState,
+    ) -> Result<(), ProjectError> {
+        let dir = self.project_dir(folder)?;
+        editor_state.validate()?;
+        let mut manifest = self.manifest(&dir)?;
+        manifest.editor_state = editor_state;
+        manifest.updated_at_ms = now_ms();
+        manifest.validate()?;
+        write_json(&dir.join(PROJECT_FILE), &manifest)
     }
 
     fn manifest(&self, dir: &Path) -> Result<ProjectManifest, ProjectError> {
@@ -1615,5 +1641,80 @@ mod tests {
         );
         assert_eq!(encode_world(&decoded).unwrap(), bytes);
         assert_eq!(chunk_positions(&decoded, "minecraft:overworld").len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod workspace_tests {
+    use super::*;
+
+    fn workspace_root(label: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "furybuilder-store-{label}-{}-{}",
+            std::process::id(),
+            now_ms()
+        ));
+        let _ = fs::remove_dir_all(&root);
+        root
+    }
+
+    #[test]
+    fn editor_state_round_trips_workspace_policy_without_touching_the_world() {
+        use workspace_model::WorkspacePolicy;
+
+        let root = workspace_root("workspace");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Protected", CreationMode::Flat, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let checksum_before = store.manifest(&root.join(&folder)).unwrap().world_checksum;
+
+        let mut editor_state = EditorState {
+            workspace: WorkspacePolicy::default(),
+            ..EditorState::default()
+        };
+        editor_state
+            .workspace
+            .push_protected_region(
+                "Spawn",
+                "minecraft:overworld",
+                world_domain::BlockBox::new(
+                    world_domain::BlockPos::new(-8, 0, -8),
+                    world_domain::BlockPos::new(8, 80, 8),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        store
+            .update_editor_state(&folder, editor_state.clone())
+            .expect("update");
+
+        let (opened, _, _) = store.open(&folder).expect("open");
+        assert_eq!(opened.editor_state, editor_state);
+        assert_eq!(
+            opened.editor_state.workspace.protected_regions[0].name,
+            "Spawn"
+        );
+        let manifest = store.manifest(&root.join(&folder)).unwrap();
+        assert_eq!(manifest.world_checksum, checksum_before);
+        assert_eq!(manifest.world_revision, detail.summary.world_revision);
+
+        let templates = store.templates_dir(&folder).expect("templates");
+        assert!(templates.ends_with(TEMPLATES_DIR));
+        assert!(templates.is_dir());
+        assert!(store.templates_dir("../escape").is_err());
+    }
+
+    #[test]
+    fn default_workspace_policy_is_omitted_from_the_manifest() {
+        let root = workspace_root("workspace-default");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Default", CreationMode::Empty, EditorState::default())
+            .expect("create");
+        let raw = std::fs::read_to_string(root.join(&detail.summary.folder).join(PROJECT_FILE))
+            .expect("manifest");
+        assert!(!raw.contains("\"workspace\""));
     }
 }
