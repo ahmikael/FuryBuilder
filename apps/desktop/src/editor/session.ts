@@ -5,7 +5,11 @@ import type {
   ClipboardPayload,
   EditorOperation,
   EditorTool,
+  GenerateRiverOperation,
+  GenerateRoadOperation,
+  GenerateVegetationOperation,
   HeightmapOperation,
+  StructureSiteQuery,
   TerrainBrushKind,
 } from "@/editor/types";
 import type { BlockPosition, BlockState } from "@/renderer/types";
@@ -207,6 +211,12 @@ export function operationLabel(operation: EditorOperation): string {
       return `Generate heightmap in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
     case "set_biome":
       return `Paint ${operation.biome} over ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+    case "generate_road":
+      return `Generate road in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+    case "generate_river":
+      return `Carve river in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
+    case "generate_vegetation":
+      return `Scatter vegetation in ${boundsVolume(operation.bounds).toLocaleString()} blocks`;
   }
 }
 
@@ -531,6 +541,216 @@ export function planBiome(context: BiomeContext): BiomeOperation | null {
     dimension: context.dimension,
     bounds: context.selection,
     biome,
+  };
+}
+
+export const MAX_ROUTE_WIDTH = 16;
+export const MAX_ROUTE_MEANDER = 64;
+export const MAX_ROAD_CLEARANCE = 8;
+export const MAX_RIVER_DEPTH = 16;
+export const MAX_TREE_SPACING = 32;
+export const MAX_STRUCTURE_FOOTPRINT = 32;
+export const MAX_STRUCTURE_STEP = 64;
+export const MAX_STRUCTURE_CLEARANCE = 32;
+export const MAX_STRUCTURE_SLOPE = 32;
+export const MAX_STRUCTURE_SITES = 64;
+/** Vertical headroom so a flat footprint can hold roads, channels and tree canopies. */
+export const GENERATOR_VERTICAL_MARGIN = 16;
+
+export type RouteAxis = "x" | "z";
+
+/**
+ * Route and scatter tools need air above the selected surface. The UI selection is a
+ * footprint; the operation box adds a bounded vertical margin, and the Rust core clips
+ * every write to its own bounds.
+ */
+export function generatorBounds(selection: BoxBounds): BoxBounds {
+  return {
+    min: { ...selection.min, y: selection.min.y - GENERATOR_VERTICAL_MARGIN },
+    max: { ...selection.max, y: selection.max.y + GENERATOR_VERTICAL_MARGIN },
+  };
+}
+
+/** Deterministic start/end on the selection's X or Z axis; Y is only a bounds anchor. */
+export function routeEndpoints(
+  bounds: BoxBounds,
+  axis: RouteAxis,
+): { from: BlockPosition; to: BlockPosition } {
+  if (axis === "x") {
+    const z = Math.floor((bounds.min.z + bounds.max.z) / 2);
+    return {
+      from: { x: bounds.min.x, y: bounds.min.y, z },
+      to: { x: bounds.max.x, y: bounds.min.y, z },
+    };
+  }
+  const x = Math.floor((bounds.min.x + bounds.max.x) / 2);
+  return {
+    from: { x, y: bounds.min.y, z: bounds.min.z },
+    to: { x, y: bounds.min.y, z: bounds.max.z },
+  };
+}
+
+function clampInteger(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+export function clampRouteWidth(width: number): number {
+  return clampInteger(width, 1, MAX_ROUTE_WIDTH, 3);
+}
+
+export function clampRouteMeander(meander: number): number {
+  return clampInteger(meander, 0, MAX_ROUTE_MEANDER, 4);
+}
+
+export function clampRoadClearance(clearance: number): number {
+  return clampInteger(clearance, 0, MAX_ROAD_CLEARANCE, 2);
+}
+
+export function clampRiverDepth(depth: number): number {
+  return clampInteger(depth, 1, MAX_RIVER_DEPTH, 3);
+}
+
+export function clampGroundCover(cover: number): number {
+  return clampInteger(cover, 0, 100, 35);
+}
+
+export function clampTreeChance(chance: number): number {
+  return clampInteger(chance, 0, 100, 2);
+}
+
+export function clampTreeSpacing(spacing: number): number {
+  return clampInteger(spacing, 1, MAX_TREE_SPACING, 5);
+}
+
+export function clampStructureFootprint(value: number): number {
+  return clampInteger(value, 1, MAX_STRUCTURE_FOOTPRINT, 5);
+}
+
+export function clampStructureStep(step: number): number {
+  return clampInteger(step, 1, MAX_STRUCTURE_STEP, 5);
+}
+
+export function clampStructureSlope(slope: number): number {
+  return clampInteger(slope, 0, MAX_STRUCTURE_SLOPE, 2);
+}
+
+export function clampStructureClearance(clearance: number): number {
+  return clampInteger(clearance, 0, MAX_STRUCTURE_CLEARANCE, 2);
+}
+
+export function clampStructureSites(limit: number): number {
+  return clampInteger(limit, 1, MAX_STRUCTURE_SITES, 8);
+}
+
+export interface RoadContext {
+  dimension: string;
+  selection: BoxBounds | null;
+  axis: RouteAxis;
+  seed: number;
+  width: number;
+  meander: number;
+  clearance: number;
+  surface: BlockState;
+}
+
+export interface RiverContext extends Omit<RoadContext, "clearance" | "surface"> {
+  depth: number;
+  water: BlockState;
+  bed: BlockState;
+}
+
+export interface VegetationContext {
+  dimension: string;
+  selection: BoxBounds | null;
+  seed: number;
+  groundCover: number;
+  treeChance: number;
+  treeSpacing: number;
+  plant: BlockState;
+  trunk: BlockState;
+  leaves: BlockState;
+}
+
+/** Builds a deterministic road operation; the Rust core re-validates all values. */
+export function planRoad(context: RoadContext): GenerateRoadOperation | null {
+  if (!context.selection) return null;
+  const bounds = generatorBounds(context.selection);
+  const { from, to } = routeEndpoints(bounds, context.axis);
+  return {
+    type: "generate_road",
+    dimension: context.dimension,
+    bounds,
+    from,
+    to,
+    width: clampRouteWidth(context.width),
+    meander: clampRouteMeander(context.meander),
+    seed: clampTerrainSeed(context.seed),
+    clearance: clampRoadClearance(context.clearance),
+    surface: context.surface,
+  };
+}
+
+/** Builds a deterministic river operation; the Rust core re-validates all values. */
+export function planRiver(context: RiverContext): GenerateRiverOperation | null {
+  if (!context.selection) return null;
+  const bounds = generatorBounds(context.selection);
+  const { from, to } = routeEndpoints(bounds, context.axis);
+  return {
+    type: "generate_river",
+    dimension: context.dimension,
+    bounds,
+    from,
+    to,
+    width: clampRouteWidth(context.width),
+    meander: clampRouteMeander(context.meander),
+    seed: clampTerrainSeed(context.seed),
+    depth: clampRiverDepth(context.depth),
+    water: context.water,
+    bed: context.bed,
+  };
+}
+
+/** Builds a deterministic vegetation scatter; the Rust core re-validates all values. */
+export function planVegetation(context: VegetationContext): GenerateVegetationOperation | null {
+  if (!context.selection) return null;
+  return {
+    type: "generate_vegetation",
+    dimension: context.dimension,
+    bounds: generatorBounds(context.selection),
+    seed: clampTerrainSeed(context.seed),
+    groundCover: clampGroundCover(context.groundCover),
+    treeChance: clampTreeChance(context.treeChance),
+    treeSpacing: clampTreeSpacing(context.treeSpacing),
+    plant: context.plant,
+    trunk: context.trunk,
+    leaves: context.leaves,
+  };
+}
+
+export interface StructureSiteContext {
+  dimension: string;
+  selection: BoxBounds | null;
+  width: number;
+  depth: number;
+  step: number;
+  maxSlope: number;
+  clearance: number;
+  limit: number;
+}
+
+/** A read-only query; it never creates an operation or mutates the world. */
+export function planStructureSiteQuery(context: StructureSiteContext): StructureSiteQuery | null {
+  if (!context.selection) return null;
+  return {
+    dimension: context.dimension,
+    bounds: generatorBounds(context.selection),
+    width: clampStructureFootprint(context.width),
+    depth: clampStructureFootprint(context.depth),
+    step: clampStructureStep(context.step),
+    maxSlope: clampStructureSlope(context.maxSlope),
+    clearance: clampStructureClearance(context.clearance),
+    limit: clampStructureSites(context.limit),
   };
 }
 

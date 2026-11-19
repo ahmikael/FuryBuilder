@@ -664,3 +664,140 @@ fn biome_paint_without_biome_data_is_rejected_without_side_effects() {
     assert_eq!(service.world_info().revision, 0);
     assert!(service.history().is_empty());
 }
+
+#[test]
+fn road_and_vegetation_generators_are_audited_and_reversible() {
+    let mut service = WorldService::new();
+    service
+        .execute(request(Operation::FillCuboid {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(7, 64, 7)).unwrap(),
+            state: state("minecraft:grass_block"),
+        }))
+        .unwrap();
+    let road = service
+        .execute(request(Operation::GenerateRoad {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(7, 70, 7)).unwrap(),
+            from: BlockPos::new(0, 64, 3),
+            to: BlockPos::new(7, 64, 3),
+            width: 1,
+            meander: 0,
+            seed: 0x5EED,
+            clearance: 2,
+            surface: state("minecraft:stone_bricks"),
+        }))
+        .unwrap();
+    assert_eq!(road.changed_blocks, 8);
+    assert_eq!(road.world_revision, 2);
+    let summary = &service.audit_log().last().expect("audit").parameter_summary;
+    assert_eq!(summary["type"], "generate_road");
+    assert_eq!(summary["width"], 1);
+    assert_eq!(summary["surface"], "minecraft:stone_bricks");
+
+    let vegetation = service
+        .execute(request(Operation::GenerateVegetation {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(7, 70, 7)).unwrap(),
+            seed: 0x5EED,
+            ground_cover: 100,
+            tree_chance: 0,
+            tree_spacing: 5,
+            plant: state("minecraft:short_grass"),
+            trunk: state("minecraft:oak_log"),
+            leaves: state("minecraft:oak_leaves"),
+        }))
+        .unwrap();
+    assert_eq!(vegetation.changed_blocks, 64);
+    assert_eq!(vegetation.world_revision, 3);
+    let summary = &service.audit_log().last().expect("audit").parameter_summary;
+    assert_eq!(summary["type"], "generate_vegetation");
+    assert_eq!(summary["treeChance"], 0);
+    assert_eq!(summary["plant"], "minecraft:short_grass");
+
+    service.undo("project-1", actor(), None).unwrap();
+    service.undo("project-1", actor(), None).unwrap();
+    match service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 64, 3),
+        })
+        .unwrap()
+    {
+        QueryResult::Block { state, .. } => {
+            assert_eq!(state.name(), "minecraft:grass_block");
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+    match service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(0, 65, 3),
+        })
+        .unwrap()
+    {
+        QueryResult::Block { state, .. } => {
+            assert_eq!(state.name(), "minecraft:air");
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+}
+
+#[test]
+fn structure_site_query_is_bounded_and_does_not_mutate_the_world() {
+    let mut service = WorldService::new();
+    service
+        .execute(request(Operation::FillCuboid {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(15, 64, 15)).unwrap(),
+            state: state("minecraft:stone"),
+        }))
+        .unwrap();
+    let revision = service.world_info().revision;
+    let result = service
+        .query(Query::FindStructureSites {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(15, 70, 15)).unwrap(),
+            width: 3,
+            depth: 3,
+            step: 3,
+            max_slope: 0,
+            clearance: 2,
+            limit: 4,
+        })
+        .unwrap();
+    match result {
+        QueryResult::StructureSites(result) => {
+            assert_eq!(result.sites.len(), 4);
+            assert_eq!(result.limit, 4);
+            assert!(result.scanned_candidates >= 4);
+            assert!(result.sites.iter().all(|site| site.origin.y == 65));
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+    assert_eq!(service.world_info().revision, revision);
+    assert_eq!(service.history().len(), 1);
+}
+
+#[test]
+fn invalid_generator_parameters_are_rejected_without_history() {
+    let mut service = WorldService::new();
+    let error = service
+        .execute(request(Operation::GenerateRiver {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds: BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(7, 70, 7)).unwrap(),
+            from: BlockPos::new(0, 64, 0),
+            to: BlockPos::new(7, 64, 7),
+            width: 1,
+            meander: 0,
+            seed: 0,
+            depth: 0,
+            water: state("minecraft:water[level=0]"),
+            bed: state("minecraft:sand"),
+        }))
+        .unwrap_err();
+    assert_eq!(error.code, ErrorCode::InvalidArgument);
+    assert!(error.message.contains("river depth"));
+    assert_eq!(service.world_info().revision, 0);
+    assert!(service.history().is_empty());
+}

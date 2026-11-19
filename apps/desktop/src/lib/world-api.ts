@@ -10,6 +10,8 @@ import type {
   OperationResult,
   PreviewResult,
   RegionBlocks,
+  StructureSiteQuery,
+  StructureSiteSearch,
 } from "@/editor/types";
 
 /** Single local project for the MVP; project management arrives in M5. */
@@ -87,6 +89,11 @@ export function readBiome(
   pos: { x: number; y: number; z: number },
 ): Promise<string | null> {
   return invokeCommand<string | null>("get_biome", { dimension, pos });
+}
+
+/** Read-only bounded placement check; it never mutates the world or bumps a revision. */
+export function findStructureSites(query: StructureSiteQuery): Promise<StructureSiteSearch> {
+  return invokeCommand<StructureSiteSearch>("find_structure_sites", { ...query });
 }
 
 export function dirtyChunkList(result: { dirtyChunks: ChunkPos[] }): ChunkPos[] {

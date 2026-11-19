@@ -7,7 +7,9 @@ use thiserror::Error;
 use world_domain::{
     BiomeState, BlockBox, BlockPos, BlockState, BoundsError, ChunkPos, Section, World, WorldError,
 };
-use world_generation::{generate_heightmap, HeightmapParams};
+use world_generation::{
+    generate_heightmap, generate_route, scatter_roll, tree_height, HeightmapParams, RoutePoint,
+};
 
 pub const MAX_OPERATION_BLOCKS: u64 = 1_000_000;
 /// Largest allowed raise/lower/noise/smooth/erode step per brush application.
@@ -24,8 +26,30 @@ pub const MAX_HEIGHTMAP_OCTAVES: u32 = world_generation::MAX_HEIGHTMAP_OCTAVES;
 pub const MAX_HEIGHTMAP_AMPLITUDE: u32 = world_generation::MAX_HEIGHTMAP_AMPLITUDE;
 /// Largest supported number of surface layers in a generated heightmap patch.
 pub const MAX_HEIGHTMAP_SURFACE_DEPTH: u32 = 32;
+/// Widest generated road or river cross-section.
+pub const MAX_ROUTE_WIDTH: u32 = world_generation::MAX_ROUTE_WIDTH;
+/// Largest lateral wander accepted by the route generators.
+pub const MAX_ROUTE_MEANDER: u32 = world_generation::MAX_ROUTE_MEANDER;
+/// Largest number of air layers generated above a road.
+pub const MAX_ROAD_CLEARANCE: u32 = 8;
+/// Deepest generated river channel.
+pub const MAX_RIVER_DEPTH: u32 = 16;
+/// Largest minimum spacing between generated trees.
+pub const MAX_TREE_SPACING: u32 = 32;
+/// Largest structure footprint edge accepted by the placement rules.
+pub const MAX_STRUCTURE_FOOTPRINT: u32 = 32;
+/// Largest structure clearance checked above the surface.
+pub const MAX_STRUCTURE_CLEARANCE: u32 = 32;
+/// Largest surface height difference accepted by the structure rules.
+pub const MAX_STRUCTURE_SLOPE: u32 = 32;
+/// Largest number of structure sites returned by one query.
+pub const MAX_STRUCTURE_SITES: usize = 64;
+/// Hard bound for the structure-site block checks in one query.
+pub const MAX_STRUCTURE_SITE_CHECKS: u64 = 2_000_000;
 /// Biome cells cover 4x4x4 blocks in Minecraft Java 1.21.4.
 const BIOME_CELL_SIZE: i32 = 4;
+const PLANT_SALT: u64 = 0x51A7_7E12;
+const TREE_SALT: u64 = 0x7AEE_5EED;
 
 /// Deterministic surface brush. Each brush changes the topmost non-air block of every
 /// non-empty column inside the selection; it never invents or scales a whole world.
@@ -83,8 +107,12 @@ pub enum OperationError {
     InvalidBrush(String),
     #[error("invalid heightmap generator: {0}")]
     InvalidHeightmap(String),
+    #[error("invalid local generator: {0}")]
+    InvalidGenerator(String),
     #[error("invalid biome operation: {0}")]
     InvalidBiome(String),
+    #[error("structure site scan would check {requested} candidates, limit is {limit}")]
+    TooManySiteCandidates { requested: u64, limit: u64 },
     #[error("operation was cancelled before it could be committed")]
     Cancelled,
     #[error(transparent)]
@@ -230,6 +258,56 @@ pub enum Operation {
         surface: BlockState,
         filler: BlockState,
     },
+    /// Deterministic local road between two XZ positions. Only blocks inside the
+    /// selection are written.
+    GenerateRoad {
+        dimension: String,
+        bounds: BlockBox,
+        from: BlockPos,
+        to: BlockPos,
+        #[serde(default = "default_route_width")]
+        width: u32,
+        #[serde(default = "default_route_meander")]
+        meander: u32,
+        #[serde(default)]
+        seed: u64,
+        #[serde(default = "default_road_clearance")]
+        clearance: u32,
+        surface: BlockState,
+    },
+    /// Deterministic local river channel between two XZ positions.
+    GenerateRiver {
+        dimension: String,
+        bounds: BlockBox,
+        from: BlockPos,
+        to: BlockPos,
+        #[serde(default = "default_route_width")]
+        width: u32,
+        #[serde(default = "default_route_meander")]
+        meander: u32,
+        #[serde(default)]
+        seed: u64,
+        #[serde(default = "default_river_depth")]
+        depth: u32,
+        water: BlockState,
+        bed: BlockState,
+    },
+    /// Deterministic scatter of plants and small trees on existing surfaces.
+    GenerateVegetation {
+        dimension: String,
+        bounds: BlockBox,
+        #[serde(default)]
+        seed: u64,
+        #[serde(default = "default_ground_cover", rename = "groundCover")]
+        ground_cover: u32,
+        #[serde(default = "default_tree_chance", rename = "treeChance")]
+        tree_chance: u32,
+        #[serde(default = "default_tree_spacing", rename = "treeSpacing")]
+        tree_spacing: u32,
+        plant: BlockState,
+        trunk: BlockState,
+        leaves: BlockState,
+    },
     /// Paints the 4x4x4 biome cells covering the selection. Requires imported or generated
     /// biome data; it never invents a biome for a world that has none.
     SetBiome {
@@ -263,6 +341,34 @@ fn default_surface_depth() -> u32 {
     1
 }
 
+fn default_route_width() -> u32 {
+    3
+}
+
+fn default_route_meander() -> u32 {
+    4
+}
+
+fn default_road_clearance() -> u32 {
+    2
+}
+
+fn default_river_depth() -> u32 {
+    3
+}
+
+fn default_ground_cover() -> u32 {
+    35
+}
+
+fn default_tree_chance() -> u32 {
+    2
+}
+
+fn default_tree_spacing() -> u32 {
+    5
+}
+
 impl Operation {
     pub fn dimension(&self) -> &str {
         match self {
@@ -272,6 +378,9 @@ impl Operation {
             | Operation::Replace { dimension, .. }
             | Operation::TerrainBrush { dimension, .. }
             | Operation::GenerateHeightmap { dimension, .. }
+            | Operation::GenerateRoad { dimension, .. }
+            | Operation::GenerateRiver { dimension, .. }
+            | Operation::GenerateVegetation { dimension, .. }
             | Operation::SetBiome { dimension, .. } => dimension,
         }
     }
@@ -284,6 +393,9 @@ impl Operation {
             Operation::FillCuboid { bounds, .. }
             | Operation::Replace { bounds, .. }
             | Operation::TerrainBrush { bounds, .. }
+            | Operation::GenerateRoad { bounds, .. }
+            | Operation::GenerateRiver { bounds, .. }
+            | Operation::GenerateVegetation { bounds, .. }
             | Operation::SetBiome { bounds, .. } => bounds.volume(),
             Operation::GenerateHeightmap { bounds, base_y, .. } => {
                 let columns = (i64::from(bounds.max.x) - i64::from(bounds.min.x) + 1).max(0) as u64
@@ -311,6 +423,9 @@ impl Operation {
             | Operation::Replace { bounds, .. }
             | Operation::TerrainBrush { bounds, .. }
             | Operation::GenerateHeightmap { bounds, .. }
+            | Operation::GenerateRoad { bounds, .. }
+            | Operation::GenerateRiver { bounds, .. }
+            | Operation::GenerateVegetation { bounds, .. }
             | Operation::SetBiome { bounds, .. } => Some(*bounds),
         }
     }
@@ -449,6 +564,184 @@ fn prevalidate(world: &World, operation: &Operation) -> Result<(), OperationErro
                 filler,
             })?;
         }
+        Operation::GenerateRoad {
+            dimension,
+            bounds,
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            clearance,
+            surface,
+        } => {
+            check(bounds.min)?;
+            check(bounds.max)?;
+            validate_route(&RouteRequest {
+                dimension,
+                bounds: *bounds,
+                from: *from,
+                to: *to,
+                width: *width,
+                meander: *meander,
+                seed: *seed,
+            })?;
+            if *clearance > MAX_ROAD_CLEARANCE {
+                return Err(OperationError::InvalidGenerator(format!(
+                    "road clearance must be 0..={MAX_ROAD_CLEARANCE}, got {clearance}"
+                )));
+            }
+            if surface.is_air() {
+                return Err(OperationError::InvalidGenerator(
+                    "road surface must not be minecraft:air".to_owned(),
+                ));
+            }
+        }
+        Operation::GenerateRiver {
+            dimension,
+            bounds,
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            depth,
+            water,
+            bed,
+        } => {
+            check(bounds.min)?;
+            check(bounds.max)?;
+            validate_route(&RouteRequest {
+                dimension,
+                bounds: *bounds,
+                from: *from,
+                to: *to,
+                width: *width,
+                meander: *meander,
+                seed: *seed,
+            })?;
+            if !(1..=MAX_RIVER_DEPTH).contains(depth) {
+                return Err(OperationError::InvalidGenerator(format!(
+                    "river depth must be 1..={MAX_RIVER_DEPTH}, got {depth}"
+                )));
+            }
+            if water.is_air() || bed.is_air() {
+                return Err(OperationError::InvalidGenerator(
+                    "river water and bed must not be minecraft:air".to_owned(),
+                ));
+            }
+        }
+        Operation::GenerateVegetation {
+            dimension,
+            bounds,
+            seed,
+            ground_cover,
+            tree_chance,
+            tree_spacing,
+            plant,
+            trunk,
+            leaves,
+        } => {
+            check(bounds.min)?;
+            check(bounds.max)?;
+            validate_vegetation(&VegetationRequest {
+                dimension,
+                bounds: *bounds,
+                seed: *seed,
+                ground_cover: *ground_cover,
+                tree_chance: *tree_chance,
+                tree_spacing: *tree_spacing,
+                plant,
+                trunk,
+                leaves,
+            })?;
+        }
+    }
+    Ok(())
+}
+
+struct RouteRequest<'a> {
+    dimension: &'a str,
+    bounds: BlockBox,
+    from: BlockPos,
+    to: BlockPos,
+    width: u32,
+    meander: u32,
+    seed: u64,
+}
+
+fn validate_route(request: &RouteRequest<'_>) -> Result<(), OperationError> {
+    if !(1..=MAX_ROUTE_WIDTH).contains(&request.width) {
+        return Err(OperationError::InvalidGenerator(format!(
+            "route width must be 1..={MAX_ROUTE_WIDTH}, got {}",
+            request.width
+        )));
+    }
+    if request.meander > MAX_ROUTE_MEANDER {
+        return Err(OperationError::InvalidGenerator(format!(
+            "route meander must be 0..={MAX_ROUTE_MEANDER}, got {}",
+            request.meander
+        )));
+    }
+    if !route_xz_inside(request.bounds, request.from) {
+        return Err(OperationError::InvalidGenerator(format!(
+            "route start {:?} is outside the selection XZ bounds {:?}..{:?}",
+            request.from, request.bounds.min, request.bounds.max
+        )));
+    }
+    if !route_xz_inside(request.bounds, request.to) {
+        return Err(OperationError::InvalidGenerator(format!(
+            "route end {:?} is outside the selection XZ bounds {:?}..{:?}",
+            request.to, request.bounds.min, request.bounds.max
+        )));
+    }
+    Ok(())
+}
+
+fn route_xz_inside(bounds: BlockBox, pos: BlockPos) -> bool {
+    pos.x >= bounds.min.x && pos.x <= bounds.max.x && pos.z >= bounds.min.z && pos.z <= bounds.max.z
+}
+
+struct VegetationRequest<'a> {
+    dimension: &'a str,
+    bounds: BlockBox,
+    seed: u64,
+    ground_cover: u32,
+    tree_chance: u32,
+    tree_spacing: u32,
+    plant: &'a BlockState,
+    trunk: &'a BlockState,
+    leaves: &'a BlockState,
+}
+
+fn validate_vegetation(request: &VegetationRequest<'_>) -> Result<(), OperationError> {
+    if request.ground_cover > 100 {
+        return Err(OperationError::InvalidGenerator(format!(
+            "groundCover must be 0..=100, got {}",
+            request.ground_cover
+        )));
+    }
+    if request.tree_chance > 100 {
+        return Err(OperationError::InvalidGenerator(format!(
+            "treeChance must be 0..=100, got {}",
+            request.tree_chance
+        )));
+    }
+    if !(1..=MAX_TREE_SPACING).contains(&request.tree_spacing) {
+        return Err(OperationError::InvalidGenerator(format!(
+            "treeSpacing must be 1..={MAX_TREE_SPACING}, got {}",
+            request.tree_spacing
+        )));
+    }
+    if request.ground_cover == 0 && request.tree_chance == 0 {
+        return Err(OperationError::InvalidGenerator(
+            "at least one of groundCover or treeChance must be above zero".to_owned(),
+        ));
+    }
+    if request.plant.is_air() || request.trunk.is_air() || request.leaves.is_air() {
+        return Err(OperationError::InvalidGenerator(
+            "vegetation materials must not be minecraft:air".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -702,6 +995,89 @@ fn target_changes(
                 observer,
             );
         }
+        Operation::GenerateRoad {
+            dimension,
+            bounds,
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            clearance,
+            surface,
+        } => {
+            return plan_road(
+                world,
+                RouteRequest {
+                    dimension,
+                    bounds: *bounds,
+                    from: *from,
+                    to: *to,
+                    width: *width,
+                    meander: *meander,
+                    seed: *seed,
+                },
+                *clearance,
+                surface,
+                observer,
+            );
+        }
+        Operation::GenerateRiver {
+            dimension,
+            bounds,
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            depth,
+            water,
+            bed,
+        } => {
+            return plan_river(
+                world,
+                RouteRequest {
+                    dimension,
+                    bounds: *bounds,
+                    from: *from,
+                    to: *to,
+                    width: *width,
+                    meander: *meander,
+                    seed: *seed,
+                },
+                *depth,
+                water,
+                bed,
+                observer,
+            );
+        }
+        Operation::GenerateVegetation {
+            dimension,
+            bounds,
+            seed,
+            ground_cover,
+            tree_chance,
+            tree_spacing,
+            plant,
+            trunk,
+            leaves,
+        } => {
+            return plan_vegetation(
+                world,
+                VegetationRequest {
+                    dimension,
+                    bounds: *bounds,
+                    seed: *seed,
+                    ground_cover: *ground_cover,
+                    tree_chance: *tree_chance,
+                    tree_spacing: *tree_spacing,
+                    plant,
+                    trunk,
+                    leaves,
+                },
+                observer,
+            );
+        }
         Operation::SetBiome { .. } => {
             return Err(OperationError::InvalidBiome(
                 "biome operations use the dedicated biome planning path".to_owned(),
@@ -940,6 +1316,548 @@ fn plan_heightmap(
     Ok(PlannedChanges {
         changes,
         warnings: Vec::new(),
+    })
+}
+
+/// Deterministic local road. The surface follows the topmost non-air block of each
+/// column inside the selection; the road never bridges a fluid or builds from the
+/// selection floor. Reapplying the same road does not stack a second layer.
+fn plan_road(
+    world: &World,
+    request: RouteRequest<'_>,
+    clearance: u32,
+    surface: &BlockState,
+    observer: &dyn OperationObserver,
+) -> Result<PlannedChanges, OperationError> {
+    let route = generate_route(
+        RoutePoint::new(request.from.x, request.from.z),
+        RoutePoint::new(request.to.x, request.to.z),
+        request.width,
+        request.meander,
+        request.seed,
+    )
+    .map_err(|error| OperationError::InvalidGenerator(error.to_string()))?;
+    let total = route.cells.len().max(1) as u64;
+    report(observer, OperationPhase::Planning, 0, total)?;
+
+    let air = BlockState::default();
+    let mut desired: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+    let mut clipped = 0usize;
+    let mut missing = 0usize;
+    let mut fluid = 0usize;
+    let mut done = 0u64;
+    for (x, z) in route.cells {
+        done += 1;
+        if done == total || done % 128 == 0 {
+            report(observer, OperationPhase::Planning, done, total)?;
+        }
+        if x < request.bounds.min.x
+            || x > request.bounds.max.x
+            || z < request.bounds.min.z
+            || z > request.bounds.max.z
+        {
+            clipped += 1;
+            continue;
+        }
+        let Some((surface_y, top)) =
+            topmost_surface(world, request.dimension, request.bounds, x, z)?
+        else {
+            missing += 1;
+            continue;
+        };
+        if is_fluid(&top) {
+            fluid += 1;
+            continue;
+        }
+        let road_y = if top == *surface {
+            surface_y
+        } else {
+            surface_y + 1
+        };
+        if road_y < request.bounds.min.y || road_y > request.bounds.max.y {
+            clipped += 1;
+            continue;
+        }
+        desired.insert(BlockPos::new(x, road_y, z), surface.clone());
+        let clear_to = (road_y + clearance as i32).min(request.bounds.max.y);
+        for y in (road_y + 1)..=clear_to {
+            desired.insert(BlockPos::new(x, y, z), air.clone());
+        }
+    }
+
+    let mut warnings = Vec::new();
+    if clipped > 0 {
+        warnings.push(format!(
+            "{clipped} route column(s) were outside the selection or could not fit its Y range"
+        ));
+    }
+    if missing > 0 {
+        warnings.push(format!(
+            "{missing} route column(s) had no terrain surface and were skipped"
+        ));
+    }
+    if fluid > 0 {
+        warnings.push(format!(
+            "{fluid} route column(s) rested on a fluid and were skipped"
+        ));
+    }
+    let changes = finalize_changes(world, request.dimension, desired)?;
+    Ok(PlannedChanges { changes, warnings })
+}
+
+/// Deterministic river channel. It carves down from the topmost solid surface and fills
+/// the channel with water over a bed. Columns already covered by fluid are skipped, so a
+/// repeated application does not deepen the same river.
+fn plan_river(
+    world: &World,
+    request: RouteRequest<'_>,
+    depth: u32,
+    water: &BlockState,
+    bed: &BlockState,
+    observer: &dyn OperationObserver,
+) -> Result<PlannedChanges, OperationError> {
+    let route = generate_route(
+        RoutePoint::new(request.from.x, request.from.z),
+        RoutePoint::new(request.to.x, request.to.z),
+        request.width,
+        request.meander,
+        request.seed,
+    )
+    .map_err(|error| OperationError::InvalidGenerator(error.to_string()))?;
+    let total = route.cells.len().max(1) as u64;
+    report(observer, OperationPhase::Planning, 0, total)?;
+
+    let mut desired: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+    let mut clipped = 0usize;
+    let mut missing = 0usize;
+    let mut fluid = 0usize;
+    let mut done = 0u64;
+    for (x, z) in route.cells {
+        done += 1;
+        if done == total || done % 128 == 0 {
+            report(observer, OperationPhase::Planning, done, total)?;
+        }
+        if x < request.bounds.min.x
+            || x > request.bounds.max.x
+            || z < request.bounds.min.z
+            || z > request.bounds.max.z
+        {
+            clipped += 1;
+            continue;
+        }
+        let Some((surface_y, top)) =
+            topmost_surface(world, request.dimension, request.bounds, x, z)?
+        else {
+            missing += 1;
+            continue;
+        };
+        if is_fluid(&top) {
+            fluid += 1;
+            continue;
+        }
+        let depth = i32::try_from(depth).unwrap_or(i32::MAX);
+        let water_bottom = (surface_y - depth + 1).max(request.bounds.min.y);
+        let bed_y = water_bottom - 1;
+        if bed_y >= request.bounds.min.y {
+            desired.insert(BlockPos::new(x, bed_y, z), bed.clone());
+        }
+        for y in water_bottom..=surface_y {
+            desired.insert(BlockPos::new(x, y, z), water.clone());
+        }
+    }
+
+    let mut warnings = Vec::new();
+    if clipped > 0 {
+        warnings.push(format!(
+            "{clipped} river column(s) were outside the selection"
+        ));
+    }
+    if missing > 0 {
+        warnings.push(format!(
+            "{missing} river column(s) had no terrain surface and were skipped"
+        ));
+    }
+    if fluid > 0 {
+        warnings.push(format!(
+            "{fluid} river column(s) already contained fluid and were left unchanged"
+        ));
+    }
+    let changes = finalize_changes(world, request.dimension, desired)?;
+    Ok(PlannedChanges { changes, warnings })
+}
+
+/// Deterministic vegetation scatter. Plants and trees are placed only into existing air;
+/// trees require a fully free trunk/canopy volume and respect a minimum spacing. A tree
+/// that would overwrite a block or another planned feature is skipped instead of clipping.
+fn plan_vegetation(
+    world: &World,
+    request: VegetationRequest<'_>,
+    observer: &dyn OperationObserver,
+) -> Result<PlannedChanges, OperationError> {
+    let width = (i64::from(request.bounds.max.x) - i64::from(request.bounds.min.x) + 1).max(0);
+    let depth = (i64::from(request.bounds.max.z) - i64::from(request.bounds.min.z) + 1).max(0);
+    let total = (width * depth) as u64;
+    report(observer, OperationPhase::Planning, 0, total)?;
+
+    let mut desired: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+    let mut columns: Vec<(i32, i32, i32)> = Vec::new();
+    let mut accepted_trees: Vec<(i32, i32)> = Vec::new();
+    let mut empty = 0usize;
+    let mut fluid = 0usize;
+    let mut existing_vegetation = 0usize;
+    let mut rejected_spacing = 0usize;
+    let mut rejected_clearance = 0usize;
+    let mut trees = 0usize;
+    let mut done = 0u64;
+
+    for z in request.bounds.min.z..=request.bounds.max.z {
+        for x in request.bounds.min.x..=request.bounds.max.x {
+            done += 1;
+            if done == total || done % 256 == 0 {
+                report(observer, OperationPhase::Planning, done, total)?;
+            }
+            let Some((surface_y, top)) =
+                topmost_surface(world, request.dimension, request.bounds, x, z)?
+            else {
+                empty += 1;
+                continue;
+            };
+            if is_fluid(&top) {
+                fluid += 1;
+                continue;
+            }
+            if is_existing_vegetation(&top) {
+                existing_vegetation += 1;
+                continue;
+            }
+            columns.push((x, z, surface_y));
+
+            if request.tree_chance == 0
+                || scatter_roll(request.seed, TREE_SALT, x, z) >= request.tree_chance
+            {
+                continue;
+            }
+            let spacing = request.tree_spacing as i32;
+            if accepted_trees
+                .iter()
+                .any(|(tree_x, tree_z)| (x - tree_x).abs().max((z - tree_z).abs()) < spacing)
+            {
+                rejected_spacing += 1;
+                continue;
+            }
+
+            let height = tree_height(request.seed, x, z) as i32;
+            let top_y = surface_y + height;
+            let radius = 2i32;
+            if x - radius < request.bounds.min.x
+                || x + radius > request.bounds.max.x
+                || z - radius < request.bounds.min.z
+                || z + radius > request.bounds.max.z
+                || top_y > request.bounds.max.y
+            {
+                rejected_clearance += 1;
+                continue;
+            }
+
+            let mut tree_positions: BTreeMap<BlockPos, BlockState> = BTreeMap::new();
+            for y in (surface_y + 1)..=top_y {
+                tree_positions.insert(BlockPos::new(x, y, z), request.trunk.clone());
+            }
+            for (layer, layer_radius) in [(0i32, 1i32), (-1, 2), (-2, 2)] {
+                let y = top_y + layer;
+                for offset_x in -layer_radius..=layer_radius {
+                    for offset_z in -layer_radius..=layer_radius {
+                        if offset_x == 0 && offset_z == 0 {
+                            continue;
+                        }
+                        tree_positions.insert(
+                            BlockPos::new(x + offset_x, y, z + offset_z),
+                            request.leaves.clone(),
+                        );
+                    }
+                }
+            }
+
+            let mut blocked = false;
+            for pos in tree_positions.keys() {
+                if desired.contains_key(pos) || !world.get_block(request.dimension, *pos)?.is_air()
+                {
+                    blocked = true;
+                    break;
+                }
+            }
+            if blocked {
+                rejected_clearance += 1;
+                continue;
+            }
+            for (pos, state) in tree_positions {
+                desired.insert(pos, state);
+            }
+            accepted_trees.push((x, z));
+            trees += 1;
+        }
+    }
+
+    let mut plants = 0usize;
+    for (x, z, surface_y) in columns {
+        if request.ground_cover == 0
+            || scatter_roll(request.seed, PLANT_SALT, x, z) >= request.ground_cover
+        {
+            continue;
+        }
+        let plant_y = surface_y + 1;
+        if plant_y > request.bounds.max.y {
+            continue;
+        }
+        let pos = BlockPos::new(x, plant_y, z);
+        if desired.contains_key(&pos) {
+            continue;
+        }
+        if !world.get_block(request.dimension, pos)?.is_air() {
+            continue;
+        }
+        desired.insert(pos, request.plant.clone());
+        plants += 1;
+    }
+
+    let mut warnings = Vec::new();
+    if empty > 0 {
+        warnings.push(format!(
+            "{empty} column(s) had no terrain surface and were skipped"
+        ));
+    }
+    if fluid > 0 {
+        warnings.push(format!(
+            "{fluid} column(s) were covered by fluid and were skipped"
+        ));
+    }
+    if existing_vegetation > 0 {
+        warnings.push(format!(
+            "{existing_vegetation} column(s) already had leaves or a trunk and were skipped"
+        ));
+    }
+    if rejected_spacing > 0 {
+        warnings.push(format!(
+            "{rejected_spacing} tree(s) were skipped to keep the configured spacing"
+        ));
+    }
+    if rejected_clearance > 0 {
+        warnings.push(format!(
+            "{rejected_clearance} tree(s) were skipped because their canopy did not fit or was obstructed"
+        ));
+    }
+    let changes = finalize_changes(world, request.dimension, desired)?;
+    warnings.push(format!(
+        "{trees} tree(s) and {plants} plant(s) planned inside the selection"
+    ));
+    Ok(PlannedChanges { changes, warnings })
+}
+
+fn topmost_surface(
+    world: &World,
+    dimension: &str,
+    bounds: BlockBox,
+    x: i32,
+    z: i32,
+) -> Result<Option<(i32, BlockState)>, OperationError> {
+    for y in (bounds.min.y..=bounds.max.y).rev() {
+        let state = world.get_block(dimension, BlockPos::new(x, y, z))?;
+        if !state.is_air() {
+            return Ok(Some((y, state)));
+        }
+    }
+    Ok(None)
+}
+
+fn is_fluid(state: &BlockState) -> bool {
+    matches!(state.name(), "minecraft:water" | "minecraft:lava")
+}
+
+fn is_existing_vegetation(state: &BlockState) -> bool {
+    let name = state.name();
+    name.ends_with("_leaves")
+        || name.ends_with("_log")
+        || name.ends_with("_wood")
+        || name == "minecraft:short_grass"
+        || name == "minecraft:tall_grass"
+        || name == "minecraft:fern"
+        || name == "minecraft:large_fern"
+}
+
+fn finalize_changes(
+    world: &World,
+    dimension: &str,
+    desired: BTreeMap<BlockPos, BlockState>,
+) -> Result<Vec<BlockChange>, OperationError> {
+    let mut changes = Vec::with_capacity(desired.len());
+    for (pos, state) in desired {
+        if world.get_block(dimension, pos)? != state {
+            changes.push(BlockChange { pos, state });
+        }
+    }
+    Ok(changes)
+}
+
+/// Rules for a deterministic, greedy structure-site search.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StructureSiteRules {
+    pub width: u32,
+    pub depth: u32,
+    pub step: u32,
+    pub max_slope: u32,
+    pub clearance: u32,
+    pub limit: usize,
+}
+
+/// One valid site. `origin` is the minimum XZ corner at the highest surface plus one;
+/// the caller can use the min/max surface heights to adapt the structure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureSite {
+    pub origin: BlockPos,
+    pub min_surface_y: i32,
+    pub max_surface_y: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StructureSiteSearch {
+    pub sites: Vec<StructureSite>,
+    pub scanned_candidates: u64,
+    pub rejected_candidates: u64,
+}
+
+/// Finds bounded flat, clear and non-overlapping structure sites. The rules are a
+/// deterministic heuristic, not a claim about vanilla structure generation.
+pub fn find_structure_sites(
+    world: &World,
+    dimension: &str,
+    bounds: BlockBox,
+    rules: StructureSiteRules,
+) -> Result<StructureSiteSearch, OperationError> {
+    world.dimension(dimension)?;
+    if !(1..=MAX_STRUCTURE_FOOTPRINT).contains(&rules.width)
+        || !(1..=MAX_STRUCTURE_FOOTPRINT).contains(&rules.depth)
+    {
+        return Err(OperationError::InvalidGenerator(format!(
+            "structure width and depth must be 1..={MAX_STRUCTURE_FOOTPRINT}"
+        )));
+    }
+    if !(1..=64).contains(&rules.step) {
+        return Err(OperationError::InvalidGenerator(format!(
+            "structure step must be 1..=64, got {}",
+            rules.step
+        )));
+    }
+    if rules.max_slope > MAX_STRUCTURE_SLOPE {
+        return Err(OperationError::InvalidGenerator(format!(
+            "structure maxSlope must be 0..={MAX_STRUCTURE_SLOPE}, got {}",
+            rules.max_slope
+        )));
+    }
+    if rules.clearance > MAX_STRUCTURE_CLEARANCE {
+        return Err(OperationError::InvalidGenerator(format!(
+            "structure clearance must be 0..={MAX_STRUCTURE_CLEARANCE}, got {}",
+            rules.clearance
+        )));
+    }
+    if rules.limit == 0 || rules.limit > MAX_STRUCTURE_SITES {
+        return Err(OperationError::InvalidGenerator(format!(
+            "structure limit must be 1..={MAX_STRUCTURE_SITES}, got {}",
+            rules.limit
+        )));
+    }
+
+    let bounds_width = (i64::from(bounds.max.x) - i64::from(bounds.min.x) + 1).max(0) as u64;
+    let bounds_depth = (i64::from(bounds.max.z) - i64::from(bounds.min.z) + 1).max(0) as u64;
+    if u64::from(rules.width) > bounds_width || u64::from(rules.depth) > bounds_depth {
+        return Ok(StructureSiteSearch {
+            sites: Vec::new(),
+            scanned_candidates: 0,
+            rejected_candidates: 0,
+        });
+    }
+    let step = u64::from(rules.step);
+    let candidates_x = (bounds_width - u64::from(rules.width)) / step + 1;
+    let candidates_z = (bounds_depth - u64::from(rules.depth)) / step + 1;
+    let candidates = candidates_x.saturating_mul(candidates_z);
+    let checks = candidates
+        .saturating_mul(u64::from(rules.width))
+        .saturating_mul(u64::from(rules.depth))
+        .saturating_mul(u64::from(rules.clearance) + 1);
+    if checks > MAX_STRUCTURE_SITE_CHECKS {
+        return Err(OperationError::TooManySiteCandidates {
+            requested: checks,
+            limit: MAX_STRUCTURE_SITE_CHECKS,
+        });
+    }
+
+    let last_x = bounds.max.x - rules.width as i32 + 1;
+    let last_z = bounds.max.z - rules.depth as i32 + 1;
+    let mut sites = Vec::new();
+    let mut scanned = 0u64;
+    let mut rejected = 0u64;
+    'outer: for z in (bounds.min.z..=last_z).step_by(rules.step as usize) {
+        for x in (bounds.min.x..=last_x).step_by(rules.step as usize) {
+            scanned += 1;
+            if sites.iter().any(|site: &StructureSite| {
+                x < site.origin.x + rules.width as i32
+                    && x + rules.width as i32 > site.origin.x
+                    && z < site.origin.z + rules.depth as i32
+                    && z + rules.depth as i32 > site.origin.z
+            }) {
+                rejected += 1;
+                continue;
+            }
+            let mut min_surface = i32::MAX;
+            let mut max_surface = i32::MIN;
+            let mut valid = true;
+            'columns: for offset_z in 0..rules.depth as i32 {
+                for offset_x in 0..rules.width as i32 {
+                    let column_x = x + offset_x;
+                    let column_z = z + offset_z;
+                    let Some((surface_y, top)) =
+                        topmost_surface(world, dimension, bounds, column_x, column_z)?
+                    else {
+                        valid = false;
+                        break 'columns;
+                    };
+                    if is_fluid(&top) {
+                        valid = false;
+                        break 'columns;
+                    }
+                    min_surface = min_surface.min(surface_y);
+                    max_surface = max_surface.max(surface_y);
+                    for offset_y in 1..=rules.clearance as i32 {
+                        let check_y = surface_y + offset_y;
+                        if check_y > bounds.max.y
+                            || !world
+                                .get_block(dimension, BlockPos::new(column_x, check_y, column_z))?
+                                .is_air()
+                        {
+                            valid = false;
+                            break 'columns;
+                        }
+                    }
+                }
+            }
+            if !valid || max_surface - min_surface > rules.max_slope as i32 {
+                rejected += 1;
+                continue;
+            }
+            sites.push(StructureSite {
+                origin: BlockPos::new(x, max_surface + 1, z),
+                min_surface_y: min_surface,
+                max_surface_y: max_surface,
+            });
+            if sites.len() >= rules.limit {
+                break 'outer;
+            }
+        }
+    }
+    Ok(StructureSiteSearch {
+        sites,
+        scanned_candidates: scanned,
+        rejected_candidates: rejected,
     })
 }
 
@@ -2555,5 +3473,218 @@ mod tests {
         let error = preview(&empty, &operation).unwrap_err();
         assert!(matches!(error, OperationError::InvalidBiome(_)));
         assert!(error.to_string().contains("biome data is missing"));
+    }
+
+    #[test]
+    fn road_follows_the_surface_clears_above_and_is_repeatable() {
+        let mut world = World::new_empty();
+        for x in 0..=4 {
+            fill_column(&mut world, x, 0, 60, 64, "minecraft:stone");
+        }
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(4, 70, 0)).unwrap();
+        let operation = Operation::GenerateRoad {
+            dimension: DIM.into(),
+            bounds,
+            from: BlockPos::new(0, 64, 0),
+            to: BlockPos::new(4, 64, 0),
+            width: 1,
+            meander: 0,
+            seed: 0x5EED,
+            clearance: 2,
+            surface: state("minecraft:gold_block"),
+        };
+        let applied = apply(&mut world, &operation).unwrap();
+        assert_eq!(applied.changed_blocks, 5);
+        for x in 0..=4 {
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 64, 0)).unwrap(),
+                state("minecraft:stone")
+            );
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 65, 0)).unwrap(),
+                state("minecraft:gold_block")
+            );
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 66, 0)).unwrap(),
+                state("minecraft:air")
+            );
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 67, 0)).unwrap(),
+                state("minecraft:air")
+            );
+        }
+        let again = apply(&mut world, &operation).unwrap();
+        assert_eq!(again.changed_blocks, 0, "the same road must not stack");
+    }
+
+    #[test]
+    fn river_carves_a_bed_and_water_without_deepening_on_reapply() {
+        let mut world = World::new_empty();
+        for x in 0..=4 {
+            fill_column(&mut world, x, 0, 60, 64, "minecraft:stone");
+        }
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(4, 70, 0)).unwrap();
+        let operation = Operation::GenerateRiver {
+            dimension: DIM.into(),
+            bounds,
+            from: BlockPos::new(0, 64, 0),
+            to: BlockPos::new(4, 64, 0),
+            width: 1,
+            meander: 0,
+            seed: 0x5EED,
+            depth: 3,
+            water: state("minecraft:water[level=0]"),
+            bed: state("minecraft:sand"),
+        };
+        let applied = apply(&mut world, &operation).unwrap();
+        assert_eq!(applied.changed_blocks, 20);
+        for x in 0..=4 {
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 60, 0)).unwrap(),
+                state("minecraft:stone")
+            );
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 61, 0)).unwrap(),
+                state("minecraft:sand")
+            );
+            for y in 62..=64 {
+                assert_eq!(
+                    world.get_block(DIM, BlockPos::new(x, y, 0)).unwrap(),
+                    state("minecraft:water[level=0]")
+                );
+            }
+            assert_eq!(
+                world.get_block(DIM, BlockPos::new(x, 65, 0)).unwrap(),
+                state("minecraft:air")
+            );
+        }
+        let again = apply(&mut world, &operation).unwrap();
+        assert_eq!(again.changed_blocks, 0);
+        assert!(again
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("fluid")));
+    }
+
+    #[test]
+    fn vegetation_is_deterministic_and_only_uses_free_air() {
+        let mut world = World::new_empty();
+        for x in 0..16 {
+            for z in 0..16 {
+                fill_column(&mut world, x, z, 60, 64, "minecraft:grass_block");
+            }
+        }
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(15, 80, 15)).unwrap();
+        let operation = Operation::GenerateVegetation {
+            dimension: DIM.into(),
+            bounds,
+            seed: 0x5EED,
+            ground_cover: 100,
+            tree_chance: 100,
+            tree_spacing: 5,
+            plant: state("minecraft:short_grass"),
+            trunk: state("minecraft:oak_log"),
+            leaves: state("minecraft:oak_leaves"),
+        };
+        let first = preview(&world, &operation).unwrap();
+        let second = preview(&world, &operation).unwrap();
+        assert_eq!(first.changed_blocks, second.changed_blocks);
+        assert!(first.changed_blocks > 64);
+        let applied = apply(&mut world, &operation).unwrap();
+        assert_eq!(applied.changed_blocks, first.changed_blocks);
+
+        let mut logs = 0;
+        let mut leaves = 0;
+        let mut plants = 0;
+        for x in 0..16 {
+            for z in 0..16 {
+                for y in 65..=80 {
+                    let block = world.get_block(DIM, BlockPos::new(x, y, z)).unwrap();
+                    match block.name() {
+                        "minecraft:oak_log" => logs += 1,
+                        "minecraft:oak_leaves" => leaves += 1,
+                        "minecraft:short_grass" => plants += 1,
+                        _ => {}
+                    }
+                }
+            }
+        }
+        assert!(logs > 0, "the scatter must place trees");
+        assert!(leaves > 0, "the scatter must place tree leaves");
+        assert!(plants > 0, "the scatter must place ground cover");
+        assert!(
+            applied.diffs.iter().all(|diff| diff.dimension == DIM),
+            "all diffs stay in the selected dimension"
+        );
+    }
+
+    #[test]
+    fn structure_sites_require_flat_clear_ground_and_do_not_overlap() {
+        let mut world = World::new_empty();
+        for x in 0..16 {
+            for z in 0..16 {
+                fill_column(&mut world, x, z, 60, 64, "minecraft:stone");
+            }
+        }
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(15, 70, 15)).unwrap();
+        let rules = StructureSiteRules {
+            width: 3,
+            depth: 3,
+            step: 3,
+            max_slope: 0,
+            clearance: 2,
+            limit: 4,
+        };
+        let search = find_structure_sites(&world, DIM, bounds, rules).unwrap();
+        assert_eq!(search.sites.len(), 4);
+        assert!((4..=25).contains(&search.scanned_candidates));
+        assert!(search.sites.iter().all(|site| site.origin.y == 65));
+        assert!(search
+            .sites
+            .iter()
+            .all(|site| site.min_surface_y == 64 && site.max_surface_y == 64));
+        assert!(search.sites.windows(2).all(|pair| {
+            let first = pair[0];
+            let second = pair[1];
+            first.origin.x + 3 <= second.origin.x
+                || second.origin.x + 3 <= first.origin.x
+                || first.origin.z + 3 <= second.origin.z
+                || second.origin.z + 3 <= first.origin.z
+        }));
+
+        let blocked_bounds =
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(2, 70, 2)).unwrap();
+        world
+            .set_block(DIM, BlockPos::new(1, 65, 1), &state("minecraft:stone"))
+            .unwrap();
+        let blocked = find_structure_sites(
+            &world,
+            DIM,
+            blocked_bounds,
+            StructureSiteRules { limit: 1, ..rules },
+        )
+        .unwrap();
+        assert!(blocked.sites.is_empty());
+        assert_eq!(blocked.rejected_candidates, 1);
+    }
+
+    #[test]
+    fn route_generators_reject_a_position_outside_the_selection() {
+        let world = World::new_empty();
+        let bounds = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(3, 70, 3)).unwrap();
+        let operation = Operation::GenerateRoad {
+            dimension: DIM.into(),
+            bounds,
+            from: BlockPos::new(10, 64, 0),
+            to: BlockPos::new(0, 64, 0),
+            width: 1,
+            meander: 0,
+            seed: 0,
+            clearance: 1,
+            surface: state("minecraft:stone_bricks"),
+        };
+        let error = preview(&world, &operation).unwrap_err();
+        assert!(matches!(error, OperationError::InvalidGenerator(_)));
+        assert!(error.to_string().contains("outside the selection"));
     }
 }

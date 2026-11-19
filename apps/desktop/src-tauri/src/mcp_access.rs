@@ -241,6 +241,9 @@ impl McpAccessState {
                 | Operation::Replace { bounds, .. }
                 | Operation::TerrainBrush { bounds, .. }
                 | Operation::GenerateHeightmap { bounds, .. }
+                | Operation::GenerateRoad { bounds, .. }
+                | Operation::GenerateRiver { bounds, .. }
+                | Operation::GenerateVegetation { bounds, .. }
                 | Operation::SetBiome { bounds, .. } => {
                     if !box_contains(&selection.bounds, bounds) {
                         return Err(AppError::new(

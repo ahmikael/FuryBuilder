@@ -9,6 +9,7 @@ import {
   Mountain,
   Redo2,
   RotateCcw,
+  Route,
   Search,
   Terminal,
   Undo2,
@@ -25,6 +26,7 @@ import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor
 import { TerrainPanel } from "@/features/workspace/TerrainPanel";
 import { HeightmapPanel } from "@/features/workspace/HeightmapPanel";
 import { BiomePanel } from "@/features/workspace/BiomePanel";
+import { GeneratorsPanel } from "@/features/workspace/GeneratorsPanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -635,6 +637,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="biomes">
               <Leaf className="size-3" /> Biomes
             </TabsTrigger>
+            <TabsTrigger value="generators">
+              <Route className="size-3" /> Generators
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -668,6 +673,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="biomes" className="m-0 p-2">
           <BiomePanel />
+        </TabsContent>
+
+        <TabsContent value="generators" className="m-0 p-2">
+          <GeneratorsPanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

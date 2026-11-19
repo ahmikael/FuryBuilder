@@ -42,6 +42,76 @@ export interface BiomeOperation {
   biome: string;
 }
 
+/** Deterministic local road that follows the existing surface inside the selection. */
+export interface GenerateRoadOperation {
+  type: "generate_road";
+  dimension: string;
+  bounds: BoxBounds;
+  from: BlockPosition;
+  to: BlockPosition;
+  width: number;
+  meander: number;
+  seed: number;
+  clearance: number;
+  surface: BlockState;
+}
+
+/** Deterministic local river channel with a bed and water column. */
+export interface GenerateRiverOperation {
+  type: "generate_river";
+  dimension: string;
+  bounds: BoxBounds;
+  from: BlockPosition;
+  to: BlockPosition;
+  width: number;
+  meander: number;
+  seed: number;
+  depth: number;
+  water: BlockState;
+  bed: BlockState;
+}
+
+/** Deterministic scatter of ground cover and small trees on free surfaces. */
+export interface GenerateVegetationOperation {
+  type: "generate_vegetation";
+  dimension: string;
+  bounds: BoxBounds;
+  seed: number;
+  groundCover: number;
+  treeChance: number;
+  treeSpacing: number;
+  plant: BlockState;
+  trunk: BlockState;
+  leaves: BlockState;
+}
+
+/** One bounded, flat and clear candidate for a structure footprint. */
+export interface StructureSite {
+  origin: BlockPosition;
+  minSurfaceY: number;
+  maxSurfaceY: number;
+}
+
+export interface StructureSiteQuery {
+  dimension: string;
+  bounds: BoxBounds;
+  width: number;
+  depth: number;
+  step: number;
+  maxSlope: number;
+  clearance: number;
+  limit: number;
+}
+
+export interface StructureSiteSearch {
+  dimension: string;
+  bounds: BoxBounds;
+  sites: StructureSite[];
+  scannedCandidates: number;
+  rejectedCandidates: number;
+  limit: number;
+}
+
 export type EditorOperation =
   | { type: "set_block"; dimension: string; pos: BlockPosition; state: BlockState }
   | { type: "batch"; dimension: string; changes: BlockChange[] }
@@ -59,7 +129,10 @@ export type EditorOperation =
       targetY?: number | null;
     }
   | HeightmapOperation
-  | BiomeOperation;
+  | BiomeOperation
+  | GenerateRoadOperation
+  | GenerateRiverOperation
+  | GenerateVegetationOperation;
 
 export interface PreviewResult {
   affectedBlocks: number;

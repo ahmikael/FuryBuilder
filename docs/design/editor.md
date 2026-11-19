@@ -6,16 +6,16 @@ palette are derived views.
 
 ## Tools
 
-| Tool | Key | Click behaviour |
-|---|---|---|
-| Select / inspect | 1 | Picks a block, updates the inspector and hover outline. |
-| Place | 2 | Places the palette state on the picked face. |
-| Remove | 3 | Replaces the picked block with `minecraft:air`. |
-| Brush | 4 | Places a radius-1…4 sphere on the picked face (19 blocks at radius 1). |
-| Box select | 5 | First click sets a corner, second click completes the box. |
-| Fill | 6 | Fills the current box selection with the palette state. |
-| Line | 7 | First click sets a start, second click places a connected 3D line. |
-| Replace | 8 | Replaces one source state inside the box selection with the palette state. |
+| Tool             | Key | Click behaviour                                                            |
+| ---------------- | --- | -------------------------------------------------------------------------- |
+| Select / inspect | 1   | Picks a block, updates the inspector and hover outline.                    |
+| Place            | 2   | Places the palette state on the picked face.                               |
+| Remove           | 3   | Replaces the picked block with `minecraft:air`.                            |
+| Brush            | 4   | Places a radius-1…4 sphere on the picked face (19 blocks at radius 1).     |
+| Box select       | 5   | First click sets a corner, second click completes the box.                 |
+| Fill             | 6   | Fills the current box selection with the palette state.                    |
+| Line             | 7   | First click sets a start, second click places a connected 3D line.         |
+| Replace          | 8   | Replaces one source state inside the box selection with the palette state. |
 
 Alt+click picks a world block as the brush state. Right-click without dragging opens the
 context menu (place, remove, pick, replace source, box corner, copy/paste, fill, delete,
@@ -28,15 +28,15 @@ selection. It requires a selection; the footprint keeps the selected X/Z extent 
 bounded 16-block vertical air margin so raise and lower can write above or below the
 surface without escaping the operation bounds.
 
-| Brush | Behaviour |
-|---|---|
-| Raise | Adds `amount` layers of the palette material above each surface. |
-| Lower | Removes up to `amount` blocks above each surface. |
-| Smooth | Moves each surface toward the rounded 8-neighbour average, at most `amount`. |
-| Flatten | Moves each surface to an explicit target Y or the median surface height. |
-| Noise | Adds stable SplitMix64 noise in `-amount..=amount` from the entered seed. |
-| Erode | Lowers peaks toward the rounded 4-neighbour average, at most `amount`. |
-| Terrace | Snaps each surface to the nearest multiple of `step` (2..16). |
+| Brush   | Behaviour                                                                    |
+| ------- | ---------------------------------------------------------------------------- |
+| Raise   | Adds `amount` layers of the palette material above each surface.             |
+| Lower   | Removes up to `amount` blocks above each surface.                            |
+| Smooth  | Moves each surface toward the rounded 8-neighbour average, at most `amount`. |
+| Flatten | Moves each surface to an explicit target Y or the median surface height.     |
+| Noise   | Adds stable SplitMix64 noise in `-amount..=amount` from the entered seed.    |
+| Erode   | Lowers peaks toward the rounded 4-neighbour average, at most `amount`.       |
+| Terrace | Snaps each surface to the nearest multiple of `step` (2..16).                |
 
 - Amount is 1..16, terrace steps are 2..16, material must not be air, and `targetY` is only
   valid for flatten and must be inside the selection.
@@ -55,16 +55,16 @@ The `Heightmap` tab builds a bounded local surface patch from explicit parameter
 of editing the existing surface. It requires a box selection and writes one reversible
 operation; it is not a whole-world generator and makes no vanilla worldgen parity claim.
 
-| Parameter | Behaviour |
-|---|---|
-| Seed | Unsigned integer seed; the same seed and parameters reproduce the same patch. |
-| Scale | Noise cell size in blocks, 1..64. |
-| Octaves | Fractal octave count, 1..6; each octave contributes half the weight of the previous one. |
-| Amplitude | Maximum height offset above `baseY`, 1..256. |
-| Base Y | Starting surface height; empty uses the selection's minimum Y. |
-| Surface depth | Number of top layers written with the surface material, 1..32. |
-| Surface | Palette material placed on the top layer(s). |
-| Filler | Material placed between `baseY` and the surface layers. |
+| Parameter     | Behaviour                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Seed          | Unsigned integer seed; the same seed and parameters reproduce the same patch.            |
+| Scale         | Noise cell size in blocks, 1..64.                                                        |
+| Octaves       | Fractal octave count, 1..6; each octave contributes half the weight of the previous one. |
+| Amplitude     | Maximum height offset above `baseY`, 1..256.                                             |
+| Base Y        | Starting surface height; empty uses the selection's minimum Y.                           |
+| Surface depth | Number of top layers written with the surface material, 1..32.                           |
+| Surface       | Palette material placed on the top layer(s).                                             |
+| Filler        | Material placed between `baseY` and the surface layers.                                  |
 
 - The footprint is the selected X/Z extent. The vertical bounds expand to include `baseY`
   and `baseY + amplitude`, so the whole patch stays inside the recorded operation extent.
@@ -84,10 +84,10 @@ editable world are a grid of 4x4x4 block cells per section, stored as a palette 
 YZX cells. A cell touched anywhere by the selection is painted, so the operation reports
 the covered block volume while changing whole cells.
 
-| Input | Behaviour |
-|---|---|
-| Selection | Required box; every 4x4x4 cell it touches is painted. |
-| Biome id | Namespaced lowercase id such as `minecraft:forest`; the panel reads the current biome at the selection minimum corner. |
+| Input     | Behaviour                                                                                                              |
+| --------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Selection | Required box; every 4x4x4 cell it touches is painted.                                                                  |
+| Biome id  | Namespaced lowercase id such as `minecraft:forest`; the panel reads the current biome at the selection minimum corner. |
 
 - The operation is `set_biome`; the Rust core previews it, applies it through the
   revisioned pipeline and records it as one reversible history entry. Undo restores the
@@ -99,6 +99,31 @@ the covered block volume while changing whole cells.
   unknown section tags and block entities/entities are preserved.
 - This tool edits existing biome data; it does not run vanilla biome generation or claim
   biome parity with a seed.
+
+## Local generators and structure sites (M9.12)
+
+The `Generators` tab adds deterministic local construction tools for roads, river
+channels, vegetation and a read-only placement-rule query. Every edit requires a box
+selection and is previewed and applied as one reversible operation. These are not
+whole-world generators and make no vanilla worldgen or vanilla structure-placement claim.
+
+| Tool       | Behaviour                                                                                                                                                                                          |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Road       | Runs between the selection edges on the chosen X/Z axis, follows the topmost non-air surface, writes the road surface and clears up to 8 blocks of headroom. Width 1..16, meander 0..64, seed u64. |
+| River      | Same route rasterization; carves 1..16 blocks below the surface, places a bed below the water and fills the channel.                                                                               |
+| Vegetation | Scatters ground cover (0..100%) and small trees (0..100% chance, spacing 1..32) only into existing air; trees need a free trunk and canopy volume.                                                 |
+| Sites      | Bounded query for flat, dry, clear, non-overlapping structure footprints. Width/depth 1..32, step 1..64, max slope 0..32, clearance 0..32, limit 1..64.                                            |
+
+- Route endpoints are derived from the selection edges; the operation box adds the same
+  bounded 16-block vertical margin as terrain brushes so headroom and canopies stay inside
+  the recorded extent.
+- Route columns outside the selection, without a surface, or resting on a fluid are
+  skipped with warnings instead of bridging or building a pillar. Repeating a road does
+  not stack a second layer; repeating a river does not deepen it.
+- The placement query inspects at most 2,000,000 block positions and returns at most 64
+  sites. It never mutates the world, bumps a revision or creates an operation.
+- The selected materials come from the curated 1.21.4 registry. Block states only are
+  changed; heightmaps, light and biomes are not recalculated.
 
 ## Selection and geometry
 
@@ -171,15 +196,15 @@ dialogs. Camera keys use the same guard.
 
 ## Testing
 
-| Area | Evidence |
-|---|---|
-| Box selection, negative bounds, volume limits | `editor/session.test.ts`, `editor/commands.test.ts` |
-| Faces, lines, brush, fill, replace | `editor/session.test.ts` |
-| Conflicts (no selection/source, source = target, revision mismatch) | `editor/commands.test.ts` |
-| Cancellation and stale job completion | `editor/commands.test.ts`, `state/tool-store.test.ts` |
-| Hotkeys and text-field protection | `editor/use-editor-hotkeys.test.tsx`, `editor/session.test.ts` |
-| Click → preview → apply → dirty chunks | `features/viewport/Viewport.test.tsx` |
-| Palette search, canonical defaults, property editing | `features/workspace/BottomPanel.test.tsx` |
+| Area                                                                | Evidence                                                       |
+| ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| Box selection, negative bounds, volume limits                       | `editor/session.test.ts`, `editor/commands.test.ts`            |
+| Faces, lines, brush, fill, replace                                  | `editor/session.test.ts`                                       |
+| Conflicts (no selection/source, source = target, revision mismatch) | `editor/commands.test.ts`                                      |
+| Cancellation and stale job completion                               | `editor/commands.test.ts`, `state/tool-store.test.ts`          |
+| Hotkeys and text-field protection                                   | `editor/use-editor-hotkeys.test.tsx`, `editor/session.test.ts` |
+| Click → preview → apply → dirty chunks                              | `features/viewport/Viewport.test.tsx`                          |
+| Palette search, canonical defaults, property editing                | `features/workspace/BottomPanel.test.tsx`                      |
 
 ## Limitations (M4)
 

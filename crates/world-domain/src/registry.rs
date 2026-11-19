@@ -58,6 +58,8 @@ const CATALOG: &[CatalogEntry] = &[
             ("waterlogged", "false"),
         ],
     ),
+    ("minecraft:short_grass", &[]),
+    ("minecraft:fern", &[]),
     ("minecraft:glass", &[]),
     ("minecraft:water", &[("level", "0")]),
     ("minecraft:lava", &[("level", "0")]),

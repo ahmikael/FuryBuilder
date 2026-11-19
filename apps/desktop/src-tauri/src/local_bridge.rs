@@ -1154,6 +1154,71 @@ fn operation_summary(operation: &Operation) -> Value {
             "surface": surface.to_string(),
             "filler": filler.to_string(),
         }),
+        Operation::GenerateRoad {
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            clearance,
+            surface,
+            ..
+        } => json!({
+            "type": "generate_road",
+            "dimension": dimension,
+            "bounds": bounds,
+            "from": from,
+            "to": to,
+            "width": width,
+            "meander": meander,
+            "seed": seed,
+            "clearance": clearance,
+            "surface": surface.to_string(),
+        }),
+        Operation::GenerateRiver {
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            depth,
+            water,
+            bed,
+            ..
+        } => json!({
+            "type": "generate_river",
+            "dimension": dimension,
+            "bounds": bounds,
+            "from": from,
+            "to": to,
+            "width": width,
+            "meander": meander,
+            "seed": seed,
+            "depth": depth,
+            "water": water.to_string(),
+            "bed": bed.to_string(),
+        }),
+        Operation::GenerateVegetation {
+            seed,
+            ground_cover,
+            tree_chance,
+            tree_spacing,
+            plant,
+            trunk,
+            leaves,
+            ..
+        } => json!({
+            "type": "generate_vegetation",
+            "dimension": dimension,
+            "bounds": bounds,
+            "seed": seed,
+            "groundCover": ground_cover,
+            "treeChance": tree_chance,
+            "treeSpacing": tree_spacing,
+            "plant": plant.to_string(),
+            "trunk": trunk.to_string(),
+            "leaves": leaves.to_string(),
+        }),
         Operation::SetBiome { biome, .. } => json!({
             "type": "set_biome",
             "dimension": dimension,
@@ -3223,5 +3288,51 @@ mod tests {
         assert_eq!(summary["biome"], "minecraft:desert");
         assert_eq!(summary["bounds"]["min"]["x"], -4);
         assert_eq!(summary["bounds"]["max"]["y"], 67);
+    }
+
+    #[test]
+    fn generator_operation_summaries_expose_route_and_scatter_settings() {
+        let bounds =
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(15, 80, 15)).expect("bounds");
+        let road = Operation::GenerateRoad {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            from: BlockPos::new(0, 64, 7),
+            to: BlockPos::new(15, 64, 7),
+            width: 3,
+            meander: 2,
+            seed: 42,
+            clearance: 2,
+            surface: "minecraft:stone_bricks".parse().expect("surface"),
+        };
+        let summary = operation_summary(&road);
+        assert_eq!(summary["type"], "generate_road");
+        assert_eq!(summary["width"], 3);
+        assert_eq!(summary["meander"], 2);
+        assert_eq!(summary["seed"], 42);
+        assert_eq!(summary["clearance"], 2);
+        assert_eq!(summary["surface"], "minecraft:stone_bricks");
+        assert_eq!(summary["from"]["x"], 0);
+        assert_eq!(summary["to"]["x"], 15);
+
+        let vegetation = Operation::GenerateVegetation {
+            dimension: "minecraft:overworld".to_owned(),
+            bounds,
+            seed: 7,
+            ground_cover: 35,
+            tree_chance: 2,
+            tree_spacing: 5,
+            plant: "minecraft:short_grass".parse().expect("plant"),
+            trunk: "minecraft:oak_log".parse().expect("trunk"),
+            leaves: "minecraft:oak_leaves".parse().expect("leaves"),
+        };
+        let summary = operation_summary(&vegetation);
+        assert_eq!(summary["type"], "generate_vegetation");
+        assert_eq!(summary["groundCover"], 35);
+        assert_eq!(summary["treeChance"], 2);
+        assert_eq!(summary["treeSpacing"], 5);
+        assert_eq!(summary["plant"], "minecraft:short_grass");
+        assert_eq!(summary["trunk"], "minecraft:oak_log");
+        assert_eq!(summary["leaves"], "minecraft:oak_leaves");
     }
 }

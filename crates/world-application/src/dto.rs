@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
-use world_operations::Operation;
+use world_operations::{Operation, StructureSite};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -114,6 +114,18 @@ pub struct ChunkStats {
     pub blocks: usize,
 }
 
+/// Result of the bounded structure-site rule check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureSites {
+    pub dimension: String,
+    pub bounds: BlockBox,
+    pub sites: Vec<StructureSite>,
+    pub scanned_candidates: u64,
+    pub rejected_candidates: u64,
+    pub limit: u32,
+}
+
 /// One section transferred to the renderer. `data` is empty when `palette` has one entry;
 /// otherwise it contains little-endian `u32` halves of the packed `u64` words
 /// (`[lo0, hi0, lo1, hi1, ...]`) so JavaScript never loses integer precision.
@@ -160,11 +172,37 @@ pub struct RenderSnapshot {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Query {
     WorldInfo,
-    GetBlock { dimension: String, pos: BlockPos },
-    GetBiome { dimension: String, pos: BlockPos },
-    RegionSummary { dimension: String, bounds: BlockBox },
-    RegionBlocks { dimension: String, bounds: BlockBox },
-    ChunkStats { dimension: String, chunk: ChunkPos },
+    GetBlock {
+        dimension: String,
+        pos: BlockPos,
+    },
+    GetBiome {
+        dimension: String,
+        pos: BlockPos,
+    },
+    RegionSummary {
+        dimension: String,
+        bounds: BlockBox,
+    },
+    RegionBlocks {
+        dimension: String,
+        bounds: BlockBox,
+    },
+    ChunkStats {
+        dimension: String,
+        chunk: ChunkPos,
+    },
+    FindStructureSites {
+        dimension: String,
+        bounds: BlockBox,
+        width: u32,
+        depth: u32,
+        step: u32,
+        #[serde(rename = "maxSlope")]
+        max_slope: u32,
+        clearance: u32,
+        limit: u32,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -184,6 +222,7 @@ pub enum QueryResult {
     RegionSummary(RegionSummary),
     RegionBlocks(RegionBlocks),
     ChunkStats(ChunkStats),
+    StructureSites(StructureSites),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -78,6 +78,7 @@ pub fn run() {
             commands::read_region,
             commands::get_block,
             commands::get_biome,
+            commands::find_structure_sites,
             commands::project_status,
             commands::project_list,
             commands::project_create,

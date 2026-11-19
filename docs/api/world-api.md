@@ -31,6 +31,21 @@ Operation =
         surface: BlockState, filler: BlockState
     }
   | { type: "set_biome", dimension, bounds, biome: BiomeId }
+  | {
+      type: "generate_road", dimension, bounds, from: Pos, to: Pos,
+        width: 1..16, meander: 0..64, seed: u64,
+        clearance: 0..8, surface: BlockState
+    }
+  | {
+      type: "generate_river", dimension, bounds, from: Pos, to: Pos,
+        width: 1..16, meander: 0..64, seed: u64,
+        depth: 1..16, water: BlockState, bed: BlockState
+    }
+  | {
+      type: "generate_vegetation", dimension, bounds, seed: u64,
+        groundCover: 0..100, treeChance: 0..100, treeSpacing: 1..32,
+        plant: BlockState, trunk: BlockState, leaves: BlockState
+    }
 
 OperationResult {
   operationId: string,
@@ -64,24 +79,42 @@ History stores section-level before/after snapshots (not full world copies).
 - History is bounded (default 100 entries); oldest entries are pruned first.
 
 ## Queries```ts
-Query = 
-  | { type: "world_info" }
-  | { type: "get_block", dimension, pos }
-  | { type: "get_biome", dimension, pos }
-  | { type: "region_summary", dimension, bounds }
-  | { type: "chunk_stats", dimension, chunk }
 
-QueryResult = 
-  | { type: "world_info", data: WorldInfo }
-  | { type: "block", data: { dimension, pos, state } }
-  | { type: "biome", data: { dimension, pos, biome: BiomeId | null } }
-  | { type: "region_summary", data: RegionSummary }
-  | { type: "chunk_stats", data: ChunkStats }
-```
+Query =
+| { type: "world_info" }
+| { type: "get_block", dimension, pos }
+| { type: "get_biome", dimension, pos }
+| { type: "region_summary", dimension, bounds }
+| { type: "chunk_stats", dimension, chunk }
+| {
+type: "find_structure_sites", dimension, bounds,
+width: 1..32, depth: 1..32, step: 1..64,
+maxSlope: 0..32, clearance: 0..32, limit: 1..64
+}
+
+QueryResult =
+| { type: "world_info", data: WorldInfo }
+| { type: "block", data: { dimension, pos, state } }
+| { type: "biome", data: { dimension, pos, biome: BiomeId | null } }
+| { type: "region_summary", data: RegionSummary }
+| { type: "chunk_stats", data: ChunkStats }
+| { type: "structure_sites", data: StructureSites }
+
+````
 
 `region_summary` is bounded to 1,000,000 blocks and returns a palette sorted by count.
 `get_biome` reports the biome covering the block from the 4x4x4 editable cell grid, or
-`null` when the source has no biome data. Queries never mutate the world or bump revisions.
+`null` when the source has no biome data. `find_structure_sites` is a read-only, bounded
+heuristic search: it checks at most 2,000,000 block positions and returns at most 64
+non-overlapping flat, dry, clear footprints. Queries never mutate the world or bump
+revisions.
+
+`generate_road` follows the topmost non-air block in each column, writes the surface at
+the next Y and clears a bounded headroom; `generate_river` carves a channel and fills it
+with water over a bed. Repeating the same parameters is idempotent. `generate_vegetation`
+places ground cover and small trees only into existing air, with minimum tree spacing.
+All three are deterministic local construction tools; they make no vanilla worldgen
+parity claim and are recorded as ordinary reversible operations.
 
 ## Render snapshots
 
@@ -109,7 +142,7 @@ Every applied operation, undo and redo appends an `AuditEntry`:
   revisionBefore, revisionAfter, changedBlocks, timestampMs,
   parameterSummary: object, linkedObjectId?: string
 }
-```
+````
 
 The parameter summary is bounded (batch operations report counts, not every block) and is
 safe to expose to AI clients. Secrets and filesystem paths are never included.
@@ -132,5 +165,12 @@ default biome.
 - Y outside the dimension is rejected before any write.
 - Batch edits are atomic; an invalid position leaves the world untouched.
 - Undo restores the exact pre-operation section payloads, including mixed palettes.
+- Road, river and vegetation generators are deterministic for the same seed and
+  parameters, stay inside their operation bounds, skip fluid columns, and are reversible
+  through the same section diffs. Reapplications do not stack roads or deepen rivers.
+- Vegetation only fills existing air and enforces minimum tree spacing; a blocked trunk
+  or canopy is skipped instead of clipped.
+- `find_structure_sites` never mutates the world or bumps the revision, and its candidate
+  and result counts are bounded (2,000,000 checks, 64 sites).
 - Idempotent retries never apply twice.
 - Different dimensions never share coordinates.

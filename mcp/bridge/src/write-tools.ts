@@ -68,23 +68,10 @@ const operation = z.discriminatedUnion("type", [
     type: z.literal("terrain_brush"),
     dimension,
     bounds,
-    kind: z.enum([
-      "raise",
-      "lower",
-      "smooth",
-      "flatten",
-      "noise",
-      "erode",
-      "terrace",
-    ]),
+    kind: z.enum(["raise", "lower", "smooth", "flatten", "noise", "erode", "terrace"]),
     material: blockState,
     amount: z.number().int().min(1).max(16).default(1),
-    seed: z
-      .number()
-      .int()
-      .nonnegative()
-      .max(Number.MAX_SAFE_INTEGER)
-      .default(0),
+    seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0),
     step: z.number().int().min(2).max(16).default(4),
     targetY: z.number().int().optional(),
   }),
@@ -92,12 +79,7 @@ const operation = z.discriminatedUnion("type", [
     type: z.literal("generate_heightmap"),
     dimension,
     bounds,
-    seed: z
-      .number()
-      .int()
-      .nonnegative()
-      .max(Number.MAX_SAFE_INTEGER)
-      .default(0),
+    seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0),
     scale: z.number().int().min(1).max(64).default(8),
     octaves: z.number().int().min(1).max(6).default(3),
     amplitude: z.number().int().min(1).max(256).default(8),
@@ -105,6 +87,43 @@ const operation = z.discriminatedUnion("type", [
     surfaceDepth: z.number().int().min(1).max(32).default(1),
     surface: blockState,
     filler: blockState,
+  }),
+  z.object({
+    type: z.literal("generate_road"),
+    dimension,
+    bounds,
+    from: blockPos,
+    to: blockPos,
+    width: z.number().int().min(1).max(16).default(3),
+    meander: z.number().int().min(0).max(64).default(4),
+    seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0),
+    clearance: z.number().int().min(0).max(8).default(2),
+    surface: blockState,
+  }),
+  z.object({
+    type: z.literal("generate_river"),
+    dimension,
+    bounds,
+    from: blockPos,
+    to: blockPos,
+    width: z.number().int().min(1).max(16).default(3),
+    meander: z.number().int().min(0).max(64).default(4),
+    seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0),
+    depth: z.number().int().min(1).max(16).default(3),
+    water: blockState,
+    bed: blockState,
+  }),
+  z.object({
+    type: z.literal("generate_vegetation"),
+    dimension,
+    bounds,
+    seed: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).default(0),
+    groundCover: z.number().int().min(0).max(100).default(35),
+    treeChance: z.number().int().min(0).max(100).default(2),
+    treeSpacing: z.number().int().min(1).max(32).default(5),
+    plant: blockState,
+    trunk: blockState,
+    leaves: blockState,
   }),
   z.object({
     type: z.literal("set_biome"),
@@ -143,9 +162,7 @@ const writeProject = {
     .number()
     .int()
     .nonnegative()
-    .describe(
-      "Revision the caller previewed; the write fails if the world moved on.",
-    ),
+    .describe("Revision the caller previewed; the write fails if the world moved on."),
 };
 
 const idempotencyKey = z
@@ -212,12 +229,7 @@ export function registerWriteTools(server: McpServer): void {
       }),
       annotations: modifiesWorld,
     },
-    async ({
-      project_id,
-      operation: requested,
-      world_revision,
-      idempotency_key,
-    }) => {
+    async ({ project_id, operation: requested, world_revision, idempotency_key }) => {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
@@ -301,10 +313,7 @@ export function registerWriteTools(server: McpServer): void {
     async ({ project_id, world_revision, operation_id }) => {
       try {
         const projectId = requireProjectId(project_id);
-        const payload: Record<string, unknown> = withRevision(
-          { projectId },
-          world_revision,
-        );
+        const payload: Record<string, unknown> = withRevision({ projectId }, world_revision);
         if (operation_id !== undefined) payload.operationId = operation_id;
         return textResult(
           await callDesktop("undo_operation", payload, {

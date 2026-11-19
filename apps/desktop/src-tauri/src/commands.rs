@@ -19,7 +19,8 @@ use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
     ErrorCode, HistoryState, HistorySummary, Operation, OperationRequest, OperationResult,
-    PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, WorldService,
+    PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, StructureSites,
+    WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -218,6 +219,40 @@ pub fn get_biome(
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     Ok(service.world().get_biome(&dimension, pos)?)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn find_structure_sites(
+    state: State<'_, AppState>,
+    dimension: String,
+    bounds: BlockBox,
+    width: u32,
+    depth: u32,
+    step: u32,
+    max_slope: u32,
+    clearance: u32,
+    limit: u32,
+) -> Result<StructureSites, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    match service.query(Query::FindStructureSites {
+        dimension,
+        bounds,
+        width,
+        depth,
+        step,
+        max_slope,
+        clearance,
+        limit,
+    })? {
+        QueryResult::StructureSites(result) => Ok(result),
+        _ => Err(AppError::internal(
+            "unexpected query result for structure sites",
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------------------

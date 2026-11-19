@@ -5,6 +5,7 @@ import {
   boundsFromPositions,
   boundsVolume,
   editorShortcut,
+  generatorBounds,
   ghostForContext,
   heightmapBounds,
   isValidBiomeId,
@@ -15,7 +16,12 @@ import {
   planBiome,
   planBlockTool,
   planHeightmap,
+  planRiver,
+  planRoad,
+  planStructureSiteQuery,
   planTerrainBrush,
+  planVegetation,
+  routeEndpoints,
   spherePositions,
   terrainBrushBounds,
   translateBounds,
@@ -537,5 +543,141 @@ describe("biome planning", () => {
       biome: "minecraft:desert",
     });
     expect(operationLabel(operation!)).toBe("Paint minecraft:desert over 448 blocks");
+  });
+});
+
+describe("local generator planning", () => {
+  const selection = { min: { x: 0, y: 64, z: 0 }, max: { x: 7, y: 70, z: 7 } };
+  const water: BlockState = { name: "minecraft:water", properties: { level: "0" } };
+  const sand: BlockState = { name: "minecraft:sand", properties: {} };
+  const grass: BlockState = { name: "minecraft:short_grass", properties: {} };
+  const log: BlockState = { name: "minecraft:oak_log", properties: { axis: "y" } };
+  const leaves: BlockState = { name: "minecraft:oak_leaves", properties: {} };
+
+  it("expands the selection vertically and derives route endpoints", () => {
+    expect(generatorBounds(selection)).toEqual({
+      min: { x: 0, y: 48, z: 0 },
+      max: { x: 7, y: 86, z: 7 },
+    });
+    const bounds = generatorBounds(selection);
+    expect(routeEndpoints(bounds, "x")).toEqual({
+      from: { x: 0, y: 48, z: 3 },
+      to: { x: 7, y: 48, z: 3 },
+    });
+    expect(routeEndpoints(bounds, "z")).toEqual({
+      from: { x: 3, y: 48, z: 0 },
+      to: { x: 3, y: 48, z: 7 },
+    });
+  });
+
+  it("builds and labels road, river and vegetation operations", () => {
+    const road = planRoad({
+      dimension: "minecraft:overworld",
+      selection,
+      axis: "x",
+      seed: 42,
+      width: 3,
+      meander: 4,
+      clearance: 2,
+      surface: bricks,
+    });
+    expect(road).toMatchObject({
+      type: "generate_road",
+      seed: 42,
+      width: 3,
+      meander: 4,
+      clearance: 2,
+      surface: bricks,
+    });
+    expect(operationLabel(road!)).toBe("Generate road in 2496 blocks");
+
+    const river = planRiver({
+      dimension: "minecraft:overworld",
+      selection,
+      axis: "z",
+      seed: 0,
+      width: 99,
+      meander: 999,
+      depth: 99,
+      water,
+      bed: sand,
+    });
+    expect(river).toMatchObject({
+      type: "generate_river",
+      width: 16,
+      meander: 64,
+      depth: 16,
+      water,
+      bed: sand,
+    });
+    expect(operationLabel(river!)).toBe("Carve river in 2496 blocks");
+
+    const vegetation = planVegetation({
+      dimension: "minecraft:overworld",
+      selection,
+      seed: 7,
+      groundCover: 500,
+      treeChance: -1,
+      treeSpacing: 0,
+      plant: grass,
+      trunk: log,
+      leaves,
+    });
+    expect(vegetation).toMatchObject({
+      type: "generate_vegetation",
+      groundCover: 100,
+      treeChance: 0,
+      treeSpacing: 1,
+    });
+    expect(operationLabel(vegetation!)).toBe("Scatter vegetation in 2496 blocks");
+  });
+
+  it("requires a selection for every generator and bounded site query", () => {
+    expect(
+      planRoad({
+        dimension: "minecraft:overworld",
+        selection: null,
+        axis: "x",
+        seed: 0,
+        width: 3,
+        meander: 4,
+        clearance: 2,
+        surface: bricks,
+      }),
+    ).toBeNull();
+    expect(
+      planStructureSiteQuery({
+        dimension: "minecraft:overworld",
+        selection: null,
+        width: 5,
+        depth: 5,
+        step: 5,
+        maxSlope: 2,
+        clearance: 2,
+        limit: 8,
+      }),
+    ).toBeNull();
+
+    expect(
+      planStructureSiteQuery({
+        dimension: "minecraft:overworld",
+        selection,
+        width: 99,
+        depth: 0,
+        step: 999,
+        maxSlope: 999,
+        clearance: -5,
+        limit: 0,
+      }),
+    ).toEqual({
+      dimension: "minecraft:overworld",
+      bounds: generatorBounds(selection),
+      width: 32,
+      depth: 1,
+      step: 64,
+      maxSlope: 32,
+      clearance: 0,
+      limit: 1,
+    });
   });
 });

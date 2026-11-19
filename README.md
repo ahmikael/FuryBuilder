@@ -128,6 +128,13 @@ stored in the world domain, snapshot format 2 and the overlay document, written 
 standard undo/redo history. The tool refuses to invent biome data for a section that has
 none instead of silently assuming a default biome. Terrain brushes and the heightmap
 generator still change block states only and do not recalculate biomes or lighting.
+M9.12 adds deterministic local road, river and vegetation generators plus a bounded
+structure-site placement query. Roads follow the existing surface and clear headroom,
+rivers carve a bed and water column without deepening on reapply, and vegetation only
+fills free air with configurable ground cover, tree chance and spacing. The panel previews
+and applies each edit through the same reversible history as every other operation, and
+the `find_structure_sites` query is read-only, capped at 2,000,000 checks and 64 sites.
+None of these tools claims vanilla worldgen or vanilla structure placement parity.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

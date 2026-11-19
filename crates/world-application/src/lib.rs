@@ -11,7 +11,8 @@ mod service;
 pub use dto::{
     Actor, ActorSource, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats,
     HistoryState, HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult,
-    Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot, UndoTarget,
+    Query, QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot,
+    StructureSites, UndoTarget,
 };
 pub use error::{AppError, ErrorCode};
 pub use jobs::{

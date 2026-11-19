@@ -72,10 +72,7 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await callDesktop(
-            "world_info",
-            withRevision({ projectId }, world_revision),
-          ),
+          await callDesktop("world_info", withRevision({ projectId }, world_revision)),
         );
       } catch (error) {
         return errorResult(error);
@@ -133,6 +130,58 @@ export function registerReadTools(server: McpServer): void {
             type: "get_biome",
             dimension,
             pos,
+          }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "find_structure_sites",
+    {
+      title: "Find structure sites",
+      description:
+        "Runs a bounded, read-only placement-rule check over a region and returns non-overlapping flat, dry, clear footprints. This is a deterministic heuristic, not a vanilla structure-generation claim.",
+      inputSchema: z.object({
+        ...project,
+        dimension: z.string().min(1).max(128),
+        bounds,
+        width: z.number().int().min(1).max(32),
+        depth: z.number().int().min(1).max(32),
+        step: z.number().int().min(1).max(64).default(5),
+        maxSlope: z.number().int().min(0).max(32).default(2),
+        clearance: z.number().int().min(0).max(32).default(2),
+        limit: z.number().int().min(1).max(64).default(8),
+      }),
+      annotations: readOnly,
+    },
+    async ({
+      project_id,
+      dimension,
+      bounds: region,
+      width,
+      depth,
+      step,
+      maxSlope,
+      clearance,
+      limit,
+      world_revision,
+    }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await queryDesktop(projectId, world_revision, {
+            type: "find_structure_sites",
+            dimension,
+            bounds: region,
+            width,
+            depth,
+            step,
+            maxSlope,
+            clearance,
+            limit,
           }),
         );
       } catch (error) {
@@ -212,13 +261,9 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await callDesktop(
-            "get_camera",
-            withRevision({ projectId }, world_revision),
-            {
-              timeoutMs: RENDER_TIMEOUT_MS,
-            },
-          ),
+          await callDesktop("get_camera", withRevision({ projectId }, world_revision), {
+            timeoutMs: RENDER_TIMEOUT_MS,
+          }),
         );
       } catch (error) {
         return errorResult(error);
@@ -248,19 +293,13 @@ export function registerReadTools(server: McpServer): void {
     async ({ project_id, dimension, world_revision }) => {
       try {
         const projectId = requireProjectId(project_id);
-        const payload: Record<string, unknown> = withRevision(
-          { projectId },
-          world_revision,
-        );
+        const payload: Record<string, unknown> = withRevision({ projectId }, world_revision);
         if (dimension !== undefined) payload.dimension = dimension;
         const result = (await callDesktop("capture_viewport", payload, {
           timeoutMs: RENDER_TIMEOUT_MS,
         })) as Record<string, unknown>;
         const dataUrl = result.dataUrl;
-        if (
-          typeof dataUrl !== "string" ||
-          !dataUrl.startsWith(PNG_DATA_URL_PREFIX)
-        ) {
+        if (typeof dataUrl !== "string" || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
           return {
             isError: true,
             content: [
@@ -292,9 +331,7 @@ export function registerReadTools(server: McpServer): void {
                   image: {
                     mimeType: "image/png",
                     bytes: imageBytes.byteLength,
-                    sha256: createHash("sha256")
-                      .update(imageBytes)
-                      .digest("hex"),
+                    sha256: createHash("sha256").update(imageBytes).digest("hex"),
                   },
                 },
                 null,

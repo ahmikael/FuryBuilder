@@ -90,7 +90,7 @@ impl From<OperationError> for AppError {
             | OperationError::World(WorldError::UnknownDimension(_)) => {
                 AppError::new(ErrorCode::NotFound, error.to_string())
             }
-            OperationError::TooManyBlocks { .. } => {
+            OperationError::TooManyBlocks { .. } | OperationError::TooManySiteCandidates { .. } => {
                 AppError::new(ErrorCode::LimitExceeded, error.to_string())
             }
             OperationError::OutOfBounds { .. }
@@ -104,9 +104,9 @@ impl From<OperationError> for AppError {
                 AppError::invalid_argument(error.to_string())
             }
             OperationError::InvalidBrush(_) => AppError::invalid_argument(error.to_string()),
-            OperationError::InvalidHeightmap(_) | OperationError::InvalidBiome(_) => {
-                AppError::invalid_argument(error.to_string())
-            }
+            OperationError::InvalidHeightmap(_)
+            | OperationError::InvalidGenerator(_)
+            | OperationError::InvalidBiome(_) => AppError::invalid_argument(error.to_string()),
             OperationError::Cancelled => AppError::new(ErrorCode::Cancelled, error.to_string()),
         }
     }

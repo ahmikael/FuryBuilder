@@ -5,12 +5,14 @@ use uuid::Uuid;
 use world_domain::{BlockBox, BlockRegistry, ChunkPos, World, WorldInfo};
 use world_operations::{
     self as operations, BlockChange, NoopObserver, Operation, OperationObserver, SectionDiff,
+    StructureSiteRules,
 };
 
 use crate::dto::{
     Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
     HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
-    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot, UndoTarget,
+    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot, StructureSites,
+    UndoTarget,
 };
 use crate::error::{AppError, ErrorCode};
 
@@ -720,6 +722,38 @@ impl WorldService {
                     blocks: loaded.map(|c| c.block_count()).unwrap_or(0),
                 }))
             }
+            Query::FindStructureSites {
+                dimension,
+                bounds,
+                width,
+                depth,
+                step,
+                max_slope,
+                clearance,
+                limit,
+            } => {
+                let search = operations::find_structure_sites(
+                    self.world(),
+                    &dimension,
+                    bounds,
+                    StructureSiteRules {
+                        width,
+                        depth,
+                        step,
+                        max_slope,
+                        clearance,
+                        limit: limit as usize,
+                    },
+                )?;
+                Ok(QueryResult::StructureSites(StructureSites {
+                    dimension,
+                    bounds,
+                    sites: search.sites,
+                    scanned_candidates: search.scanned_candidates,
+                    rejected_candidates: search.rejected_candidates,
+                    limit,
+                }))
+            }
         }
     }
 
@@ -777,6 +811,21 @@ impl WorldService {
             } => {
                 self.registry.validate(surface)?;
                 self.registry.validate(filler)?;
+            }
+            Operation::GenerateRoad { surface, .. } => self.registry.validate(surface)?,
+            Operation::GenerateRiver { water, bed, .. } => {
+                self.registry.validate(water)?;
+                self.registry.validate(bed)?;
+            }
+            Operation::GenerateVegetation {
+                plant,
+                trunk,
+                leaves,
+                ..
+            } => {
+                self.registry.validate(plant)?;
+                self.registry.validate(trunk)?;
+                self.registry.validate(leaves)?;
             }
             // `BiomeState` is validated by its own deserializer; there is no block registry
             // entry to check and no biomes are fabricated here.
@@ -896,6 +945,74 @@ fn summarize_operation(operation: &Operation) -> serde_json::Value {
             "surfaceDepth": surface_depth,
             "surface": surface.to_string(),
             "filler": filler.to_string()
+        }),
+        Operation::GenerateRoad {
+            dimension,
+            bounds,
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            clearance,
+            surface,
+        } => json!({
+            "type": "generate_road",
+            "dimension": dimension,
+            "bounds": bounds,
+            "from": from,
+            "to": to,
+            "width": width,
+            "meander": meander,
+            "seed": seed,
+            "clearance": clearance,
+            "surface": surface.to_string()
+        }),
+        Operation::GenerateRiver {
+            dimension,
+            bounds,
+            from,
+            to,
+            width,
+            meander,
+            seed,
+            depth,
+            water,
+            bed,
+        } => json!({
+            "type": "generate_river",
+            "dimension": dimension,
+            "bounds": bounds,
+            "from": from,
+            "to": to,
+            "width": width,
+            "meander": meander,
+            "seed": seed,
+            "depth": depth,
+            "water": water.to_string(),
+            "bed": bed.to_string()
+        }),
+        Operation::GenerateVegetation {
+            dimension,
+            bounds,
+            seed,
+            ground_cover,
+            tree_chance,
+            tree_spacing,
+            plant,
+            trunk,
+            leaves,
+        } => json!({
+            "type": "generate_vegetation",
+            "dimension": dimension,
+            "bounds": bounds,
+            "seed": seed,
+            "groundCover": ground_cover,
+            "treeChance": tree_chance,
+            "treeSpacing": tree_spacing,
+            "plant": plant.to_string(),
+            "trunk": trunk.to_string(),
+            "leaves": leaves.to_string()
         }),
         Operation::SetBiome {
             dimension,

@@ -1,0 +1,95 @@
+{
+  "tool": {
+    "name": "furybuilder-generators-ui",
+    "version": 1
+  },
+  "generatedAt": "2026-11-19T10:24:34.059Z",
+  "target": "Minecraft Java 1.21.4 / M9.12 local generators",
+  "executableSha256": "69d320a21098ee673b663324c5e6b131e5691bb7b5765597290850d367879520",
+  "project": {
+    "name": "Generators Smoke",
+    "folder": "Generators Smoke.furybuilder",
+    "creationMode": "flat"
+  },
+  "viewport": {
+    "selectionClicks": "real viewport pointer events",
+    "canvas": {
+      "left": 224,
+      "top": 40,
+      "width": 960,
+      "height": 660
+    },
+    "selection": {
+      "min": {
+        "x": -3,
+        "y": 64,
+        "z": 1
+      },
+      "max": {
+        "x": 2,
+        "y": 64,
+        "z": 1
+      }
+    }
+  },
+  "panel": {
+    "structureSitesText": "4 site(s) · scanned 4 · rejected 0\norigin -3,65,1 · surface 64..64\norigin -2,65,1 · surface 64..64\norigin -1,65,1 · surface 64..64\norigin 0,65,1 · surface 64..64",
+    "siteCount": 4,
+    "previewText": "6 block(s) would change out of 198 selected.",
+    "previewScreenshot": {
+      "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-19-generators-ui.png",
+      "bytes": 495983
+    },
+    "appliedScreenshot": {
+      "path": "C:\\Users\\Mike\\Desktop\\FuryBuilder\\docs\\testing\\evidence\\2026-11-19-generators-ui-applied.png",
+      "bytes": 495232
+    }
+  },
+  "world": {
+    "revisionBefore": 1,
+    "revisionAfterSites": 1,
+    "revisionAfterPreview": 1,
+    "revisionAfter": 2,
+    "revisionAfterUndo": 3,
+    "roadPosition": {
+      "x": -3,
+      "y": 65,
+      "z": 1
+    },
+    "blockBefore": {
+      "name": "minecraft:air"
+    },
+    "blockAfterPreview": {
+      "name": "minecraft:air"
+    },
+    "blockAfter": {
+      "name": "minecraft:stone_bricks"
+    },
+    "blockAfterUndo": {
+      "name": "minecraft:air"
+    },
+    "canUndoAfterApply": true,
+    "historyEntriesAfterApply": 1
+  },
+  "conclusions": {
+    "realFlatProjectOpened": true,
+    "realSelectionProduced": true,
+    "structureSiteQueryReturnedSites": true,
+    "structureSiteQueryWasReadOnly": true,
+    "previewWasNonEmpty": true,
+    "previewDidNotMutateWorld": true,
+    "roadCommittedRevision": true,
+    "roadSurfaceReachedWorld": true,
+    "undoRestoredBlock": true,
+    "undoRecordedInHistory": true,
+    "noConsoleErrors": true
+  },
+  "consoleErrors": [],
+  "limitations": [
+    "the viewport selection used synthetic pointer events on the real viewport element; all operations used the real Tauri backend",
+    "the flat base is deliberate manual geometry, not Minecraft world generation",
+    "the road is a deterministic local construction tool and makes no vanilla worldgen parity claim",
+    "the structure-site query is a deterministic placement heuristic, not vanilla structure generation",
+    "river and vegetation operations are covered by Rust and UI tests, not re-applied by this smoke"
+  ]
+}
