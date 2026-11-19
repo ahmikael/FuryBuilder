@@ -123,6 +123,56 @@ export function registerReadTools(server: McpServer): void {
   );
 
   server.registerTool(
+    "list_scene_objects",
+    {
+      title: "List semantic objects",
+      description:
+        "Lists the project's editor-only semantic objects (districts, buildings, roads) with their kind, dimension, bounds, parent and tags. These are metadata; reading them never changes blocks.",
+      inputSchema: z.object({ ...project }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(await queryDesktop(projectId, world_revision, { type: "scene_objects" }));
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    "inspect_scene_object",
+    {
+      title: "Inspect semantic object",
+      description:
+        "Returns one semantic object, its current block palette, volume, non-air count and direct children at the authoritative revision. Read-only; the bounds are project metadata, not a generated structure.",
+      inputSchema: z.object({
+        ...project,
+        object_id: z
+          .string()
+          .min(1)
+          .max(64)
+          .describe("Semantic object id from list_scene_objects."),
+      }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision, object_id }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await queryDesktop(projectId, world_revision, {
+            type: "inspect_scene_object",
+            objectId: object_id,
+          }),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
+  server.registerTool(
     "get_block",
     {
       title: "Get block",

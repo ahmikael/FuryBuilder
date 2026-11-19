@@ -144,7 +144,13 @@ not part of block history, while undo/redo still restores earlier snapshots. Tem
 verified Java `.nbt` payloads stored per project with SHA-256 and bounded size; a selection
 can be saved as a template, an `.nbt` file can be imported, and either can be inserted as
 one reversible Batch operation through the same layer/mask/protection checks. MCP exposes
-the policy and library read-only plus a confirmed `insert_template` write.
+the policy and library read-only plus a confirmed `insert_template` write. M9.14 adds
+editor-only semantic objects: districts, buildings, roads, entrances and landmarks stored
+in `project.json` with a name, dimension, inclusive bounds, optional parent and bounded
+tags. The `Objects` tab creates an object from the current selection, shows its hierarchy
+and inspects the current block palette and non-air count at the authoritative revision.
+Scene edits never place blocks, bump the world revision or enter block history. MCP exposes
+`list_scene_objects` and `inspect_scene_object` as read-only tools.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

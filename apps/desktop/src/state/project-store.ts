@@ -33,12 +33,14 @@ import type {
   SessionStatus,
 } from "@/project/types";
 import { defaultWorkspacePolicy } from "@/project/types";
+import { defaultScene } from "@/project/scene-types";
 import type { StructureImportProjectArgs, StructureInsertArgs } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
 import { pushToast, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { useWorkspaceStore } from "@/state/workspace-store";
+import { useSceneStore } from "@/state/scene-store";
 import { reloadViewport } from "@/features/viewport/viewport-bus";
 
 interface ProjectUiState {
@@ -98,6 +100,7 @@ export function currentEditorState(): EditorState {
     selectedDimension: useEditorStore.getState().selectedDimension,
     loadRadius: useWorldStore.getState().loadRadius,
     workspace: useWorkspaceStore.getState().policy,
+    scene: useSceneStore.getState().scene,
   };
 }
 
@@ -127,6 +130,7 @@ function applyPayload(payload: OpenedProjectPayload): void {
   useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
   useWorldStore.getState().setLoadRadius(editorState.loadRadius);
   useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
+  useSceneStore.getState().reset(editorState.scene ?? defaultScene());
   useWorldStore.getState().applySummary({
     source: "core",
     dimension: editorState.selectedDimension,
@@ -185,6 +189,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
       useWorldStore.getState().setLoadRadius(editorState.loadRadius);
       useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
+      useSceneStore.getState().reset(editorState.scene ?? defaultScene());
       useWorldStore.getState().applySummary({
         source: "core",
         dimension: editorState.selectedDimension,
@@ -528,6 +533,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       useToolStore.getState().markSaved();
       useToolStore.getState().resetTransient();
       useWorkspaceStore.getState().reset();
+      useSceneStore.getState().reset();
       useToolStore.getState().setSelection(null);
       useHistoryStore.getState().reset();
       useWorldStore
@@ -593,6 +599,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   reset: () => {
     useWorkspaceStore.getState().reset();
+    useSceneStore.getState().reset();
     set(initial);
   },
 }));

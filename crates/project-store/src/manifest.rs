@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use scene_model::Scene;
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
 use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
@@ -197,10 +198,18 @@ pub struct EditorState {
     /// so projects written before M9.13 stay byte-identical until the user changes it.
     #[serde(default, skip_serializing_if = "workspace_is_default")]
     pub workspace: WorkspacePolicy,
+    /// Editor-only semantic objects (districts, buildings, roads). Omitted when empty so
+    /// projects written before M9.14 remain byte-compatible.
+    #[serde(default, skip_serializing_if = "scene_is_default")]
+    pub scene: Scene,
 }
 
 fn workspace_is_default(workspace: &WorkspacePolicy) -> bool {
     workspace == &WorkspacePolicy::default()
+}
+
+fn scene_is_default(scene: &Scene) -> bool {
+    scene == &Scene::default()
 }
 
 impl Default for EditorState {
@@ -209,6 +218,7 @@ impl Default for EditorState {
             selected_dimension: "minecraft:overworld".to_owned(),
             load_radius: DEFAULT_LOAD_RADIUS,
             workspace: WorkspacePolicy::default(),
+            scene: Scene::default(),
         }
     }
 }
@@ -228,6 +238,9 @@ impl EditorState {
         self.workspace
             .validate()
             .map_err(|error| ProjectError::invalid_manifest(format!("workspace: {error}")))?;
+        self.scene
+            .validate()
+            .map_err(|error| ProjectError::invalid_manifest(format!("scene: {error}")))?;
         Ok(())
     }
 }

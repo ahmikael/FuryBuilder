@@ -1,5 +1,6 @@
 import type { WorldInfo } from "@/lib/contracts";
 import type { Bounds3 } from "@/renderer/types";
+import type { Scene } from "@/project/scene-types";
 
 export type CreationMode = "empty" | "flat" | "vanilla" | "import";
 export type SaveKind = "manual" | "autosave" | "checkpoint";
@@ -46,6 +47,7 @@ export interface EditorState {
   selectedDimension: string;
   loadRadius: number;
   workspace?: WorkspacePolicy;
+  scene?: Scene;
 }
 
 export interface SourceInfo {

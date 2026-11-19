@@ -2018,6 +2018,106 @@ mod tests {
     }
 
     #[test]
+    fn serves_scene_objects_and_inspection_as_read_only_queries() {
+        use std::collections::BTreeMap;
+        use world_application::ObjectKind;
+
+        let state = AppState::new(temp_root("scene-query"));
+        {
+            let mut service = state.service.lock().expect("service");
+            service
+                .add_scene_object(
+                    "Old Town",
+                    ObjectKind::District,
+                    "minecraft:overworld",
+                    BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(16, 80, 16))
+                        .expect("bounds"),
+                    None,
+                    BTreeMap::from([("style".to_owned(), "medieval".to_owned())]),
+                    Some("Historic center".to_owned()),
+                )
+                .expect("district");
+            service
+                .add_scene_object(
+                    "Town Hall",
+                    ObjectKind::Building,
+                    "minecraft:overworld",
+                    BlockBox::new(BlockPos::new(4, 64, 4), BlockPos::new(6, 64, 6))
+                        .expect("bounds"),
+                    Some("old-town".to_owned()),
+                    BTreeMap::new(),
+                    None,
+                )
+                .expect("building");
+        }
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-scene-1",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": { "type": "scene_objects" }
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let result = response.result.expect("result");
+        assert_eq!(result["type"], "scene_objects");
+        assert_eq!(result["worldRevision"], 0);
+        assert_eq!(result["data"].as_array().expect("objects").len(), 2);
+        assert_eq!(result["data"][0]["id"], "old-town");
+        assert_eq!(result["data"][0]["tags"]["style"], "medieval");
+        assert_eq!(result["data"][1]["parentId"], "old-town");
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-scene-2",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": { "type": "inspect_scene_object", "objectId": "town-hall" }
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let result = response.result.expect("result");
+        assert_eq!(result["type"], "scene_object");
+        assert_eq!(result["worldRevision"], 0);
+        assert_eq!(result["data"]["object"]["name"], "Town Hall");
+        assert_eq!(result["data"]["volume"], 9);
+        assert_eq!(
+            result["data"]["children"]
+                .as_array()
+                .expect("children")
+                .len(),
+            0
+        );
+
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-scene-3",
+                "token",
+                "query",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "query": { "type": "inspect_scene_object", "objectId": "missing" }
+                }),
+            ),
+        );
+        assert!(!response.ok);
+        assert_eq!(response.error.expect("error").code, ErrorCode::NotFound);
+    }
+
+    #[test]
     fn serves_world_info_and_bounded_queries_for_the_open_project() {
         let state = AppState::new(temp_root("query"));
         let response = handle_request(

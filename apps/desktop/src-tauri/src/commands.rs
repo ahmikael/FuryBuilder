@@ -19,9 +19,9 @@ use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateS
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
-    ErrorCode, HistoryState, HistorySummary, Operation, OperationRequest, OperationResult,
-    PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, StructureSites,
-    WorkspacePolicy, WorldService,
+    ErrorCode, HistoryState, HistorySummary, ObjectKind, Operation, OperationRequest,
+    OperationResult, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot,
+    SceneObjectInspection, SemanticObject, StructureSites, WorkspacePolicy, WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -343,15 +343,16 @@ fn current_payload(
 }
 
 /// Replaces the authoritative service for a newly opened world and installs the
-/// project's persisted workspace policy before any command can run. Doing this in one
-/// place prevents a project from briefly opening with default layers/protection.
+/// project's persisted workspace policy and semantic scene before any command can run.
+/// Doing this in one place prevents a project from briefly opening with default metadata.
 fn install_world_service(
     state: &AppState,
     world: World,
-    workspace: WorkspacePolicy,
+    editor_state: &project_store::EditorState,
 ) -> Result<(), AppError> {
     let mut replacement = WorldService::from_world(world);
-    replacement.set_workspace_policy(workspace)?;
+    replacement.set_workspace_policy(editor_state.workspace.clone())?;
+    replacement.set_scene(editor_state.scene.clone())?;
     let mut service = state
         .service
         .lock()
@@ -435,7 +436,7 @@ pub fn project_create(
         .map_err(project_error)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    install_world_service(&state, world, editor_state.workspace.clone())?;
+    install_world_service(&state, world, &editor_state)?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -466,7 +467,7 @@ pub fn project_open(
         .map_err(project_error)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    install_world_service(&state, world, detail.editor_state.workspace.clone())?;
+    install_world_service(&state, world, &detail.editor_state)?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -641,13 +642,13 @@ pub fn project_open_checkpoint(
     state
         .jobs
         .cancel_all("the world was replaced by a checkpoint");
-    let workspace = projects
+    let editor_state = projects
         .current
         .as_ref()
         .filter(|current| current.folder == folder)
-        .map(|current| current.editor_state.workspace.clone())
+        .map(|current| current.editor_state.clone())
         .unwrap_or_default();
-    install_world_service(&state, world, workspace)?;
+    install_world_service(&state, world, &editor_state)?;
     if let Some(current) = projects.current.as_mut() {
         if current.folder == folder {
             current.autosaved_revision = Some(revision);
@@ -898,7 +899,7 @@ fn import_world_project(
     match built {
         Ok(detail) => {
             state.jobs.cancel_all("the open project changed");
-            install_world_service(state, world, editor_state.workspace.clone())?;
+            install_world_service(state, world, &editor_state)?;
             projects.current = Some(CurrentProject {
                 folder: folder.clone(),
                 project_id: detail.summary.project_id.clone(),
@@ -1666,6 +1667,131 @@ fn workspace_set_policy_impl(
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     service.set_workspace_policy(policy.clone())?;
     Ok(policy)
+}
+
+/// Persists editor metadata (workspace policy and/or semantic scene) without rewriting
+/// the world snapshot or bumping its revision. The open project keeps the same state so
+/// the next command sees the accepted values immediately.
+fn persist_editor_state(
+    state: &AppState,
+    folder: &str,
+    editor_state: project_store::EditorState,
+) -> Result<(), AppError> {
+    let mut projects = state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?;
+    projects
+        .store
+        .update_editor_state(folder, editor_state.clone())
+        .map_err(project_error)?;
+    if let Some(active) = projects.current.as_mut() {
+        if active.folder == folder {
+            active.editor_state = editor_state;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn scene_objects(state: State<'_, AppState>) -> Result<Vec<SemanticObject>, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    Ok(service.scene().objects().to_vec())
+}
+
+#[tauri::command]
+pub fn scene_inspect(
+    state: State<'_, AppState>,
+    object_id: String,
+) -> Result<SceneObjectInspection, AppError> {
+    let service = state
+        .service
+        .lock()
+        .map_err(|_| AppError::internal("world state lock poisoned"))?;
+    match service.query(Query::InspectSceneObject { object_id })? {
+        QueryResult::SceneObject(inspection) => Ok(inspection),
+        _ => Err(AppError::internal("unexpected scene inspection result")),
+    }
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub fn scene_create(
+    state: State<'_, AppState>,
+    name: String,
+    kind: ObjectKind,
+    dimension: String,
+    bounds: BlockBox,
+    parent_id: Option<String>,
+    tags: Option<std::collections::BTreeMap<String, String>>,
+    note: Option<String>,
+) -> Result<SemanticObject, AppError> {
+    scene_create_impl(
+        &state,
+        name,
+        kind,
+        dimension,
+        bounds,
+        parent_id,
+        tags.unwrap_or_default(),
+        note,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scene_create_impl(
+    state: &AppState,
+    name: String,
+    kind: ObjectKind,
+    dimension: String,
+    bounds: BlockBox,
+    parent_id: Option<String>,
+    tags: std::collections::BTreeMap<String, String>,
+    note: Option<String>,
+) -> Result<SemanticObject, AppError> {
+    let current = current_project(state)?;
+    let (object, scene) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let object =
+            service.add_scene_object(&name, kind, &dimension, bounds, parent_id, tags, note)?;
+        (object, service.scene().clone())
+    };
+    let mut editor_state = current.editor_state.clone();
+    editor_state.scene = scene;
+    editor_state.validate().map_err(project_error)?;
+    persist_editor_state(state, &current.folder, editor_state)?;
+    Ok(object)
+}
+
+#[tauri::command]
+pub fn scene_delete(
+    state: State<'_, AppState>,
+    object_id: String,
+) -> Result<SemanticObject, AppError> {
+    scene_delete_impl(&state, &object_id)
+}
+
+fn scene_delete_impl(state: &AppState, object_id: &str) -> Result<SemanticObject, AppError> {
+    let current = current_project(state)?;
+    let (object, scene) = {
+        let mut service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let object = service.remove_scene_object(object_id)?;
+        (object, service.scene().clone())
+    };
+    let mut editor_state = current.editor_state.clone();
+    editor_state.scene = scene;
+    editor_state.validate().map_err(project_error)?;
+    persist_editor_state(state, &current.folder, editor_state)?;
+    Ok(object)
 }
 
 #[tauri::command]
@@ -2720,7 +2846,8 @@ mod workspace_tests {
             (folder, detail, world)
         };
         let _ = detail;
-        install_world_service(&state, world, WorkspacePolicy::default()).expect("service");
+        install_world_service(&state, world, &project_store::EditorState::default())
+            .expect("service");
         (state, folder)
     }
 
@@ -2907,6 +3034,138 @@ mod workspace_tests {
         assert_eq!(
             state.service.lock().expect("service").world_info().revision,
             initial_revision
+        );
+    }
+
+    #[test]
+    fn scene_objects_persist_and_inspect_blocks_without_world_edits() {
+        use std::collections::BTreeMap;
+        use world_application::ObjectKind;
+
+        let (state, folder) = project_state("scene");
+        let project_id = current_project(&state).expect("current").project_id;
+        let initial_revision = state.service.lock().expect("service").world_info().revision;
+        {
+            let mut service = state.service.lock().expect("service");
+            service
+                .execute(OperationRequest {
+                    project_id: project_id.clone(),
+                    operation: Operation::SetBlock {
+                        dimension: "minecraft:overworld".to_owned(),
+                        pos: BlockPos::new(4, 64, 4),
+                        state: "minecraft:stone".parse().expect("state"),
+                    },
+                    expected_revision: None,
+                    idempotency_key: None,
+                    actor: ui_actor(),
+                    linked_object_id: None,
+                    layer_id: None,
+                })
+                .expect("stone");
+        }
+        let revision_after_block = state.service.lock().expect("service").world_info().revision;
+        assert_eq!(revision_after_block, initial_revision + 1);
+
+        let district = scene_create_impl(
+            &state,
+            "Old Town".to_owned(),
+            ObjectKind::District,
+            "minecraft:overworld".to_owned(),
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(16, 80, 16)).expect("bounds"),
+            None,
+            BTreeMap::from([("style".to_owned(), "medieval".to_owned())]),
+            Some("Historic center".to_owned()),
+        )
+        .expect("district");
+        let building = scene_create_impl(
+            &state,
+            "Town Hall".to_owned(),
+            ObjectKind::Building,
+            "minecraft:overworld".to_owned(),
+            BlockBox::new(BlockPos::new(4, 64, 4), BlockPos::new(6, 64, 4)).expect("bounds"),
+            Some(district.id.clone()),
+            BTreeMap::new(),
+            None,
+        )
+        .expect("building");
+        assert_eq!(building.id, "town-hall");
+        assert_eq!(
+            state.service.lock().expect("service").world_info().revision,
+            revision_after_block,
+            "scene metadata is not a world edit"
+        );
+
+        let inspection = {
+            let service = state.service.lock().expect("service");
+            match service
+                .query(Query::InspectSceneObject {
+                    object_id: building.id.clone(),
+                })
+                .expect("inspect")
+            {
+                QueryResult::SceneObject(inspection) => inspection,
+                other => panic!("unexpected query result: {other:?}"),
+            }
+        };
+        assert_eq!(inspection.object.name, "Town Hall");
+        assert_eq!(inspection.volume, 3);
+        assert_eq!(inspection.non_air_blocks, 3);
+        assert_eq!(
+            inspection
+                .palette
+                .iter()
+                .find(|entry| entry.state == "minecraft:stone")
+                .map(|entry| entry.count),
+            Some(1)
+        );
+
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert_eq!(reopened.0.editor_state.scene.objects().len(), 2);
+        assert_eq!(
+            reopened.0.editor_state.scene.objects()[0].tags["style"],
+            "medieval"
+        );
+        assert_eq!(
+            reopened.0.editor_state.scene.objects()[1]
+                .parent_id
+                .as_deref(),
+            Some("old-town")
+        );
+
+        let error = scene_delete_impl(&state, "old-town").expect_err("children");
+        assert_eq!(error.code, ErrorCode::Conflict);
+        scene_delete_impl(&state, "town-hall").expect("delete child");
+        scene_delete_impl(&state, "old-town").expect("delete parent");
+        let reopened = state
+            .projects
+            .lock()
+            .expect("projects")
+            .store
+            .open(&folder)
+            .expect("reopen");
+        assert!(reopened.0.editor_state.scene.is_empty());
+
+        let error = scene_create_impl(
+            &state,
+            "Bad".to_owned(),
+            ObjectKind::Other,
+            "minecraft:moon".to_owned(),
+            BlockBox::single(BlockPos::new(0, 64, 0)),
+            None,
+            BTreeMap::new(),
+            None,
+        )
+        .expect_err("unknown dimension");
+        assert_eq!(error.code, ErrorCode::NotFound);
+        assert_eq!(
+            state.service.lock().expect("service").world_info().revision,
+            revision_after_block
         );
     }
 }

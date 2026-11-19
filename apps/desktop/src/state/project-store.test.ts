@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenedProjectPayload, ProjectSummary, SessionStatus } from "@/project/types";
 import { defaultWorkspacePolicy } from "@/project/types";
+import { defaultScene } from "@/project/scene-types";
 import type { StructureInsertOutcome } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
@@ -60,6 +61,7 @@ const { currentEditorState, projectIsDirty, useProjectStore } =
   await import("@/state/project-store");
 
 const workspace = defaultWorkspacePolicy();
+const scene = defaultScene();
 
 const summary: ProjectSummary = {
   folder: "My Castle.furybuilder",
@@ -229,6 +231,7 @@ describe("project activation", () => {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
         workspace,
+        scene,
       });
       expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
       expect(useWorldStore.getState().loadRadius).toBe(2);
@@ -289,6 +292,7 @@ describe("save and autosave", () => {
       selectedDimension: "minecraft:overworld",
       loadRadius: 1,
       workspace,
+      scene,
     });
     const current = useProjectStore.getState().current!;
     expect(current.savedRevision).toBe(4);
@@ -314,7 +318,7 @@ describe("save and autosave", () => {
     useWorldStore.setState({ revision: 6 });
     expect(await useProjectStore.getState().autosave("edit")).toBe(true);
     expect(api.autosave).toHaveBeenCalledWith(
-      { selectedDimension: "minecraft:overworld", loadRadius: 1, workspace },
+      { selectedDimension: "minecraft:overworld", loadRadius: 1, workspace, scene },
       "edit",
     );
     expect(useProjectStore.getState().current?.autosavedRevision).toBe(5);
@@ -328,6 +332,7 @@ describe("save and autosave", () => {
       selectedDimension: "minecraft:the_nether",
       loadRadius: 3,
       workspace,
+      scene,
     });
   });
 });
@@ -344,6 +349,7 @@ describe("close, checkpoints and rename", () => {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
         workspace,
+        scene,
       });
       expect(useProjectStore.getState().current).toBeNull();
       expect(useWorldStore.getState().revision).toBe(0);

@@ -951,3 +951,159 @@ fn active_mask_bounds_operations_and_unknown_layers_are_rejected() {
         ErrorCode::NotFound
     );
 }
+
+#[test]
+fn scene_objects_are_queryable_and_inspect_world_blocks_without_mutating() {
+    use scene_model::ObjectKind;
+    use std::collections::BTreeMap;
+
+    let mut service = WorldService::new();
+    service
+        .execute(set_block(BlockPos::new(4, 64, 4), "minecraft:stone"))
+        .unwrap();
+    service
+        .execute(set_block(BlockPos::new(5, 64, 4), "minecraft:glass"))
+        .unwrap();
+    let revision = service.world_info().revision;
+
+    let district = service
+        .add_scene_object(
+            "Old Town",
+            ObjectKind::District,
+            "minecraft:overworld",
+            BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(16, 80, 16)).unwrap(),
+            None,
+            BTreeMap::new(),
+            Some("Historic center".to_owned()),
+        )
+        .unwrap();
+    let building = service
+        .add_scene_object(
+            "Town Hall",
+            ObjectKind::Building,
+            "minecraft:overworld",
+            BlockBox::new(BlockPos::new(4, 64, 4), BlockPos::new(6, 64, 4)).unwrap(),
+            Some(district.id.clone()),
+            BTreeMap::from([("style".to_owned(), "nordic".to_owned())]),
+            None,
+        )
+        .unwrap();
+    assert_eq!(service.world_info().revision, revision);
+    assert_eq!(building.id, "town-hall");
+    assert_eq!(building.parent_id.as_deref(), Some("old-town"));
+
+    match service.query(Query::SceneObjects).unwrap() {
+        QueryResult::SceneObjects(objects) => {
+            assert_eq!(objects.len(), 2);
+            assert_eq!(objects[0].kind, ObjectKind::District);
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+    match service
+        .query(Query::InspectSceneObject {
+            object_id: "town-hall".to_owned(),
+        })
+        .unwrap()
+    {
+        QueryResult::SceneObject(inspection) => {
+            assert_eq!(inspection.object.name, "Town Hall");
+            assert_eq!(inspection.volume, 3);
+            assert_eq!(inspection.non_air_blocks, 2);
+            assert_eq!(
+                inspection
+                    .palette
+                    .iter()
+                    .map(|entry| entry.count)
+                    .sum::<u64>(),
+                3
+            );
+            assert!(inspection
+                .palette
+                .iter()
+                .any(|entry| entry.state == "minecraft:stone" && entry.count == 1));
+            assert!(inspection.children.is_empty());
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+    match service
+        .query(Query::InspectSceneObject {
+            object_id: "old-town".to_owned(),
+        })
+        .unwrap()
+    {
+        QueryResult::SceneObject(inspection) => {
+            assert_eq!(inspection.children.len(), 1);
+            assert_eq!(inspection.children[0].id, "town-hall");
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+
+    assert_eq!(
+        service
+            .query(Query::InspectSceneObject {
+                object_id: "missing".to_owned(),
+            })
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        service
+            .add_scene_object(
+                "Bad",
+                ObjectKind::Other,
+                "minecraft:moon",
+                BlockBox::single(BlockPos::new(0, 64, 0)),
+                None,
+                BTreeMap::new(),
+                None,
+            )
+            .unwrap_err()
+            .code,
+        ErrorCode::NotFound
+    );
+    assert_eq!(
+        service.remove_scene_object("old-town").unwrap_err().code,
+        ErrorCode::Conflict
+    );
+    assert_eq!(service.world_info().revision, revision);
+}
+
+#[test]
+fn scene_metadata_is_validated_and_replaced_without_history() {
+    use scene_model::{ObjectKind, Scene};
+    use std::collections::BTreeMap;
+
+    let mut service = WorldService::new();
+    let mut scene = Scene::new();
+    scene
+        .push(
+            "Nether Hub",
+            ObjectKind::Landmark,
+            "minecraft:the_nether",
+            BlockBox::single(BlockPos::new(0, 64, 0)),
+            None,
+            BTreeMap::new(),
+            None,
+        )
+        .unwrap();
+    service.set_scene(scene.clone()).unwrap();
+    assert_eq!(service.scene(), &scene);
+    assert_eq!(service.world_info().revision, 0);
+    assert!(service.history().is_empty());
+
+    let mut invalid = scene.clone();
+    invalid.schema_version = 99;
+    assert_eq!(
+        service.set_scene(invalid).unwrap_err().code,
+        ErrorCode::UnsupportedVersion
+    );
+
+    let mut missing_dimension = scene.clone();
+    missing_dimension.objects[0].dimension = "minecraft:moon".to_owned();
+    assert_eq!(
+        service.set_scene(missing_dimension).unwrap_err().code,
+        ErrorCode::NotFound
+    );
+    assert_eq!(service.scene(), &scene);
+}

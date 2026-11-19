@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use scene_model::{ObjectKind, Scene, SemanticObject};
 use serde_json::json;
 use uuid::Uuid;
 use workspace_model::WorkspacePolicy;
@@ -12,8 +13,8 @@ use world_operations::{
 use crate::dto::{
     Actor, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats, HistoryState,
     HistorySummary, OperationRequest, OperationResult, PaletteEntry, PreviewResult, Query,
-    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SectionSnapshot, StructureSites,
-    UndoTarget,
+    QueryResult, RegionBlocks, RegionSummary, RenderSnapshot, SceneObjectInspection,
+    SectionSnapshot, StructureSites, UndoTarget,
 };
 use crate::error::{AppError, ErrorCode};
 
@@ -62,6 +63,7 @@ pub struct WorldService {
     idempotency_order: VecDeque<String>,
     audit: Vec<AuditEntry>,
     workspace: WorkspacePolicy,
+    scene: Scene,
     writes_enabled: bool,
     allow_unknown_targets: bool,
     max_history: usize,
@@ -84,6 +86,7 @@ impl WorldService {
             idempotency_order: VecDeque::new(),
             audit: Vec::new(),
             workspace: WorkspacePolicy::default(),
+            scene: Scene::default(),
             writes_enabled: true,
             allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
@@ -107,6 +110,7 @@ impl WorldService {
             idempotency_order: VecDeque::new(),
             audit: Vec::new(),
             workspace: WorkspacePolicy::default(),
+            scene: Scene::default(),
             writes_enabled: true,
             allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
@@ -142,6 +146,52 @@ impl WorldService {
         self.validate_workspace_policy(&policy)?;
         self.workspace = policy;
         Ok(())
+    }
+
+    /// Returns the persisted semantic catalog. It is project metadata, never voxel data.
+    pub fn scene(&self) -> &Scene {
+        &self.scene
+    }
+
+    /// Validates a scene against this world's dimensions without changing the service.
+    pub fn validate_scene(&self, scene: &Scene) -> Result<(), AppError> {
+        scene.validate()?;
+        for object in scene.objects() {
+            self.world.dimension(&object.dimension)?;
+        }
+        Ok(())
+    }
+
+    /// Replaces the semantic catalog. Like the workspace policy, this does not bump the
+    /// world revision or enter block history.
+    pub fn set_scene(&mut self, scene: Scene) -> Result<(), AppError> {
+        self.validate_scene(&scene)?;
+        self.scene = scene;
+        Ok(())
+    }
+
+    /// Adds one semantic object. Only metadata changes; blocks are untouched.
+    #[allow(clippy::too_many_arguments)]
+    pub fn add_scene_object(
+        &mut self,
+        name: &str,
+        kind: ObjectKind,
+        dimension: &str,
+        bounds: BlockBox,
+        parent_id: Option<String>,
+        tags: BTreeMap<String, String>,
+        note: Option<String>,
+    ) -> Result<SemanticObject, AppError> {
+        self.world.dimension(dimension)?;
+        Ok(self
+            .scene
+            .push(name, kind, dimension, bounds, parent_id, tags, note)?
+            .clone())
+    }
+
+    /// Removes a leaf semantic object. Objects with children are refused.
+    pub fn remove_scene_object(&mut self, id: &str) -> Result<SemanticObject, AppError> {
+        Ok(self.scene.remove(id)?)
     }
 
     fn enforce_workspace(
@@ -709,38 +759,9 @@ impl WorldService {
                     biome,
                 })
             }
-            Query::RegionSummary { dimension, bounds } => {
-                let volume = bounds.volume();
-                if volume > MAX_REGION_SUMMARY_BLOCKS {
-                    return Err(AppError::new(
-                        ErrorCode::LimitExceeded,
-                        format!(
-                            "region summary affects {volume} blocks, limit is {MAX_REGION_SUMMARY_BLOCKS}"
-                        ),
-                    ));
-                }
-                let mut palette: BTreeMap<String, u64> = BTreeMap::new();
-                let mut non_air_blocks = 0u64;
-                for pos in bounds.iter() {
-                    let state = self.world.get_block(&dimension, pos)?;
-                    if !state.is_air() {
-                        non_air_blocks += 1;
-                    }
-                    *palette.entry(state.to_string()).or_default() += 1;
-                }
-                let mut palette: Vec<PaletteEntry> = palette
-                    .into_iter()
-                    .map(|(state, count)| PaletteEntry { state, count })
-                    .collect();
-                palette.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.state.cmp(&b.state)));
-                Ok(QueryResult::RegionSummary(RegionSummary {
-                    dimension,
-                    bounds,
-                    blocks: volume,
-                    non_air_blocks,
-                    palette,
-                }))
-            }
+            Query::RegionSummary { dimension, bounds } => Ok(QueryResult::RegionSummary(
+                self.region_summary(&dimension, bounds)?,
+            )),
             Query::RegionBlocks { dimension, bounds } => {
                 let volume = bounds.volume();
                 if volume > MAX_REGION_READ_BLOCKS {
@@ -809,7 +830,63 @@ impl WorldService {
                 }))
             }
             Query::WorkspacePolicy => Ok(QueryResult::WorkspacePolicy(self.workspace.clone())),
+            Query::SceneObjects => Ok(QueryResult::SceneObjects(self.scene.objects().to_vec())),
+            Query::InspectSceneObject { object_id } => {
+                let object = self.scene.get(&object_id).cloned().ok_or_else(|| {
+                    AppError::new(
+                        ErrorCode::NotFound,
+                        format!("semantic object `{object_id}` was not found"),
+                    )
+                })?;
+                let summary = self.region_summary(&object.dimension, object.bounds)?;
+                let children = self
+                    .scene
+                    .children(&object_id)
+                    .into_iter()
+                    .cloned()
+                    .collect();
+                Ok(QueryResult::SceneObject(SceneObjectInspection {
+                    object,
+                    volume: summary.blocks,
+                    non_air_blocks: summary.non_air_blocks,
+                    palette: summary.palette,
+                    children,
+                }))
+            }
         }
+    }
+
+    fn region_summary(&self, dimension: &str, bounds: BlockBox) -> Result<RegionSummary, AppError> {
+        let volume = bounds.volume();
+        if volume > MAX_REGION_SUMMARY_BLOCKS {
+            return Err(AppError::new(
+                ErrorCode::LimitExceeded,
+                format!(
+                    "region summary affects {volume} blocks, limit is {MAX_REGION_SUMMARY_BLOCKS}"
+                ),
+            ));
+        }
+        let mut palette: BTreeMap<String, u64> = BTreeMap::new();
+        let mut non_air_blocks = 0u64;
+        for pos in bounds.iter() {
+            let state = self.world.get_block(dimension, pos)?;
+            if !state.is_air() {
+                non_air_blocks += 1;
+            }
+            *palette.entry(state.to_string()).or_default() += 1;
+        }
+        let mut palette: Vec<PaletteEntry> = palette
+            .into_iter()
+            .map(|(state, count)| PaletteEntry { state, count })
+            .collect();
+        palette.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.state.cmp(&b.state)));
+        Ok(RegionSummary {
+            dimension: dimension.to_owned(),
+            bounds,
+            blocks: volume,
+            non_air_blocks,
+            palette,
+        })
     }
 
     fn validate_project(&self, project_id: &str) -> Result<(), AppError> {

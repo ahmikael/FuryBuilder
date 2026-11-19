@@ -955,6 +955,7 @@ dependencies = [
 name = "furybuilder-project-store"
 version = "0.1.0"
 dependencies = [
+ "furybuilder-scene-model",
  "furybuilder-workspace-model",
  "furybuilder-world-domain",
  "serde",
@@ -978,6 +979,16 @@ dependencies = [
  "ureq",
  "windows-sys 0.61.2",
  "zip",
+]
+
+[[package]]
+name = "furybuilder-scene-model"
+version = "0.1.0"
+dependencies = [
+ "furybuilder-world-domain",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1008,6 +1019,7 @@ dependencies = [
 name = "furybuilder-world-application"
 version = "0.1.0"
 dependencies = [
+ "furybuilder-scene-model",
  "furybuilder-workspace-model",
  "furybuilder-world-domain",
  "furybuilder-world-operations",

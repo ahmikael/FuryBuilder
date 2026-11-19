@@ -16,3 +16,4 @@ thiserror = { workspace = true }
 uuid = { workspace = true }
 world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
 workspace-model = { path = "../workspace-model", package = "furybuilder-workspace-model" }
+scene-model = { path = "../scene-model", package = "furybuilder-scene-model" }

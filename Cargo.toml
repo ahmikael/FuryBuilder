@@ -8,6 +8,7 @@ members = [
     "crates/world-application",
     "crates/project-store",
     "crates/workspace-model",
+    "crates/scene-model",
     "crates/structure-library",
     "crates/asset-source",
     "crates/runtime-manager",

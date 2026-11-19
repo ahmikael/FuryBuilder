@@ -5,6 +5,7 @@ import type * as IpcModule from "@/lib/ipc";
 import { ProjectManager } from "@/features/project/ProjectManager";
 import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
 import { defaultWorkspacePolicy } from "@/project/types";
+import { defaultScene } from "@/project/scene-types";
 import { useProjectStore } from "@/state/project-store";
 import { useToastStore, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
@@ -286,6 +287,7 @@ describe("project manager", () => {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
         workspace: defaultWorkspacePolicy(),
+        scene: defaultScene(),
       }),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
@@ -390,6 +392,7 @@ describe("project manager", () => {
         selectedDimension: "minecraft:overworld",
         loadRadius: 1,
         workspace: defaultWorkspacePolicy(),
+        scene: defaultScene(),
       }),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));

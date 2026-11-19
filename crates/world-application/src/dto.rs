@@ -1,3 +1,4 @@
+use scene_model::SemanticObject;
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
 use world_domain::{BiomeState, BlockBox, BlockPos, BlockState, ChunkPos, WorldInfo};
@@ -95,6 +96,18 @@ pub struct RegionSummary {
     pub blocks: u64,
     pub non_air_blocks: u64,
     pub palette: Vec<PaletteEntry>,
+}
+
+/// Metadata plus bounded world statistics for one semantic object. Inspection never
+/// changes blocks or the scene; it reports the palette of the object's current bounds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SceneObjectInspection {
+    pub object: SemanticObject,
+    pub volume: u64,
+    pub non_air_blocks: u64,
+    pub palette: Vec<PaletteEntry>,
+    pub children: Vec<SemanticObject>,
 }
 
 /// Sparse region payload for copy/paste. Air positions are implied, so a mostly empty
@@ -208,6 +221,11 @@ pub enum Query {
         limit: u32,
     },
     WorkspacePolicy,
+    SceneObjects,
+    InspectSceneObject {
+        #[serde(rename = "objectId")]
+        object_id: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -229,6 +247,8 @@ pub enum QueryResult {
     ChunkStats(ChunkStats),
     StructureSites(StructureSites),
     WorkspacePolicy(WorkspacePolicy),
+    SceneObjects(Vec<SemanticObject>),
+    SceneObject(SceneObjectInspection),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

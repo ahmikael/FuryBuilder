@@ -13,6 +13,7 @@ import {
   RotateCcw,
   Route,
   Search,
+  Shapes,
   Terminal,
   Undo2,
   Wrench,
@@ -31,6 +32,7 @@ import { BiomePanel } from "@/features/workspace/BiomePanel";
 import { GeneratorsPanel } from "@/features/workspace/GeneratorsPanel";
 import { WorkspacePanel } from "@/features/workspace/WorkspacePanel";
 import { TemplateLibraryPanel } from "@/features/workspace/TemplateLibraryPanel";
+import { ScenePanel } from "@/features/workspace/ScenePanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -650,6 +652,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="templates">
               <Library className="size-3" /> Templates
             </TabsTrigger>
+            <TabsTrigger value="objects">
+              <Shapes className="size-3" /> Objects
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -695,6 +700,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="templates" className="m-0 flex min-h-0 flex-col p-2">
           <TemplateLibraryPanel />
+        </TabsContent>
+
+        <TabsContent value="objects" className="m-0 flex min-h-0 flex-col p-2">
+          <ScenePanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

@@ -96,6 +96,8 @@ width: 1..32, depth: 1..32, step: 1..64,
 maxSlope: 0..32, clearance: 0..32, limit: 1..64
 }
 | { type: "workspace_policy" }
+| { type: "scene_objects" }
+| { type: "inspect_scene_object", objectId }
 
 QueryResult =
 | { type: "world_info", data: WorldInfo }
@@ -105,6 +107,8 @@ QueryResult =
 | { type: "chunk_stats", data: ChunkStats }
 | { type: "structure_sites", data: StructureSites }
 | { type: "workspace_policy", data: WorkspacePolicy }
+| { type: "scene_objects", data: SemanticObject[] }
+| { type: "scene_object", data: SceneObjectInspection }
 
 ````
 
@@ -121,6 +125,30 @@ with water over a bed. Repeating the same parameters is idempotent. `generate_ve
 places ground cover and small trees only into existing air, with minimum tree spacing.
 All three are deterministic local construction tools; they make no vanilla worldgen
 parity claim and are recorded as ordinary reversible operations.
+
+## Semantic objects
+
+Semantic objects are project metadata, separate from voxel data and from the workspace
+edit policy. They are persisted in `project.json` and never change blocks by themselves.
+
+```ts
+SemanticObject {
+  id, name, kind: "district" | "building" | "road" | "entrance" | "landmark" | "other",
+  dimension, bounds, parentId?, tags?: Record<string, string>, note?
+}
+```
+
+- Ids are lowercase slugs derived from the name and uniquified; names never become file
+  paths. Limits: 1,024 objects, 64-character names, 16 tags per object, 8 hierarchy levels
+  and 1,024-character notes. A child must share its parent's dimension.
+- `scene_objects` returns the full catalog. `inspect_scene_object` returns the object,
+  its direct children and bounded `region_summary` statistics (volume, non-air count,
+  sorted palette) for its current bounds. The region summary limit of 1,000,000 blocks
+  applies, so an oversized object is refused instead of scanning without a bound.
+- Creating or deleting an object is metadata-only: no revision bump and no block-history
+  entry. Deleting a parent that still has children returns `conflict`.
+- Unknown objects and unknown dimensions return `not_found`; invalid kinds, names, tags
+  or an unsupported scene schema return `invalid_argument` or `unsupported_version`.
 
 ## Render snapshots
 

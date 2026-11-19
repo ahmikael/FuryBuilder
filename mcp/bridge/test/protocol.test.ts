@@ -244,6 +244,8 @@ describe("MCP protocol negotiation", () => {
         "world_info",
         "get_workspace_policy",
         "list_templates",
+        "list_scene_objects",
+        "inspect_scene_object",
         "get_block",
         "get_biome",
         "find_structure_sites",
@@ -262,6 +264,8 @@ describe("MCP protocol negotiation", () => {
       "get_region",
       "get_workspace_policy",
       "inspect_region",
+      "inspect_scene_object",
+      "list_scene_objects",
       "list_templates",
       "world_info",
     ]);

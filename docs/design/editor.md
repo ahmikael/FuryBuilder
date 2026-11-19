@@ -157,6 +157,33 @@ MCP exposes `get_workspace_policy` and `list_templates` as read-only tools and
 `insert_template` as a confirmed write. The template is re-read and re-verified by the
 desktop before the confirmation dialog is shown.
 
+## Semantic objects (M9.14)
+
+The `Objects` tab adds a project-local catalog of districts, buildings, roads, entrances,
+landmarks and other named areas. It is metadata layered over the voxel world: creating,
+renaming or deleting an object never places or removes blocks.
+
+| Concept    | Behaviour                                                                                                                                      |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Object     | Name, kind, dimension, inclusive bounds, optional parent, bounded tags and an optional note. Stored in `project.json`.                         |
+| Creation   | Uses the current box selection by default; the note and tags are optional. Ids are unique lowercase slugs, not file paths.                     |
+| Hierarchy  | A child must share its parent's dimension. Depth is capped at 8; deleting a parent with children is refused until they are removed/reparented. |
+| Inspection | Shows volume, non-air blocks, current palette (top 8 states) and direct children. Palette statistics are read from the authoritative world.    |
+
+- The Core validates the whole scene when opening, saving or replacing it: 1,024 objects,
+  64-character names, 16 tags per object, 32-character tag keys, 128-character values and
+  1,024-character notes. Cycles, duplicate ids, unknown parents and cross-dimension parents
+  are refused.
+- Scene changes are metadata: they do not bump the world revision and are not added to
+  block history. Undo/redo therefore continue to apply only to voxel edits.
+- `Use bounds as selection` reproduces an object's box in the viewport when its dimension
+  is the one currently displayed; it does not switch dimensions silently.
+- The `inspect_scene_object` path reuses the bounded region-summary query, so an object
+  larger than 1,000,000 blocks is reported as `limit_exceeded` instead of scanning
+  unbounded data.
+- MCP exposes `list_scene_objects` and `inspect_scene_object` as read-only tools. There is
+  no MCP scene-write tool in M9.14; the desktop UI is the authority for scene creation.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

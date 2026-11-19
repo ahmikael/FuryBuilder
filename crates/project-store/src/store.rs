@@ -1716,5 +1716,97 @@ mod workspace_tests {
         let raw = std::fs::read_to_string(root.join(&detail.summary.folder).join(PROJECT_FILE))
             .expect("manifest");
         assert!(!raw.contains("\"workspace\""));
+        assert!(!raw.contains("\"scene\""));
+    }
+
+    #[test]
+    fn editor_state_round_trips_semantic_objects_without_touching_the_world() {
+        use scene_model::{ObjectKind, Scene};
+
+        let root = workspace_root("scene");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("District", CreationMode::Flat, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let checksum_before = store.manifest(&root.join(&folder)).unwrap().world_checksum;
+
+        let mut scene = Scene::new();
+        let district = scene
+            .push(
+                "Old Town",
+                ObjectKind::District,
+                "minecraft:overworld",
+                world_domain::BlockBox::new(
+                    world_domain::BlockPos::new(0, 60, 0),
+                    world_domain::BlockPos::new(32, 80, 32),
+                )
+                .unwrap(),
+                None,
+                std::collections::BTreeMap::from([("style".to_owned(), "medieval".to_owned())]),
+                Some("Historic center".to_owned()),
+            )
+            .expect("district")
+            .clone();
+        scene
+            .push(
+                "Town Hall",
+                ObjectKind::Building,
+                "minecraft:overworld",
+                world_domain::BlockBox::new(
+                    world_domain::BlockPos::new(4, 60, 4),
+                    world_domain::BlockPos::new(12, 72, 12),
+                )
+                .unwrap(),
+                Some(district.id.clone()),
+                std::collections::BTreeMap::new(),
+                None,
+            )
+            .expect("building");
+
+        let editor_state = EditorState {
+            scene: scene.clone(),
+            ..EditorState::default()
+        };
+        store
+            .update_editor_state(&folder, editor_state)
+            .expect("update");
+
+        let (opened, _, _) = store.open(&folder).expect("open");
+        assert_eq!(opened.editor_state.scene, scene);
+        assert_eq!(
+            opened.editor_state.scene.objects()[1].parent_id.as_deref(),
+            Some("old-town")
+        );
+        let manifest = store.manifest(&root.join(&folder)).unwrap();
+        assert_eq!(manifest.world_checksum, checksum_before);
+        assert_eq!(manifest.world_revision, detail.summary.world_revision);
+
+        let raw = std::fs::read_to_string(root.join(&folder).join(PROJECT_FILE)).expect("manifest");
+        assert!(raw.contains("\"scene\""));
+        assert!(raw.contains("\"style\""));
+    }
+
+    #[test]
+    fn invalid_scene_metadata_is_refused_without_writing_the_manifest() {
+        use scene_model::Scene;
+
+        let root = workspace_root("scene-invalid");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create("Broken", CreationMode::Empty, EditorState::default())
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let scene = Scene {
+            schema_version: 99,
+            ..Scene::default()
+        };
+        let editor_state = EditorState {
+            scene,
+            ..EditorState::default()
+        };
+        assert!(store.update_editor_state(&folder, editor_state).is_err());
+        let opened = store.open(&folder).expect("open");
+        assert!(opened.0.editor_state.scene.is_empty());
     }
 }
