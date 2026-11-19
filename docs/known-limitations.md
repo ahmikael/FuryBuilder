@@ -25,7 +25,7 @@ manually. Create a checkpoint first and keep the original world untouched.
 | KL-01 | Platform         | Windows-first; macOS/Linux are not tested                                  | by design            |
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                     | by design            |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud            | by design            |
-| KL-04 | Distribution     | No signed installer, auto-update, changelog or backup policy yet           | pending M11          |
+| KL-04 | Distribution     | Beta installers are unsigned; no auto-update channel is configured         | pending M11          |
 | KL-05 | Version support  | Only Java 1.21.4 / DV 4189; other versions and Bedrock are refused         | by design            |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split/legacy refused   | by design            |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw         | by design            |
@@ -88,13 +88,15 @@ no cloud sync, shared editing or server. The desktop also does not take an OS fi
 detect a second live session. **Workaround:** use one instance per project; make a checkpoint
 before copying a project folder. **Evidence:** `docs/design/projects.md` (M5 limitations).
 
-### KL-04 — No signed installer or release pipeline yet
+### KL-04 — Beta installers are unsigned and there is no auto-update
 
-**Status:** pending M11. **Example:** there is no `.msi`/`.exe` installer produced and tested
-by this repository, no auto-update channel, no finalized changelog/migration/backup policy,
-and no third-party security audit or release signing. **Workaround:** build from source with
-`pnpm tauri:dev` or `pnpm tauri:build`; do not distribute an unsigned build as a stable
-release. **Evidence:** `FURYBUILDER_MASTER_PLAN.md` M11, `docs/legal/third-party-notices.md`.
+**Status:** pending M11. **Example:** the NSIS and MSI packages are built, installed and
+update-tested, but they are not Authenticode-signed and Windows SmartScreen can warn about an
+unknown publisher. The Tauri auto-updater is not configured; updating means running a newer
+installer over the old one. **Workaround:** verify the published SHA-256 before running a
+package, and keep a project backup before updating. **Evidence:**
+`docs/install-windows.md`, `docs/legal/security-audit.md`,
+`docs/testing/evidence/2026-11-19-release-security/signature-evidence.json`.
 
 ## Minecraft versions, import and export
 

@@ -95,7 +95,15 @@ fn inspect_path(path: &Path) -> Result<GenerationDatapack, ServerError> {
                 path.display()
             ))
         })?;
-        let name = entry.name().to_owned();
+        let name = entry
+            .name()
+            .map_err(|error| {
+                ServerError::Archive(format!(
+                    "{} has an entry with an unreadable name: {error}",
+                    path.display()
+                ))
+            })?
+            .into_owned();
         validate_entry_name(&name, path)?;
         if entry
             .unix_mode()

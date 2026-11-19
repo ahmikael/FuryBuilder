@@ -5,6 +5,8 @@
   metadata.
 - [Migration and backup policy](backup-policy.md) — automatic project protections, retention
   bounds, user backup/restore, update policy and uncovered scenarios.
+- [Security audit](../legal/security-audit.md) — Rust/Node advisories, license policy,
+  Authenticode status and residual release risks.
 - [Windows installation and updates](../install-windows.md) — package types, install, update,
   uninstall and user-data location.
 - [Changelog](../../CHANGELOG.md) — user-visible changes by release.

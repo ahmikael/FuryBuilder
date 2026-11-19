@@ -93,7 +93,12 @@ pub(crate) fn build_atlas(
         };
         match decode_png(&bytes) {
             Ok(image) => {
-                let has_alpha = image.rgba.chunks_exact(4).any(|pixel| pixel[3] < 255);
+                let has_alpha = image
+                    .rgba
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .any(|pixel| pixel[3] < 255);
                 textures.push(DecodedTexture {
                     key,
                     path: Some(path),
@@ -158,7 +163,7 @@ fn missing_texture(key: &str, path: Option<String>) -> DecodedTexture {
     let mut rgba = vec![0u8; (width * height * 4) as usize];
     for y in 0..height {
         for x in 0..width {
-            let magenta = ((x / 4) + (y / 4)) % 2 == 0;
+            let magenta = ((x / 4) + (y / 4)).is_multiple_of(2);
             let offset = ((y * width + x) * 4) as usize;
             if magenta {
                 rgba[offset] = 255;
@@ -344,7 +349,7 @@ fn decode_png(bytes: &[u8]) -> Result<DecodedImage, String> {
     // 16x512 water). FuryBuilder samples the first frame: the stack would otherwise stretch
     // the whole animation into one UV rectangle and inflate the atlas. Animation timing is
     // not played back.
-    let height = if source_height > source_width && source_height % source_width == 0 {
+    let height = if source_height > source_width && source_height.is_multiple_of(source_width) {
         source_width
     } else {
         source_height
@@ -426,8 +431,18 @@ mod tests {
         let missing = missing_texture("__missing__", None);
         assert_eq!((missing.width, missing.height), (16, 16));
         assert!(missing.missing);
-        assert!(missing.rgba.chunks_exact(4).all(|pixel| pixel[3] == 255));
-        assert!(missing.rgba.chunks_exact(4).any(|pixel| pixel[0] == 255));
+        assert!(missing
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| pixel[3] == 255));
+        assert!(missing
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|pixel| pixel[0] == 255));
     }
 
     #[test]
@@ -439,7 +454,7 @@ mod tests {
             encoder.set_depth(png::BitDepth::Eight);
             let mut writer = encoder.write_header().expect("png header");
             let mut pixels = vec![0u8; 16 * 32 * 4];
-            for (index, pixel) in pixels.chunks_exact_mut(4).enumerate() {
+            for (index, pixel) in pixels.as_chunks_mut::<4>().0.iter_mut().enumerate() {
                 let row = index / 16;
                 pixel.copy_from_slice(if row < 16 {
                     &[255, 0, 0, 255]
@@ -455,8 +470,10 @@ mod tests {
         assert_eq!(decoded.rgba.len(), 16 * 16 * 4);
         assert!(decoded
             .rgba
-            .chunks_exact(4)
-            .all(|pixel| pixel == [255, 0, 0, 255]));
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| *pixel == [255, 0, 0, 255]));
     }
 
     #[test]

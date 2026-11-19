@@ -882,7 +882,7 @@ fn target_changes(
             for (index, change) in changes.iter().enumerate() {
                 deduped.insert(change.pos, change.state.clone());
                 let done = index as u64 + 1;
-                if done == total || done % 1024 == 0 {
+                if done == total || done.is_multiple_of(1024) {
                     report(observer, OperationPhase::Planning, done, total)?;
                 }
             }
@@ -911,7 +911,7 @@ fn target_changes(
                     });
                 }
                 done += 1;
-                if done == total || done % 4096 == 0 {
+                if done == total || done.is_multiple_of(4096) {
                     report(observer, OperationPhase::Planning, done, total)?;
                 }
             }
@@ -935,7 +935,7 @@ fn target_changes(
                     });
                 }
                 done += 1;
-                if done == total || done % 4096 == 0 {
+                if done == total || done.is_multiple_of(4096) {
                     report(observer, OperationPhase::Planning, done, total)?;
                 }
             }
@@ -1147,7 +1147,7 @@ fn plan_terrain_brush(
             }
             heights[z_index * width + x_index] = surface;
             done += 1;
-            if done == total || done % 64 == 0 {
+            if done == total || done.is_multiple_of(64) {
                 report(observer, OperationPhase::Planning, done, total)?;
             }
         }
@@ -1308,7 +1308,7 @@ fn plan_heightmap(
                 }
             }
             done += 1;
-            if done == total || done % 256 == 0 {
+            if done == total || done.is_multiple_of(256) {
                 report(observer, OperationPhase::Planning, done, total)?;
             }
         }
@@ -1348,7 +1348,7 @@ fn plan_road(
     let mut done = 0u64;
     for (x, z) in route.cells {
         done += 1;
-        if done == total || done % 128 == 0 {
+        if done == total || done.is_multiple_of(128) {
             report(observer, OperationPhase::Planning, done, total)?;
         }
         if x < request.bounds.min.x
@@ -1434,7 +1434,7 @@ fn plan_river(
     let mut done = 0u64;
     for (x, z) in route.cells {
         done += 1;
-        if done == total || done % 128 == 0 {
+        if done == total || done.is_multiple_of(128) {
             report(observer, OperationPhase::Planning, done, total)?;
         }
         if x < request.bounds.min.x
@@ -1513,7 +1513,7 @@ fn plan_vegetation(
     for z in request.bounds.min.z..=request.bounds.max.z {
         for x in request.bounds.min.x..=request.bounds.max.x {
             done += 1;
-            if done == total || done % 256 == 0 {
+            if done == total || done.is_multiple_of(256) {
                 report(observer, OperationPhase::Planning, done, total)?;
             }
             let Some((surface_y, top)) =
@@ -2084,7 +2084,7 @@ fn plan_biomes(
                     cells.push(cell);
                 }
                 done += 1;
-                if done == total || done % 64 == 0 {
+                if done == total || done.is_multiple_of(64) {
                     report(observer, OperationPhase::Planning, done, total)?;
                 }
             }
@@ -2150,7 +2150,7 @@ fn apply_biomes(
             )));
         }
         let done = index as u64 + 1;
-        if done == total || done % 64 == 0 {
+        if done == total || done.is_multiple_of(64) {
             if let Err(error) = report(observer, OperationPhase::Applying, done, total) {
                 restore_sections(world, dimension, &before);
                 return Err(error);
@@ -2294,7 +2294,7 @@ pub fn apply_with_observer(
             }
         }
         let done = index as u64 + 1;
-        if done == total || done % 1024 == 0 {
+        if done == total || done.is_multiple_of(1024) {
             if let Err(error) = report(observer, OperationPhase::Applying, done, total) {
                 restore_sections(world, operation.dimension(), &before);
                 return Err(error);

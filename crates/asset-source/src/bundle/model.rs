@@ -228,7 +228,7 @@ fn select_variant<'a>(
                 .is_some_and(|actual| actual.eq_ignore_ascii_case(expected))
         });
         if matches {
-            if best.map_or(true, |(specificity, _)| pairs.len() > specificity) {
+            if best.is_none_or(|(specificity, _)| pairs.len() > specificity) {
                 best = Some((pairs.len(), value));
             }
             continue;
@@ -242,7 +242,7 @@ fn select_variant<'a>(
             .iter()
             .map(|(name, expected)| default_value_score(name, expected))
             .sum();
-        if fallback.as_ref().map_or(true, |(best_score, best_key, _)| {
+        if fallback.as_ref().is_none_or(|(best_score, best_key, _)| {
             score > *best_score || (score == *best_score && key.as_str() < *best_key)
         }) {
             fallback = Some((score, key.as_str(), value));

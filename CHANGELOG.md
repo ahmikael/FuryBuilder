@@ -17,9 +17,15 @@ project schema, the world snapshot format and the MCP tool schema; see
 - Single-source application version in `version.json` with `pnpm version:check` and
   `pnpm version:set`; CI rejects drifting manifests.
 - Release versioning, migration and backup policies under `docs/release/`.
+- Dependency security and license audit: `cargo audit`, `pnpm audit`, a generated
+  third-party inventory, `pnpm licenses:check` in CI, and `scripts/verify-release-artifacts.ps1`
+  for installer hashes, versions and Authenticode status.
 
 ### Changed
 
+- Upgraded `zip` from 2.6.1 to 9.7.3 to fix six RustSec advisories
+  (RUSTSEC-2026-0367/0368/0369/0429/0545/0548).
+- Raised the minimum supported Rust version to 1.88, as required by `zip 9.7.3`.
 - Project schema migration now copies the original `project.json` byte for byte before
   applying the migration, instead of writing a rewritten document as the backup.
 - Per-save `project.json.bak-*` copies are now bounded to the newest five revisions.
@@ -28,6 +34,13 @@ project schema, the world snapshot format and the MCP tool schema; see
 
 - A failed migration or interrupted save can no longer leave an unbounded pile of manifest
   backups or a non-verbatim migration backup.
+
+### Security
+
+- Removed six known `zip` extraction advisories by upgrading to `zip 9.7.3`; the runtime
+  extractor keeps its own path, symlink, entry-count and size checks.
+- Added a repeatable dependency/license audit and an Authenticode verification gate. Beta
+  installers remain unsigned until an external code-signing certificate and key exist.
 
 ## [0.1.0] - 2026-11-19
 

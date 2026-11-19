@@ -79,11 +79,14 @@ pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
             archive.len()
         )));
     }
-    let version_names: Vec<String> = archive
-        .file_names()
-        .filter(|name| *name == "version.json")
-        .map(str::to_owned)
-        .collect();
+    let mut version_names: Vec<String> = Vec::new();
+    for name in archive.file_names() {
+        let name =
+            name.map_err(|error| ServerError::Archive(format!("{}: {error}", path.display())))?;
+        if name == "version.json" {
+            version_names.push(name.into_owned());
+        }
+    }
     if version_names.len() != 1 {
         return Err(ServerError::Archive(format!(
             "{} must contain exactly one root version.json",
@@ -128,9 +131,15 @@ pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
             )));
         }
     }
-    let has_server_main = archive.file_names().any(|name| {
-        name == "net/minecraft/bundler/Main.class" || name == "net/minecraft/server/Main.class"
-    });
+    let mut has_server_main = false;
+    for name in archive.file_names() {
+        let name =
+            name.map_err(|error| ServerError::Archive(format!("{}: {error}", path.display())))?;
+        if name == "net/minecraft/bundler/Main.class" || name == "net/minecraft/server/Main.class" {
+            has_server_main = true;
+            break;
+        }
+    }
     if !has_server_main {
         return Err(ServerError::Archive(format!(
             "{} has no Minecraft server main class; client and library JARs are refused",

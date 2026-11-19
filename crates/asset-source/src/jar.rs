@@ -98,7 +98,7 @@ pub(crate) fn inspect_client_jar(path: &Path, expected: &ExpectedClient) -> Clie
             report.errors.push(format!(
                 "client JAR SHA-1 is {actual_hash} but launcher metadata declares {expected_hash}"
             ));
-        } else if expected.size.map_or(true, |size| size == report.bytes) {
+        } else if expected.size.is_none_or(|size| size == report.bytes) {
             report.checksum_verified = true;
         }
     } else if expected.sha1.is_none() {

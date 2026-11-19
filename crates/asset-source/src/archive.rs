@@ -102,7 +102,7 @@ impl Archive {
         }
         if directory_offset
             .checked_add(directory_size)
-            .map_or(true, |end| end > file_len)
+            .is_none_or(|end| end > file_len)
         {
             return Err(ArchiveError::Invalid(
                 "central directory is outside the file",
@@ -224,7 +224,7 @@ impl Archive {
         let data_offset = header_offset + 30 + name_len + extra_len;
         if data_offset
             .checked_add(entry.compressed_size)
-            .map_or(true, |end| end > self.file_len)
+            .is_none_or(|end| end > self.file_len)
         {
             return Err(ArchiveError::Invalid("entry data is outside the file"));
         }

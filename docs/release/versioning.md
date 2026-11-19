@@ -74,14 +74,21 @@ through the backup.
 2. Run `pnpm version:set <version>`, then `pnpm version:check`.
 3. Run `pnpm typecheck`, `pnpm lint`, `pnpm test`, `cargo fmt --all -- --check`,
    `cargo clippy --workspace --all-targets -- -D warnings` and `cargo test --workspace`.
-4. Build both installers with `pnpm tauri:build`.
-5. Run `scripts/test-windows-installer.ps1` with the previous and new NSIS installers to
+4. Run `cargo audit`, `pnpm audit --prod`, `pnpm licenses:check` and refresh the inventory
+   with `pnpm licenses:update` when dependencies changed. Zero denied/unknown licenses are
+   required.
+5. Build both installers with `pnpm tauri:build`.
+6. Run `scripts/test-windows-installer.ps1` with the previous and new NSIS installers to
    prove clean install, update and uninstall. Record new SHA-256 values.
-6. Run `scripts/test_windows_installer_evidence.py` and the release documentation tests.
-7. Review the migrations section of [backup-policy.md](backup-policy.md) whenever a schema
+7. Run `scripts/verify-release-artifacts.ps1` on both packages. Use `-RequireSigned` for a
+   public stable release; an unsigned beta passes only when the limitation is recorded and
+   published hashes are available.
+8. Run `scripts/test_windows_installer_evidence.py`, `scripts/test_release_security.py` and
+   the remaining release documentation tests.
+9. Review the migrations section of [backup-policy.md](backup-policy.md) whenever a schema
    constant changed.
-8. Commit the version bump, changelog, lock file and evidence together; tag `v<version>`.
-9. Do not publish a package whose installer hash is missing from the release notes.
+10. Commit the version bump, changelog, lock file and evidence together; tag `v<version>`.
+11. Do not publish a package whose installer hash is missing from the release notes.
 
 ## Changelog policy
 

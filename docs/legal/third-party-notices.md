@@ -24,9 +24,30 @@ FuryBuilder code is MIT-licensed. This file tracks non-code obligations.
 
 ## JavaScript/Rust dependencies
 
-- Dependencies must use MIT-compatible licenses. A generated notice list is part of the
-  release checklist.
+- The maintained inventory and license policy result are in
+  [third-party-inventory.md](third-party-inventory.md) (generated) and
+  [third-party-inventory.json](third-party-inventory.json) (machine-readable).
+- `pnpm licenses:update` regenerates the inventory; `pnpm licenses:check` fails CI when a
+  dependency introduces a denied license or is missing license metadata.
+- Allowed licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Zlib, Unicode-3.0,
+  CC0-1.0, MIT-0, Unlicense, MPL-2.0 and CDLA-Permissive-2.0. Copyleft (GPL/AGPL/SSPL) and
+  non-commercial licenses are rejected. A dual license passes when at least one branch is
+  allowed.
+- MPL-2.0 components are used unmodified as dependencies; their source is available from the
+  published package archives and upstream projects. FuryBuilder does not relicense them.
+  Unicode-3.0 and CDLA-Permissive-2.0 components are data/license texts used under their terms.
 - Placeholder textures are original works created for FuryBuilder and licensed MIT.
+
+## Release security
+
+- Dependency advisories and signature status for the beta are recorded in
+  [security-audit.md](security-audit.md).
+- The beta installers are **not code-signed**. A code-signing certificate and a protected key
+  are external requirements; until they exist, releases are distributed with published
+  SHA-256 hashes and Windows SmartScreen warnings are documented.
+- `scripts/verify-release-artifacts.ps1` records hashes, versions and Authenticode status and
+  fails on an invalid or tampered signature. With `-RequireSigned` it also fails on unsigned
+  artifacts, which is the intended gate once signing is set up.
 
 ## References
 

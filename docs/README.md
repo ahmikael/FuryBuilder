@@ -22,6 +22,10 @@ milestone is complete.
 
 - [Release documentation](release/README.md) — versioning, changelog, migrations and backup
   policy for the Windows beta.
+- [Security audit](legal/security-audit.md) — dependency advisories, license policy,
+  Authenticode status and residual release risks.
+- [Third-party notices](legal/third-party-notices.md) and the generated
+  [dependency inventory](legal/third-party-inventory.md).
 
 ## Architecture and design
 

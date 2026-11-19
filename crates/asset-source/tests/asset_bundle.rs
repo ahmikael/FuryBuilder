@@ -140,8 +140,8 @@ fn transparent_png(width: u32, height: u32) -> Vec<u8> {
         encoder.set_depth(png::BitDepth::Eight);
         let mut writer = encoder.write_header().expect("png header");
         let mut rgba = vec![0u8; (width * height * 4) as usize];
-        for (index, px) in rgba.chunks_exact_mut(4).enumerate() {
-            if index % 2 == 0 {
+        for (index, px) in rgba.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+            if index.is_multiple_of(2) {
                 px.copy_from_slice(&[255, 255, 255, 0]);
             } else {
                 px.copy_from_slice(&[255, 255, 255, 255]);

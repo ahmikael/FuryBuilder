@@ -777,8 +777,10 @@ impl ParametricObject {
                     }
                     let is_door = z == 0 && x == door_x && level <= 2;
                     let is_corner = (x == 0 || x == width - 1) && (z == 0 || z == depth - 1);
-                    let is_window =
-                        level == window_level && !is_corner && !is_door && (x + z) % 2 == 0;
+                    let is_window = level == window_level
+                        && !is_corner
+                        && !is_door
+                        && (x + z).is_multiple_of(2);
                     let state = if is_door {
                         air.clone()
                     } else if is_window {

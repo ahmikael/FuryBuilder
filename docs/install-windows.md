@@ -42,7 +42,11 @@ format at a time; do not keep an NSIS and an MSI installation side by side.
 The beta packages are currently **not code-signed**. Windows SmartScreen may
 show an "Unknown publisher" warning; this is expected until a code-signing
 certificate is configured. Do not disable SmartScreen globally and do not run a
-package whose hash does not match the published value.
+package whose hash does not match the published value. The audit record and the
+reason signing is still pending are in
+[legal/security-audit.md](legal/security-audit.md). `scripts/verify-release-artifacts.ps1`
+reproduces the hash, version and signature check for a local build; `-RequireSigned`
+turns missing signatures into a failure once a certificate exists.
 
 ## Update
 
