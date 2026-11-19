@@ -23,6 +23,25 @@ tested; see `docs/testing/mcp-compatibility.md` for the matrix.
   build). The browser-only Vite preview has no Rust backend and cannot serve MCP.
 - A project open in FuryBuilder. The active project ID is part of every MCP call.
 
+### Try the bundled demo project first
+
+The repository contains a self-authored demo project at
+[`examples/furybuilder-demo.furybuilder`](../examples/furybuilder-demo.furybuilder) and real
+captures in [docs/demo](demo/README.md). It contains no Minecraft game files, so it works on a
+machine without Minecraft or Java.
+
+1. Copy the folder into `%APPDATA%\com.furybuilder.desktop\projects\` and open **FuryBuilder
+   Demo** in the Project manager.
+2. Leave the access mode at **Read-only** and connect a client as described below.
+3. Call `bridge_info`, `world_info`, `get_block` at `(0, 64, 0)` and `capture_viewport`.
+   Revision `1` must be reported consistently.
+4. The recorded result of this exact read-only check is
+   [`docs/demo/mcp-probe.json`](demo/mcp-probe.json), produced by
+   `mcp/bridge/scripts/probe-live-observation.mjs`.
+
+The demo is also the target used by the screenshot and project checks in
+[`scripts/test_demo_assets.py`](../scripts/test_demo_assets.py).
+
 While running, the app writes a discovery file:
 
 ```text

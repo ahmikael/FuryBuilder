@@ -32,6 +32,7 @@ const metadata = {
   resolution: [640, 480] as [number, number],
   renderer: "three-webgl2" as const,
   rendererSchema: 1,
+  textureSource: "placeholder" as const,
   legend: [],
   legendTruncated: false,
   requestedChunks: [],

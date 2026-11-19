@@ -12,6 +12,13 @@ export interface ObservationLegendEntry {
   color: string;
 }
 
+/**
+ * Which texture atlas produced the pixels. `minecraft_assets` means a verified bundle
+ * selected from the user's local installation; it never means Mojang files ship with
+ * FuryBuilder.
+ */
+export type CaptureTextureSource = "placeholder" | "minecraft_assets";
+
 export interface CaptureMetadata {
   schemaVersion: number;
   mode: "viewport";
@@ -21,6 +28,7 @@ export interface CaptureMetadata {
   resolution: [number, number];
   renderer: "three-webgl2";
   rendererSchema: number;
+  textureSource: CaptureTextureSource;
   legend: ObservationLegendEntry[];
   legendTruncated: boolean;
   requestedChunks: ChunkPos[];
@@ -47,6 +55,7 @@ export function buildCaptureMetadata(
   resolution: [number, number],
   requestedChunks: ChunkPos[],
   capturedAt: Date = new Date(),
+  textureSource: CaptureTextureSource = "placeholder",
 ): CaptureMetadata {
   const loadedChunks = world.loadedChunks();
   const missingChunks = world.missingChunks(requestedChunks);
@@ -57,6 +66,10 @@ export function buildCaptureMetadata(
     count,
     color: blockColor(state),
   }));
+  const textureNote =
+    textureSource === "minecraft_assets"
+      ? "Textures come from the user's locally configured Minecraft asset bundle; Mojang files are not embedded in FuryBuilder."
+      : "Textures are original FuryBuilder placeholders; no Minecraft assets are embedded.";
   return {
     schemaVersion: OBSERVATION_SCHEMA_VERSION,
     mode: "viewport",
@@ -66,6 +79,7 @@ export function buildCaptureMetadata(
     resolution,
     renderer: "three-webgl2",
     rendererSchema: RENDERER_SCHEMA_VERSION,
+    textureSource,
     legend,
     legendTruncated: sorted.length > MAX_LEGEND_ENTRIES,
     requestedChunks,
@@ -75,7 +89,7 @@ export function buildCaptureMetadata(
     capturedAt: capturedAt.toISOString(),
     notes: [
       "Image is a derived view; authoritative block data lives in the Rust world core.",
-      "Textures are original FuryBuilder placeholders, not Minecraft assets.",
+      textureNote,
       "Reproduce with the same worldRevision, camera pose, resolution and renderer schema.",
       "GPU anti-aliasing and driver differences are not modelled by the metadata.",
       "partial=true means requested chunks were not loaded when the image was captured.",

@@ -1,0 +1,334 @@
+{
+  "schemaVersion": 1,
+  "milestone": "M11",
+  "task": "demo-project-screenshots-mcp-setup",
+  "recordedAt": "2026-11-19T18:07:54.599Z",
+  "pass": true,
+  "environment": {
+    "platform": "Windows",
+    "origin": "http://127.0.0.1:1420",
+    "isolatedAppData": true,
+    "executable": "target/debug/furybuilder-desktop.exe",
+    "executableSha256": "209d4f0c849ad952494cbd4a7947f880cb2c1ac61402bf848b504014eae7eea9",
+    "appVersion": "0.1.0",
+    "webview2": null
+  },
+  "assets": {
+    "mode": "local_minecraft_installation",
+    "label": "12 models · 15 tex",
+    "savedSourceKind": "minecraft_root",
+    "savedSourceValid": true,
+    "mojangAssetsBundled": false,
+    "note": "Screenshots use the caller's legally installed local assets. No Mojang JAR, texture or asset file is copied into this repository or the demo project."
+  },
+  "project": {
+    "name": "FuryBuilder Demo",
+    "folder": "furybuilder-demo.furybuilder",
+    "projectId": "84e0bcc6-e61b-48e8-850d-7db9d8e96096",
+    "creationMode": "empty",
+    "targetMinecraftVersion": "1.21.4",
+    "targetDataVersion": 4189,
+    "worldRevision": 1,
+    "savedRevision": 1,
+    "chunks": 9,
+    "sections": 81,
+    "blockCount": 297719,
+    "dimensions": 3,
+    "worldFile": "data/world-00000000000000000001.fwl",
+    "worldBytes": 54237,
+    "worldChecksum": "a07aead74b2a96cab86c5356dc95923e1ac0b4165462d661ba2c5a304645a85c",
+    "manifestBytes": 736,
+    "manifestSha256": "7ab1499ab6a47615ef1ed14d5a6f55e1b16b93e3c034f0a1658a2d991eb63311",
+    "demoContent": "Seeded by the built-in load_demo_world scene; not Minecraft worldgen."
+  },
+  "screenshots": {
+    "editor": {
+      "file": "screenshots/editor.png",
+      "width": 1800,
+      "height": 1125,
+      "bytes": 875131,
+      "sha256": "269c849c8ea7c5424e83b0761c695b705b77a058ec1ac1a3a422be098fae35ca",
+      "kind": "desktop_app",
+      "worldRevision": 1
+    },
+    "viewport": {
+      "file": "screenshots/viewport.png",
+      "width": 1200,
+      "height": 825,
+      "bytes": 1147740,
+      "sha256": "f18aaa34a9b7dbbdc45a9ad3c71f00a63a7f4f2f4f036e3728359491b448f0c1",
+      "kind": "webgl_viewport",
+      "metadata": {
+        "schemaVersion": 1,
+        "mode": "viewport",
+        "dimension": "minecraft:overworld",
+        "worldRevision": 1,
+        "camera": {
+          "position": [30, 86, 30],
+          "target": [11.331732761697673, 73.55448850779844, 7.183228930963811],
+          "yaw": 0.685729510906286,
+          "pitch": -0.39946143444504556,
+          "fov": 70
+        },
+        "resolution": [1200, 825],
+        "renderer": "three-webgl2",
+        "rendererSchema": 1,
+        "textureSource": "minecraft_assets",
+        "legend": [
+          {
+            "state": "minecraft:stone",
+            "count": 288000,
+            "color": "#8b8b8b"
+          },
+          {
+            "state": "minecraft:dirt",
+            "count": 6828,
+            "color": "#6d4c33"
+          },
+          {
+            "state": "minecraft:grass_block",
+            "count": 2262,
+            "color": "#5f8f3e"
+          },
+          {
+            "state": "minecraft:oak_leaves",
+            "count": 126,
+            "color": "#3f6b2e"
+          },
+          {
+            "state": "minecraft:water",
+            "count": 126,
+            "color": "#3a6ed6"
+          },
+          {
+            "state": "minecraft:dark_oak_planks",
+            "count": 119,
+            "color": "#a97c4b"
+          },
+          {
+            "state": "minecraft:oak_planks",
+            "count": 116,
+            "color": "#a97c4b"
+          },
+          {
+            "state": "minecraft:stone_bricks",
+            "count": 81,
+            "color": "#8b8b8b"
+          },
+          {
+            "state": "minecraft:oak_stairs",
+            "count": 40,
+            "color": "#a97c4b"
+          },
+          {
+            "state": "minecraft:oak_log",
+            "count": 9,
+            "color": "#6b4f2f"
+          },
+          {
+            "state": "minecraft:glass",
+            "count": 8,
+            "color": "#c8e8f0"
+          },
+          {
+            "state": "minecraft:sea_lantern",
+            "count": 2,
+            "color": "#bfe6d8"
+          },
+          {
+            "state": "minecraft:torch",
+            "count": 2,
+            "color": "#ffcf4d"
+          }
+        ],
+        "legendTruncated": false,
+        "requestedChunks": [
+          {
+            "x": -1,
+            "z": -1
+          },
+          {
+            "x": -1,
+            "z": 0
+          },
+          {
+            "x": -1,
+            "z": 1
+          },
+          {
+            "x": 0,
+            "z": -1
+          },
+          {
+            "x": 0,
+            "z": 0
+          },
+          {
+            "x": 0,
+            "z": 1
+          },
+          {
+            "x": 1,
+            "z": -1
+          },
+          {
+            "x": 1,
+            "z": 0
+          },
+          {
+            "x": 1,
+            "z": 1
+          }
+        ],
+        "loadedChunks": [
+          {
+            "x": -1,
+            "z": -1
+          },
+          {
+            "x": -1,
+            "z": 0
+          },
+          {
+            "x": -1,
+            "z": 1
+          },
+          {
+            "x": 0,
+            "z": -1
+          },
+          {
+            "x": 0,
+            "z": 0
+          },
+          {
+            "x": 0,
+            "z": 1
+          },
+          {
+            "x": 1,
+            "z": -1
+          },
+          {
+            "x": 1,
+            "z": 0
+          },
+          {
+            "x": 1,
+            "z": 1
+          }
+        ],
+        "missingChunks": [],
+        "partial": false,
+        "capturedAt": "2026-11-19T18:07:48.337Z",
+        "notes": [
+          "Image is a derived view; authoritative block data lives in the Rust world core.",
+          "Textures come from the user's locally configured Minecraft asset bundle; Mojang files are not embedded in FuryBuilder.",
+          "Reproduce with the same worldRevision, camera pose, resolution and renderer schema.",
+          "GPU anti-aliasing and driver differences are not modelled by the metadata.",
+          "partial=true means requested chunks were not loaded when the image was captured."
+        ]
+      }
+    },
+    "mcpAccess": {
+      "file": "screenshots/mcp-access.png",
+      "width": 1800,
+      "height": 1125,
+      "bytes": 424843,
+      "sha256": "40aa23106feaa10e53d23a368cd945c02cefe4b79ef31f7af8305069a4a45a5b",
+      "kind": "mcp_access_dialog"
+    },
+    "observationTopDown": {
+      "file": "screenshots/observation-top-down.png",
+      "width": 48,
+      "height": 48,
+      "bytes": 9332,
+      "sha256": "030c2e5a7de3b86b961c4d8ec9f1a09859dde5f40be98cb996e206d18d2f596d",
+      "kind": "deterministic_observation",
+      "mode": "top_down",
+      "worldRevision": 1,
+      "bounds": {
+        "min": {
+          "x": -16,
+          "y": 60,
+          "z": -16
+        },
+        "max": {
+          "x": 31,
+          "y": 72,
+          "z": 31
+        }
+      },
+      "legendEntries": 6,
+      "partial": false,
+      "warnings": []
+    }
+  },
+  "mcp": {
+    "probeFile": "mcp-probe.json",
+    "protocolEra": "modern",
+    "worldRevision": 1,
+    "block": {
+      "type": "block",
+      "worldRevision": 1,
+      "state": "minecraft:grass_block",
+      "propertyCount": 0
+    },
+    "region": {
+      "type": "region_summary",
+      "worldRevision": 1,
+      "dimension": "minecraft:overworld",
+      "bounds": {
+        "max": {
+          "x": 1,
+          "y": 65,
+          "z": 1
+        },
+        "min": {
+          "x": -1,
+          "y": 63,
+          "z": -1
+        }
+      },
+      "blocks": 27,
+      "nonAirBlocks": 18,
+      "paletteEntries": 3,
+      "paletteTotal": 27
+    },
+    "staleRejection": {
+      "isError": true,
+      "code": "revision_mismatch",
+      "requestedRevision": 2,
+      "actualRevision": 1
+    },
+    "capture": {
+      "mimeType": "image/png",
+      "bytes": 1147930,
+      "sha256": "af819065cb0977d94b4db8a4f0a91042d000c384c90548a6cb90519d0fd2a1d2",
+      "imageMatchesMetadata": true,
+      "metadata": {
+        "dimension": "minecraft:overworld",
+        "worldRevision": 1,
+        "partial": false,
+        "missingChunks": 0,
+        "loadedChunks": 9,
+        "legendEntries": 13,
+        "legendTruncated": false
+      },
+      "verification": {
+        "authoritativeRevision": 1,
+        "partial": false,
+        "renderRevision": 1,
+        "stale": false
+      }
+    }
+  },
+  "consoleErrors": [],
+  "notes": [
+    "The demo project contains only FuryBuilder block-state data, a manifest and an empty source manifest.",
+    "The project folder is renamed from the app-generated folder to furybuilder-demo.furybuilder; the display name stays FuryBuilder Demo.",
+    "Screenshots and the MCP capture are real WebView2/WebGL output from this run, not mockups.",
+    "The demo scene is deterministic demo content, not a Minecraft world and not evidence of vanilla worldgen parity.",
+    "No code-signing or Minecraft redistribution claim is made by this evidence."
+  ]
+}

@@ -20,9 +20,14 @@ project schema, the world snapshot format and the MCP tool schema; see
 - Dependency security and license audit: `cargo audit`, `pnpm audit`, a generated
   third-party inventory, `pnpm licenses:check` in CI, and `scripts/verify-release-artifacts.ps1`
   for installer hashes, versions and Authenticode status.
+- Bundled self-authored demo project (`examples/furybuilder-demo.furybuilder`), real WebView2
+  screenshots, a deterministic observation map and a recorded read-only MCP probe in
+  `docs/demo/`. The demo contains no Mojang assets and opens without Minecraft or Java.
 
 ### Changed
 
+- Viewport capture metadata now names its texture source (`placeholder` or
+  `minecraft_assets`) instead of always claiming placeholder textures.
 - Upgraded `zip` from 2.6.1 to 9.7.3 to fix six RustSec advisories
   (RUSTSEC-2026-0367/0368/0369/0429/0545/0548).
 - Raised the minimum supported Rust version to 1.88, as required by `zip 9.7.3`.

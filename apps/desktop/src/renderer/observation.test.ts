@@ -39,9 +39,30 @@ describe("observation metadata", () => {
     expect(metadata.resolution).toEqual([1280, 720]);
     expect(metadata.renderer).toBe("three-webgl2");
     expect(metadata.rendererSchema).toBe(1);
+    expect(metadata.textureSource).toBe("placeholder");
     expect(metadata.capturedAt).toBe("2026-11-17T12:00:00.000Z");
     expect(metadata.partial).toBe(false);
     expect(metadata.notes.length).toBeGreaterThanOrEqual(3);
+    expect(metadata.notes.join(" ")).toContain("original FuryBuilder placeholders");
+  });
+
+  it("labels a local Minecraft asset bundle without claiming that Mojang files are shipped", () => {
+    const builder = new SnapshotBuilder();
+    builder.setBlock(0, 64, 0, "minecraft:stone");
+    const metadata = buildCaptureMetadata(
+      worldFrom(builder),
+      camera,
+      [640, 480],
+      [{ x: 0, z: 0 }],
+      undefined,
+      "minecraft_assets",
+    );
+
+    expect(metadata.textureSource).toBe("minecraft_assets");
+    const notes = metadata.notes.join(" ");
+    expect(notes).toContain("locally configured Minecraft asset bundle");
+    expect(notes).toContain("not embedded in FuryBuilder");
+    expect(notes).not.toContain("original FuryBuilder placeholders");
   });
 
   it("builds a sorted legend with approximate colours", () => {

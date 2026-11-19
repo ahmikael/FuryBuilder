@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-19",
+  "result": "passed",
+  "protocolEra": "modern",
+  "projectId": "84e0bcc6-e61b-48e8-850d-7db9d8e96096",
+  "worldRevision": 1,
+  "observations": {
+    "block": {
+      "type": "block",
+      "worldRevision": 1,
+      "state": "minecraft:grass_block",
+      "propertyCount": 0
+    },
+    "region": {
+      "type": "region_summary",
+      "worldRevision": 1,
+      "dimension": "minecraft:overworld",
+      "bounds": {
+        "max": {
+          "x": 1,
+          "y": 65,
+          "z": 1
+        },
+        "min": {
+          "x": -1,
+          "y": 63,
+          "z": -1
+        }
+      },
+      "blocks": 27,
+      "nonAirBlocks": 18,
+      "paletteEntries": 3,
+      "paletteTotal": 27
+    },
+    "staleRejection": {
+      "isError": true,
+      "code": "revision_mismatch",
+      "requestedRevision": 2,
+      "actualRevision": 1
+    },
+    "capture": {
+      "mimeType": "image/png",
+      "bytes": 1147930,
+      "sha256": "af819065cb0977d94b4db8a4f0a91042d000c384c90548a6cb90519d0fd2a1d2",
+      "imageMatchesMetadata": true,
+      "metadata": {
+        "dimension": "minecraft:overworld",
+        "worldRevision": 1,
+        "partial": false,
+        "missingChunks": 0,
+        "loadedChunks": 9,
+        "legendEntries": 13,
+        "legendTruncated": false
+      },
+      "verification": {
+        "authoritativeRevision": 1,
+        "partial": false,
+        "renderRevision": 1,
+        "stale": false
+      }
+    }
+  }
+}

@@ -13,6 +13,15 @@ Application API over MCP.
 - **License:** MIT for FuryBuilder code. Minecraft game assets are **not** distributed with
   this repository; see `docs/legal/third-party-notices.md`.
 
+## Demo
+
+![FuryBuilder editor with the bundled demo project](docs/demo/screenshots/editor.png)
+
+A self-authored demo project, real WebView2 screenshots, a deterministic observation map and
+a recorded read-only MCP probe are in [docs/demo](docs/demo/README.md). The project itself
+contains no Minecraft game files and works without Minecraft or Java; screenshots were rendered
+with the recorder's locally installed 1.21.4 assets.
+
 ## Repository layout
 
 ```text

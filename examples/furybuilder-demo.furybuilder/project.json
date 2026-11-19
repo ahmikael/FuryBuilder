@@ -1,0 +1,26 @@
+{
+  "projectSchemaVersion": 1,
+  "projectId": "84e0bcc6-e61b-48e8-850d-7db9d8e96096",
+  "name": "FuryBuilder Demo",
+  "creationMode": "empty",
+  "targetMinecraftVersion": "1.21.4",
+  "targetDataVersion": 4189,
+  "worldRevision": 1,
+  "worldFile": "data/world-00000000000000000001.fwl",
+  "worldChecksum": "a07aead74b2a96cab86c5356dc95923e1ac0b4165462d661ba2c5a304645a85c",
+  "worldBytes": 54237,
+  "createdAtMs": 1795111651546,
+  "updatedAtMs": 1795111655494,
+  "lastSavedAtMs": 1795111655494,
+  "lastSaveKind": "manual",
+  "editorState": {
+    "selectedDimension": "minecraft:overworld",
+    "loadRadius": 1
+  },
+  "source": {
+    "kind": "generated",
+    "immutable": true
+  },
+  "createdBy": "FuryBuilder",
+  "appVersion": "0.1.0"
+}

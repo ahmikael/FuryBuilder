@@ -681,6 +681,8 @@ export class ViewportRenderer {
       this.cameraPose(),
       [canvas.width, canvas.height],
       this.requestedChunks,
+      undefined,
+      this.hasAssetBundle ? "minecraft_assets" : "placeholder",
     );
     return { dataUrl, metadata };
   }
