@@ -175,6 +175,55 @@ desktop keeps at most 16 active jobs and 256 retained records. If the Job API ca
 reached, the three job tools return `job_api_unavailable` instead of fabricating a job; use
 the synchronous tools in that case.
 
+## Optional MCP Apps observation preview
+
+The bridge implements the stable MCP Apps extension `io.modelcontextprotocol/ui`
+(SEP-1865, protocol revision `2026-01-26`) as an optional presentation layer for
+`observe`. It is negotiated, never assumed. A host opts in by declaring the extension
+and the HTML MIME type during connection:
+
+```json
+{
+  "capabilities": {
+    "extensions": {
+      "io.modelcontextprotocol/ui": {
+        "mimeTypes": ["text/html;profile=mcp-app"]
+      }
+    }
+  }
+}
+```
+
+When the extension is negotiated:
+
+- `observe` carries `_meta.ui.resourceUri = "ui://furybuilder/observation"` and
+  `_meta.ui.visibility = ["model", "app"]`;
+- `resources/list` includes `ui://furybuilder/observation` and `resources/read` returns
+  a static HTML view with MIME type `text/html;profile=mcp-app`;
+- the view performs the MCP Apps `ui/initialize` handshake and renders the PNG and
+  metadata from the ordinary `observe` result.
+
+The view is deliberately static and self-contained: no external URLs, scripts, fonts,
+frames or network access. Its resource metadata declares empty CSP allowlists and
+`prefersBorder: true`. It accepts only a base64 PNG data URL from the tool result,
+enforces a payload limit and writes all metadata through `textContent`, never through
+`innerHTML`. The extension does not change permissions, confirmations or world access;
+it only changes how an observation result may be presented.
+
+When the extension is absent or does not list the MIME type, nothing else changes:
+`observe` still returns the ordinary image block plus JSON metadata, and
+`capture_viewport` remains the screenshot fallback. `bridge_info.bridge.apps` reports
+`mode: "apps"` with `apps_negotiated`, or `mode: "fallback"` with
+`client_did_not_declare_apps`/`client_mime_type_missing` and the fallback tools. This is
+a normal result, not an error.
+
+**Evaluation status (M9.19):** the protocol path is tested through a real stdio bridge
+with an official SDK client that declares the extension, for both the modern and legacy
+eras. MCP Apps is a host-rendering feature; inline rendering depends on the client and
+is not a release gate. VS Code 1.147 and other published hosts advertise MCP Apps
+support, but interactive chat rendering was not automated in this repository. Clients
+that do not support Apps keep the complete image/JSON fallback.
+
 ## Access modes and limits
 
 Click **AI / MCP** in the FuryBuilder toolbar. The dialog says that the window is the
@@ -291,13 +340,15 @@ metadata/digest consistency. Both are read-only.
 
 ## Known limitations
 
-- OpenCode 2.3.2 is the only real external client exercised. Tasks and Apps extensions are
-  reported as options but not implemented; the fallback job tools are the supported path.
+- OpenCode 2.3.2 is the only real external client exercised end-to-end. Tasks remains an
+  explicit option with fallback job tools; MCP Apps is implemented and negotiated by the
+  bridge, but inline rendering depends on the host and is not a release gate.
 - Screenshots require a mounted, visible editor viewport. A minimized or headless window is
   not promised to capture.
-- The observation API currently has one image mode (`viewport`) plus structured summary and
-  block/region reads. Heightmap, top-down, material/biome maps, cross-sections and revision
-  diffs are later M9 work.
+- The observation API supports six deterministic map modes (top-down, heightmap,
+  material, biome, cross-section and revision diff) plus structured summary and
+  block/region reads. Inline MCP Apps rendering is an optional presentation layer over the
+  same PNG result.
 - The discovery token relies on the per-user app-data directory ACL; stronger named-pipe
   ACLs remain a security review item.
 - MCP access changes are not persisted across restarts, and the activity journal is

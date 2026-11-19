@@ -6,6 +6,7 @@ import {
 import * as z from "zod/v4";
 
 import {
+  BRIDGE_IMPLEMENTS_APPS,
   BRIDGE_IMPLEMENTS_TASKS,
   BRIDGE_INSTRUCTIONS,
   BRIDGE_NAME,
@@ -16,6 +17,14 @@ import {
   resolveTasksSupport,
   type ProtocolEra,
 } from "./capabilities.js";
+import {
+  APPS_EXTENSION_ID,
+  APPS_RESOURCE_MIME_TYPE,
+  OBSERVATION_APP_URI,
+  OBSERVATION_TOOL_NAME,
+  registerObservationApp,
+  resolveAppsSupport,
+} from "./apps.js";
 import { evaluateContext } from "./context.js";
 import { BRIDGE_INSTANCE_ID, BRIDGE_STARTED_AT_MS } from "./instance.js";
 import { registerJobTools, JOB_TOOL_NAMES } from "./job-tools.js";
@@ -55,6 +64,12 @@ export function createFuryBuilderServer(
   registerJobTools(server, jobs);
   registerReadTools(server);
   registerWriteTools(server);
+  registerObservationApp(server);
+  server.server.registerCapabilities({
+    extensions: {
+      [APPS_EXTENSION_ID]: { mimeTypes: [APPS_RESOURCE_MIME_TYPE] },
+    },
+  });
 
   server.registerTool(
     "bridge_info",
@@ -79,7 +94,9 @@ export function createFuryBuilderServer(
       const era: ProtocolEra = envelope ? "modern" : "legacy";
       const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? null;
       const clientCapabilities =
-        envelope?.[CLIENT_CAPABILITIES_META_KEY] ?? null;
+        envelope?.[CLIENT_CAPABILITIES_META_KEY] ??
+        server.server.getClientCapabilities() ??
+        null;
       const desktop = await probeDesktop();
       const jobBackendConnected =
         jobs.connected && desktop.connected && desktop.jobs?.available === true;
@@ -87,6 +104,7 @@ export function createFuryBuilderServer(
         clientCapabilities,
         jobBackendConnected,
       });
+      const apps = resolveAppsSupport({ clientCapabilities });
       const activeContext = desktop.connected
         ? {
             projectId: desktop.project.projectId,
@@ -114,6 +132,16 @@ export function createFuryBuilderServer(
                   legacyFallback: true,
                   contextPolicy: "explicit-per-request",
                   optionalExtensions: OPTIONAL_EXTENSIONS,
+                  apps: {
+                    ...apps,
+                    bridgeImplementsApps: BRIDGE_IMPLEMENTS_APPS,
+                    resourceUri: OBSERVATION_APP_URI,
+                    tool: OBSERVATION_TOOL_NAME,
+                    fallback: {
+                      tools: [OBSERVATION_TOOL_NAME, "capture_viewport"],
+                      content: ["image/png", "application/json"],
+                    },
+                  },
                   jobs: {
                     backendConnected: jobBackendConnected,
                     fallbackTools: JOB_TOOL_NAMES,

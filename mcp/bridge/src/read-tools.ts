@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import * as z from "zod/v4";
 
 import { requireProjectId } from "./capabilities.js";
+import { OBSERVATION_TOOL_META } from "./apps.js";
 import { callDesktop } from "./desktop-client.js";
 import { errorResult, textResult, withRevision } from "./tool-result.js";
 
@@ -77,7 +78,10 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await callDesktop("world_info", withRevision({ projectId }, world_revision)),
+          await callDesktop(
+            "world_info",
+            withRevision({ projectId }, world_revision),
+          ),
         );
       } catch (error) {
         return errorResult(error);
@@ -98,7 +102,9 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await queryDesktop(projectId, world_revision, { type: "workspace_policy" }),
+          await queryDesktop(projectId, world_revision, {
+            type: "workspace_policy",
+          }),
         );
       } catch (error) {
         return errorResult(error);
@@ -119,7 +125,10 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await callDesktop("list_templates", withRevision({ projectId }, world_revision)),
+          await callDesktop(
+            "list_templates",
+            withRevision({ projectId }, world_revision),
+          ),
         );
       } catch (error) {
         return errorResult(error);
@@ -139,7 +148,11 @@ export function registerReadTools(server: McpServer): void {
     async ({ project_id, world_revision }) => {
       try {
         const projectId = requireProjectId(project_id);
-        return textResult(await queryDesktop(projectId, world_revision, { type: "scene_objects" }));
+        return textResult(
+          await queryDesktop(projectId, world_revision, {
+            type: "scene_objects",
+          }),
+        );
       } catch (error) {
         return errorResult(error);
       }
@@ -190,7 +203,9 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await queryDesktop(projectId, world_revision, { type: "parametric_objects" }),
+          await queryDesktop(projectId, world_revision, {
+            type: "parametric_objects",
+          }),
         );
       } catch (error) {
         return errorResult(error);
@@ -471,9 +486,13 @@ export function registerReadTools(server: McpServer): void {
       try {
         const projectId = requireProjectId(project_id);
         return textResult(
-          await callDesktop("get_camera", withRevision({ projectId }, world_revision), {
-            timeoutMs: RENDER_TIMEOUT_MS,
-          }),
+          await callDesktop(
+            "get_camera",
+            withRevision({ projectId }, world_revision),
+            {
+              timeoutMs: RENDER_TIMEOUT_MS,
+            },
+          ),
         );
       } catch (error) {
         return errorResult(error);
@@ -511,23 +530,42 @@ export function registerReadTools(server: McpServer): void {
           .int()
           .nonnegative()
           .optional()
-          .describe("Required for revision_diff; the current world revision is the upper bound."),
+          .describe(
+            "Required for revision_diff; the current world revision is the upper bound.",
+          ),
       }),
       annotations: readOnly,
+      _meta: OBSERVATION_TOOL_META,
     },
-    async ({ project_id, world_revision, dimension, bounds, mode, slice, from_revision }) => {
+    async ({
+      project_id,
+      world_revision,
+      dimension,
+      bounds,
+      mode,
+      slice,
+      from_revision,
+    }) => {
       try {
         const projectId = requireProjectId(project_id);
-        const observation: Record<string, unknown> = { dimension, bounds, mode };
+        const observation: Record<string, unknown> = {
+          dimension,
+          bounds,
+          mode,
+        };
         if (slice !== undefined) observation.slice = slice;
-        if (from_revision !== undefined) observation.fromRevision = from_revision;
+        if (from_revision !== undefined)
+          observation.fromRevision = from_revision;
         const result = (await callDesktop(
           "observe",
           withRevision({ projectId, observation }, world_revision),
           { timeoutMs: RENDER_TIMEOUT_MS },
         )) as Record<string, unknown>;
         const dataUrl = result.image;
-        if (typeof dataUrl !== "string" || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+        if (
+          typeof dataUrl !== "string" ||
+          !dataUrl.startsWith(PNG_DATA_URL_PREFIX)
+        ) {
           return {
             isError: true,
             content: [
@@ -557,7 +595,9 @@ export function registerReadTools(server: McpServer): void {
                   image: {
                     mimeType: "image/png",
                     bytes: imageBytes.byteLength,
-                    sha256: createHash("sha256").update(imageBytes).digest("hex"),
+                    sha256: createHash("sha256")
+                      .update(imageBytes)
+                      .digest("hex"),
                   },
                 },
                 null,
@@ -617,7 +657,9 @@ export function registerReadTools(server: McpServer): void {
         floating_fix: z
           .enum(["none", "remove", "support"])
           .optional()
-          .describe("Suggested repair mode for floating blocks; it is never auto-applied."),
+          .describe(
+            "Suggested repair mode for floating blocks; it is never auto-applied.",
+          ),
       }),
       annotations: readOnly,
     },
@@ -636,7 +678,8 @@ export function registerReadTools(server: McpServer): void {
         const projectId = requireProjectId(project_id);
         const request: Record<string, unknown> = { dimension, bounds };
         if (rules !== undefined) request.rules = rules;
-        if (allowed_bounds !== undefined) request.allowedBounds = allowed_bounds;
+        if (allowed_bounds !== undefined)
+          request.allowedBounds = allowed_bounds;
         if (path !== undefined) {
           request.path = {
             from: path.from,
@@ -684,13 +727,19 @@ export function registerReadTools(server: McpServer): void {
     async ({ project_id, dimension, world_revision }) => {
       try {
         const projectId = requireProjectId(project_id);
-        const payload: Record<string, unknown> = withRevision({ projectId }, world_revision);
+        const payload: Record<string, unknown> = withRevision(
+          { projectId },
+          world_revision,
+        );
         if (dimension !== undefined) payload.dimension = dimension;
         const result = (await callDesktop("capture_viewport", payload, {
           timeoutMs: RENDER_TIMEOUT_MS,
         })) as Record<string, unknown>;
         const dataUrl = result.dataUrl;
-        if (typeof dataUrl !== "string" || !dataUrl.startsWith(PNG_DATA_URL_PREFIX)) {
+        if (
+          typeof dataUrl !== "string" ||
+          !dataUrl.startsWith(PNG_DATA_URL_PREFIX)
+        ) {
           return {
             isError: true,
             content: [
@@ -722,7 +771,9 @@ export function registerReadTools(server: McpServer): void {
                   image: {
                     mimeType: "image/png",
                     bytes: imageBytes.byteLength,
-                    sha256: createHash("sha256").update(imageBytes).digest("hex"),
+                    sha256: createHash("sha256")
+                      .update(imageBytes)
+                      .digest("hex"),
                   },
                 },
                 null,

@@ -12,7 +12,7 @@ export type ProtocolEra = "modern" | "legacy";
  */
 export const OPTIONAL_EXTENSIONS = {
   tasks: false,
-  apps: false,
+  apps: true,
 } as const;
 
 /**
@@ -21,6 +21,13 @@ export const OPTIONAL_EXTENSIONS = {
  * the ordinary start/status/cancel tools, which never invent a job or a result.
  */
 export const BRIDGE_IMPLEMENTS_TASKS = false;
+
+/**
+ * MCP Apps is implemented only as an optional observation preview. The observe tool
+ * always returns the ordinary PNG image and JSON metadata, so clients without the
+ * extension keep working unchanged.
+ */
+export const BRIDGE_IMPLEMENTS_APPS = true;
 
 export type TasksFallbackReason =
   | "client_did_not_declare_tasks"

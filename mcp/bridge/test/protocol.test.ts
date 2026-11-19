@@ -5,14 +5,29 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  APPS_EXTENSION_ID,
+  APPS_RESOURCE_MIME_TYPE,
+  OBSERVATION_APP_HTML,
+  OBSERVATION_APP_URI,
+} from "../src/apps.js";
 import { MODERN_PROTOCOL_VERSION } from "../src/capabilities.js";
 
 const bridgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const clients: Client[] = [];
 // Keep the diagnostic deterministic even when the developer has the desktop app running.
 const missingRuntime = join(tmpdir(), "furybuilder-bridge-no-runtime.json");
+const appsCapabilities = {
+  extensions: {
+    [APPS_EXTENSION_ID]: { mimeTypes: [APPS_RESOURCE_MIME_TYPE] },
+  },
+};
 
-function bridgeEnv(overrides: Record<string, string> = {}): Record<string, string> {
+type ClientOptions = NonNullable<ConstructorParameters<typeof Client>[1]>;
+
+function bridgeEnv(
+  overrides: Record<string, string> = {},
+): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
@@ -21,7 +36,9 @@ function bridgeEnv(overrides: Record<string, string> = {}): Record<string, strin
   return { ...env, ...overrides };
 }
 
-export function stdioTransport(runtimePath = missingRuntime): StdioClientTransport {
+export function stdioTransport(
+  runtimePath = missingRuntime,
+): StdioClientTransport {
   return new StdioClientTransport({
     command: process.execPath,
     args: ["--import", "tsx", "src/main.ts"],
@@ -31,13 +48,23 @@ export function stdioTransport(runtimePath = missingRuntime): StdioClientTranspo
   });
 }
 
-async function connect(modern: boolean): Promise<Client> {
+async function connect(
+  modern: boolean,
+  capabilities?: ClientOptions["capabilities"],
+): Promise<Client> {
+  const options: ClientOptions = {};
+  if (modern) {
+    options.versionNegotiation = { mode: { pin: MODERN_PROTOCOL_VERSION } };
+  }
+  if (capabilities !== undefined) {
+    options.capabilities = capabilities;
+  }
   const client = new Client(
     {
       name: modern ? "modern-test-client" : "legacy-test-client",
       version: "1.0.0",
     },
-    modern ? { versionNegotiation: { mode: { pin: MODERN_PROTOCOL_VERSION } } } : undefined,
+    options,
   );
   clients.push(client);
   await client.connect(stdioTransport());
@@ -46,7 +73,8 @@ async function connect(modern: boolean): Promise<Client> {
 
 function textResult(result: Awaited<ReturnType<Client["callTool"]>>): unknown {
   const text = result.content.find((block) => block.type === "text");
-  if (!text || text.type !== "text") throw new Error("bridge_info returned no text");
+  if (!text || text.type !== "text")
+    throw new Error("bridge_info returned no text");
   return JSON.parse(text.text);
 }
 
@@ -112,7 +140,7 @@ describe("MCP protocol negotiation", () => {
     expect(info.bridge.contextPolicy).toBe("explicit-per-request");
     expect(info.bridge.optionalExtensions).toEqual({
       tasks: false,
-      apps: false,
+      apps: true,
     });
     expect(info.bridge.jobs).toMatchObject({
       backendConnected: false,
@@ -146,6 +174,124 @@ describe("MCP protocol negotiation", () => {
       projectId: "project-modern",
       worldRevision: 12,
       protocolEra: "modern",
+    });
+  });
+
+  it("negotiates MCP Apps and serves the observation resource when the client declares it", async () => {
+    const client = await connect(true, appsCapabilities);
+    expect(client.getServerCapabilities()?.extensions).toMatchObject({
+      [APPS_EXTENSION_ID]: { mimeTypes: [APPS_RESOURCE_MIME_TYPE] },
+    });
+
+    const info = textResult(
+      await client.callTool({
+        name: "bridge_info",
+        arguments: { project_id: "project-apps" },
+      }),
+    ) as {
+      bridge: {
+        apps: {
+          mode: string;
+          reason: string;
+          extensionAdvertised: boolean;
+          bridgeImplementsApps: boolean;
+          resourceUri: string;
+          tool: string;
+          fallback: { tools: string[]; content: string[] };
+        };
+      };
+    };
+    expect(info.bridge.apps).toMatchObject({
+      mode: "apps",
+      reason: "apps_negotiated",
+      extensionAdvertised: true,
+      bridgeImplementsApps: true,
+      resourceUri: OBSERVATION_APP_URI,
+      tool: "observe",
+      fallback: {
+        tools: ["observe", "capture_viewport"],
+        content: ["image/png", "application/json"],
+      },
+    });
+
+    const { resources } = await client.listResources();
+    expect(
+      resources.find((resource) => resource.uri === OBSERVATION_APP_URI),
+    ).toMatchObject({
+      name: "furybuilder-observation",
+      mimeType: APPS_RESOURCE_MIME_TYPE,
+      title: "FuryBuilder observation preview",
+    });
+
+    const read = await client.readResource({ uri: OBSERVATION_APP_URI });
+    const content = read.contents[0];
+    expect(content).toMatchObject({
+      uri: OBSERVATION_APP_URI,
+      mimeType: APPS_RESOURCE_MIME_TYPE,
+    });
+    expect(content && "text" in content ? content.text : "").toBe(
+      OBSERVATION_APP_HTML,
+    );
+    expect(
+      (
+        content?._meta as
+          { ui?: { csp?: { resourceDomains?: string[] } } } | undefined
+      )?.ui?.csp?.resourceDomains,
+    ).toEqual([]);
+
+    const { tools } = await client.listTools();
+    const observe = tools.find((tool) => tool.name === "observe");
+    expect(observe?._meta).toEqual({
+      ui: { resourceUri: OBSERVATION_APP_URI, visibility: ["model", "app"] },
+    });
+  });
+
+  it("keeps the ordinary observation fallback when the client does not declare Apps", async () => {
+    const client = await connect(true);
+    const info = textResult(
+      await client.callTool({
+        name: "bridge_info",
+        arguments: { project_id: "project-no-apps" },
+      }),
+    ) as {
+      bridge: {
+        apps: { mode: string; reason: string; extensionAdvertised: boolean };
+      };
+    };
+    expect(info.bridge.apps).toMatchObject({
+      mode: "fallback",
+      reason: "client_did_not_declare_apps",
+      extensionAdvertised: false,
+    });
+
+    const { resources } = await client.listResources();
+    expect(resources.map((resource) => resource.uri)).toContain(
+      OBSERVATION_APP_URI,
+    );
+    const { tools } = await client.listTools();
+    const observe = tools.find((tool) => tool.name === "observe");
+    expect(observe?.annotations?.readOnlyHint).toBe(true);
+    expect(observe?._meta).toEqual({
+      ui: { resourceUri: OBSERVATION_APP_URI, visibility: ["model", "app"] },
+    });
+  });
+
+  it("negotiates Apps from legacy initialize capabilities as well", async () => {
+    const client = await connect(false, appsCapabilities);
+    expect(client.getProtocolEra()).toBe("legacy");
+    const info = textResult(
+      await client.callTool({
+        name: "bridge_info",
+        arguments: { project_id: "project-legacy-apps" },
+      }),
+    ) as {
+      bridge: { apps: { mode: string; reason: string } };
+      request: { protocolEra: string };
+    };
+    expect(info.request.protocolEra).toBe("legacy");
+    expect(info.bridge.apps).toMatchObject({
+      mode: "apps",
+      reason: "apps_negotiated",
     });
   });
 
@@ -202,7 +348,9 @@ describe("MCP protocol negotiation", () => {
     const client = await connect(false);
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name);
-    expect(names).toEqual(expect.arrayContaining(["start_job", "get_job_status", "cancel_job"]));
+    expect(names).toEqual(
+      expect.arrayContaining(["start_job", "get_job_status", "cancel_job"]),
+    );
     const startJob = tools.find((tool) => tool.name === "start_job");
     expect(startJob).toBeDefined();
     expect(JSON.stringify(startJob?.inputSchema)).toContain("world_revision");
@@ -219,7 +367,9 @@ describe("MCP protocol negotiation", () => {
     });
     expect(started.isError).toBe(true);
     const startText = started.content.find((block) => block.type === "text");
-    expect(startText?.type === "text" ? startText.text : "").toMatch(/^job_api_unavailable:/);
+    expect(startText?.type === "text" ? startText.text : "").toMatch(
+      /^job_api_unavailable:/,
+    );
 
     const status = await client.callTool({
       name: "get_job_status",
@@ -227,7 +377,9 @@ describe("MCP protocol negotiation", () => {
     });
     expect(status.isError).toBe(true);
     const statusText = status.content.find((block) => block.type === "text");
-    expect(statusText?.type === "text" ? statusText.text : "").toMatch(/^job_api_unavailable:/);
+    expect(statusText?.type === "text" ? statusText.text : "").toMatch(
+      /^job_api_unavailable:/,
+    );
 
     const cancelled = await client.callTool({
       name: "cancel_job",
@@ -330,7 +482,9 @@ describe("MCP protocol negotiation", () => {
     expect(apply?.annotations?.readOnlyHint).toBe(false);
     expect(apply?.annotations?.destructiveHint).toBe(true);
     expect(JSON.stringify(apply?.inputSchema)).toContain("idempotency_key");
-    const preview = writeTools.find((tool) => tool.name === "preview_operation");
+    const preview = writeTools.find(
+      (tool) => tool.name === "preview_operation",
+    );
     expect(preview?.annotations?.readOnlyHint).toBe(true);
     const previewSchema = JSON.stringify(preview?.inputSchema);
     expect(previewSchema).toContain("set_biome");
@@ -361,7 +515,9 @@ describe("MCP protocol negotiation", () => {
     });
     expect(roadPreview.isError).toBe(true);
     const roadText = roadPreview.content.find((entry) => entry.type === "text");
-    expect(roadText?.type === "text" ? roadText.text : "").toMatch(/^runtime_file_missing:/);
+    expect(roadText?.type === "text" ? roadText.text : "").toMatch(
+      /^runtime_file_missing:/,
+    );
 
     const biomePreview = await client.callTool({
       name: "preview_operation",
@@ -379,8 +535,12 @@ describe("MCP protocol negotiation", () => {
       },
     });
     expect(biomePreview.isError).toBe(true);
-    const biomeText = biomePreview.content.find((entry) => entry.type === "text");
-    expect(biomeText?.type === "text" ? biomeText.text : "").toMatch(/^runtime_file_missing:/);
+    const biomeText = biomePreview.content.find(
+      (entry) => entry.type === "text",
+    );
+    expect(biomeText?.type === "text" ? biomeText.text : "").toMatch(
+      /^runtime_file_missing:/,
+    );
 
     const previewResult = await client.callTool({
       name: "preview_operation",
@@ -395,8 +555,12 @@ describe("MCP protocol negotiation", () => {
       },
     });
     expect(previewResult.isError).toBe(true);
-    const previewText = previewResult.content.find((entry) => entry.type === "text");
-    expect(previewText?.type === "text" ? previewText.text : "").toMatch(/^runtime_file_missing:/);
+    const previewText = previewResult.content.find(
+      (entry) => entry.type === "text",
+    );
+    expect(previewText?.type === "text" ? previewText.text : "").toMatch(
+      /^runtime_file_missing:/,
+    );
 
     const applied = await client.callTool({
       name: "apply_operations_batch",
