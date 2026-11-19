@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boxShapeFor } from "@/renderer/shape";
+import { boxShapeFor, cachedBoxShapeFor } from "@/renderer/shape";
 import type { BlockState } from "@/renderer/types";
 
 function state(name: string, properties: Record<string, string> = {}): BlockState {
@@ -47,5 +47,30 @@ describe("block shapes", () => {
     expect(torch).toHaveLength(1);
     expect(torch?.[0]?.min).toEqual([0.4375, 0, 0.4375]);
     expect(torch?.[0]?.max).toEqual([0.5625, 0.625, 0.5625]);
+  });
+});
+
+describe("cached block shapes", () => {
+  it("reuses the shape for a stable palette state object", () => {
+    const paletteState = state("minecraft:oak_stairs", { facing: "east" });
+    const first = cachedBoxShapeFor(paletteState);
+    expect(cachedBoxShapeFor(paletteState)).toBe(first);
+    expect(first).toEqual(boxShapeFor(paletteState));
+  });
+
+  it("shares the shape between structurally equal states regardless of property order", () => {
+    const left = cachedBoxShapeFor(
+      state("minecraft:oak_stairs", { facing: "west", half: "bottom" }),
+    );
+    const right = cachedBoxShapeFor(
+      state("minecraft:oak_stairs", { half: "bottom", facing: "west" }),
+    );
+    expect(right).toBe(left);
+  });
+
+  it("caches full cubes without confusing them with a cache miss", () => {
+    expect(cachedBoxShapeFor(state("minecraft:stone"))).toBeNull();
+    expect(cachedBoxShapeFor(state("minecraft:stone"))).toBeNull();
+    expect(cachedBoxShapeFor(state("minecraft:glass"))).toBeNull();
   });
 });

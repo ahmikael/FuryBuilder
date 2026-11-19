@@ -219,6 +219,14 @@ synchronous edit threshold, 16 mesh jobs / 12 ms per animation frame and an 8,19
 queue cap. Large snapshots and asset changes now mesh incrementally, small edits stay
 immediate, captures flush pending work before claiming completeness, and the Performance
 panel reports `Mesh queue` and `Evicted`.
+M10.3 removes the per-chunk border geometry and per-rebuild material churn: all
+outlines are one merged draw with shared, properly disposed material, rebuilt only when
+the chunk set changes.
+Shape lookup is cached per palette object with a bounded structural fallback, and the
+mesher finalizes buffers with direct typed-array copies. A forced-GC WebView2 probe keeps
+five load/unload cycles within 0.3 MB and returns geometry/mesh counts to zero, so there
+is no retained renderer leak; the remaining 822 ms frame gap / 780 ms long task at the
+artificial 4,225-chunk ceiling is documented as a limit in `docs/testing/perf-runs.md`.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

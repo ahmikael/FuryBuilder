@@ -320,3 +320,128 @@ does not cover React UI work, real imported worlds, interactive brush edits,
 long-running camera movement, GPU memory, context loss or other hardware. The
 profiled run's absolute timings are inflated by sampling and are not used for
 the M9.23 limit table.
+
+## 2026-11-19 — M10.3 leak and frame-time verification
+
+Command:
+
+```powershell
+# Vite server and debug Tauri binary already running/built
+$env:FURY_LEAK_CYCLES='5'
+node scripts/webview2-stress.mjs docs/testing/evidence/2026-11-19-webview2-resilience "8,16,24,32"
+Remove-Item Env:FURY_LEAK_CYCLES
+python -m unittest discover -s scripts -p "test_webview2_resilience_evidence.py" -v
+```
+
+The run uses the same isolated Tauri/WebView2 process, real
+`ViewportRenderer`, `SnapshotBuilder`, mesher and `updateChunks` path as
+M9.23. WebView2 is started with `--js-flags=--expose-gc` so the harness can
+force V8 collection between load/unload cycles. That flag belongs to the
+benchmark harness only; the application does not rely on it.
+
+### Changes under test
+
+- **One border draw instead of one per chunk.** `rebuildBorders` now emits a
+  single merged `LineSegments` geometry with one shared material. The previous
+  implementation created one line geometry per chunk and a new material on every
+  rebuild. The shared material is disposed with the renderer.
+- **Borders rebuild only when the chunk set changes.** `updateChunks` and
+  `rebuildDirtyChunks` no longer rebuild border geometry for ordinary block
+  edits; streaming still rebuilds when a chunk is added, and removal/eviction
+  rebuilds when a chunk disappears.
+- **Bounded shape cache.** `cachedBoxShapeFor` keeps a `WeakMap` keyed by the
+  palette state object for the hot path and bounds the structural string cache
+  at 4,096 entries. Imported/custom state sets can no longer grow that cache
+  without limit.
+- **Direct typed-array finalization.** The mesher now copies its number arrays
+  with `new Float32Array(...)`/`new Uint32Array(...)` instead of the generic
+  `from()` iterator path on every rebuilt chunk.
+
+### Snapshot scaling after the bounded queue
+
+| Radius | Chunks |   Non-air | `setSnapshot` ms | Settle ms | Overview FPS | Draw calls | Triangles | Heap MB |
+| -----: | -----: | --------: | ---------------: | --------: | -----------: | ---------: | --------: | ------: |
+|      8 |    289 |   616,752 |             85.6 |     2,715 |          163 |        289 |   363,104 |     274 |
+|     16 |  1,089 | 2,325,040 |             38.5 |     3,746 |          130 |        858 | 1,040,992 |     418 |
+|     24 |  2,401 | 5,126,960 |             76.0 |     5,654 |          117 |      1,862 | 2,254,240 |     550 |
+|     32 |  4,225 | 9,022,512 |             91.9 |     8,984 |           58 |      3,120 | 3,767,040 |     774 |
+
+`setSnapshot` is now bounded to the first 16 mesh jobs; it no longer blocks for
+the full scene. At radius 32 the call dropped from 6,404 ms in M9.23 to 91.9 ms.
+The remaining work moved into the frame-budgeted queue, so `settleMs` (the time
+until all meshes exist and the FPS window refreshes) is 9.0 s at radius 32.
+That is a responsiveness trade-off, not a throughput regression: the main
+thread stays available while the queue drains. Single-run overview FPS also
+varies with thermal state and background load; compare the draw-call and
+triangle counts rather than treating a single FPS sample as a threshold.
+
+### Streaming and frame gaps
+
+| Batch chunks | Updates | Total ms | Max batch ms | Max animation-frame gap ms | FPS after stream |
+| -----------: | ------: | -------: | -----------: | -------------------------: | ---------------: |
+|           16 |     272 |   14,615 |        200.5 |                      822.2 |               50 |
+|           32 |     144 |    8,704 |        150.0 |                      361.2 |               63 |
+|           64 |      80 |    3,606 |        103.1 |                      161.1 |               54 |
+
+Compared with M9.23, the same 4,225-chunk stream finishes in 14.6/8.7/3.6 s
+instead of 19.1/16.5/14.9 s, and the worst synchronous batch fell from
+171/249/340 ms to 201/150/103 ms. Batch 16 is not uniformly better than the
+M9.23 sample, which is why the batch-time and frame-gap columns are reported
+separately rather than collapsed into one number. The border rebuild and its
+per-chunk geometry churn were a large part of the old total time.
+
+The maximum animation-frame gap is reported separately. It is not the same as
+the batch time: at batch 16 the worst gap was 822 ms while the measured batch
+calls were at most 201 ms. The `longtask` observer recorded tasks of 780, 772
+and 730 ms around the same period while the heap was about 829 MB. WebView2 did
+not expose `gc` performance entries, so the harness records the long tasks and
+the heap but does not label the event as a confirmed GC. The timing is
+consistent with a major V8 collection at the artificial 4,225-chunk ceiling.
+This is a real pause and is not hidden: the remaining fix is to reduce
+allocation churn further (buffer reuse or region merging), not to claim the
+extreme envelope is smooth. The production UI loads a much smaller radius,
+where the queue bounds application work to the 12 ms frame budget.
+
+### Border overlay cost
+
+At radius 8 (289 chunks), enabling the chunk-border overlay changed draw calls
+from 289 to 290 and left the loaded chunk count unchanged; the overlay adds one
+draw call total. The previous per-chunk implementation added one line object
+per chunk. FPS moved from 172 (hidden) to 168 (visible) in this short sample;
+this is a visual overlay cost, not a world-data cost.
+
+### Heap after forced GC
+
+The probe returned the renderer to an empty scene, forced two V8 collections,
+then repeated five load/unload cycles of the 289-chunk radius-8 snapshot:
+
+| Point            | Heap MB | Geometries | Meshes |
+| ---------------- | ------: | ---------: | -----: |
+| Baseline (empty) |   209.3 |          0 |      0 |
+| Cycle 1          |   211.2 |          0 |      0 |
+| Cycle 2          |   211.3 |          0 |      0 |
+| Cycle 3          |   211.2 |          0 |      0 |
+| Cycle 4          |   211.2 |          0 |      0 |
+| Cycle 5          |   211.0 |          0 |      0 |
+
+The spread is about 0.3 MB over five cycles, and every post-unload cycle
+reports zero renderer geometries and zero meshes. This is evidence that chunk
+data, chunk meshes and border geometry are released rather than accumulating.
+The absolute baseline includes the Vite/React development page, the synthetic
+source snapshot and the harness itself, so it is not an application memory
+budget.
+
+### Limits of this evidence
+
+Still one GPU, one WebView2 build and one short run. The leak probe covers
+repeated load/unload, not a 30-60 minute camera tour, React UI growth, GPU
+memory, context loss, real imported worlds or interactive edits during
+streaming. Forced GC measures retained memory; it does not prove that a
+long-running session will never fragment. The 822 ms animation-frame gap and
+780 ms long task at the artificial 4,225-chunk/9-million-block ceiling remain
+observed limits and are recorded as such.
+
+Evidence: [metrics.json](evidence/2026-11-19-webview2-resilience/metrics.json)
+and [viewport.png](evidence/2026-11-19-webview2-resilience/viewport.png).
+PNG SHA-256:
+`91a2db32aabd4574c3b927cc328ce4e62503d4d3a658167bfd82436879756d27`.

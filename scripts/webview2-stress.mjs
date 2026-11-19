@@ -46,6 +46,13 @@ radii.sort((left, right) => left - right);
 await mkdir(output); // Fail rather than overwrite existing evidence.
 const profile = await mkdtemp(join(tmpdir(), "fury-webview-stress-"));
 const profileEnabled = process.env.FURY_PROFILE === "1";
+const requestedLeakCycles = Number(process.env.FURY_LEAK_CYCLES ?? "4");
+const leakCycles =
+  Number.isInteger(requestedLeakCycles) &&
+  requestedLeakCycles >= 0 &&
+  requestedLeakCycles <= 12
+    ? requestedLeakCycles
+    : 4;
 
 /**
  * Collapses a Chrome CPU profile into self-time rows. Time deltas are microseconds;
@@ -130,7 +137,8 @@ const app = spawn(appPath, [], {
   env: {
     ...process.env,
     WEBVIEW2_USER_DATA_FOLDER: profile,
-    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: "--remote-debugging-port=0",
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS:
+      "--remote-debugging-port=0 --js-flags=--expose-gc",
   },
   stdio: "ignore",
 });
@@ -194,7 +202,70 @@ async function stressScene(config) {
   const nextFrame = () =>
     new Promise((resolve) => requestAnimationFrame(resolve));
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const stateOf = (name) => ({ name, properties: {} });
+  const memoryOf = () =>
+    typeof performance.memory === "object" && performance.memory
+      ? {
+          jsHeapUsedBytes: performance.memory.usedJSHeapSize,
+          jsHeapTotalBytes: performance.memory.totalJSHeapSize,
+          jsHeapLimitBytes: performance.memory.jsHeapSizeLimit,
+        }
+      : null;
+  const heap = () => memoryOf()?.jsHeapUsedBytes ?? null;
+  const collectGarbage = async () => {
+    if (typeof globalThis.gc !== "function") return false;
+    globalThis.gc();
+    await wait(40);
+    globalThis.gc();
+    await nextFrame();
+    return true;
+  };
+
+  // Measures animation-frame gaps during the run. A synchronous batch or an
+  // unbounded mesh flush shows up here as a spike even when average FPS recovers.
+  let frameGap = { last: performance.now(), max: 0, samples: 0 };
+  let frameProbeActive = true;
+  const gcEvents = [];
+  const longTasks = [];
+  const observeEntries = (type, target, map) => {
+    try {
+      const observer = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) target.push(map(entry));
+      });
+      observer.observe({ entryTypes: [type] });
+      return observer;
+    } catch {
+      return null;
+    }
+  };
+  const gcObserver = observeEntries("gc", gcEvents, (entry) => ({
+    startTime: Math.round(entry.startTime),
+    durationMs: Math.round(entry.duration * 10) / 10,
+    kind: entry.detail?.kind ?? null,
+  }));
+  const longTaskObserver = observeEntries("longtask", longTasks, (entry) => ({
+    startTime: Math.round(entry.startTime),
+    durationMs: Math.round(entry.duration * 10) / 10,
+  }));
+  const probeFrame = (now) => {
+    if (!frameProbeActive) return;
+    const gap = now - frameGap.last;
+    frameGap.last = now;
+    if (gap > frameGap.max) frameGap.max = gap;
+    frameGap.samples += 1;
+    requestAnimationFrame(probeFrame);
+  };
+  requestAnimationFrame(probeFrame);
+  const resetFrameProbe = () => {
+    frameGap = { last: performance.now(), max: 0, samples: 0 };
+    gcEvents.length = 0;
+    longTasks.length = 0;
+  };
+  const frameProbeResult = () => ({
+    maxFrameGapMs: Math.round(frameGap.max * 10) / 10,
+    frameGapSamples: frameGap.samples,
+    gcEvents: [...gcEvents],
+    longTasks: longTasks.filter((entry) => entry.durationMs >= 50),
+  });
 
   let renderer;
   try {
@@ -252,7 +323,11 @@ async function stressScene(config) {
     const allNonAir = nonAirOf(sourceChunks);
     const chunkKeys = [...chunkMap.keys()];
 
-    const waitForMetrics = async (expectedChunks, timeoutMs) => {
+    const waitForMetrics = async (
+      expectedChunks,
+      timeoutMs,
+      settleMs = 1800,
+    ) => {
       const deadline = performance.now() + timeoutMs;
       const settled = () =>
         Boolean(metrics) &&
@@ -266,14 +341,9 @@ async function stressScene(config) {
           `metrics for ${expectedChunks} chunks did not settle (last ${metrics?.loadedChunks ?? "none"}, pending ${metrics?.pendingMeshJobs ?? "unknown"})`,
         );
       // Let the short-window FPS average cover frames after the mesh queue drained.
-      await wait(1800);
+      await wait(settleMs);
       return metrics;
     };
-
-    const heap = () =>
-      typeof performance.memory === "object" && performance.memory
-        ? performance.memory.usedJSHeapSize
-        : null;
 
     const snapshots = [];
     let lastCapture = null;
@@ -376,6 +446,7 @@ async function stressScene(config) {
           });
           metrics = null;
           await waitForMetrics(1, 30_000);
+          resetFrameProbe();
           const started = performance.now();
           for (let ring = 1; ring <= config.maxRadius; ring += 1) {
             const ringChunks = chunkKeys
@@ -417,6 +488,7 @@ async function stressScene(config) {
           run.updates = run.rings.reduce((sum, ring) => sum + ring.updates, 0);
           run.metrics = await waitForMetrics(sourceChunks.length, 60_000);
           run.heapUsedBytes = heap();
+          Object.assign(run, frameProbeResult());
         } catch (error) {
           run.failed = String(error?.message ?? error);
         }
@@ -424,6 +496,123 @@ async function stressScene(config) {
       }
     } catch (error) {
       stream.failed = String(error?.message ?? error);
+    }
+
+    // Capture the streaming end state before the cleanup probes below unload it.
+    const finalRendererInfo = {
+      calls: renderer.renderer.info.render.calls,
+      triangles: renderer.renderer.info.render.triangles,
+      geometries: renderer.renderer.info.memory.geometries,
+      textures: renderer.renderer.info.memory.textures,
+    };
+    const finalMemory = memoryOf();
+
+    // Border cost probe: the chunk border overlay is one merged line geometry, so
+    // enabling it should add one draw call rather than one per loaded chunk.
+    const overlays = {
+      radius: null,
+      chunks: null,
+      withBorders: null,
+      withoutBorders: null,
+      failed: null,
+    };
+    try {
+      const overlayRadius =
+        config.radii.find((value) => value <= 8) ?? config.radii[0];
+      const overlayChunks = sourceChunks.filter(
+        (chunk) =>
+          Math.max(Math.abs(chunk.chunk.x), Math.abs(chunk.chunk.z)) <=
+          overlayRadius,
+      );
+      renderer.setCameraPose(
+        [0, Math.max(240, overlayRadius * 16 + 80), 0],
+        [0, 0, 0],
+      );
+      renderer.setSnapshot({
+        dimension: "minecraft:overworld",
+        revision: 1,
+        center: { x: 0, z: 0 },
+        radius: overlayRadius,
+        chunks: overlayChunks,
+      });
+      await waitForMetrics(overlayChunks.length, 60_000);
+      renderer.setChunkBordersVisible(true);
+      metrics = null;
+      await wait(1500);
+      overlays.withBorders = metrics;
+      renderer.setChunkBordersVisible(false);
+      metrics = null;
+      await wait(1500);
+      overlays.withoutBorders = metrics;
+      overlays.radius = overlayRadius;
+      overlays.chunks = overlayChunks.length;
+    } catch (error) {
+      overlays.failed = String(error?.message ?? error);
+    }
+
+    // Memory probe: return to an empty renderer, force V8 collection, then repeat a
+    // bounded load/unload cycle. Stable post-GC heap and geometry counts across cycles
+    // indicate that replaced meshes and chunk data are actually released.
+    const leak = {
+      enabled: config.leakCycles > 0,
+      leakRadius: Math.min(8, config.maxRadius),
+      chunks: 0,
+      gcAvailable: false,
+      baseline: null,
+      cycles: [],
+      failed: null,
+    };
+    if (leak.enabled) {
+      try {
+        renderer.removeChunks(sourceChunks.map((chunk) => chunk.chunk));
+        await waitForMetrics(0, 60_000, 250);
+        await wait(200);
+        leak.gcAvailable = await collectGarbage();
+        leak.baseline = {
+          heapUsedBytes: heap(),
+          memory: memoryOf(),
+          geometries: renderer.renderer.info.memory.geometries,
+          textures: renderer.renderer.info.memory.textures,
+        };
+        if (!leak.gcAvailable) {
+          leak.failed =
+            "window.gc is not exposed; memory trend cannot be verified";
+        } else {
+          const leakChunks = sourceChunks.filter(
+            (chunk) =>
+              Math.max(Math.abs(chunk.chunk.x), Math.abs(chunk.chunk.z)) <=
+              leak.leakRadius,
+          );
+          leak.chunks = leakChunks.length;
+          const leakSnapshot = {
+            dimension: "minecraft:overworld",
+            revision: 1,
+            center: { x: 0, z: 0 },
+            radius: leak.leakRadius,
+            chunks: leakChunks,
+          };
+          for (let cycle = 1; cycle <= config.leakCycles; cycle += 1) {
+            renderer.setSnapshot(leakSnapshot);
+            await waitForMetrics(leakChunks.length, 60_000, 250);
+            renderer.removeChunks(leakChunks.map((chunk) => chunk.chunk));
+            await waitForMetrics(0, 60_000, 250);
+            await wait(150);
+            await collectGarbage();
+            await wait(150);
+            leak.cycles.push({
+              cycle,
+              heapUsedBytes: heap(),
+              memory: memoryOf(),
+              geometries: renderer.renderer.info.memory.geometries,
+              textures: renderer.renderer.info.memory.textures,
+              meshCount: metrics?.meshCount ?? null,
+              pendingMeshJobs: metrics?.pendingMeshJobs ?? null,
+            });
+          }
+        }
+      } catch (error) {
+        leak.failed = String(error?.message ?? error);
+      }
     }
 
     const captureDataUrl = lastCapture?.dataUrl ?? null;
@@ -471,28 +660,21 @@ async function stressScene(config) {
       },
       snapshots,
       streaming: stream,
+      overlays,
+      leak,
       capture: {
         pngBytes: capturePngBytes,
         pngSha256: captureSha256,
         dataUrl: captureDataUrl,
       },
-      rendererInfo: {
-        calls: renderer.renderer.info.render.calls,
-        triangles: renderer.renderer.info.render.triangles,
-        geometries: renderer.renderer.info.memory.geometries,
-        textures: renderer.renderer.info.memory.textures,
-      },
-      memory:
-        typeof performance.memory === "object" && performance.memory
-          ? {
-              jsHeapUsedBytes: performance.memory.usedJSHeapSize,
-              jsHeapTotalBytes: performance.memory.totalJSHeapSize,
-              jsHeapLimitBytes: performance.memory.jsHeapSizeLimit,
-            }
-          : null,
+      rendererInfo: finalRendererInfo,
+      memory: finalMemory,
       heapUsedBytes: heap(),
     };
   } finally {
+    frameProbeActive = false;
+    gcObserver?.disconnect();
+    longTaskObserver?.disconnect();
     renderer?.dispose();
     host.remove();
   }
@@ -578,6 +760,7 @@ try {
     width: 1280,
     height: 720,
     batchSizes: [16, 32, 64],
+    leakCycles,
   };
   if (profileEnabled) {
     await send("Profiler.enable");
@@ -618,7 +801,7 @@ try {
   }
 
   result.kind = "webview2-large-map-stress";
-  result.schemaVersion = 1;
+  result.schemaVersion = 2;
   result.generatedAt = new Date().toISOString();
   result.executableSha256 = executableSha256;
   result.node = process.version;

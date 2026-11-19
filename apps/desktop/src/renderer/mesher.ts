@@ -447,12 +447,14 @@ function pushFluidCube(
 }
 
 function finalize(buffers: MutableMeshBuffers): MeshBuffers {
+  // Direct typed-array construction copies once without the generic iterator path
+  // used by `Float32Array.from`. This runs for every rebuilt chunk.
   return {
-    positions: Float32Array.from(buffers.positions),
-    normals: Float32Array.from(buffers.normals),
-    uvs: Float32Array.from(buffers.uvs),
-    colors: Float32Array.from(buffers.colors),
-    indices: Uint32Array.from(buffers.indices),
+    positions: new Float32Array(buffers.positions),
+    normals: new Float32Array(buffers.normals),
+    uvs: new Float32Array(buffers.uvs),
+    colors: new Float32Array(buffers.colors),
+    indices: new Uint32Array(buffers.indices),
   };
 }
 

@@ -63,16 +63,38 @@ export function boxShapeFor(state: BlockState): BlockBoxShape[] | null {
 }
 
 const shapeCache = new Map<string, BlockBoxShape[] | null>();
+const shapeByState = new WeakMap<BlockState, BlockBoxShape[] | null>();
+const MAX_SHAPE_CACHE_ENTRIES = 4096;
 
-/** Cached shape lookup used by the mesher hot loop. */
+function rememberShape(key: string, shape: BlockBoxShape[] | null): void {
+  if (shapeCache.size >= MAX_SHAPE_CACHE_ENTRIES) {
+    const oldest = shapeCache.keys().next().value;
+    if (oldest !== undefined) shapeCache.delete(oldest);
+  }
+  shapeCache.set(key, shape);
+}
+
+/**
+ * Cached shape lookup used by the mesher hot loop.
+ *
+ * Palette block-state objects are stable for a decoded section, so the common path is a
+ * WeakMap lookup with no string allocation. Structurally equal states still share the
+ * bounded string cache; the bound prevents custom or imported state sets from growing
+ * the module-level cache without limit.
+ */
 export function cachedBoxShapeFor(state: BlockState): BlockBoxShape[] | null {
+  if (shapeByState.has(state)) return shapeByState.get(state) ?? null;
   const properties = state.properties ?? {};
   const key = `${state.name}|${Object.entries(properties)
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([name, value]) => `${name}=${value}`)
     .join(",")}`;
-  if (shapeCache.has(key)) return shapeCache.get(key) ?? null;
-  const shape = boxShapeFor(state);
-  shapeCache.set(key, shape);
-  return shape;
+  let shape = shapeCache.get(key);
+  if (shape === undefined && !shapeCache.has(key)) {
+    shape = boxShapeFor(state);
+    rememberShape(key, shape);
+  }
+  const resolved = shape ?? null;
+  shapeByState.set(state, resolved);
+  return resolved;
 }

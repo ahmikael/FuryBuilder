@@ -93,6 +93,11 @@ export class ViewportRenderer {
   private readonly materials: Record<"opaque" | "cutout" | "translucent", MeshBasicMaterial>;
   private readonly chunkGroup = new Group();
   private readonly borderGroup = new Group();
+  private readonly borderMaterial = new LineBasicMaterial({
+    color: CHUNK_COLOR,
+    transparent: true,
+    opacity: 0.55,
+  });
   private readonly grid: GridHelper;
   private readonly selection: LineSegments;
   private readonly selectionBox: LineSegments;
@@ -369,12 +374,12 @@ export class ViewportRenderer {
     }
   }
 
-  private enforceResidentBudget(): void {
+  private enforceResidentBudget(): boolean {
     const excess = this.world.loadedChunkCount() - this.meshBudget.maxResidentChunks;
-    if (excess <= 0) return;
+    if (excess <= 0) return false;
     const camera = this.cameraChunk();
     const evicted = selectChunksToEvict(this.world.loadedChunks(), camera, excess);
-    if (evicted.length === 0) return;
+    if (evicted.length === 0) return false;
     const neighbours = new Map<string, ChunkPos>();
     for (const pos of evicted) {
       this.meshQueue.remove(pos);
@@ -393,6 +398,7 @@ export class ViewportRenderer {
     this.evictedChunks += evicted.length;
     this.enqueueChunks([...neighbours.values()], camera);
     this.callbacks.onChunksEvicted?.(evicted);
+    return evicted.length > 0;
   }
 
   private addDirtyWithNeighbours(pos: ChunkPos, dirty: Map<string, ChunkPos>): void {
@@ -416,7 +422,8 @@ export class ViewportRenderer {
     } else {
       this.processMeshQueue();
     }
-    this.rebuildBorders();
+    // The chunk set did not change (asset swap or full remesh), so the border
+    // geometry is still valid and must not be rebuilt here.
   }
 
   setSnapshot(snapshot: RenderSnapshot): void {
@@ -439,11 +446,14 @@ export class ViewportRenderer {
   updateChunks(snapshot: ChunkSnapshotBatch): void {
     this.world.setRevision(snapshot.revision);
     const dirty = new Map<string, ChunkPos>();
+    let chunkSetChanged = false;
     for (const chunk of snapshot.chunks) {
+      const wasLoaded = this.world.isLoaded(chunk.chunk);
       this.world.upsertChunk(chunk);
+      if (wasLoaded !== this.world.isLoaded(chunk.chunk)) chunkSetChanged = true;
       this.addDirtyWithNeighbours(chunk.chunk, dirty);
     }
-    this.enforceResidentBudget();
+    const evicted = this.enforceResidentBudget();
     if (dirty.size <= this.meshBudget.maxSynchronousUpdateChunks) {
       for (const pos of dirty.values()) {
         if (this.world.isLoaded(pos)) this.rebuildChunk(pos);
@@ -457,14 +467,18 @@ export class ViewportRenderer {
       }
       this.processMeshQueue();
     }
-    this.rebuildBorders();
+    // Ordinary edits replace block data inside existing chunks; their borders are
+    // unchanged. Rebuild only when this call actually added or evicted chunks.
+    if (chunkSetChanged || evicted) this.rebuildBorders();
   }
 
   /** Unloads chunks (for example when the view distance shrinks) and heals neighbours. */
   removeChunks(chunks: ChunkPos[]): void {
     const dirty = new Map<string, ChunkPos>();
+    let removed = false;
     for (const chunk of chunks) {
       if (!this.world.isLoaded(chunk)) continue;
+      removed = true;
       this.world.removeChunk(chunk);
       this.meshQueue.remove(chunk);
       this.removeChunkMesh(chunkKey(chunk));
@@ -485,7 +499,7 @@ export class ViewportRenderer {
       for (const pos of dirty.values()) this.enqueueChunk(pos);
       this.processMeshQueue();
     }
-    this.rebuildBorders();
+    if (removed) this.rebuildBorders();
   }
 
   rebuildDirtyChunks(chunks: ChunkPos[]): void {
@@ -495,7 +509,7 @@ export class ViewportRenderer {
     } else {
       this.processMeshQueue();
     }
-    this.rebuildBorders();
+    // Data-only refresh: the chunk set and therefore border geometry are unchanged.
   }
 
   setMeshBudget(budget: Partial<MeshBudget>): void {
@@ -694,6 +708,7 @@ export class ViewportRenderer {
     this.orbit.dispose();
     this.clearChunkMeshes();
     this.clearBorders();
+    this.borderMaterial.dispose();
     this.grid.geometry.dispose();
     (this.grid.material as LineBasicMaterial).dispose();
     this.selection.geometry.dispose();
@@ -760,17 +775,12 @@ export class ViewportRenderer {
 
   private rebuildBorders(): void {
     this.clearBorders();
-    const material = new LineBasicMaterial({
-      color: CHUNK_COLOR,
-      transparent: true,
-      opacity: 0.55,
-    });
+    const points: number[] = [];
+    const yBottom = -64;
+    const yTop = 72;
     for (const chunk of this.world.loadedChunks()) {
       const x = chunk.x * 16;
       const z = chunk.z * 16;
-      const points: number[] = [];
-      const yBottom = -64;
-      const yTop = 72;
       const corners = [
         [x, z],
         [x + 16, z],
@@ -806,11 +816,14 @@ export class ViewportRenderer {
         yTop,
         z,
       );
-      const geometry = new BufferGeometry();
-      geometry.setAttribute("position", new Float32BufferAttribute(points, 3));
-      const lines = new LineSegments(geometry, material);
-      this.borderGroup.add(lines);
     }
+    if (points.length === 0) {
+      this.borderGroup.visible = false;
+      return;
+    }
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(points, 3));
+    this.borderGroup.add(new LineSegments(geometry, this.borderMaterial));
     this.borderGroup.visible = this.boundsVisible;
   }
 

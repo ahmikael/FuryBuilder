@@ -351,6 +351,35 @@ This is a bounded renderer policy, not a full streaming world manager. The UI cu
 loads a small radius, so eviction is not exercised in normal use; the policy prevents
 unbounded growth when the load radius or a future camera-driven streamer grows.
 
+## Border, shape-cache and frame-time hygiene (M10.3)
+
+- **Chunk borders are one overlay object.** All visible chunk outlines share one merged
+  `LineSegments` geometry and one `LineBasicMaterial`. The material is disposed with the
+  renderer. Enabling borders adds one draw call, not one per chunk, and the geometry is
+  rebuilt only when a chunk is added, removed or evicted. Ordinary block edits no longer
+  rebuild border geometry.
+- **Shape lookup is bounded.** `cachedBoxShapeFor` uses a `WeakMap` keyed by the stable
+  palette-state object for the per-block hot path, so normal meshing performs no string
+  allocation. Structurally equal states share a string-keyed cache capped at 4,096
+  entries; imported or custom state sets cannot grow it without bound.
+- **Mesher finalization avoids generic iteration.** `new Float32Array(...)` and
+  `new Uint32Array(...)` copy the completed number arrays directly instead of using the
+  generic `from()` path for every rebuilt chunk.
+- **Observability:** `RenderMetrics.pendingMeshJobs` and `evictedChunks` continue to
+  expose queue and residency state. The stress harness additionally records animation
+  frame gaps, the border on/off draw-call delta and post-GC heap across repeated
+  load/unload cycles.
+- **Known limit:** at the artificial 4,225-chunk / 9-million-block ceiling, the run
+  recorded an 822 ms worst animation-frame gap and a 780 ms `longtask` with about
+  829 MB of heap. WebView2 did not expose `gc` performance entries, so this is
+  consistent with a major collection rather than a confirmed label. It is outside the
+  normal UI load radius and is documented rather than hidden. Bounded queue work keeps
+  application-caused pauses to the frame budget.
+
+The measurements and the five-cycle post-GC heap result are recorded in
+`docs/testing/perf-runs.md`; the evidence is committed under
+`docs/testing/evidence/2026-11-19-webview2-resilience/`.
+
 ## Commit pipeline
 
 ```text
