@@ -180,6 +180,13 @@ state orientation and protected-region conflicts produce structured findings wit
 `rule_id`, severity, confidence, bounds, position counts and the authoritative revision.
 Suggested repairs are ordinary operations: the `Validation` tab and MCP `validate_region`
 only report them, and every repair goes through preview and the confirmed transaction path.
+M9.20 makes large copy/paste practical: copies above the Core's 65,536-block region-read
+limit are split into deterministic tiles with percentage progress and cancellation, while
+selections stay capped at 1,000,000 blocks. A paste of 65,536 or more non-air blocks is
+staged behind a pink ghost and an Inspector preview and requires a second confirmation;
+the confirmed paste runs through the cancellable Rust Job API with authoritative progress.
+Escape cancels the staged preview, cancellation rolls back before writing, and every paste
+remains one reversible Batch.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

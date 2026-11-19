@@ -2,6 +2,7 @@ import { invokeCommand } from "@/lib/ipc";
 import type { WorldInfo } from "@/lib/contracts";
 import type { BlockState, ChunkPos } from "@/renderer/types";
 import type {
+  ActorSource,
   BlockDefinition,
   BoxBounds,
   EditorOperation,
@@ -46,6 +47,49 @@ export function applyOperation(
     expectedRevision: expectedRevision ?? null,
     idempotencyKey,
   });
+}
+
+/** Public state of a cancellable Rust job. Progress is authoritative, never simulated. */
+export type WorldJobState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface WorldJobSnapshot {
+  jobId: string;
+  projectId: string;
+  kind: string;
+  state: WorldJobState;
+  progress: number;
+  message: string;
+  actorSource: ActorSource;
+  worldRevision: number | null;
+  result: OperationResult | null;
+  error: { code: string; message: string; details?: unknown } | null;
+  cancelRequested: boolean;
+  replayed: boolean;
+  createdAtMs: number;
+  startedAtMs: number | null;
+  finishedAtMs: number | null;
+}
+
+export function startWorldJob(
+  kind: "apply_operation" | "undo_operation",
+  parameters: Record<string, unknown>,
+  expectedRevision: number | null,
+  idempotencyKey: string = newIdempotencyKey(),
+): Promise<WorldJobSnapshot> {
+  return invokeCommand<WorldJobSnapshot>("start_world_job", {
+    kind,
+    parameters,
+    expectedRevision,
+    idempotencyKey,
+  });
+}
+
+export function worldJobStatus(jobId: string): Promise<WorldJobSnapshot> {
+  return invokeCommand<WorldJobSnapshot>("world_job_status", { jobId });
+}
+
+export function cancelWorldJob(jobId: string): Promise<WorldJobSnapshot> {
+  return invokeCommand<WorldJobSnapshot>("cancel_world_job", { jobId });
 }
 
 export function undoOperation(operationId?: string): Promise<OperationResult> {

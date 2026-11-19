@@ -196,3 +196,10 @@ export interface ClipboardPayload {
   /** Positions are relative to the copied minimum corner. */
   blocks: BlockChange[];
 }
+
+/** Large paste staged for an explicit second confirmation and ghost preview. */
+export interface PendingPaste {
+  target: BlockPosition;
+  bounds: BoxBounds;
+  blocks: number;
+}

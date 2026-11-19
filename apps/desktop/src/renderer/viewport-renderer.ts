@@ -68,6 +68,7 @@ const GHOST_COLORS: Record<GhostStyle, number> = {
   line: 0x22d3ee,
   fill: 0xfbbf24,
   replace: 0xc084fc,
+  paste: 0xf472b6,
 };
 
 export class ViewportRenderer {

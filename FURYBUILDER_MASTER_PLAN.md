@@ -1013,7 +1013,7 @@ furybuilder/
 - [x] Расширить Observation: top-down, heightmap, material/biome map, cross-section, revision diff с легендой, bounds и world_revision.
 - [x] Добавить Validation/critic: структурированные findings (позиции, severity, rule_id), ограниченные правила, ручное/AI исправление через preview/transaction.
 - [x] Оценить MCP Apps (`ui://` preview) на клиенте с подтверждённой поддержкой, с fallback на screenshot/resources; не блокировать выпуск на этом.
-- [ ] Поддержать copy/paste больших областей с прогрессом, предпросмотром и отменой.
+- [x] Поддержать copy/paste больших областей с прогрессом, предпросмотром и отменой.
 - [ ] Разработать правила сложных AI-задач: планирование, контрольные точки, проверки, отчёт.
 - [ ] Исследовать работу по 2D-референсу, schematic reference и overlay изображений.
 - [ ] Провести стресс-тест большой карты со streaming/meshing и определить реальные пределы.

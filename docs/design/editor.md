@@ -286,14 +286,35 @@ never writes during a scan, and every finding is bound to an exact `worldRevisio
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates
   are normalized by `min`/`max`, never by truncation toward zero.
 - The box tool is a two-click state machine. Switching tools cancels a dangling corner;
-  Escape cancels the pending click first, then the job, then the selection.
+  Escape cancels the pending paste preview first, then a job, then the selection.
 - Volumes above 1,000,000 blocks are rejected before an operation is built.
 - The line uses rounded sampling on the dominant axis, so horizontal, vertical and
   negative diagonals stay connected.
 - The locally computed ghost is a coloured translucent box (green place, red remove,
-  amber brush/fill, cyan box/line, purple replace). It is a geometric preview, not a
-  claim about the final diff; the server preview validates the real operation before it
-  is committed.
+  amber brush/fill, cyan box/line, purple replace, pink paste preview). It is a geometric
+  preview, not a claim about the final diff; the server preview validates the real
+  operation before it is committed.
+
+## Large-area copy and paste (M9.20)
+
+- A copy above the core's 65,536-block region-read limit is split into deterministic,
+  non-overlapping tiles by `planRegionTiles`. Tiles are read sequentially, merged into one
+  relative clipboard and reported as a percentage of completed tiles. Cancel discards all
+  partial reads and leaves the previous clipboard untouched.
+- The editor still caps a selection at 1,000,000 blocks. A 1,000,000-block volume needs at
+  most 32 bounded read requests, so copy never sends an unbounded region query.
+- A paste with fewer than 65,536 non-air blocks keeps the immediate
+  preview → apply path used by other edits.
+- A paste at or above that threshold is staged first: the viewport shows a pink ghost of
+  the exact target bounds and the Inspector reports the clipboard size and preview range.
+  Ctrl+V again, the context menu or the Inspector's `Confirm paste` button applies it;
+  Escape cancels the preview without writing.
+- Confirmed large pastes run through the Rust Job API (`apply_operation`). The progress
+  pill shows the operation observer's percentage. Cancel requests a real job
+  cancellation, and the job rolls back before writing, so a cancelled paste never leaves a
+  partial structure. Small pastes remain synchronous and atomic.
+- Both paths commit one reversible `Operation::Batch`; Ctrl+Z restores the target exactly
+  like any other edit.
 
 ## Commit pipeline
 
@@ -333,9 +354,11 @@ click → planBlockTool (local operation) → preview_operation (server validati
 - Preview validation and region reads are cancellable: the job is marked, its result is
   discarded, and no write is dispatched.
 - A write that has already been dispatched is atomic and cannot be reported as cancelled
-  mid-flight. The Cancel button is therefore hidden during apply. This is deliberate:
-  pretending a partially applied write was cancelled would corrupt user trust.
-- The job pill and bottom status bar show the active job and its cancel affordance.
+  mid-flight. The Cancel button is therefore hidden during a synchronous apply. Large
+  pastes use the Rust Job API instead: progress is reported by the operation observer and
+  cancellation rolls the job back before writing.
+- The job pill and bottom status bar show the active job, its cancellation affordance and
+  a percentage when the backend provides one.
 
 ## Save status
 

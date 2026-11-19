@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ClipboardPayload, EditorTool, ToastMessage } from "@/editor/types";
+import type { ClipboardPayload, EditorTool, PendingPaste, ToastMessage } from "@/editor/types";
 import { MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS, type GhostPreview } from "@/editor/session";
 import type { BlockPosition, BlockState } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
@@ -10,6 +10,8 @@ export interface EditorJob {
   cancellable: boolean;
   cancelRequested: boolean;
   startedAt: number;
+  /** Integer percentage from a real backend job, or null for indeterminate work. */
+  progress: number | null;
 }
 
 interface ToolState {
@@ -22,6 +24,7 @@ interface ToolState {
   hover: RayHit | null;
   ghost: GhostPreview | null;
   clipboard: ClipboardPayload | null;
+  pendingPaste: PendingPaste | null;
   job: EditorJob | null;
   syncState: "pristine" | "modified";
   lastOperation: {
@@ -39,7 +42,9 @@ interface ToolState {
   setHover: (hover: RayHit | null, ghost: GhostPreview | null) => void;
   setGhost: (ghost: GhostPreview | null) => void;
   setClipboard: (clipboard: ClipboardPayload | null) => void;
-  beginJob: (label: string, cancellable?: boolean) => number;
+  setPendingPaste: (pendingPaste: PendingPaste | null) => void;
+  beginJob: (label: string, cancellable?: boolean, progress?: number | null) => number;
+  setJobProgress: (id: number, progress: number | null) => void;
   requestCancel: () => void;
   finishJob: (id: number) => void;
   markModified: () => void;
@@ -70,6 +75,7 @@ export const useToolStore = create<ToolState>()((set) => ({
   hover: null,
   ghost: null,
   clipboard: null,
+  pendingPaste: null,
   job: null,
   syncState: "pristine",
   lastOperation: null,
@@ -80,16 +86,28 @@ export const useToolStore = create<ToolState>()((set) => ({
       anchor: null,
       ghost: null,
       hover: null,
+      pendingPaste: null,
     }),
   setBrushRadius: (radius) => set({ brushRadius: clampBrushRadius(radius) }),
   setSelectedBlock: (selectedBlock) => set({ selectedBlock }),
   setReplaceFrom: (replaceFrom) => set({ replaceFrom }),
-  setAnchor: (anchor) => set({ anchor }),
-  setSelection: (selection) => set({ selection }),
+  setAnchor: (anchor) =>
+    set((state) => ({
+      anchor,
+      pendingPaste: null,
+      ghost: state.pendingPaste ? null : state.ghost,
+    })),
+  setSelection: (selection) =>
+    set((state) => ({
+      selection,
+      pendingPaste: null,
+      ghost: state.pendingPaste ? null : state.ghost,
+    })),
   setHover: (hover, ghost) => set({ hover, ghost }),
   setGhost: (ghost) => set({ ghost }),
-  setClipboard: (clipboard) => set({ clipboard }),
-  beginJob: (label, cancellable = false) => {
+  setClipboard: (clipboard) => set({ clipboard, pendingPaste: null }),
+  setPendingPaste: (pendingPaste) => set({ pendingPaste }),
+  beginJob: (label, cancellable = false, progress = null) => {
     const id = nextJobId++;
     set({
       job: {
@@ -98,17 +116,24 @@ export const useToolStore = create<ToolState>()((set) => ({
         cancellable,
         cancelRequested: false,
         startedAt: Date.now(),
+        progress: progress === null ? null : Math.min(100, Math.max(0, Math.round(progress))),
       },
     });
     return id;
   },
+  setJobProgress: (id, progress) =>
+    set((state) => {
+      if (!state.job || state.job.id !== id) return state;
+      const value = progress === null ? null : Math.min(100, Math.max(0, Math.round(progress)));
+      return { job: { ...state.job, progress: value } };
+    }),
   requestCancel: () =>
     set((state) => (state.job ? { job: { ...state.job, cancelRequested: true } } : state)),
   finishJob: (id) => set((state) => (state.job && state.job.id === id ? { job: null } : state)),
   markModified: () => set({ syncState: "modified" }),
   markSaved: () => set({ syncState: "pristine" }),
   setLastOperation: (lastOperation) => set({ lastOperation, syncState: "modified" }),
-  resetTransient: () => set({ anchor: null, hover: null, ghost: null }),
+  resetTransient: () => set({ anchor: null, hover: null, ghost: null, pendingPaste: null }),
 }));
 
 interface ToastState {

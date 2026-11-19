@@ -61,6 +61,9 @@ pub struct JobSnapshot {
     pub state: JobState,
     pub progress: u8,
     pub message: String,
+    /// Actor that started the job. Lets the desktop distinguish UI work from MCP work
+    /// without guessing from the job kind or the world-change event.
+    pub actor_source: ActorSource,
     pub world_revision: Option<u64>,
     pub result: Option<OperationResult>,
     pub error: Option<AppError>,
@@ -271,6 +274,7 @@ impl JobQueue {
                 state: JobState::Queued,
                 progress: 0,
                 message: "queued".to_owned(),
+                actor_source: request.actor.source,
                 world_revision: None,
                 result: None,
                 error: None,
@@ -914,10 +918,20 @@ mod tests {
         let finished = wait_terminal(&queue, &snapshot.job_id);
         assert_eq!(finished.state, JobState::Succeeded, "{finished:?}");
         assert_eq!(finished.progress, 100);
+        assert_eq!(finished.actor_source, ActorSource::Mcp);
         assert_eq!(finished.world_revision, Some(1));
         assert_eq!(finished.result.as_ref().expect("result").changed_blocks, 1);
         let revision = service.lock().expect("service").world().revision();
         assert_eq!(revision, 1);
+    }
+
+    #[test]
+    fn job_snapshot_reports_the_starting_actor() {
+        let (queue, _) = queue();
+        let mut request = apply_request("ui-job", BlockPos::new(3, 64, 3));
+        request.actor = Actor::ui("ui");
+        let snapshot = queue.start(request).unwrap();
+        assert_eq!(snapshot.actor_source, ActorSource::Ui);
     }
 
     #[test]

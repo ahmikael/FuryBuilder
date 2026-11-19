@@ -46,7 +46,12 @@ describe("tool store", () => {
       label: "Reading region",
       cancellable: true,
       cancelRequested: false,
+      progress: null,
     });
+    useToolStore.getState().setJobProgress(id, 42.4);
+    expect(useToolStore.getState().job?.progress).toBe(42);
+    useToolStore.getState().setJobProgress(id, 250);
+    expect(useToolStore.getState().job?.progress).toBe(100);
     useToolStore.getState().requestCancel();
     expect(useToolStore.getState().job?.cancelRequested).toBe(true);
     useToolStore.getState().finishJob(id);

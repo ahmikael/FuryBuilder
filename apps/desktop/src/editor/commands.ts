@@ -1,4 +1,5 @@
 import type { BlockChange, BoxBounds, EditorOperation, EditorTool } from "@/editor/types";
+import { clipboardPasteBounds, LARGE_PASTE_THRESHOLD, planRegionTiles } from "@/editor/clipboard";
 import {
   AIR_STATE,
   MAX_EDIT_VOLUME,
@@ -8,17 +9,23 @@ import {
   linePoints,
   normalizeBounds,
   operationLabel,
+  pasteChanges,
   planBlockTool,
   TOOL_LABELS,
 } from "@/editor/session";
 import { normalizeError, isTauriRuntime } from "@/lib/ipc";
 import {
   applyOperation,
+  cancelWorldJob,
   fetchWorldInfo,
+  newIdempotencyKey,
   previewOperation,
   readRegion,
   redoOperation,
+  startWorldJob,
   undoOperation,
+  worldJobStatus,
+  type WorldJobSnapshot,
 } from "@/lib/world-api";
 import type { BlockState, ChunkPos } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
@@ -375,10 +382,22 @@ export function setReplaceSource(hit: RayHit | null): void {
   });
 }
 
+function samePosition(
+  a: { x: number; y: number; z: number },
+  b: { x: number; y: number; z: number },
+): boolean {
+  return a.x === b.x && a.y === b.y && a.z === b.z;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function copySelection(): Promise<void> {
   if (!requireCore()) return;
   const state = useToolStore.getState();
-  if (!state.selection) {
+  const selection = state.selection;
+  if (!selection) {
     pushToast({ kind: "warning", title: "Select a box to copy." });
     return;
   }
@@ -386,37 +405,59 @@ export async function copySelection(): Promise<void> {
     pushToast({ kind: "info", title: "Another operation is running." });
     return;
   }
-  const job = state.beginJob("Copying selection", true);
+  const volume = boundsVolume(selection);
+  if (volume <= 0 || volume > MAX_EDIT_VOLUME) {
+    pushToast({
+      kind: "error",
+      title: "Selection too large to copy",
+      description: `${volume.toLocaleString()} blocks exceeds the ${MAX_EDIT_VOLUME.toLocaleString()} block editor limit.`,
+    });
+    return;
+  }
+
+  const dimension = useWorldStore.getState().dimension;
+  const tiles = planRegionTiles(selection);
+  const job = state.beginJob(`Copying ${volume.toLocaleString()} blocks`, true, 0);
+  const blocks: BlockChange[] = [];
   try {
-    const region = await readRegion(useWorldStore.getState().dimension, state.selection);
+    for (let index = 0; index < tiles.length; index += 1) {
+      if (isJobCancelled(job)) {
+        useToolStore.getState().finishJob(job);
+        pushToast({ kind: "info", title: "Copy cancelled", description: "Nothing was copied." });
+        return;
+      }
+      const region = await readRegion(dimension, tiles[index]!);
+      for (const change of region.blocks) {
+        blocks.push({
+          pos: {
+            x: change.pos.x - selection.min.x,
+            y: change.pos.y - selection.min.y,
+            z: change.pos.z - selection.min.z,
+          },
+          state: change.state,
+        });
+      }
+      useToolStore.getState().setJobProgress(job, Math.round(((index + 1) / tiles.length) * 100));
+    }
     if (isJobCancelled(job)) {
       useToolStore.getState().finishJob(job);
-      pushToast({ kind: "info", title: "Copy cancelled" });
+      pushToast({ kind: "info", title: "Copy cancelled", description: "Nothing was copied." });
       return;
     }
+
     const size: [number, number, number] = [
-      region.bounds.max.x - region.bounds.min.x + 1,
-      region.bounds.max.y - region.bounds.min.y + 1,
-      region.bounds.max.z - region.bounds.min.z + 1,
+      selection.max.x - selection.min.x + 1,
+      selection.max.y - selection.min.y + 1,
+      selection.max.z - selection.min.z + 1,
     ];
-    const blocks: BlockChange[] = region.blocks.map((change) => ({
-      pos: {
-        x: change.pos.x - region.bounds.min.x,
-        y: change.pos.y - region.bounds.min.y,
-        z: change.pos.z - region.bounds.min.z,
-      },
-      state: change.state,
-    }));
-    useToolStore.getState().setClipboard({
-      dimension: region.dimension,
-      size,
-      blocks,
-    });
+    useToolStore.getState().setClipboard({ dimension, size, blocks });
     useToolStore.getState().finishJob(job);
     pushToast({
       kind: "success",
       title: `Copied ${blocks.length.toLocaleString()} blocks`,
-      description: `${size[0]}×${size[1]}×${size[2]} structure from ${region.dimension}`,
+      description: `${size[0]}×${size[1]}×${size[2]} structure from ${dimension}${
+        tiles.length > 1 ? ` in ${tiles.length} bounded tiles` : ""
+      }`,
     });
   } catch (error) {
     useToolStore.getState().finishJob(job);
@@ -424,10 +465,147 @@ export async function copySelection(): Promise<void> {
   }
 }
 
+/**
+ * Large pastes use the Rust Job API: preview, then a queued atomic batch whose progress
+ * comes from the operation observer. Cancelling the job rolls back before any write, so
+ * the editor never reports a partially pasted structure as cancelled.
+ */
+async function applyLargePaste(changes: BlockChange[], bounds: BoxBounds): Promise<void> {
+  if (!requireCore()) return;
+  const state = useToolStore.getState();
+  if (state.job) {
+    pushToast({ kind: "info", title: "Another operation is running." });
+    return;
+  }
+
+  const dimension = useWorldStore.getState().dimension;
+  const operation: EditorOperation = { type: "batch", dimension, changes };
+  const count = changes.length;
+  const job = state.beginJob(`Validating paste of ${count.toLocaleString()} blocks`, true, 0);
+  let preview;
+  try {
+    preview = await previewOperation(operation);
+  } catch (error) {
+    useToolStore.getState().finishJob(job);
+    reportError(error, "Paste preview failed");
+    return;
+  }
+  if (isJobCancelled(job)) {
+    useToolStore.getState().finishJob(job);
+    pushToast({ kind: "info", title: "Paste cancelled", description: "Nothing was written." });
+    return;
+  }
+  if (preview.changedBlocks === 0) {
+    useToolStore.getState().finishJob(job);
+    pushToast({
+      kind: "info",
+      title: "No blocks changed",
+      description: "The target already contained the pasted structure.",
+    });
+    return;
+  }
+  if (preview.warnings.length > 0) {
+    pushToast({
+      kind: "warning",
+      title: "Paste warning",
+      description: preview.warnings.join(" "),
+    });
+  }
+  useToolStore.getState().setJobProgress(job, 5);
+
+  let snapshot: WorldJobSnapshot;
+  try {
+    snapshot = await startWorldJob(
+      "apply_operation",
+      { operation },
+      useWorldStore.getState().revision,
+      newIdempotencyKey(),
+    );
+  } catch (error) {
+    useToolStore.getState().finishJob(job);
+    reportError(error, "Large paste was not started");
+    return;
+  }
+  useToolStore.getState().setJobProgress(job, snapshot.progress);
+
+  let cancelSent = false;
+  while (snapshot.state === "queued" || snapshot.state === "running") {
+    if (!cancelSent && isJobCancelled(job)) {
+      cancelSent = true;
+      try {
+        await cancelWorldJob(snapshot.jobId);
+      } catch {
+        // The next status poll reports the authoritative terminal state.
+      }
+    }
+    await delay(200);
+    try {
+      snapshot = await worldJobStatus(snapshot.jobId);
+    } catch (error) {
+      useToolStore.getState().finishJob(job);
+      reportError(error, "Could not read the paste job");
+      return;
+    }
+    useToolStore.getState().setJobProgress(job, snapshot.progress);
+  }
+
+  useToolStore.getState().finishJob(job);
+  const result = snapshot.result;
+  if (snapshot.state === "succeeded" && result) {
+    useWorldStore.getState().applySummary({
+      revision: result.worldRevision,
+      source: "core",
+    });
+    useToolStore.getState().setSelection(bounds);
+    if (result.changedBlocks === 0) {
+      pushToast({
+        kind: "info",
+        title: "No blocks changed",
+        description: "The target already contained the pasted structure.",
+      });
+      afterWrite();
+      return;
+    }
+    useToolStore.getState().setLastOperation({
+      operationId: result.operationId,
+      changedBlocks: result.changedBlocks,
+      revision: result.worldRevision,
+      warnings: result.warnings,
+    });
+    refreshViewportChunks(result.dirtyChunks);
+    afterWrite();
+    pushToast({
+      kind: "success",
+      title: "Large paste applied",
+      description: `${result.changedBlocks.toLocaleString()} block(s) changed · revision ${result.worldRevision}`,
+    });
+    return;
+  }
+  if (snapshot.state === "cancelled") {
+    pushToast({
+      kind: "info",
+      title: "Paste cancelled",
+      description: "No changes were committed; the job rolled back before writing.",
+    });
+    return;
+  }
+  const backendError = normalizeError(snapshot.error ?? snapshot.message);
+  pushToast({
+    kind: "error",
+    title: "Large paste failed",
+    description: `${backendError.message}${backendError.code !== "unknown" ? ` [${backendError.code}]` : ""}`,
+  });
+}
+
 export async function pasteClipboard(): Promise<void> {
   const state = useToolStore.getState();
-  if (!state.clipboard) {
+  const clipboard = state.clipboard;
+  if (!clipboard) {
     pushToast({ kind: "info", title: "Clipboard is empty", description: "Copy a box first." });
+    return;
+  }
+  if (state.job) {
+    pushToast({ kind: "info", title: "Another operation is running." });
     return;
   }
   const target =
@@ -441,14 +619,7 @@ export async function pasteClipboard(): Promise<void> {
     });
     return;
   }
-  const changes = state.clipboard.blocks.map((change) => ({
-    pos: {
-      x: target.x + change.pos.x,
-      y: target.y + change.pos.y,
-      z: target.z + change.pos.z,
-    },
-    state: change.state,
-  }));
+  const changes = pasteChanges(clipboard, target);
   if (changes.length === 0) {
     pushToast({
       kind: "info",
@@ -457,7 +628,37 @@ export async function pasteClipboard(): Promise<void> {
     });
     return;
   }
-  const bounds = boundsFromPositions(changes.map((change) => change.pos));
+
+  const bounds = clipboardPasteBounds(clipboard, target);
+  const pasteVolume = boundsVolume(bounds);
+  if (pasteVolume <= 0 || pasteVolume > MAX_EDIT_VOLUME) {
+    pushToast({
+      kind: "error",
+      title: "Paste too large",
+      description: `${pasteVolume.toLocaleString()} blocks exceeds the ${MAX_EDIT_VOLUME.toLocaleString()} block editor limit.`,
+    });
+    return;
+  }
+  if (changes.length >= LARGE_PASTE_THRESHOLD) {
+    if (!requireCore()) return;
+    const pending = state.pendingPaste;
+    if (!pending || !samePosition(pending.target, target)) {
+      useToolStore.getState().setPendingPaste({ target, bounds, blocks: changes.length });
+      refreshGhost();
+      pushToast({
+        kind: "info",
+        title: "Large paste preview",
+        description: `${changes.length.toLocaleString()} blocks into (${bounds.min.x},${bounds.min.y},${bounds.min.z}) → (${bounds.max.x},${bounds.max.y},${bounds.max.z}). Press Ctrl+V again or click Paste to apply; Esc cancels.`,
+      });
+      return;
+    }
+    useToolStore.getState().setPendingPaste(null);
+    useToolStore.getState().setGhost(null);
+    await applyLargePaste(changes, bounds);
+    return;
+  }
+
+  useToolStore.getState().setPendingPaste(null);
   await applyEditorOperation(
     {
       type: "batch",
@@ -536,6 +737,12 @@ export function cancelInteraction(): void {
     state.requestCancel();
     return;
   }
+  if (state.pendingPaste) {
+    state.setPendingPaste(null);
+    state.setGhost(null);
+    pushToast({ kind: "info", title: "Paste preview cancelled" });
+    return;
+  }
   if (state.anchor) {
     state.setAnchor(null);
     state.setGhost(null);
@@ -562,6 +769,15 @@ export function describeActiveTool(): string {
 /** Rebuilds the local ghost after hover/anchor/selection changes. */
 export function refreshGhost(): void {
   const state = useToolStore.getState();
+  if (state.pendingPaste) {
+    state.setGhost({
+      bounds: state.pendingPaste.bounds,
+      kind: "paste",
+      blocks: state.pendingPaste.blocks,
+      label: `Paste preview · ${state.pendingPaste.blocks.toLocaleString()} blocks`,
+    });
+    return;
+  }
   const hit = state.hover;
   const selection = state.selection;
   const tool = state.tool;

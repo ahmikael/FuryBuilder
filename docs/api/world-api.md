@@ -82,6 +82,48 @@ History stores section-level before/after snapshots (not full world copies).
 - A new applied operation clears the redo stack.
 - History is bounded (default 100 entries); oldest entries are pruned first.
 
+## Jobs
+
+The same bounded `JobQueue` is used by the MCP bridge and the UI. Tauri exposes three
+thin commands for editor work that is expected to run for a while (currently a large
+paste):
+
+```ts
+startWorldJob(kind, parameters, expectedRevision, idempotencyKey) -> JobSnapshot
+worldJobStatus(jobId) -> JobSnapshot
+cancelWorldJob(jobId) -> JobSnapshot
+```
+
+```ts
+JobSnapshot {
+  jobId: string,
+  projectId: string,
+  kind: "apply_operation" | "undo_operation",
+  state: "queued" | "running" | "succeeded" | "failed" | "cancelled",
+  progress: 0..100,
+  message: string,
+  actorSource: "ui" | "mcp" | "api" | "system",
+  worldRevision: number | null,
+  result: OperationResult | null,
+  error: { code, message, details? } | null,
+  cancelRequested: boolean,
+  replayed: boolean,
+  createdAtMs, startedAtMs, finishedAtMs
+}
+```
+
+- `parameters` for `apply_operation` is `{ operation, linkedObjectId?, layerId? }`; for
+  `undo_operation` it is `{ operationId? }`.
+- Progress comes from the operation observer (`validating`/`planning`/`applying`), not
+  from a timer. A queued or running job can be cancelled; cancellation before a write
+  commits leaves no changes, and a write cancelled mid-apply is rolled back section by
+  section.
+- At most 16 jobs are active; 256 completed records are retained. Reusing an idempotency
+  key with an identical request returns the original job (`replayed: true`); a different
+  payload returns `conflict`.
+- `actorSource` lets the desktop refresh the viewport only for MCP-originated jobs;
+  UI jobs refresh through their own command path.
+
 ## Queries```ts
 
 Query =

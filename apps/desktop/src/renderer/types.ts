@@ -42,7 +42,8 @@ export interface Bounds3 {
   max: BlockPosition;
 }
 
-export type GhostStyle = "place" | "remove" | "brush" | "box" | "line" | "fill" | "replace";
+export type GhostStyle =
+  "place" | "remove" | "brush" | "box" | "line" | "fill" | "replace" | "paste";
 
 export interface BlockSelection {
   dimension: string;

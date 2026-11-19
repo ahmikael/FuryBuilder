@@ -255,6 +255,7 @@ export function Viewport() {
   const ghost = useToolStore((state) => state.ghost);
   const job = useToolStore((state) => state.job);
   const clipboard = useToolStore((state) => state.clipboard);
+  const pendingPaste = useToolStore((state) => state.pendingPaste);
   const lastOperation = useToolStore((state) => state.lastOperation);
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
@@ -852,6 +853,7 @@ export function Viewport() {
           <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-black/70 px-2 py-1 font-mono text-[9px] text-white/75">
             <Loader2 className="size-3 animate-spin text-primary" />
             {job.label}
+            {job.progress !== null ? ` · ${job.progress}%` : null}
             {job.cancelRequested ? " · cancelling…" : null}
             {job.cancellable && !job.cancelRequested ? (
               <button
@@ -1167,7 +1169,11 @@ export function Viewport() {
           />
           <ContextItem
             icon={<ClipboardPaste />}
-            label={`Paste${clipboard ? ` (${clipboard.blocks.length})` : ""}`}
+            label={
+              pendingPaste
+                ? `Confirm paste (${pendingPaste.blocks})`
+                : `Paste${clipboard ? ` (${clipboard.blocks.length})` : ""}`
+            }
             hint="Ctrl+V"
             disabled={!clipboard || !editingEnabled}
             onClick={() => {

@@ -1,12 +1,14 @@
 import type * as IpcModule from "@/lib/ipc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BackendError } from "@/lib/ipc";
-import type { EditorOperation } from "@/editor/types";
+import { LARGE_PASTE_THRESHOLD } from "@/editor/clipboard";
+import type { BoxBounds, EditorOperation } from "@/editor/types";
 import type { BlockState } from "@/renderer/types";
 import { useHistoryStore } from "@/state/history-store";
 import { useToastStore, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
+import { boundsVolume } from "@/editor/session";
 
 const api = vi.hoisted(() => ({
   preview: vi.fn(),
@@ -16,6 +18,9 @@ const api = vi.hoisted(() => ({
   readRegion: vi.fn(),
   undo: vi.fn(),
   redo: vi.fn(),
+  startJob: vi.fn(),
+  jobStatus: vi.fn(),
+  cancelJob: vi.fn(),
 }));
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
@@ -28,6 +33,10 @@ vi.mock("@/lib/world-api", () => ({
   readRegion: api.readRegion,
   undoOperation: api.undo,
   redoOperation: api.redo,
+  startWorldJob: api.startJob,
+  worldJobStatus: api.jobStatus,
+  cancelWorldJob: api.cancelJob,
+  newIdempotencyKey: () => "test-key",
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => {
@@ -78,6 +87,27 @@ function result(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function jobSnapshot(state: string, overrides: Record<string, unknown> = {}) {
+  return {
+    jobId: "job-1",
+    projectId: "local-project",
+    kind: "apply_operation",
+    state,
+    progress: state === "succeeded" ? 100 : 42,
+    message: state,
+    actorSource: "ui",
+    worldRevision: null,
+    result: null,
+    error: null,
+    cancelRequested: false,
+    replayed: false,
+    createdAtMs: 1,
+    startedAtMs: 2,
+    finishedAtMs: state === "running" ? null : 3,
+    ...overrides,
+  };
+}
+
 async function flush(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -94,6 +124,9 @@ beforeEach(async () => {
   api.readRegion.mockReset();
   api.undo.mockReset();
   api.redo.mockReset();
+  api.startJob.mockReset();
+  api.jobStatus.mockReset();
+  api.cancelJob.mockReset();
   api.preview.mockResolvedValue({
     affectedBlocks: 1,
     changedBlocks: 1,
@@ -103,6 +136,11 @@ beforeEach(async () => {
   api.apply.mockResolvedValue(result());
   api.info.mockResolvedValue(worldInfo);
   api.history.mockResolvedValue({ canUndo: true, canRedo: false, revision: 2, entries: [] });
+  api.startJob.mockResolvedValue(
+    jobSnapshot("succeeded", { result: result({ changedBlocks: 4, worldRevision: 3 }) }),
+  );
+  api.jobStatus.mockResolvedValue(jobSnapshot("succeeded", { result: result() }));
+  api.cancelJob.mockResolvedValue(jobSnapshot("cancelled", { progress: 42 }));
   useWorldStore.setState({
     revision: 0,
     blockCount: 0,
@@ -119,6 +157,7 @@ beforeEach(async () => {
     hover: null,
     ghost: null,
     clipboard: null,
+    pendingPaste: null,
     job: null,
     syncState: "pristine",
     lastOperation: null,
@@ -335,6 +374,7 @@ describe("cancellation", () => {
         cancellable: true,
         cancelRequested: false,
         startedAt: Date.now(),
+        progress: null,
       },
       selection: { min: { x: 0, y: 64, z: 0 }, max: { x: 1, y: 64, z: 1 } },
     });
@@ -402,6 +442,145 @@ describe("clipboard commands", () => {
       min: { x: 10, y: 70, z: 10 },
       max: { x: 11, y: 70, z: 11 },
     });
+  });
+
+  it("reads a large selection in bounded tiles and merges relative blocks", async () => {
+    const selection: BoxBounds = {
+      min: { x: 100, y: 40, z: -20 },
+      max: { x: 180, y: 60, z: 28 },
+    };
+    useToolStore.setState({ selection });
+    const tiles: BoxBounds[] = [];
+    const progressSeen: Array<number | null> = [];
+    api.readRegion.mockImplementation(async (dimension: string, tile: BoxBounds) => {
+      progressSeen.push(useToolStore.getState().job?.progress ?? null);
+      tiles.push(tile);
+      return {
+        dimension,
+        bounds: tile,
+        volume: boundsVolume(tile),
+        blocks: [{ pos: { ...tile.min }, state: bricks }],
+      };
+    });
+
+    await copySelection();
+
+    expect(tiles.length).toBeGreaterThan(1);
+    for (const tile of tiles) {
+      expect(boundsVolume(tile)).toBeLessThanOrEqual(65_536);
+    }
+    expect(progressSeen[0]).toBe(0);
+    expect(progressSeen.at(-1)!).toBeLessThan(100);
+    expect(progressSeen).toEqual([...progressSeen].sort((a, b) => (a ?? 0) - (b ?? 0)));
+    const clipboard = useToolStore.getState().clipboard;
+    expect(clipboard?.size).toEqual([81, 21, 49]);
+    expect(clipboard?.blocks).toHaveLength(tiles.length);
+    expect(clipboard?.blocks[0]).toEqual({ pos: { x: 0, y: 0, z: 0 }, state: bricks });
+    expect(clipboard?.blocks[1]?.pos).toEqual({
+      x: tiles[1]!.min.x - selection.min.x,
+      y: tiles[1]!.min.y - selection.min.y,
+      z: tiles[1]!.min.z - selection.min.z,
+    });
+    expect(useToastStore.getState().toasts.at(-1)?.description).toContain("bounded tiles");
+  });
+
+  it("cancels a tiled copy without storing a partial clipboard", async () => {
+    useToolStore.setState({
+      selection: { min: { x: 0, y: 0, z: 0 }, max: { x: 80, y: 20, z: 48 } },
+    });
+    api.readRegion.mockImplementation(async (dimension: string, tile: BoxBounds) => {
+      useToolStore.getState().requestCancel();
+      return { dimension, bounds: tile, volume: boundsVolume(tile), blocks: [] };
+    });
+
+    await copySelection();
+
+    expect(api.readRegion).toHaveBeenCalledTimes(1);
+    expect(useToolStore.getState().clipboard).toBeNull();
+    expect(useToolStore.getState().job).toBeNull();
+    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain("Copy cancelled");
+  });
+
+  it("previews a large paste before starting a cancellable job", async () => {
+    const blocks = Array.from({ length: LARGE_PASTE_THRESHOLD }, (_, index) => ({
+      pos: { x: index % 256, y: 0, z: Math.floor(index / 256) },
+      state: bricks,
+    }));
+    useToolStore.setState({
+      selection: { min: { x: 2, y: 64, z: 3 }, max: { x: 3, y: 65, z: 4 } },
+      clipboard: {
+        dimension: "minecraft:overworld",
+        size: [256, 1, 256],
+        blocks,
+      },
+    });
+
+    await pasteClipboard();
+
+    expect(useToolStore.getState().pendingPaste).toEqual({
+      target: { x: 2, y: 64, z: 3 },
+      bounds: { min: { x: 2, y: 64, z: 3 }, max: { x: 257, y: 64, z: 258 } },
+      blocks: LARGE_PASTE_THRESHOLD,
+    });
+    expect(useToolStore.getState().ghost?.kind).toBe("paste");
+    expect(api.preview).not.toHaveBeenCalled();
+    expect(api.apply).not.toHaveBeenCalled();
+    expect(api.startJob).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Large paste preview");
+
+    api.preview.mockResolvedValue({
+      affectedBlocks: LARGE_PASTE_THRESHOLD,
+      changedBlocks: LARGE_PASTE_THRESHOLD,
+      dirtyChunks: [{ x: 0, z: 0 }],
+      warnings: [],
+    });
+    api.info.mockResolvedValue({ ...worldInfo, revision: 3 });
+
+    await pasteClipboard();
+
+    expect(useToolStore.getState().pendingPaste).toBeNull();
+    expect(useToolStore.getState().ghost).toBeNull();
+    expect(api.preview).toHaveBeenCalledTimes(1);
+    expect(api.startJob).toHaveBeenCalledTimes(1);
+    const [kind, parameters, revision] = api.startJob.mock.calls[0]!;
+    expect(kind).toBe("apply_operation");
+    expect(revision).toBe(0);
+    expect((parameters as { operation: EditorOperation }).operation).toMatchObject({
+      type: "batch",
+      dimension: "minecraft:overworld",
+    });
+    expect((parameters as { operation: { changes: unknown[] } }).operation.changes).toHaveLength(
+      LARGE_PASTE_THRESHOLD,
+    );
+    expect(useToolStore.getState().selection).toEqual({
+      min: { x: 2, y: 64, z: 3 },
+      max: { x: 257, y: 64, z: 258 },
+    });
+    expect(useWorldStore.getState().revision).toBe(3);
+    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Large paste applied");
+  });
+
+  it("cancels a staged large-paste preview without writing", async () => {
+    useToolStore.setState({
+      pendingPaste: {
+        target: { x: 1, y: 2, z: 3 },
+        bounds: { min: { x: 1, y: 2, z: 3 }, max: { x: 9, y: 9, z: 9 } },
+        blocks: LARGE_PASTE_THRESHOLD,
+      },
+      ghost: {
+        bounds: { min: { x: 1, y: 2, z: 3 }, max: { x: 9, y: 9, z: 9 } },
+        kind: "paste",
+        blocks: LARGE_PASTE_THRESHOLD,
+        label: "Paste preview",
+      },
+    });
+
+    cancelInteraction();
+
+    expect(useToolStore.getState().pendingPaste).toBeNull();
+    expect(useToolStore.getState().ghost).toBeNull();
+    expect(api.startJob).not.toHaveBeenCalled();
+    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Paste preview cancelled");
   });
 
   it("does not read when there is no selection", async () => {

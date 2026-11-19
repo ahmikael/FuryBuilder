@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { copySelection, pasteClipboard } from "@/editor/commands";
-import { boundsVolume } from "@/editor/session";
+import { adjacentPosition, boundsVolume } from "@/editor/session";
 import { isTauriRuntime } from "@/lib/ipc";
 import { creationModeLabel } from "@/project/types";
 import { blockColor } from "@/renderer/assets";
@@ -61,6 +61,8 @@ export function Inspector() {
   const replaceFrom = useToolStore((state) => state.replaceFrom);
   const boxSelection = useToolStore((state) => state.selection);
   const clipboard = useToolStore((state) => state.clipboard);
+  const pendingPaste = useToolStore((state) => state.pendingPaste);
+  const hover = useToolStore((state) => state.hover);
   const setSelectedBlock = useToolStore((state) => state.setSelectedBlock);
   const setReplaceFrom = useToolStore((state) => state.setReplaceFrom);
   const setSelection = useToolStore((state) => state.setSelection);
@@ -73,6 +75,13 @@ export function Inspector() {
   const state = selection?.state ?? { name: "minecraft:air", properties: {} };
   const properties = Object.entries(state.properties ?? {});
   const editing = isTauriRuntime();
+  const pasteTarget = boxSelection?.min ?? (hover ? adjacentPosition(hover.pos, hover.face) : null);
+  const pastePreviewReady =
+    pendingPaste !== null &&
+    pasteTarget !== null &&
+    pendingPaste.target.x === pasteTarget.x &&
+    pendingPaste.target.y === pasteTarget.y &&
+    pendingPaste.target.z === pasteTarget.z;
 
   return (
     <aside className="flex min-h-0 w-64 shrink-0 flex-col border-l border-border bg-sidebar text-sidebar-foreground">
@@ -162,9 +171,26 @@ export function Inspector() {
                 disabled={!clipboard || !editing}
                 onClick={() => void pasteClipboard()}
               >
-                Paste{clipboard ? ` (${clipboard.blocks.length})` : ""}
+                {pendingPaste && pastePreviewReady
+                  ? `Confirm paste (${pendingPaste.blocks})`
+                  : `Paste${clipboard ? ` (${clipboard.blocks.length})` : ""}`}
               </Button>
             </div>
+            {clipboard ? (
+              <div className="mt-1 rounded border border-border px-2 py-1 font-mono text-[9px] text-muted-foreground">
+                Clipboard {clipboard.size[0]}×{clipboard.size[1]}×{clipboard.size[2]} ·{" "}
+                {clipboard.blocks.length.toLocaleString()} blocks
+                {pendingPaste
+                  ? ` · preview ${pendingPaste.bounds.min.x},${pendingPaste.bounds.min.y},${pendingPaste.bounds.min.z} → ${pendingPaste.bounds.max.x},${pendingPaste.bounds.max.y},${pendingPaste.bounds.max.z}`
+                  : ""}
+              </div>
+            ) : null}
+            {pastePreviewReady ? (
+              <div className="mt-1 text-[9px] text-status-warn">
+                Large paste preview. Press Ctrl+V again or click Confirm paste to apply; Esc cancels
+                without writing.
+              </div>
+            ) : null}
           </div>
         </section>
 

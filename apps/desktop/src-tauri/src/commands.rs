@@ -20,11 +20,12 @@ use tauri::{AppHandle, Emitter, State};
 use world_application::{
     app_info as build_app_info, compile_build_dsl, Actor, AppError, AppInfo, BlockChange,
     BuildDslSummary, BuildRecipe, ChunkSnapshotBatch, ErrorCode, HistoryState, HistorySummary,
-    ObjectKind, Observation, ObservationRequest, Operation, OperationRequest, OperationResult,
-    ParametricApplyResult, ParametricConflictPolicy, ParametricInspection, ParametricObjectSummary,
-    ParametricScene, ParametricSpec, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks,
-    RenderSnapshot, SceneObjectInspection, SemanticObject, StructureSites, ValidationQuery,
-    ValidationReport, WorkspacePolicy, WorldService,
+    JobSnapshot, JobStartRequest, ObjectKind, Observation, ObservationRequest, Operation,
+    OperationRequest, OperationResult, ParametricApplyResult, ParametricConflictPolicy,
+    ParametricInspection, ParametricObjectSummary, ParametricScene, ParametricSpec, PingResponse,
+    PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot, SceneObjectInspection,
+    SemanticObject, StructureSites, ValidationQuery, ValidationReport, WorkspacePolicy,
+    WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -207,6 +208,43 @@ pub fn apply_operation(
         linked_object_id: None,
         layer_id: None,
     })
+}
+
+/// Starts a cancellable UI job through the same bounded queue used by MCP. The editor
+/// uses it for large pastes so progress and cancellation come from the Rust operation
+/// observer instead of a simulated client-side timer.
+#[tauri::command]
+pub fn start_world_job(
+    state: State<'_, AppState>,
+    kind: String,
+    parameters: serde_json::Value,
+    expected_revision: Option<u64>,
+    idempotency_key: String,
+) -> Result<JobSnapshot, AppError> {
+    state.jobs.start(JobStartRequest {
+        project_id: LOCAL_PROJECT_ID.to_owned(),
+        kind,
+        parameters,
+        expected_revision,
+        idempotency_key,
+        actor: ui_actor(),
+    })
+}
+
+#[tauri::command]
+pub fn world_job_status(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<JobSnapshot, AppError> {
+    state.jobs.status(LOCAL_PROJECT_ID, &job_id)
+}
+
+#[tauri::command]
+pub fn cancel_world_job(
+    state: State<'_, AppState>,
+    job_id: String,
+) -> Result<JobSnapshot, AppError> {
+    state.jobs.cancel(LOCAL_PROJECT_ID, &job_id)
 }
 
 #[tauri::command]

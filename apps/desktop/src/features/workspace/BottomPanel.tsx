@@ -759,6 +759,7 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
           <>
             <Loader2 className="size-3 animate-spin text-primary" />
             <span>{job.label}</span>
+            {job.progress !== null ? <span className="font-mono">{job.progress}%</span> : null}
             {job.cancellable && !job.cancelRequested ? (
               <Button
                 size="sm"

@@ -504,7 +504,9 @@ pub fn start(app: AppHandle, data_dir: std::path::PathBuf) -> io::Result<LocalBr
         let event_app = app.clone();
         let state = app.state::<AppState>();
         state.jobs.set_listener(move |snapshot| {
-            if snapshot.state != JobState::Succeeded {
+            // UI-initiated jobs refresh through their own command path. Only MCP work is
+            // "external" from the editor's point of view.
+            if snapshot.state != JobState::Succeeded || snapshot.actor_source != ActorSource::Mcp {
                 return;
             }
             let Some(result) = &snapshot.result else {
