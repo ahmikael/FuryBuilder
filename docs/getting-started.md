@@ -4,6 +4,9 @@ This guide takes you from a fresh checkout to a saved, exported build. It descri
 current alpha, not a future release. If a screen or action is not listed here, assume it is
 not implemented yet.
 
+To install a packaged Windows beta instead of running a checkout, start with
+[Windows installation and updates](install-windows.md).
+
 FuryBuilder is a desktop 3D editor for Minecraft Java Edition worlds and structures. It is
 not a game client: it does not run Minecraft, simulate redstone or guarantee vanilla world
 generation outside the explicit `Vanilla World` mode. The Rust core is the source of truth

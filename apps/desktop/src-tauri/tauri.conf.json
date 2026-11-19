@@ -31,6 +31,9 @@
   "bundle": {
     "active": true,
     "targets": ["msi", "nsis"],
+    "publisher": "FuryBuilder contributors",
+    "copyright": "Copyright (c) 2026 FuryBuilder contributors",
+    "licenseFile": "../../../LICENSE",
     "category": "DeveloperTool",
     "shortDescription": "3D studio for Minecraft Java worlds",
     "longDescription": "FuryBuilder is an offline-first 3D editor for creating, inspecting and exporting Minecraft Java Edition worlds and structures.",
@@ -40,6 +43,22 @@
       "icons/128x128@2x.png",
       "icons/icon.ico",
       "icons/icon.png"
-    ]
+    ],
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "compression": "lzma"
+      },
+      "wix": {
+        "upgradeCode": "ed1f6f4c-a0f3-52c1-8d7a-18326f6a292c",
+        "language": "en-US"
+      }
+    }
   }
 }

@@ -6,6 +6,8 @@ milestone is complete.
 
 ## User guides
 
+- [Windows installation and updates](install-windows.md) — packages, requirements,
+  install/update/uninstall, user-data location and unsigned-beta warnings.
 - [Getting started](getting-started.md) — install, create a project, learn the window,
   edit blocks, save/recover and export a structure.
 - [Advanced workflows](advanced-workflow.md) — precise area editing, landscape tools,

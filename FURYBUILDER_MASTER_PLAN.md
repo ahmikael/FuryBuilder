@@ -1041,7 +1041,7 @@ furybuilder/
 
 **Цель:** reproducible desktop release без скрытых рисков для миров.
 
-- [ ] Подготовить Windows installer и протестировать установку/удаление/обновление.
+- [x] Подготовить Windows installer и протестировать установку/удаление/обновление.
 - [ ] Настроить versioning, changelog, migrations и backup policy.
 - [ ] Проверить подпись сборок, security audit зависимостей и third-party notices.
 - [ ] Подготовить демо-проект, скриншоты и документацию MCP setup.

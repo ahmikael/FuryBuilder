@@ -1,0 +1,99 @@
+{
+    "schemaVersion":  1,
+    "milestone":  "M11",
+    "task":  "windows-installer",
+    "recordedAt":  "2026-11-19T20:53:21.1724807+04:00",
+    "machine":  {
+                    "computerName":  "DESKTOP-5JT7QS1",
+                    "windows":  "Microsoft Windows 11 Pro",
+                    "windowsVersion":  "10.0.26300",
+                    "webView2":  "157.0.4341.60",
+                    "isElevated":  false
+                },
+    "installers":  [
+                       {
+                           "format":  "nsis",
+                           "file":  "FuryBuilder_0.1.0_x64-setup.exe",
+                           "bytes":  5879723,
+                           "sha256":  "ad21b7f37ed092fa1b7a0e82b3b30631deb62cdda6f392037d85ed1e02ec209c",
+                           "version":  "0.1.0"
+                       },
+                       {
+                           "format":  "nsis",
+                           "file":  "FuryBuilder_0.1.1_x64-setup.exe",
+                           "bytes":  5880272,
+                           "sha256":  "e66b6fd24f81db5517edc44a2562403e68654fc5a02d02b4149d03dfd7806514",
+                           "version":  "0.1.1"
+                       },
+                       {
+                           "format":  "msi",
+                           "file":  "FuryBuilder_0.1.0_x64_en-US.msi",
+                           "bytes":  7802880,
+                           "sha256":  "52622c9b503e7a3b0156d3649c1c87b25fc85f58558e6d4c4caf06e0fadc618e",
+                           "version":  "0.1.0"
+                       }
+                   ],
+    "scenarios":  [
+                      {
+                          "name":  "nsis-clean-install",
+                          "ok":  true,
+                          "version":  "0.1.0",
+                          "installLocation":  "C:\\Users\\Mike\\AppData\\Local\\FuryBuilder",
+                          "registryDisplayVersion":  "0.1.0",
+                          "publisher":  "FuryBuilder contributors"
+                      },
+                      {
+                          "name":  "nsis-installed-app-launch",
+                          "ok":  true,
+                          "version":  "0.1.0",
+                          "details":  {
+                                          "ok":  true,
+                                          "processId":  6528,
+                                          "windowTitle":  "FuryBuilder",
+                                          "windowReadySeconds":  1.17,
+                                          "startupLogRecords":  1,
+                                          "versionMatched":  true,
+                                          "closedGracefully":  true
+                                      }
+                      },
+                      {
+                          "name":  "nsis-upgrade",
+                          "ok":  true,
+                          "fromVersion":  "0.1.0",
+                          "toVersion":  "0.1.1",
+                          "installLocation":  "C:\\Users\\Mike\\AppData\\Local\\FuryBuilder",
+                          "registryDisplayVersion":  "0.1.1",
+                          "appDataMarkerPreserved":  true,
+                          "launch":  {
+                                         "ok":  true,
+                                         "processId":  11748,
+                                         "windowTitle":  "FuryBuilder",
+                                         "windowReadySeconds":  0.94,
+                                         "startupLogRecords":  1,
+                                         "versionMatched":  true,
+                                         "closedGracefully":  true
+                                     }
+                      },
+                      {
+                          "name":  "nsis-uninstall",
+                          "ok":  true,
+                          "registryEntryRemoved":  true,
+                          "executableRemoved":  true,
+                          "installLocation":  "C:\\Users\\Mike\\AppData\\Local\\FuryBuilder",
+                          "appDataPreserved":  true
+                      },
+                      {
+                          "name":  "msi-package-extraction",
+                          "ok":  true,
+                          "mode":  "administrative extraction (msiexec /a); per-machine install requires elevation",
+                          "extractedVersion":  "0.1.0",
+                          "extractedExecutableSha256":  "75968698ebb46bc4b5e09be5df9f984ce3c59ac130b5badaad40a30ff8954111"
+                      }
+                  ],
+    "limitations":  [
+                        "The MSI was validated by administrative extraction only. A silent per-machine install needs an elevated session, which this non-elevated harness does not request."
+                    ],
+    "appDataBackedUpAndRestored":  true,
+    "pass":  true,
+    "failure":  null
+}
