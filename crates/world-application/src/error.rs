@@ -1,3 +1,4 @@
+use build_dsl::BuildDslError;
 use scene_model::{ParametricError, SceneError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -104,6 +105,18 @@ impl From<SceneError> for AppError {
             "limit_exceeded" => ErrorCode::LimitExceeded,
             "unsupported_version" => ErrorCode::UnsupportedVersion,
             "not_found" => ErrorCode::NotFound,
+            "conflict" => ErrorCode::Conflict,
+            _ => ErrorCode::InvalidArgument,
+        };
+        AppError::new(code, error.to_string())
+    }
+}
+
+impl From<BuildDslError> for AppError {
+    fn from(error: BuildDslError) -> Self {
+        let code = match error.code() {
+            "limit_exceeded" => ErrorCode::LimitExceeded,
+            "unsupported_version" => ErrorCode::UnsupportedVersion,
             "conflict" => ErrorCode::Conflict,
             _ => ErrorCode::InvalidArgument,
         };

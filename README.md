@@ -160,6 +160,13 @@ generated overlay unless the user explicitly chooses override. Bake detaches the
 and keeps the blocks, while rollback restores the captured baseline. MCP exposes
 `list_parametric_objects` and `inspect_parametric_object` as read-only tools with conflict
 details; the desktop panel owns the mutating actions.
+M9.16 adds a typed, data-only Build DSL. A versioned JSON recipe of houses and repeat nodes
+is validated and compiled deterministically into one ordinary reversible Batch, with hard
+budgets (64 houses, 16,384 blocks, depth 4), rotated block states and overlap detection.
+The `Build DSL` tab compiles and previews the exact operation before applying it; MCP
+exposes `preview_build_dsl`, which returns the preview plus the same typed operation for the
+standard confirmed `apply_operation` path. Recipes cannot execute JavaScript, shell or file
+access.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

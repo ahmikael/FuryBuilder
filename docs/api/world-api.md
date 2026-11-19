@@ -130,6 +130,38 @@ places ground cover and small trees only into existing air, with minimum tree sp
 All three are deterministic local construction tools; they make no vanilla worldgen
 parity claim and are recorded as ordinary reversible operations.
 
+## Build DSL
+
+Build DSL is a versioned, declarative recipe format compiled by the Core into the same
+`Operation::Batch` used by manual editing and MCP. It is data only: there is no script,
+expression evaluator, shell or file access.
+
+```ts
+BuildRecipe {
+  schemaVersion: 1,
+  dimension: string,
+  nodes: (
+    | { type: "house", at: [x, y, z], rotation?: "none" | "cw90" | "cw180" | "cw270",
+        params: HouseParams }
+    | { type: "repeat", axis: "x" | "y" | "z", count: 1..16, spacing: 1..64,
+        child: BuildNode }
+  )[]
+}
+```
+
+- Budgets: 64 top-level nodes, 64 expanded houses, 16,384 generated blocks, repeat depth 4.
+  Duplicate positions are rejected as `conflict`; invalid materials, unknown fields and
+  unsupported schema versions are refused.
+- `build_dsl_preview(recipe)` compiles, runs the normal preview and returns
+  `{ summary, operation, preview }` without writing. The returned operation is then passed
+  to `apply_operation`, so revision checks, confirmation, workspace policy, history and
+  undo are identical to manual edits.
+- MCP exposes `preview_build_dsl` as read-only and returns the same operation. Applying it
+  still requires explicit write access and the normal confirmation dialog.
+- Compilation is deterministic for a given schema and generator version. Repetition is
+  expanded before writing, and rotation also turns `facing`, `axis` and `rotation` block
+  properties instead of only moving coordinates.
+
 ## Semantic objects
 
 Semantic objects are project metadata, separate from voxel data and from the workspace

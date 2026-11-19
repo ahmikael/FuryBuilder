@@ -18,12 +18,12 @@ use runtime_manager::{
 use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
 use tauri::{AppHandle, Emitter, State};
 use world_application::{
-    app_info as build_app_info, Actor, AppError, AppInfo, BlockChange, ChunkSnapshotBatch,
-    ErrorCode, HistoryState, HistorySummary, ObjectKind, Operation, OperationRequest,
-    OperationResult, ParametricApplyResult, ParametricConflictPolicy, ParametricInspection,
-    ParametricObjectSummary, ParametricScene, ParametricSpec, PingResponse, PreviewResult, Query,
-    QueryResult, RegionBlocks, RenderSnapshot, SceneObjectInspection, SemanticObject,
-    StructureSites, WorkspacePolicy, WorldService,
+    app_info as build_app_info, compile_build_dsl, Actor, AppError, AppInfo, BlockChange,
+    BuildDslSummary, BuildRecipe, ChunkSnapshotBatch, ErrorCode, HistoryState, HistorySummary,
+    ObjectKind, Operation, OperationRequest, OperationResult, ParametricApplyResult,
+    ParametricConflictPolicy, ParametricInspection, ParametricObjectSummary, ParametricScene,
+    ParametricSpec, PingResponse, PreviewResult, Query, QueryResult, RegionBlocks, RenderSnapshot,
+    SceneObjectInspection, SemanticObject, StructureSites, WorkspacePolicy, WorldService,
 };
 use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
@@ -118,6 +118,44 @@ pub fn preview_operation(
         .lock()
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     service.preview(LOCAL_PROJECT_ID, &operation)
+}
+
+/// A typed Build DSL compilation plus its ordinary operation preview. The returned
+/// operation is passed to the same apply command as any other batch.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildDslPreview {
+    pub summary: BuildDslSummary,
+    pub operation: Operation,
+    pub preview: PreviewResult,
+}
+
+#[tauri::command]
+pub fn build_dsl_preview(
+    state: State<'_, AppState>,
+    recipe: BuildRecipe,
+) -> Result<BuildDslPreview, AppError> {
+    build_dsl_preview_impl(&state, recipe)
+}
+
+fn build_dsl_preview_impl(
+    state: &AppState,
+    recipe: BuildRecipe,
+) -> Result<BuildDslPreview, AppError> {
+    let compiled = compile_build_dsl(&recipe)?;
+    let operation = compiled.operation();
+    let preview = {
+        let service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        service.preview(LOCAL_PROJECT_ID, &operation)?
+    };
+    Ok(BuildDslPreview {
+        summary: compiled.summary().clone(),
+        operation,
+        preview,
+    })
 }
 
 #[tauri::command]

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Blocks,
   Boxes,
+  Braces,
   Grid3X3,
   History,
   Layers,
@@ -35,6 +36,7 @@ import { WorkspacePanel } from "@/features/workspace/WorkspacePanel";
 import { TemplateLibraryPanel } from "@/features/workspace/TemplateLibraryPanel";
 import { ScenePanel } from "@/features/workspace/ScenePanel";
 import { ParametricPanel } from "@/features/workspace/ParametricPanel";
+import { BuildDslPanel } from "@/features/workspace/BuildDslPanel";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
@@ -660,6 +662,9 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
             <TabsTrigger value="parametric">
               <Boxes className="size-3" /> Parametric
             </TabsTrigger>
+            <TabsTrigger value="dsl">
+              <Braces className="size-3" /> Build DSL
+            </TabsTrigger>
             <TabsTrigger value="console">
               <Terminal className="size-3" /> Console
             </TabsTrigger>
@@ -713,6 +718,10 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
 
         <TabsContent value="parametric" className="m-0 flex min-h-0 flex-col p-2">
           <ParametricPanel />
+        </TabsContent>
+
+        <TabsContent value="dsl" className="m-0 flex min-h-0 flex-col p-2">
+          <BuildDslPanel />
         </TabsContent>
 
         <TabsContent value="console" className="m-0 p-2">

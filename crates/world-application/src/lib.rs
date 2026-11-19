@@ -8,6 +8,11 @@ mod error;
 mod jobs;
 mod service;
 
+pub use build_dsl::{
+    compile as compile_build_dsl, BuildDslError, BuildDslSummary, BuildNode, BuildRecipe,
+    CompiledBuild, HouseNode, RepeatAxis, RepeatNode, BUILD_DSL_SCHEMA_VERSION, MAX_DSL_BLOCKS,
+    MAX_DSL_DEPTH, MAX_DSL_HOUSES, MAX_DSL_NODES, MAX_REPEAT_COUNT, MAX_REPEAT_SPACING,
+};
 pub use dto::{
     Actor, ActorSource, AuditAction, AuditEntry, ChunkSnapshot, ChunkSnapshotBatch, ChunkStats,
     HistoryState, HistorySummary, OperationRequest, OperationResult, PaletteEntry,

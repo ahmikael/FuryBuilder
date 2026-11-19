@@ -1,0 +1,19 @@
+[package]
+name = "furybuilder-build-dsl"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Versioned declarative build recipes compiled into the shared Operation API"
+[lib]
+name = "build_dsl"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+scene-model = { path = "../scene-model", package = "furybuilder-scene-model" }
+world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
+world-operations = { path = "../world-operations", package = "furybuilder-world-operations" }
+
+[dev-dependencies]
+serde_json = { workspace = true }

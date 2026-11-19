@@ -70,6 +70,7 @@ pub fn run() {
             commands::render_snapshot,
             commands::render_chunks,
             commands::preview_operation,
+            commands::build_dsl_preview,
             commands::apply_operation,
             commands::undo_operation,
             commands::redo_operation,

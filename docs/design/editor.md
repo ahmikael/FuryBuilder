@@ -211,6 +211,28 @@ current selection, transform the recipe in place, bake/detach it or roll it back
 - MCP exposes `list_parametric_objects` and `inspect_parametric_object` as read-only tools.
   Creation, transform, bake and rollback stay in the desktop UI in M9.15.
 
+## Build DSL (M9.16)
+
+The `Build DSL` tab edits a versioned JSON recipe of houses and repeat groups. It is a
+controlled construction format, not a scripting sandbox: the frontend only parses JSON,
+the Core validates and compiles, and the result is an ordinary `Batch` operation sent
+through the normal preview/apply and undo path.
+
+| Concept    | Behaviour                                                                                                                          |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| House node | Absolute origin, optional rotation, and bounded house parameters; version 1 is the only generator.                                 |
+| Repeat     | Expands a child 1–16 times along X, Y or Z with 1–64 block spacing. Nesting is capped at depth 4.                                  |
+| Budget     | At most 64 top-level nodes, 64 expanded houses and 16,384 blocks. Overlaps and malformed recipes are rejected before any write.    |
+| Preview    | Compiling runs the authoritative preview and shows bounds, house/block counts, affected/changed blocks, dirty chunks and warnings. |
+| Apply      | Applying sends the exact compiled operation through the shared history path; it is never written just because it was previewed.    |
+
+- The editor rejects invalid JSON locally, but all semantic validation and budgets stay in
+  Rust. There is no `eval`, dynamic import, filesystem or shell access.
+- `preview_build_dsl` in MCP returns the same summary, preview and typed operation as the
+  tab. An agent must still call the confirmed `apply_operation` tool to commit it.
+- Recipes are transient in M9.16. They are not written to `project.json`, and export formats
+  do not claim to preserve DSL metadata.
+
 ## Selection and geometry
 
 - Selections are inclusive `{min,max}` boxes in world coordinates. Negative coordinates

@@ -224,6 +224,67 @@ export function registerReadTools(server: McpServer): void {
     },
   );
 
+  const houseParams = z.object({
+    width: z.number().int().min(3).max(32),
+    depth: z.number().int().min(3).max(32),
+    height: z.number().int().min(2).max(32),
+    wall: z.string().min(1).max(128),
+    floor: z.string().min(1).max(128),
+    roof: z.string().min(1).max(128),
+    window: z.string().min(1).max(128).nullable().optional(),
+  });
+
+  const buildNode: z.ZodTypeAny = z.lazy(() =>
+    z.discriminatedUnion("type", [
+      z.object({
+        type: z.literal("house"),
+        at: z.tuple([z.number().int(), z.number().int(), z.number().int()]),
+        rotation: z.enum(["none", "cw90", "cw180", "cw270"]).default("none"),
+        params: houseParams,
+      }),
+      z.object({
+        type: z.literal("repeat"),
+        axis: z.enum(["x", "y", "z"]),
+        count: z.number().int().min(1).max(16),
+        spacing: z.number().int().min(1).max(64),
+        child: buildNode,
+      }),
+    ]),
+  );
+
+  const buildRecipe = z.object({
+    schemaVersion: z.literal(1).default(1),
+    dimension: z.string().min(1).max(128),
+    nodes: z.array(buildNode).min(1).max(64),
+  });
+
+  server.registerTool(
+    "preview_build_dsl",
+    {
+      title: "Preview Build DSL",
+      description:
+        "Validates a versioned declarative build recipe, compiles it deterministically into one typed Batch operation and returns the ordinary preview, budget metadata and the exact operation. Read-only: nothing is written. Pass the returned operation to apply_operation (which requires explicit write access and confirmation) to commit it.",
+      inputSchema: z.object({
+        ...project,
+        recipe: buildRecipe,
+      }),
+      annotations: readOnly,
+    },
+    async ({ project_id, world_revision, recipe }) => {
+      try {
+        const projectId = requireProjectId(project_id);
+        return textResult(
+          await callDesktop(
+            "build_dsl_preview",
+            withRevision({ projectId, recipe }, world_revision),
+          ),
+        );
+      } catch (error) {
+        return errorResult(error);
+      }
+    },
+  );
+
   server.registerTool(
     "get_block",
     {

@@ -21,9 +21,10 @@ use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 use world_application::{
-    app_info, apply_job_operation, undo_job_operation_id, Actor, ActorSource, AppError, ErrorCode,
-    JobStartRequest, JobState, Operation, OperationRequest, OperationResult, PreviewResult, Query,
-    UndoTarget, WorldService, DEFAULT_JOB_LIST_LIMIT, MAX_JOB_LIST_LIMIT,
+    app_info, apply_job_operation, compile_build_dsl, undo_job_operation_id, Actor, ActorSource,
+    AppError, BuildRecipe, ErrorCode, JobStartRequest, JobState, Operation, OperationRequest,
+    OperationResult, PreviewResult, Query, UndoTarget, WorldService, DEFAULT_JOB_LIST_LIMIT,
+    MAX_JOB_LIST_LIMIT,
 };
 
 use crate::mcp_access::{McpAccessInput, McpAccessMode};
@@ -370,6 +371,15 @@ struct OperationParams {
     world_revision: Option<u64>,
     #[serde(default)]
     idempotency_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BuildDslParams {
+    project_id: String,
+    recipe: BuildRecipe,
+    #[serde(default)]
+    world_revision: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -747,6 +757,36 @@ fn dispatch_inner(
                 }),
             };
             Ok(value)
+        }
+        "build_dsl_preview" => {
+            let params: BuildDslParams = parse_params(params)?;
+            authorize_project(state, &params.project_id)?;
+            require_revision(state, params.world_revision)?;
+            let compiled = compile_build_dsl(&params.recipe)?;
+            let summary = compiled.summary().clone();
+            let operation = compiled.operation();
+            let service = state
+                .service
+                .lock()
+                .map_err(|_| AppError::internal("world state lock poisoned"))?;
+            let preview = service.preview(&params.project_id, &operation)?;
+            let revision = service.world().revision();
+            let access = match state.mcp_access.authorize_operation(&operation) {
+                Ok(()) => json!({ "allowed": true }),
+                Err(error) => json!({
+                    "allowed": false,
+                    "code": error.code,
+                    "message": error.message,
+                    "details": error.details,
+                }),
+            };
+            Ok(json!({
+                "summary": summary,
+                "operation": operation,
+                "preview": preview,
+                "worldRevision": revision,
+                "access": access,
+            }))
         }
         "apply_operation" => {
             let params: OperationParams = parse_params(params)?;
@@ -2224,6 +2264,96 @@ mod tests {
         );
         assert!(!response.ok);
         assert_eq!(response.error.expect("error").code, ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn serves_build_dsl_preview_and_applies_the_compiled_operation() {
+        let state = AppState::new(temp_root("build-dsl"));
+        let recipe = json!({
+            "schemaVersion": 1,
+            "dimension": "minecraft:overworld",
+            "nodes": [{
+                "type": "house",
+                "at": [2, 64, 2],
+                "rotation": "none",
+                "params": {
+                    "width": 5,
+                    "depth": 4,
+                    "height": 3,
+                    "wall": "minecraft:stone_bricks",
+                    "floor": "minecraft:oak_planks",
+                    "roof": "minecraft:dark_oak_planks",
+                    "window": null
+                }
+            }]
+        });
+        let response = handle_request(
+            &state,
+            "token",
+            request(
+                "req-dsl-preview",
+                "token",
+                "build_dsl_preview",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 0,
+                    "recipe": recipe
+                }),
+            ),
+        );
+        assert!(response.ok, "{:?}", response.error);
+        let result = response.result.expect("dsl preview");
+        assert_eq!(result["summary"]["houses"], 1);
+        assert!(result["summary"]["blocks"].as_u64().expect("blocks") > 0);
+        assert_eq!(result["operation"]["type"], "batch");
+        assert_eq!(result["operation"]["dimension"], "minecraft:overworld");
+        assert_eq!(result["worldRevision"], 0);
+        assert!(
+            result["preview"]["affectedBlocks"]
+                .as_u64()
+                .expect("affected")
+                > 0
+        );
+        assert_eq!(
+            result["access"]["allowed"], false,
+            "writes are off by default"
+        );
+        let operation = result["operation"].clone();
+
+        enable_writes(
+            &state,
+            McpAccessMode::FullProject,
+            None,
+            100_000,
+            8_192,
+            false,
+        );
+        let applied = handle_request(
+            &state,
+            "token",
+            request(
+                "req-dsl-apply",
+                "token",
+                "apply_operation",
+                json!({
+                    "projectId": LOCAL_PROJECT_ID,
+                    "worldRevision": 0,
+                    "idempotencyKey": "dsl-apply-1",
+                    "operation": operation
+                }),
+            ),
+        );
+        assert!(applied.ok, "{:?}", applied.error);
+        assert_eq!(applied.result.expect("apply")["worldRevision"], 1);
+        let service = state.service.lock().expect("service");
+        assert_eq!(
+            service
+                .world()
+                .get_block("minecraft:overworld", BlockPos::new(2, 64, 2))
+                .expect("block")
+                .to_string(),
+            "minecraft:oak_planks"
+        );
     }
 
     #[test]
