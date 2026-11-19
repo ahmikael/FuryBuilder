@@ -211,3 +211,112 @@ Evidence: [metrics.json](evidence/2026-11-19-webview2-stress/metrics.json) and
 PNG SHA-256:
 `91a2db32aabd4574c3b927cc328ce4e62503d4d3a658167bfd82436879756d27`.
 The executable SHA-256 is recorded in the metrics.
+
+## 2026-11-19 — M10.1 CPU, GPU and RAM profile
+
+Command:
+
+```powershell
+# Vite server and debug Tauri binary already running/built
+$env:FURY_PROFILE='1'
+node scripts/webview2-stress.mjs docs/testing/evidence/2026-11-19-webview2-profile "8,16,24"
+Remove-Item Env:FURY_PROFILE
+
+cargo bench -p furybuilder-world-application --bench world_ops
+
+cd apps/desktop
+$env:FURY_PERF='1'
+pnpm exec vitest run src/renderer/mesher.perf.test.ts --reporter=verbose --disableConsoleIntercept
+Remove-Item Env:FURY_PERF
+python -m unittest discover -s ../../scripts -p "test_webview2_profile_evidence.py" -v
+```
+
+The profiled WebView2 run uses the same real Tauri/WebView2/Three.js path as the
+M9.23 stress test. Chrome `Profiler` sampled at 250 µs across three snapshot
+sizes and three `updateChunks` streaming runs (60.4 s, 100,668 samples). The
+profile includes synthetic waits, so absolute times carry profiling overhead;
+the ranking and module shares are the useful result. Evidence:
+[metrics.json](evidence/2026-11-19-webview2-profile/metrics.json),
+[cpu-profile-summary.json](evidence/2026-11-19-webview2-profile/cpu-profile-summary.json)
+and [viewport.png](evidence/2026-11-19-webview2-profile/viewport.png).
+
+### CPU hot spots (self time, aggregated duplicates)
+
+| Function                 | Self ms | Share | Module                 |
+| ------------------------ | ------: | ----: | ---------------------- |
+| `cachedBoxShapeFor`      | 5,059.5 |  8.4% | `shape.ts`             |
+| `buildChunkMesh`         | 4,305.6 |  7.1% | `mesher.ts`            |
+| `pushQuad`               | 3,579.7 |  5.9% | `mesher.ts`            |
+| `readPackedIndex`        | 3,297.0 |  5.5% | `world.ts`             |
+| `neighborName`           | 2,893.7 |  4.8% | `mesher.ts`            |
+| `needsUpdate` (Three.js) | 1,852.0 |  3.1% | `three.module`         |
+| `blockAt`                | 1,642.2 |  2.7% | `world.ts`             |
+| `multiplyMatrices`       | 1,203.6 |  2.0% | `three.module`         |
+| `rebuildChunk`           | 1,098.2 |  1.8% | `viewport-renderer.ts` |
+| `finalize`               |   992.0 |  1.6% | `mesher.ts`            |
+| `setup` (Three.js)       |   968.9 |  1.6% | `three.module`         |
+| `isAirName`              |   804.7 |  1.3% | `assets.ts`            |
+| `getBindingState`        |   745.5 |  1.2% | `three.module`         |
+| `bindVertexArray`        |   698.2 |  1.2% | WebGL                  |
+| `styleForBlock`          |   530.0 |  0.9% | `assets.ts`            |
+| `Float32BufferAttribute` |   501.3 |  0.8% | `three.module`         |
+| `bufferData`             |   415.3 |  0.7% | WebGL                  |
+| `setProgram`             |   406.7 |  0.7% | `three.module`         |
+
+Module shares from the top rows: `mesher.ts` 12.1 s (20.0%), Three.js 8.8 s
+(14.6%), `shape.ts` 5.1 s (8.4%), `world.ts` 4.9 s (8.2%), `assets.ts` 1.3 s
+(2.2%), `viewport-renderer.ts` 1.1 s (1.8%). Idle was 9.1 s (15.0%) and GC
+1.48 s (2.4%).
+
+The picture is consistent: per-block meshing and palette decoding dominate,
+followed by Three.js buffer/VAO/program setup. The most actionable costs are:
+
+1. **`cachedBoxShapeFor` builds and sorts a string key on every lookup.**
+   Resolve shapes once per palette entry or use an interned state key instead of
+   sorting properties inside the hot loop.
+2. **`neighborName`/`blockAt` repeatedly build `${x},${z}` keys and decode
+   coordinates.** Cache neighbour chunk references and local indices per
+   section; keep the palette/style lookup out of the per-face path.
+3. **`finalize` copies every array with `Float32Array.from`/`Uint32Array.from`.**
+   Those copies add CPU and garbage on top of the buffers already built.
+   Preallocate or hand over the typed arrays directly.
+4. **`needsUpdate`, `setup`, `getBindingState`, `bindVertexArray`, `bufferData`
+   and `setProgram` are the upload path.** Per-chunk geometry and one mesh per
+   render category create many draw calls and buffer binds; M10.2 should bound
+   meshing work per frame, and later work can reuse buffers or merge draws.
+5. **`rebuildChunk` disposes and recreates geometry for every dirty chunk.**
+   Reusing geometry buffers for small edits should reduce both CPU and GC.
+
+### GPU and RAM
+
+At radius 24 the profiled overview camera reported 99 FPS, 1,862 draw calls,
+2,254,240 triangles, 2,052 geometries and one texture on the GTX 1060 3 GB.
+`EXT_disjoint_timer_query_webgl2` is available, but this run did not use timer
+queries; GPU attribution is therefore from frame time, draw calls and
+triangles, not a vendor GPU profile. Draw calls scale with visible chunks, so
+the per-chunk mesh strategy is the main GPU-side scaling limit.
+
+After the three streaming runs the JS heap was 711 MB used, 760 MB total, with
+a 4.4 GB limit; GC samples were 2.4% of the profile. This is not a leak proof:
+each run replaces 2,401 chunks and their meshes, and old allocations may simply
+not have been collected yet. It is enough to justify explicit cache budgets,
+eviction and bounded meshing jobs in M10.2/M10.3.
+
+### Rust core and mesher micro-benchmarks
+
+`cargo bench` on the same machine: `fill_cuboid` of 320,000 blocks in 123.61 ms
+(2,588,785 blocks/s), 100,000 reads in 9.44 ms (10,589,406 reads/s), undo in
+0.28 ms and redo in 0.16 ms. The Rust core is not the bottleneck in this
+renderer workload.
+
+`FURY_PERF=1` mesher test: 50 centre-chunk builds, 201.76 ms total, 4.04 ms per
+chunk, 875 faces. This is a single-chunk CPU measurement and excludes GPU
+upload and draw calls.
+
+### Caveats
+
+One GPU, one WebView2 build, a synthetic scene and a short run. The profile
+does not cover React UI work, real imported worlds, interactive brush edits,
+long-running camera movement, GPU memory, context loss or other hardware. The
+profiled run's absolute timings are inflated by sampling and are not used for
+the M9.23 limit table.

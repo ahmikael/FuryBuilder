@@ -45,6 +45,57 @@ if (radii.length === 0) throw new Error("No valid radii supplied");
 radii.sort((left, right) => left - right);
 await mkdir(output); // Fail rather than overwrite existing evidence.
 const profile = await mkdtemp(join(tmpdir(), "fury-webview-stress-"));
+const profileEnabled = process.env.FURY_PROFILE === "1";
+
+/**
+ * Collapses a Chrome CPU profile into self-time rows. Time deltas are microseconds;
+ * idle/program samples are reported separately so synthetic waits do not hide real work.
+ */
+function summarizeProfile(profile) {
+  const nodeById = new Map(profile.nodes.map((node) => [node.id, node]));
+  const selfMicros = new Map();
+  let totalMicros = 0;
+  const timeDeltas = profile.timeDeltas ?? [];
+  for (let index = 0; index < profile.samples.length; index += 1) {
+    const micros = timeDeltas[index] ?? 0;
+    totalMicros += micros;
+    const nodeId = profile.samples[index];
+    selfMicros.set(nodeId, (selfMicros.get(nodeId) ?? 0) + micros);
+  }
+  const rows = [];
+  for (const [nodeId, micros] of selfMicros) {
+    const node = nodeById.get(nodeId);
+    if (!node) continue;
+    const frame = node.callFrame;
+    rows.push({
+      functionName: frame.functionName || "(anonymous)",
+      url: frame.url,
+      lineNumber: frame.lineNumber + 1,
+      selfMs: Math.round(micros) / 1000,
+    });
+  }
+  rows.sort((left, right) => right.selfMs - left.selfMs);
+  const idleNames = new Set(["(idle)", "(program)", "(root)"]);
+  const idleRows = rows.filter((row) => idleNames.has(row.functionName));
+  const gcRows = rows.filter(
+    (row) => row.functionName === "(garbage collector)",
+  );
+  const activeRows = rows.filter(
+    (row) =>
+      !idleNames.has(row.functionName) &&
+      row.functionName !== "(garbage collector)",
+  );
+  const share = (micros) => (totalMicros > 0 ? micros / totalMicros : 0);
+  return {
+    sampleCount: profile.samples.length,
+    durationMs: Math.round(totalMicros / 1000),
+    idleMs: Math.round(idleRows.reduce((sum, row) => sum + row.selfMs, 0)),
+    gcMs: Math.round(gcRows.reduce((sum, row) => sum + row.selfMs, 0)),
+    idleShare: share(idleRows.reduce((sum, row) => sum + row.selfMs, 0) * 1000),
+    gcShare: share(gcRows.reduce((sum, row) => sum + row.selfMs, 0) * 1000),
+    topSelfTime: activeRows.slice(0, 40),
+  };
+}
 
 // Do not accidentally test a different checkout already listening on the port.
 for (const name of ["viewport-renderer", "builders", "mesher", "world"]) {
@@ -161,6 +212,7 @@ async function stressScene(config) {
     if (!(gl instanceof WebGL2RenderingContext))
       throw new Error("WebGL2 context unavailable");
     const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+    const gpuTimer = gl.getExtension("EXT_disjoint_timer_query_webgl2");
 
     // Deterministic synthetic terrain. It is not a claim about Minecraft worldgen.
     const builder = new SnapshotBuilder();
@@ -396,6 +448,7 @@ async function stressScene(config) {
           ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
           : null,
         maxTextureSize: gl.getParameter(gl.MAX_TEXTURE_SIZE),
+        gpuTimerAvailable: Boolean(gpuTimer),
         glError: gl.getError(),
       },
       scenario: {
@@ -416,6 +469,20 @@ async function stressScene(config) {
         pngSha256: captureSha256,
         dataUrl: captureDataUrl,
       },
+      rendererInfo: {
+        calls: renderer.renderer.info.render.calls,
+        triangles: renderer.renderer.info.render.triangles,
+        geometries: renderer.renderer.info.memory.geometries,
+        textures: renderer.renderer.info.memory.textures,
+      },
+      memory:
+        typeof performance.memory === "object" && performance.memory
+          ? {
+              jsHeapUsedBytes: performance.memory.usedJSHeapSize,
+              jsHeapTotalBytes: performance.memory.totalJSHeapSize,
+              jsHeapLimitBytes: performance.memory.jsHeapSizeLimit,
+            }
+          : null,
       heapUsedBytes: heap(),
     };
   } finally {
@@ -505,9 +572,29 @@ try {
     height: 720,
     batchSizes: [16, 32, 64],
   };
+  if (profileEnabled) {
+    await send("Profiler.enable");
+    await send("Profiler.setSamplingInterval", { interval: 250 });
+    await send("Profiler.start");
+  }
   const result = await evaluate(
     `(${stressScene.toString()})(${JSON.stringify(config)})`,
   );
+  if (profileEnabled) {
+    const stopped = await send("Profiler.stop");
+    const summary = summarizeProfile(stopped.profile);
+    await writeFile(
+      join(output, "cpu-profile-summary.json"),
+      JSON.stringify(summary, null, 2) + "\n",
+      { flag: "wx" },
+    );
+    result.profiling = {
+      enabled: true,
+      samplingIntervalMicros: 250,
+      summaryFile: "cpu-profile-summary.json",
+      note: "The profiled run has profiling overhead; use it for relative hot spots, not for the limit table.",
+    };
+  }
   if (result.environment.glError !== 0)
     throw new Error(`WebGL error: ${result.environment.glError}`);
 

@@ -1,0 +1,770 @@
+{
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "webglVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "shadingLanguage": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+    "gpuVendor": "Google Inc. (NVIDIA)",
+    "gpuRenderer": "ANGLE (NVIDIA, NVIDIA GeForce GTX 1060 3GB (0x00001C02) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    "maxTextureSize": 16384,
+    "gpuTimerAvailable": true,
+    "glError": 0
+  },
+  "scenario": {
+    "width": 1280,
+    "height": 720,
+    "maxRadius": 24,
+    "totalChunks": 2401,
+    "nonAirBlocks": 5126960,
+    "radii": [
+      8,
+      16,
+      24
+    ],
+    "batchSizes": [
+      16,
+      32,
+      64
+    ],
+    "worldModel": "synthetic 7-layer stone base, grass surface, bounded oak-plank towers"
+  },
+  "snapshots": [
+    {
+      "radius": 8,
+      "chunks": 289,
+      "nonAirBlocks": 616752,
+      "setupMs": 540.7,
+      "settleMs": 2041,
+      "metrics": {
+        "fps": 139,
+        "frameMs": 10.7,
+        "drawCalls": 283,
+        "triangles": 354464,
+        "geometries": 283,
+        "textures": 1,
+        "loadedChunks": 289,
+        "renderedSections": 578,
+        "meshCount": 289
+      },
+      "overviewMetrics": {
+        "fps": 133,
+        "frameMs": 6.3,
+        "drawCalls": 289,
+        "triangles": 363104,
+        "geometries": 289,
+        "textures": 1,
+        "loadedChunks": 289,
+        "renderedSections": 578,
+        "meshCount": 289
+      },
+      "heapUsedBytes": 199379260,
+      "capture": {
+        "resolution": [
+          1600,
+          900
+        ],
+        "worldRevision": 1,
+        "loadedChunks": 289,
+        "missingChunks": 0,
+        "partial": false,
+        "dataUrlLength": 1215158
+      },
+      "failed": null
+    },
+    {
+      "radius": 16,
+      "chunks": 1089,
+      "nonAirBlocks": 2325040,
+      "setupMs": 1713.9,
+      "settleMs": 1898.1,
+      "metrics": {
+        "fps": 155,
+        "frameMs": 6.4,
+        "drawCalls": 769,
+        "triangles": 936416,
+        "geometries": 769,
+        "textures": 1,
+        "loadedChunks": 1089,
+        "renderedSections": 2178,
+        "meshCount": 1089
+      },
+      "overviewMetrics": {
+        "fps": 153,
+        "frameMs": 8.3,
+        "drawCalls": 858,
+        "triangles": 1040992,
+        "geometries": 945,
+        "textures": 1,
+        "loadedChunks": 1089,
+        "renderedSections": 2178,
+        "meshCount": 1089
+      },
+      "heapUsedBytes": 362069967,
+      "capture": {
+        "resolution": [
+          1600,
+          900
+        ],
+        "worldRevision": 1,
+        "loadedChunks": 1089,
+        "missingChunks": 0,
+        "partial": false,
+        "dataUrlLength": 1904746
+      },
+      "failed": null
+    },
+    {
+      "radius": 24,
+      "chunks": 2401,
+      "nonAirBlocks": 5126960,
+      "setupMs": 3876,
+      "settleMs": 1931.7,
+      "metrics": {
+        "fps": 162,
+        "frameMs": 6.8,
+        "drawCalls": 1307,
+        "triangles": 1586016,
+        "geometries": 1307,
+        "textures": 1,
+        "loadedChunks": 2401,
+        "renderedSections": 4802,
+        "meshCount": 2401
+      },
+      "overviewMetrics": {
+        "fps": 99,
+        "frameMs": 11.3,
+        "drawCalls": 1862,
+        "triangles": 2254240,
+        "geometries": 2052,
+        "textures": 1,
+        "loadedChunks": 2401,
+        "renderedSections": 4802,
+        "meshCount": 2401
+      },
+      "heapUsedBytes": 598706458,
+      "capture": {
+        "resolution": [
+          1600,
+          900
+        ],
+        "worldRevision": 1,
+        "loadedChunks": 2401,
+        "missingChunks": 0,
+        "partial": false,
+        "dataUrlLength": 1912398
+      },
+      "failed": null
+    }
+  ],
+  "streaming": {
+    "maxRadius": 24,
+    "batchSizes": [
+      16,
+      32,
+      64
+    ],
+    "runs": [
+      {
+        "batchChunks": 16,
+        "rings": [
+          {
+            "ring": 1,
+            "chunks": 8,
+            "updates": 1,
+            "ms": 14.8,
+            "maxBatchMs": 14.8
+          },
+          {
+            "ring": 2,
+            "chunks": 16,
+            "updates": 1,
+            "ms": 39.8,
+            "maxBatchMs": 39.8
+          },
+          {
+            "ring": 3,
+            "chunks": 24,
+            "updates": 2,
+            "ms": 71.2,
+            "maxBatchMs": 45.3
+          },
+          {
+            "ring": 4,
+            "chunks": 32,
+            "updates": 2,
+            "ms": 96.8,
+            "maxBatchMs": 49
+          },
+          {
+            "ring": 5,
+            "chunks": 40,
+            "updates": 3,
+            "ms": 128,
+            "maxBatchMs": 53.2
+          },
+          {
+            "ring": 6,
+            "chunks": 48,
+            "updates": 3,
+            "ms": 157.2,
+            "maxBatchMs": 58.6
+          },
+          {
+            "ring": 7,
+            "chunks": 56,
+            "updates": 4,
+            "ms": 197.6,
+            "maxBatchMs": 60.9
+          },
+          {
+            "ring": 8,
+            "chunks": 64,
+            "updates": 4,
+            "ms": 215.6,
+            "maxBatchMs": 56.1
+          },
+          {
+            "ring": 9,
+            "chunks": 72,
+            "updates": 5,
+            "ms": 266.4,
+            "maxBatchMs": 65.9
+          },
+          {
+            "ring": 10,
+            "chunks": 80,
+            "updates": 5,
+            "ms": 283.3,
+            "maxBatchMs": 60.5
+          },
+          {
+            "ring": 11,
+            "chunks": 88,
+            "updates": 6,
+            "ms": 330,
+            "maxBatchMs": 62.6
+          },
+          {
+            "ring": 12,
+            "chunks": 96,
+            "updates": 6,
+            "ms": 346.2,
+            "maxBatchMs": 61.4
+          },
+          {
+            "ring": 13,
+            "chunks": 104,
+            "updates": 7,
+            "ms": 385.7,
+            "maxBatchMs": 62.6
+          },
+          {
+            "ring": 14,
+            "chunks": 112,
+            "updates": 7,
+            "ms": 437.9,
+            "maxBatchMs": 67.4
+          },
+          {
+            "ring": 15,
+            "chunks": 120,
+            "updates": 8,
+            "ms": 466.8,
+            "maxBatchMs": 65
+          },
+          {
+            "ring": 16,
+            "chunks": 128,
+            "updates": 8,
+            "ms": 495.9,
+            "maxBatchMs": 65.2
+          },
+          {
+            "ring": 17,
+            "chunks": 136,
+            "updates": 9,
+            "ms": 537.2,
+            "maxBatchMs": 66.6
+          },
+          {
+            "ring": 18,
+            "chunks": 144,
+            "updates": 9,
+            "ms": 599,
+            "maxBatchMs": 85.1
+          },
+          {
+            "ring": 19,
+            "chunks": 152,
+            "updates": 10,
+            "ms": 621.5,
+            "maxBatchMs": 67.1
+          },
+          {
+            "ring": 20,
+            "chunks": 160,
+            "updates": 10,
+            "ms": 692.2,
+            "maxBatchMs": 91.4
+          },
+          {
+            "ring": 21,
+            "chunks": 168,
+            "updates": 11,
+            "ms": 688.8,
+            "maxBatchMs": 68.4
+          },
+          {
+            "ring": 22,
+            "chunks": 176,
+            "updates": 11,
+            "ms": 730.9,
+            "maxBatchMs": 70
+          },
+          {
+            "ring": 23,
+            "chunks": 184,
+            "updates": 12,
+            "ms": 814.5,
+            "maxBatchMs": 80.8
+          },
+          {
+            "ring": 24,
+            "chunks": 192,
+            "updates": 12,
+            "ms": 1000.4,
+            "maxBatchMs": 195.7
+          }
+        ],
+        "totalMs": 10309.6,
+        "updates": 156,
+        "metrics": {
+          "fps": 86,
+          "frameMs": 11.1,
+          "drawCalls": 1862,
+          "triangles": 2254240,
+          "geometries": 1862,
+          "textures": 1,
+          "loadedChunks": 2401,
+          "renderedSections": 4802,
+          "meshCount": 2401
+        },
+        "heapUsedBytes": 560494198,
+        "failed": null
+      },
+      {
+        "batchChunks": 32,
+        "rings": [
+          {
+            "ring": 1,
+            "chunks": 8,
+            "updates": 1,
+            "ms": 16.9,
+            "maxBatchMs": 16.9
+          },
+          {
+            "ring": 2,
+            "chunks": 16,
+            "updates": 1,
+            "ms": 38.1,
+            "maxBatchMs": 38.1
+          },
+          {
+            "ring": 3,
+            "chunks": 24,
+            "updates": 1,
+            "ms": 65.6,
+            "maxBatchMs": 65.6
+          },
+          {
+            "ring": 4,
+            "chunks": 32,
+            "updates": 1,
+            "ms": 86.5,
+            "maxBatchMs": 86.5
+          },
+          {
+            "ring": 5,
+            "chunks": 40,
+            "updates": 2,
+            "ms": 121.1,
+            "maxBatchMs": 92.9
+          },
+          {
+            "ring": 6,
+            "chunks": 48,
+            "updates": 2,
+            "ms": 157.5,
+            "maxBatchMs": 104.9
+          },
+          {
+            "ring": 7,
+            "chunks": 56,
+            "updates": 2,
+            "ms": 179.7,
+            "maxBatchMs": 103.6
+          },
+          {
+            "ring": 8,
+            "chunks": 64,
+            "updates": 2,
+            "ms": 200,
+            "maxBatchMs": 101.7
+          },
+          {
+            "ring": 9,
+            "chunks": 72,
+            "updates": 3,
+            "ms": 239.9,
+            "maxBatchMs": 107.7
+          },
+          {
+            "ring": 10,
+            "chunks": 80,
+            "updates": 3,
+            "ms": 270.8,
+            "maxBatchMs": 111.1
+          },
+          {
+            "ring": 11,
+            "chunks": 88,
+            "updates": 3,
+            "ms": 307.5,
+            "maxBatchMs": 118.1
+          },
+          {
+            "ring": 12,
+            "chunks": 96,
+            "updates": 3,
+            "ms": 322.3,
+            "maxBatchMs": 113.1
+          },
+          {
+            "ring": 13,
+            "chunks": 104,
+            "updates": 4,
+            "ms": 366.8,
+            "maxBatchMs": 115.9
+          },
+          {
+            "ring": 14,
+            "chunks": 112,
+            "updates": 4,
+            "ms": 386.9,
+            "maxBatchMs": 115
+          },
+          {
+            "ring": 15,
+            "chunks": 120,
+            "updates": 4,
+            "ms": 431.5,
+            "maxBatchMs": 117.8
+          },
+          {
+            "ring": 16,
+            "chunks": 128,
+            "updates": 4,
+            "ms": 437.8,
+            "maxBatchMs": 111
+          },
+          {
+            "ring": 17,
+            "chunks": 136,
+            "updates": 5,
+            "ms": 545.7,
+            "maxBatchMs": 138.7
+          },
+          {
+            "ring": 18,
+            "chunks": 144,
+            "updates": 5,
+            "ms": 539.9,
+            "maxBatchMs": 140.8
+          },
+          {
+            "ring": 19,
+            "chunks": 152,
+            "updates": 5,
+            "ms": 546.1,
+            "maxBatchMs": 118.2
+          },
+          {
+            "ring": 20,
+            "chunks": 160,
+            "updates": 5,
+            "ms": 607.7,
+            "maxBatchMs": 127.5
+          },
+          {
+            "ring": 21,
+            "chunks": 168,
+            "updates": 6,
+            "ms": 642.6,
+            "maxBatchMs": 129
+          },
+          {
+            "ring": 22,
+            "chunks": 176,
+            "updates": 6,
+            "ms": 650.3,
+            "maxBatchMs": 121.2
+          },
+          {
+            "ring": 23,
+            "chunks": 184,
+            "updates": 6,
+            "ms": 684.3,
+            "maxBatchMs": 122.1
+          },
+          {
+            "ring": 24,
+            "chunks": 192,
+            "updates": 6,
+            "ms": 731.4,
+            "maxBatchMs": 132.6
+          }
+        ],
+        "totalMs": 9352.5,
+        "updates": 84,
+        "metrics": {
+          "fps": 102,
+          "frameMs": 9.7,
+          "drawCalls": 1862,
+          "triangles": 2254240,
+          "geometries": 1862,
+          "textures": 1,
+          "loadedChunks": 2401,
+          "renderedSections": 4802,
+          "meshCount": 2401
+        },
+        "heapUsedBytes": 823059182,
+        "failed": null
+      },
+      {
+        "batchChunks": 64,
+        "rings": [
+          {
+            "ring": 1,
+            "chunks": 8,
+            "updates": 1,
+            "ms": 14.8,
+            "maxBatchMs": 14.8
+          },
+          {
+            "ring": 2,
+            "chunks": 16,
+            "updates": 1,
+            "ms": 37.9,
+            "maxBatchMs": 37.9
+          },
+          {
+            "ring": 3,
+            "chunks": 24,
+            "updates": 1,
+            "ms": 62.4,
+            "maxBatchMs": 62.4
+          },
+          {
+            "ring": 4,
+            "chunks": 32,
+            "updates": 1,
+            "ms": 86.8,
+            "maxBatchMs": 86.8
+          },
+          {
+            "ring": 5,
+            "chunks": 40,
+            "updates": 1,
+            "ms": 114.2,
+            "maxBatchMs": 114.2
+          },
+          {
+            "ring": 6,
+            "chunks": 48,
+            "updates": 1,
+            "ms": 209.1,
+            "maxBatchMs": 209.1
+          },
+          {
+            "ring": 7,
+            "chunks": 56,
+            "updates": 1,
+            "ms": 157.1,
+            "maxBatchMs": 157.1
+          },
+          {
+            "ring": 8,
+            "chunks": 64,
+            "updates": 1,
+            "ms": 184.7,
+            "maxBatchMs": 184.7
+          },
+          {
+            "ring": 9,
+            "chunks": 72,
+            "updates": 2,
+            "ms": 223.6,
+            "maxBatchMs": 191.4
+          },
+          {
+            "ring": 10,
+            "chunks": 80,
+            "updates": 2,
+            "ms": 246,
+            "maxBatchMs": 191.8
+          },
+          {
+            "ring": 11,
+            "chunks": 88,
+            "updates": 2,
+            "ms": 268.5,
+            "maxBatchMs": 194.3
+          },
+          {
+            "ring": 12,
+            "chunks": 96,
+            "updates": 2,
+            "ms": 301.2,
+            "maxBatchMs": 196.8
+          },
+          {
+            "ring": 13,
+            "chunks": 104,
+            "updates": 2,
+            "ms": 332.8,
+            "maxBatchMs": 204.9
+          },
+          {
+            "ring": 14,
+            "chunks": 112,
+            "updates": 2,
+            "ms": 356.5,
+            "maxBatchMs": 205.2
+          },
+          {
+            "ring": 15,
+            "chunks": 120,
+            "updates": 2,
+            "ms": 390.9,
+            "maxBatchMs": 209
+          },
+          {
+            "ring": 16,
+            "chunks": 128,
+            "updates": 2,
+            "ms": 409.2,
+            "maxBatchMs": 205.6
+          },
+          {
+            "ring": 17,
+            "chunks": 136,
+            "updates": 3,
+            "ms": 451.4,
+            "maxBatchMs": 213.2
+          },
+          {
+            "ring": 18,
+            "chunks": 144,
+            "updates": 3,
+            "ms": 484.8,
+            "maxBatchMs": 213.4
+          },
+          {
+            "ring": 19,
+            "chunks": 152,
+            "updates": 3,
+            "ms": 567.8,
+            "maxBatchMs": 270.7
+          },
+          {
+            "ring": 20,
+            "chunks": 160,
+            "updates": 3,
+            "ms": 535.8,
+            "maxBatchMs": 212.9
+          },
+          {
+            "ring": 21,
+            "chunks": 168,
+            "updates": 3,
+            "ms": 554.3,
+            "maxBatchMs": 210.1
+          },
+          {
+            "ring": 22,
+            "chunks": 176,
+            "updates": 3,
+            "ms": 623.8,
+            "maxBatchMs": 256.7
+          },
+          {
+            "ring": 23,
+            "chunks": 184,
+            "updates": 3,
+            "ms": 619.6,
+            "maxBatchMs": 217.7
+          },
+          {
+            "ring": 24,
+            "chunks": 192,
+            "updates": 3,
+            "ms": 659.1,
+            "maxBatchMs": 225.5
+          }
+        ],
+        "totalMs": 8588.1,
+        "updates": 48,
+        "metrics": {
+          "fps": 102,
+          "frameMs": 9.6,
+          "drawCalls": 1862,
+          "triangles": 2254240,
+          "geometries": 1862,
+          "textures": 1,
+          "loadedChunks": 2401,
+          "renderedSections": 4802,
+          "meshCount": 2401
+        },
+        "heapUsedBytes": 711149326,
+        "failed": null
+      }
+    ],
+    "failed": null
+  },
+  "capture": {
+    "pngBytes": 1434282,
+    "pngSha256": "91a2db32aabd4574c3b927cc328ce4e62503d4d3a658167bfd82436879756d27"
+  },
+  "rendererInfo": {
+    "calls": 1862,
+    "triangles": 2254240,
+    "geometries": 1862,
+    "textures": 1
+  },
+  "memory": {
+    "jsHeapUsedBytes": 711149326,
+    "jsHeapTotalBytes": 759848010,
+    "jsHeapLimitBytes": 4395630592
+  },
+  "heapUsedBytes": 711149326,
+  "profiling": {
+    "enabled": true,
+    "samplingIntervalMicros": 250,
+    "summaryFile": "cpu-profile-summary.json",
+    "note": "The profiled run has profiling overhead; use it for relative hot spots, not for the limit table."
+  },
+  "kind": "webview2-large-map-stress",
+  "schemaVersion": 1,
+  "generatedAt": "2026-11-19T12:58:33.928Z",
+  "executableSha256": "69d320a21098ee673b663324c5e6b131e5691bb7b5765597290850d367879520",
+  "node": "v26.13.1",
+  "os": {
+    "platform": "win32",
+    "release": "10.0.26300"
+  },
+  "cpu": {
+    "model": "Intel(R) Core(TM) i5-9600KF CPU @ 3.70GHz",
+    "logical": 6
+  },
+  "totalMemoryBytes": 17093582848,
+  "durationMs": 62386
+}

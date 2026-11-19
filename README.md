@@ -207,6 +207,12 @@ ceiling (radius 32), the comfortable interactive envelope (radius 16, 1,089 chun
 upper playable bound (radius 24, 2,401 chunks), plus a 16-32 chunk streaming budget. These
 are single-machine reference numbers, not guarantees; details and caveats are in
 `docs/testing/perf-runs.md`.
+M10.1 profiled the real renderer with Chrome CPU sampling, WebGL/ANGLE frame metrics and
+JS-heap/GC data. The dominant costs are per-block shape lookup (`cachedBoxShapeFor`),
+chunk meshing (`buildChunkMesh`, `pushQuad`, `neighborName`), palette decoding
+(`readPackedIndex`, `blockAt`) and Three.js buffer/VAO/program setup; the Rust core stays
+well below those costs. The ranked profile, module shares and follow-up actions are in
+`docs/testing/perf-runs.md`.
 The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official

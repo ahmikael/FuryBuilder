@@ -1,0 +1,250 @@
+{
+  "sampleCount": 100668,
+  "durationMs": 60437,
+  "idleMs": 9070,
+  "gcMs": 1476,
+  "idleShare": 0.15006912857882568,
+  "gcShare": 0.02442926439971346,
+  "topSelfTime": [
+    {
+      "functionName": "cachedBoxShapeFor",
+      "url": "http://127.0.0.1:1420/src/renderer/shape.ts",
+      "lineNumber": 163,
+      "selfMs": 4040.218
+    },
+    {
+      "functionName": "buildChunkMesh",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 440,
+      "selfMs": 3412.766
+    },
+    {
+      "functionName": "pushQuad",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 273,
+      "selfMs": 2909.677
+    },
+    {
+      "functionName": "neighborName",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 246,
+      "selfMs": 2268.678
+    },
+    {
+      "functionName": "needsUpdate",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 43339,
+      "selfMs": 1852.045
+    },
+    {
+      "functionName": "readPackedIndex",
+      "url": "http://127.0.0.1:1420/src/renderer/world.ts",
+      "lineNumber": 25,
+      "selfMs": 1418.792
+    },
+    {
+      "functionName": "blockAt",
+      "url": "http://127.0.0.1:1420/src/renderer/world.ts",
+      "lineNumber": 108,
+      "selfMs": 1295.387
+    },
+    {
+      "functionName": "readPackedIndex",
+      "url": "http://127.0.0.1:1420/src/renderer/world.ts",
+      "lineNumber": 25,
+      "selfMs": 1212.666
+    },
+    {
+      "functionName": "rebuildChunk",
+      "url": "http://127.0.0.1:1420/src/renderer/viewport-renderer.ts",
+      "lineNumber": 507,
+      "selfMs": 1098.249
+    },
+    {
+      "functionName": "cachedBoxShapeFor",
+      "url": "http://127.0.0.1:1420/src/renderer/shape.ts",
+      "lineNumber": 163,
+      "selfMs": 1019.279
+    },
+    {
+      "functionName": "finalize",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 424,
+      "selfMs": 991.993
+    },
+    {
+      "functionName": "setup",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 43268,
+      "selfMs": 968.904
+    },
+    {
+      "functionName": "buildChunkMesh",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 440,
+      "selfMs": 892.797
+    },
+    {
+      "functionName": "multiplyMatrices",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 8272,
+      "selfMs": 757.409
+    },
+    {
+      "functionName": "getBindingState",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 43293,
+      "selfMs": 745.496
+    },
+    {
+      "functionName": "bindVertexArray",
+      "url": "",
+      "lineNumber": 0,
+      "selfMs": 698.192
+    },
+    {
+      "functionName": "pushQuad",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 273,
+      "selfMs": 670.066
+    },
+    {
+      "functionName": "neighborName",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 246,
+      "selfMs": 625.071
+    },
+    {
+      "functionName": "build",
+      "url": "http://127.0.0.1:1420/src/renderer/builders.ts",
+      "lineNumber": 65,
+      "selfMs": 555.008
+    },
+    {
+      "functionName": "styleForBlock",
+      "url": "http://127.0.0.1:1420/src/renderer/assets.ts",
+      "lineNumber": 131,
+      "selfMs": 529.965
+    },
+    {
+      "functionName": "projectObject",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 52293,
+      "selfMs": 529.194
+    },
+    {
+      "functionName": "Float32BufferAttribute",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 13513,
+      "selfMs": 501.283
+    },
+    {
+      "functionName": "isAirName",
+      "url": "http://127.0.0.1:1420/src/renderer/assets.ts",
+      "lineNumber": 148,
+      "selfMs": 486.692
+    },
+    {
+      "functionName": "Object3D",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 9265,
+      "selfMs": 481.308
+    },
+    {
+      "functionName": "setBlock",
+      "url": "http://127.0.0.1:1420/src/renderer/builders.ts",
+      "lineNumber": 34,
+      "selfMs": 460.785
+    },
+    {
+      "functionName": "multiplyMatrices",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 8272,
+      "selfMs": 446.191
+    },
+    {
+      "functionName": "bufferData",
+      "url": "",
+      "lineNumber": 0,
+      "selfMs": 415.325
+    },
+    {
+      "functionName": "setProgram",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 52553,
+      "selfMs": 406.715
+    },
+    {
+      "functionName": "copy",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 4174,
+      "selfMs": 396.168
+    },
+    {
+      "functionName": "renderObjects",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 52414,
+      "selfMs": 382.262
+    },
+    {
+      "functionName": "sort",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 46801,
+      "selfMs": 377.956
+    },
+    {
+      "functionName": "updateMatrixWorld",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 10068,
+      "selfMs": 365.88
+    },
+    {
+      "functionName": "readPackedIndex",
+      "url": "http://127.0.0.1:1420/src/renderer/world.ts",
+      "lineNumber": 25,
+      "selfMs": 362.098
+    },
+    {
+      "functionName": "blockAt",
+      "url": "http://127.0.0.1:1420/src/renderer/world.ts",
+      "lineNumber": 108,
+      "selfMs": 346.788
+    },
+    {
+      "functionName": "shouldRenderFace",
+      "url": "http://127.0.0.1:1420/src/renderer/mesher.ts",
+      "lineNumber": 238,
+      "selfMs": 339.494
+    },
+    {
+      "functionName": "remove",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 9822,
+      "selfMs": 321.503
+    },
+    {
+      "functionName": "isAirName",
+      "url": "http://127.0.0.1:1420/src/renderer/assets.ts",
+      "lineNumber": 148,
+      "selfMs": 318.029
+    },
+    {
+      "functionName": "readPackedIndex",
+      "url": "http://127.0.0.1:1420/src/renderer/world.ts",
+      "lineNumber": 25,
+      "selfMs": 303.449
+    },
+    {
+      "functionName": "min",
+      "url": "http://127.0.0.1:1420/node_modules/.vite/deps/three.module-Hm3F-BXk.js?v=0fd3d3dc",
+      "lineNumber": 4443,
+      "selfMs": 300.45
+    },
+    {
+      "functionName": "drawElements",
+      "url": "",
+      "lineNumber": 0,
+      "selfMs": 287.907
+    }
+  ]
+}
