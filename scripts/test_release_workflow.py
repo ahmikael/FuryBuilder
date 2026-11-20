@@ -7,6 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOW = ROOT / ".github" / "workflows" / "release.yml"
+CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 CONFIG = ROOT / "apps" / "desktop" / "src-tauri" / "tauri.conf.json"
 CAPABILITY = ROOT / "apps" / "desktop" / "src-tauri" / "capabilities" / "default.json"
 PACKAGE = ROOT / "package.json"
@@ -17,6 +18,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        cls.ci_workflow = CI_WORKFLOW.read_text(encoding="utf-8")
         cls.config = json.loads(CONFIG.read_text(encoding="utf-8"))
         cls.capability = json.loads(CAPABILITY.read_text(encoding="utf-8"))
         cls.package = json.loads(PACKAGE.read_text(encoding="utf-8"))
@@ -119,6 +121,19 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("already published", self.workflow)
         self.assertIn("gh release delete", self.workflow)
         self.assertIn("--verify-tag", self.workflow)
+
+    def test_sidecar_is_staged_before_rust_compilation(self):
+        for workflow, sidecar in (
+            (self.workflow, "scripts/build-mcp-sidecar.mjs"),
+            (self.ci_workflow, "scripts/build-mcp-sidecar.mjs --debug"),
+        ):
+            staged = workflow.index(sidecar)
+            for command in ("cargo fmt --all", "cargo clippy --workspace", "cargo test --workspace"):
+                self.assertLess(
+                    staged,
+                    workflow.index(command),
+                    f"{sidecar} must run before {command}; Tauri validates externalBin during compilation.",
+                )
 
 
 if __name__ == "__main__":

@@ -85,6 +85,9 @@ jobs:
         with:
           workspaces: "."
 
+      - name: Build the MCP sidecar for the installer
+        run: node scripts/build-mcp-sidecar.mjs
+
       - name: Rust formatting
         run: cargo fmt --all -- --check
 
@@ -93,9 +96,6 @@ jobs:
 
       - name: Rust tests
         run: cargo test --workspace
-
-      - name: Build the MCP sidecar for the installer
-        run: node scripts/build-mcp-sidecar.mjs
 
       - name: License policy
         run: pnpm licenses:check

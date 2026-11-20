@@ -92,6 +92,9 @@ jobs:
         with:
           workspaces: "."
 
+      - name: Stage the MCP sidecar
+        run: node scripts/build-mcp-sidecar.mjs --debug
+
       - name: License policy
         run: pnpm licenses:check
 
@@ -103,9 +106,6 @@ jobs:
 
       - name: Rust tests
         run: cargo test --workspace
-
-      - name: Stage the MCP sidecar
-        run: node scripts/build-mcp-sidecar.mjs --debug
 
       - name: Rust workspace build
         run: cargo build --workspace
