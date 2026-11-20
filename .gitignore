@@ -39,6 +39,7 @@ Thumbs.db
 # Test output
 test-results/
 playwright-report/
+artifacts/
 
 # Python helpers
 __pycache__/

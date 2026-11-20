@@ -2,10 +2,6 @@
 # and Linux. Byte-stable fixtures below opt out explicitly.
 * text=auto eol=lf
 
-# The demo project is a byte-for-byte fixture whose manifest is checksummed in
-# docs/demo/evidence.json. Disable EOL conversion so every platform checks out
-# exactly the bytes that were recorded.
+# The demo project is a byte-for-byte fixture. Disable EOL conversion so every
+# platform checks out exactly the bytes that were recorded.
 examples/furybuilder-demo.furybuilder/** -text !eol
-
-# Published evidence is hashed byte-for-byte by the validation scripts.
-docs/testing/evidence/** -text !eol

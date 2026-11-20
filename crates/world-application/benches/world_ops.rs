@@ -2,7 +2,7 @@
 //!
 //! Run with: `cargo bench -p furybuilder-world-application --bench world_ops`.
 //! Results are intentionally printed as plain lines so they can be recorded in
-//! `docs/testing/perf-runs.md` without a specific benchmark framework.
+//! `docs/advanced-workflow.md` (Performance and scale) without a specific benchmark framework.
 
 use std::hint::black_box;
 use std::time::Instant;

@@ -9,7 +9,7 @@
 //! The report is used to answer a narrow question before an export claims success:
 //! which derived data was present in the source, which fields the verified writer
 //! preserved as raw bytes, and which values it did not recalculate. The observations
-//! are recorded in `docs/formats/java-chunk-derived-data.md`; a full metadata
+//! are summarized in `docs/formats.md`; a full metadata
 //! recomputation is a separate stage (M8.9).
 
 use std::collections::{BTreeMap, BTreeSet};

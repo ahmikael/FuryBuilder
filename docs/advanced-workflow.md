@@ -330,8 +330,7 @@ zero failed operations, zero revision mismatches, zero context losses and a save
 then repeated 5-minute sessions on Microsoft WARP and Google SwiftShader. The machine has only
 one physical GPU, so integrated/discrete and cross-vendor coverage is not claimed. WARP and
 SwiftShader are software rasterizers, not hardware performance representatives. Frame metrics
-are renderer/JS timings; GPU timer queries were not used. Details and reproduction commands are
-in `docs/testing/evidence/2026-11-19-long-edit-gpu/`.
+are renderer/JS timings; GPU timer queries were not used.
 
 For large work: raise the load radius deliberately, prefer bounded operations and checkpoints,
 and avoid treating the tested ceiling as a normal working radius.
@@ -361,9 +360,7 @@ and avoid treating the tested ceiling as a normal working radius.
 
 - [Getting started](getting-started.md)
 - [MCP setup](mcp-setup.md)
-- [Editor design notes](design/editor.md)
-- [Security boundaries](design/security.md)
-- [Format support matrix](formats/support-matrix.md)
-- [World export notes](formats/java-world-export.md)
-- [Performance runs](testing/perf-runs.md)
-- [Test matrix](testing/test-matrix.md)
+- [Security boundaries](architecture.md#security-boundaries)
+- [Format support](formats.md)
+- [World export](formats.md#complete-world-folder-export)
+- [Known limitations](reference.md#known-limitations)

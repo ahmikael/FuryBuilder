@@ -7,7 +7,7 @@
 # Usage:
 #   pwsh -File scripts/probe_minecraft_assets.ps1 `
 #     -MinecraftRoot D:\mitrium-launcher\data `
-#     [-EvidencePath docs/testing/evidence/2026-11-18-minecraft-assets-1.21.4.json]
+#     [-EvidencePath artifacts/minecraft-assets-evidence.json]
 
 param(
     [Parameter(Mandatory = $true)][string]$MinecraftRoot,

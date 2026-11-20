@@ -100,13 +100,9 @@ jobs:
       - name: License policy
         run: pnpm licenses:check
 
-      - name: Release evidence validators
+      - name: Release policy checks
         run: |
           python scripts/test_release_process.py
-          python scripts/test_release_security.py
-          python scripts/test_system_requirements.py
-          python scripts/test_known_limitations.py
-          python scripts/test_clean_setup.py
           python scripts/test_release_workflow.py
 
       - name: Generate release notes from conventional commits

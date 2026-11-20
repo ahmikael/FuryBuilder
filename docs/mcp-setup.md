@@ -15,8 +15,7 @@ bridge, with `protocol: "auto"` (MCP `2026-07-28`) and `protocol: "legacy"`. The
 is protocol-tested over real stdio in both eras; on 2026-11-20 the installed sidecar was also
 exercised against the live desktop with a manual stdio harness (27 tools, ready read-only
 context, writes refused). An OpenCode + live-app rerun is still outstanding and is not claimed
-until recorded. Other stdio clients are expected to work but are not claimed as tested; see
-`docs/testing/mcp-compatibility.md` for the matrix.
+until recorded. Other stdio clients are expected to work but are not claimed as tested.
 
 ## Prerequisites
 
@@ -31,8 +30,8 @@ until recorded. Other stdio clients are expected to work but are not claimed as 
 ### Try the bundled demo project first
 
 The repository contains a self-authored demo project at
-[`examples/furybuilder-demo.furybuilder`](../examples/furybuilder-demo.furybuilder) and real
-captures in [docs/demo](demo/README.md). It contains no Minecraft game files, so it works on a
+[`examples/furybuilder-demo.furybuilder`](../examples/furybuilder-demo.furybuilder) and a
+screenshot in [docs/demo](demo/README.md). It contains no Minecraft game files, so it works on a
 machine without Minecraft or Java.
 
 1. Copy the folder into `%APPDATA%\com.furybuilder.desktop\projects\` and open **FuryBuilder
@@ -40,12 +39,8 @@ machine without Minecraft or Java.
 2. Leave the access mode at **Read-only** and connect a client as described below.
 3. Call `bridge_info`, `world_info`, `get_block` at `(0, 64, 0)` and `capture_viewport`.
    Revision `1` must be reported consistently.
-4. The recorded result of this exact read-only check is
-   [`docs/demo/mcp-probe.json`](demo/mcp-probe.json), produced against the former
-   TypeScript bridge. The Rust bridge preserves the same tool contract.
-
-The demo is also the target used by the screenshot and project checks in
-[`scripts/test_demo_assets.py`](../scripts/test_demo_assets.py).
+4. The demo is a good read-only target for a first connection; use it to verify discovery,
+   reads, a capture and the activity journal.
 
 While running, the app writes a discovery file:
 
@@ -246,8 +241,8 @@ stale captures).
 
 `goal`, `bounds` and `constraints` are rendered as quoted, control-character-stripped data.
 They cannot change access mode, permissions, protected regions, limits, confirmation
-behavior or the stages. The full rules and rationale are in
-[`docs/design/ai-workflows.md`](../design/ai-workflows.md).
+behavior or the stages. The same rules are exposed as the `plan_complex_build` prompt and as
+structured data in `bridge_info.bridge.workflow`.
 
 ## Optional MCP Apps observation preview
 
@@ -411,7 +406,7 @@ The first checks discovery, reads, a PNG capture, read-only refusal and the acti
 journal. The second spawns the real `furybuilder-mcp` binary over stdio for both protocol
 eras and drives a mock named-pipe desktop endpoint through reads, writes, jobs, prompts and
 the MCP Apps resource. Both are read-only. Historical live-app evidence produced by the
-former TypeScript bridge remains in `docs/testing/evidence/` with its original provenance.
+former TypeScript bridge is preserved in git history with its original provenance.
 
 ## Known limitations
 

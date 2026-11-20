@@ -92,34 +92,6 @@ class ReleaseProcessTests(unittest.TestCase):
             self.assertIn(section, changelog)
         self.assertIn("NSIS", changelog)
 
-    def test_release_docs_cover_versioning_and_backup_rules(self):
-        versioning = (ROOT / "docs" / "release" / "versioning.md").read_text(encoding="utf-8")
-        for term in (
-            "version.json",
-            "pnpm version:check",
-            "PROJECT_SCHEMA_VERSION",
-            "SNAPSHOT_FORMAT_VERSION",
-            "allowDowngrades",
-            "NSIS",
-            "CHANGELOG.md",
-        ):
-            self.assertIn(term, versioning)
-
-        backup = (ROOT / "docs" / "release" / "backup-policy.md").read_text(encoding="utf-8")
-        for term in (
-            "project.json.v<old>.bak",
-            "Newest 8",
-            "Newest 5",
-            "%APPDATA%",
-            "byte for byte",
-            "unsupported_version",
-        ):
-            self.assertIn(term, backup)
-
-        index = (ROOT / "docs" / "release" / "README.md").read_text(encoding="utf-8")
-        self.assertIn("versioning.md", index)
-        self.assertIn("backup-policy.md", index)
-
     def test_ci_and_package_scripts_enforce_the_version_check(self):
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(package["scripts"]["version:check"], "node scripts/version.mjs check")

@@ -40,11 +40,11 @@ FuryBuilder code is MIT-licensed. This file tracks non-code obligations.
 
 ## Release security
 
-- Dependency advisories and signature status for the beta are recorded in
-  [security-audit.md](security-audit.md).
+- Dependency advisories are checked with `cargo audit` and `pnpm audit --prod` as part of the
+  release checklist in [release.md](../release.md).
 - The beta installers are **not code-signed**. A code-signing certificate and a protected key
-  are external requirements; until they exist, releases are distributed with published
-  SHA-256 hashes and Windows SmartScreen warnings are documented.
+  are external requirements; until they exist, Windows SmartScreen warnings are expected.
+  Download only from the official GitHub Releases page.
 - `scripts/verify-release-artifacts.ps1` records hashes, versions and Authenticode status and
   fails on an invalid or tampered signature. With `-RequireSigned` it also fails on unsigned
   artifacts, which is the intended gate once signing is set up.

@@ -6,7 +6,7 @@ it is not implemented yet.
 
 To install a packaged Windows beta instead of running a checkout, start with
 [Windows installation and updates](install-windows.md); the supported baseline and tested
-reference machine are in [System requirements](system-requirements.md).
+reference machine are in [Reference](reference.md).
 
 FuryBuilder is a desktop 3D editor for Minecraft Java Edition worlds and structures. It is
 not a game client: it does not run Minecraft, simulate redstone or guarantee vanilla world
@@ -24,7 +24,7 @@ for blocks; the viewport is a derived view.
 Minecraft assets, Java and the official server JAR are optional additions for realistic
 textures and `Vanilla World`. FuryBuilder never bundles Mojang game files. The full
 baseline, tested reference machine and unsupported configurations are in
-[System requirements](system-requirements.md).
+[Reference](reference.md).
 
 ## 2. Start the application
 
@@ -266,5 +266,5 @@ textures and never changes block data.
 - [Advanced workflows](advanced-workflow.md) — precise area editing, layers, templates,
   parametric objects, Build DSL, observation, validation, large pastes, MCP and performance.
 - [MCP setup](mcp-setup.md) — connect an AI client, access modes, confirmations and errors.
-- [Documentation index](README.md) — formats, runtimes, testing evidence and ADRs.
-- [Test matrix](testing/test-matrix.md) — what is verified, how, and where the evidence lives.
+- [Documentation index](README.md) - guides, reference, formats, architecture and release.
+- [Formats](formats.md) - supported versions, editable data and export boundaries.

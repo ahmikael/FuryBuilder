@@ -22,11 +22,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
         cls.config = json.loads(CONFIG.read_text(encoding="utf-8"))
         cls.capability = json.loads(CAPABILITY.read_text(encoding="utf-8"))
         cls.package = json.loads(PACKAGE.read_text(encoding="utf-8"))
-        cls.versioning = (ROOT / "docs" / "release" / "versioning.md").read_text(
-            encoding="utf-8"
-        )
+        cls.versioning = (ROOT / "docs" / "release.md").read_text(encoding="utf-8")
         cls.install = (ROOT / "docs" / "install-windows.md").read_text(encoding="utf-8")
-        cls.limitations = (ROOT / "docs" / "known-limitations.md").read_text(encoding="utf-8")
+        cls.limitations = (ROOT / "docs" / "reference.md").read_text(encoding="utf-8")
 
     def test_release_runs_on_version_tags_only(self):
         self.assertIn("name: Release", self.workflow)

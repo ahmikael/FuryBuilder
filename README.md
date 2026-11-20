@@ -17,10 +17,10 @@ Application API over MCP.
 
 ![FuryBuilder editor with the bundled demo project](docs/demo/screenshots/editor.png)
 
-A self-authored demo project, real WebView2 screenshots, a deterministic observation map and
-a recorded read-only MCP probe are in [docs/demo](docs/demo/README.md). The project itself
-contains no Minecraft game files and works without Minecraft or Java; screenshots were rendered
-with the recorder's locally installed 1.21.4 assets.
+A self-authored demo project and a real WebView2 screenshot are in
+[docs/demo](docs/demo/README.md). The project itself contains no Minecraft game files and
+works without Minecraft or Java; the screenshot was rendered with the recorder's locally
+installed 1.21.4 assets.
 
 ## Repository layout
 
@@ -33,13 +33,13 @@ crates/world-generation/ Deterministic local terrain and object generators
 crates/world-application/ Command/query API, projects, jobs, permissions
 crates/project-store/  Versioned project folders, atomic snapshots, recovery
 crates/mcp-bridge/     Local stdio MCP adapter (Rust, bundled sidecar)
-docs/                  ADRs, format notes, testing matrix, UX notes
+docs/                  user guides, reference, formats, architecture, release
 fixtures/              Small self-authored test structures (no Mojang assets)
 ```
 
 ## Requirements
 
-For the packaged Windows beta, see [docs/system-requirements.md](docs/system-requirements.md).
+For the packaged Windows beta, see [docs/reference.md](docs/reference.md).
 In short: 64-bit Windows 10/11 with the WebView2 runtime; no Minecraft installation or Java
 runtime is required for `Empty Project`, `Flat base`, `Import World` or structure exchange.
 `Vanilla World` additionally needs Java 21 and the official Minecraft 1.21.4 `server.jar`,
@@ -220,23 +220,19 @@ limits. The same rules are exposed as structured data in `bridge_info.bridge.wor
 clients without prompt support can still follow them; Core policy and confirmation remain
 the enforcement layer.
 M9.22 researched non-destructive reference overlays: a PNG-first 2D blueprint plane and a
-verified `.nbt` schematic ghost. The findings, threat model, storage/transform design,
-limits and test plan are in `docs/research/reference-overlays.md`. The overlay UI and
-commands are intentionally not enabled yet; references remain editor-only guides and must
-never enter world history or export.
+verified `.nbt` schematic ghost. The overlay UI and commands are intentionally not enabled
+yet; references remain editor-only guides and must never enter world history or export.
 M9.23 measured the real renderer under load in WebView2: a synthetic 4,225-chunk /
 9.0-million-block map was rendered and captured at radii 8-32, and 4,225 chunks were
 streamed through `updateChunks` in 16, 32 and 64-chunk batches. The run defines the tested
 ceiling (radius 32), the comfortable interactive envelope (radius 16, 1,089 chunks) and the
 upper playable bound (radius 24, 2,401 chunks), plus a 16-32 chunk streaming budget. These
-are single-machine reference numbers, not guarantees; details and caveats are in
-`docs/testing/perf-runs.md`.
+are single-machine reference numbers, not guarantees.
 M10.1 profiled the real renderer with Chrome CPU sampling, WebGL/ANGLE frame metrics and
 JS-heap/GC data. The dominant costs are per-block shape lookup (`cachedBoxShapeFor`),
 chunk meshing (`buildChunkMesh`, `pushQuad`, `neighborName`), palette decoding
 (`readPackedIndex`, `blockAt`) and Three.js buffer/VAO/program setup; the Rust core stays
-well below those costs. The ranked profile, module shares and follow-up actions are in
-`docs/testing/perf-runs.md`.
+well below those costs.
 M10.2 adds explicit renderer budgets: 4,096 resident chunks with deterministic
 farthest-first eviction, a 256-chunk synchronous snapshot threshold, a 64-chunk
 synchronous edit threshold, 16 mesh jobs / 12 ms per animation frame and an 8,192-job
@@ -250,7 +246,7 @@ Shape lookup is cached per palette object with a bounded structural fallback, an
 mesher finalizes buffers with direct typed-array copies. A forced-GC WebView2 probe keeps
 five load/unload cycles within 0.3 MB and returns geometry/mesh counts to zero, so there
 is no retained renderer leak; the remaining 822 ms frame gap / 780 ms long task at the
-artificial 4,225-chunk ceiling is documented as a limit in `docs/testing/perf-runs.md`.
+artificial 4,225-chunk ceiling is a known limit.
 M10.4 makes the shell persistent and keyboard-operable: panel visibility and the active
 bottom tab are saved with the theme and UI scale, the View menu and toolbar expose the
 same toggles, and a searchable command palette (`Ctrl+K`) runs layout, theme, tab, tool,
@@ -275,79 +271,44 @@ M10.7 adds explicit import and MCP security boundaries: imported worlds, NBT,
 archives, templates and generated file names are bounded and fail closed, and
 MCP policies are re-checked after confirmation so a tightened selection or a
 switch to read-only cannot be bypassed. The limits and residual risks are
-documented in `docs/design/security.md`. M10.8 adds a long-editing harness for
+documented in [`docs/architecture.md`](docs/architecture.md#security-boundaries).
+M10.8 adds a long-editing harness for
 the real desktop path: it edits a flat project for 10 minutes on the NVIDIA
 D3D11 adapter and 5 minutes each on Microsoft WARP and Google SwiftShader,
 checks the rendered block after every operation, probes undo/redo under load,
-and requires save/reopen revision, block-count and marker equality. Evidence
-and reproduction commands are in
-`docs/testing/evidence/2026-11-19-long-edit-gpu/`. The test machine has only one
-physical GPU, so integrated/discrete and cross-vendor hardware coverage is
-explicitly not claimed. The first interchange format,
+and requires save/reopen revision, block-count and marker equality. The test
+machine has only one physical GPU, so integrated/discrete and cross-vendor
+hardware coverage is explicitly not claimed. The first interchange format,
 Minecraft Java 1.21.4 (`DataVersion` 4189) structure `.nbt`, is implemented and
 verified against real game-saved fixtures, a real Tauri IPC flow and an official
 1.21.4 server load. Block states and orientations are preserved; entities and
 block entities are refused rather than silently dropped. Sponge `.schem` is the
 next format and is not enabled in the UI. External AI clients can read, build,
 screenshot, correct and undo through MCP, with read-only access by default and a
-real confirmation dialog for writes. Implemented behaviour is described here; unresolved
-items remain in [Known limitations](docs/known-limitations.md) and the
-[test matrix](docs/testing/test-matrix.md).
+real confirmation dialog for writes. Implemented behaviour is described here;
+unresolved items remain in [Reference](docs/reference.md).
 
 ## Documentation
 
-Start with [Getting started](docs/getting-started.md) for installation, the window tour,
-first edits, saving and structure export. [Advanced workflows](docs/advanced-workflow.md)
-covers precise area editing, landscape tools, layers, templates, semantic and parametric
-objects, Build DSL, observation, validation, MCP and the measured performance envelope. The
-[documentation index](docs/README.md) groups every guide, format note, runtime note, test
-record and ADR.
-
-- `docs/mcp-setup.md` — connect an MCP client, access modes, common errors and how to
-  turn access off.
-- `docs/formats/java-world-layouts.md` — observed Java world layouts, release
-  `DataVersion`s and the supported-version matrix.
-- `docs/formats/java-chunk-derived-data.md` — 1.21.4 heightmaps, light, ticks,
-  block entities, entity/POI sidecars and the preserve/vanilla-rebuild server
-  round-trips.
-- `docs/formats/java-world-export.md` — complete new world-folder export, staged
-  validation, preserved files and the real 841-chunk evidence.
-- `docs/formats/java-world-selection.md` — save vs region file vs region
-  directory, layout matrix and passthrough refusal boundaries.
-- `docs/formats/support-matrix.md` — read/edit/write/passthrough/unsupported
-  status by version and data category, also shown in the Import World wizard.
-- `docs/assets/minecraft-assets.md` - launcher discovery, JAR checksum/version
-  verification, manual selection, resource-pack validation, blockstate/model/texture
-  render bundles, atlas caching and renderer limits.
-- `docs/runtime/java-runtime.md` - Java 21 probing, manual selection, opt-in Temurin
-  download/checksum verification, managed cache cleanup and its evidence.
-- `docs/runtime/minecraft-server-jar.md` - official server JAR resolution through Mojang
-  metadata, SHA-1/version verification, manual selection, cache cleanup and its evidence.
-- `docs/runtime/vanilla-generation.md` - explicit EULA confirmation, the Vanilla World
-  wizard, validated data packs, the isolated official server process,
-  loopback/resource/process-tree guarantees, progress, cancellation, generated-base
-  verification and real evidence.
-- `docs/testing/worldgen-parity.md` — the independent JSON parity oracle, the implemented
-  M9.8 reference-chunk check, its real evidence and remaining limitations (parity
-  compares block states only; biome cells are modelled and editable but are not part of
-  the parity comparison).
-- `docs/testing/minecraft-server-fixture.md` — the automated official 1.21.4
-  server fixture, its markers, evidence and limits.
-- `docs/testing/mcp-compatibility.md` — client/protocol matrix and live probe output.
-- `docs/testing/test-matrix.md` — requirement-to-evidence coverage.
-- `docs/adr/` — architecture decision records (format, MCP runtime, versions).
+- [Getting started](docs/getting-started.md) - install, first project, editing, saving and
+  structure export.
+- [Advanced workflows](docs/advanced-workflow.md) - area editing, landscape tools, layers,
+  templates, objects, Build DSL, observation, validation, MCP and performance.
+- [MCP setup](docs/mcp-setup.md) - connect an AI client, access modes and confirmations.
+- [Reference](docs/reference.md) - supported baseline, tested machine, feature dependencies
+  and known limitations.
+- [Formats](docs/formats.md) - supported versions, editable data, structure `.nbt`, world
+  export and selection rules.
+- [Architecture](docs/architecture.md) - system shape, decisions, security and dependency
+  policy.
+- [Release and data policy](docs/release.md) - versioning, changelog, installer, updates,
+  backups and migrations.
+- [Documentation index](docs/README.md)
 
 ## Known limitations (Windows beta)
 
-The maintained, example-backed list is [docs/known-limitations.md](docs/known-limitations.md).
-The supported baseline and tested reference machine are in
-[docs/system-requirements.md](docs/system-requirements.md). It covers platform and
-distribution, the single supported Java version, import/export and
-derived-data boundaries, Vanilla World prerequisites and parity scope, editor workflow limits,
-the asset/renderer subset, the measured GPU envelope, MCP access/transport limits, recovery and
-diagnostics. Each entry has a status, a concrete example, a workaround and evidence.
-
-The most important current boundaries:
+The supported baseline, tested machine and maintained limitation list are in
+[docs/reference.md](docs/reference.md). The most important current boundaries:
 
 - Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
 - Only Minecraft Java 1.21.4 (`DataVersion` 4189). Other versions, Bedrock and custom dimensions

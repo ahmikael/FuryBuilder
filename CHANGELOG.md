@@ -12,7 +12,7 @@ First public beta: a local Windows desktop editor for Minecraft Java Edition 1.2
 (`DataVersion` 4189), built on a Rust world core with verified Java world import/export,
 optional vanilla generation through the official game engine, and an MCP bridge for external
 AI clients. The supported boundary and current limitations are documented in
-[docs/known-limitations.md](docs/known-limitations.md).
+[docs/reference.md](docs/reference.md).
 
 ### Added
 

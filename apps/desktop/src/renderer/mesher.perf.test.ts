@@ -8,7 +8,7 @@ const enabled = process.env.FURY_PERF === "1";
 /**
  * Manual renderer profiling. Run with:
  * `$env:FURY_PERF=1; pnpm exec vitest run src/renderer/mesher.perf.test.ts`
- * Results are recorded in docs/testing/perf-runs.md.
+ * Results are summarized in docs/advanced-workflow.md (Performance and scale).
  */
 describe.skipIf(!enabled)("renderer meshing profile", () => {
   it("measures the centre demo chunk", () => {

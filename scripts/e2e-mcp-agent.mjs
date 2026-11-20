@@ -33,7 +33,7 @@ const model =
 const cdpBase = process.env.FURYBUILDER_E2E_CDP || "http://127.0.0.1:9229";
 const evidencePath =
   process.env.FURYBUILDER_E2E_EVIDENCE ||
-  join(repoRoot, "docs", "testing", "evidence", "2026-11-18-ai-edit-loop.json");
+  join(repoRoot, "artifacts", "ai-edit-loop.json");
 const runtimePath =
   process.env.FURYBUILDER_MCP_RUNTIME ||
   join(

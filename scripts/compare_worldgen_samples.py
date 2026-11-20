@@ -2,7 +2,7 @@
 """Compare two independently produced, complete chunk samples.
 
 This is a test oracle, not a world reader or generator. It never starts Java,
-accepts an EULA, or downloads game files. See docs/testing/worldgen-parity.md
+accepts an EULA, or downloads game files. See docs/formats.md
 for the snapshot contract and why passing this test does not establish
 general vanilla parity.
 """

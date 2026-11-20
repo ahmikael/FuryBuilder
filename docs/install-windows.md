@@ -28,7 +28,7 @@ identifier and version from `version.json`.
 
 The supported baseline, memory/disk guidance, tested reference machine and
 configurations that are not validated are in
-[system-requirements.md](system-requirements.md).
+[reference.md](reference.md).
 
 ## Install
 
@@ -40,9 +40,8 @@ configurations that are not validated are in
 The beta installer is currently **not code-signed**. Windows SmartScreen may
 show an "Unknown publisher" warning; this is expected until a code-signing
 certificate is configured. Do not disable SmartScreen globally and do not run a
-package from an unofficial source. The audit record and the
-reason signing is still pending are in
-[legal/security-audit.md](legal/security-audit.md). `scripts/verify-release-artifacts.ps1`
+package from an unofficial source. The signing and update policy is in
+[release.md](release.md#installer-and-updates). `scripts/verify-release-artifacts.ps1`
 reproduces the hash, version and signature check for a local build; `-RequireSigned`
 turns missing signatures into a failure once a certificate exists.
 

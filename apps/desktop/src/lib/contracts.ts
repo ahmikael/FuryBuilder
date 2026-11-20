@@ -1,7 +1,7 @@
 /**
  * IPC contract exchanged with the Rust backend.
  * Keep field names in sync with serde(rename_all = "camelCase") DTOs.
- * Contract tests live on both sides (see docs/api/contracts.md).
+ * Contract tests live on both sides (see docs/architecture.md).
  */
 
 export interface AppInfo {

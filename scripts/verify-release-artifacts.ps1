@@ -37,7 +37,7 @@ param(
     [Parameter(Mandatory = $true)][string[]]$Artifact,
     [string]$ExpectedVersion,
     [switch]$RequireSigned,
-    [string]$OutFile = "docs/testing/evidence/2026-11-19-release-security/signature-evidence.json"
+    [string]$OutFile = "artifacts/release-security/signature-evidence.json"
 )
 
 $ErrorActionPreference = "Stop"

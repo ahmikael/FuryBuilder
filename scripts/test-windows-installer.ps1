@@ -37,7 +37,7 @@ param(
     [Parameter(Mandatory = $true)][string]$OldInstaller,
     [string]$NewInstaller,
     [string]$MsiInstaller,
-    [string]$OutDir = "docs/testing/evidence/2026-11-19-windows-installer"
+    [string]$OutDir = "artifacts/windows-installer"
 )
 
 $ErrorActionPreference = "Stop"
