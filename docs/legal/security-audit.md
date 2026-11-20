@@ -96,8 +96,9 @@ The 0.1.0 NSIS package and the application executable are **unsigned**:
 present signature is invalid or tampered. The intended public-release gate is
 `-RequireSigned`, which currently fails. A code-signing certificate, a protected private key
 and a timestamp service are external requirements that cannot be created in this repository.
-Until they exist, Windows SmartScreen may show an unknown-publisher warning and users must
-verify the published SHA-256 before running a package.
+Until they exist, Windows SmartScreen may show an unknown-publisher warning; download the
+package only from the official GitHub release page. The local verification script still
+records hashes for release evidence.
 
 The release is therefore **reproducible and hash-verifiable, but not publisher-authenticated**.
 This limitation is stated in `docs/install-windows.md`, `docs/known-limitations.md` and the

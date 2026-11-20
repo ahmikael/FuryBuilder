@@ -188,28 +188,12 @@ jobs:
           }
           Write-Output ("Assets: " + ($assets -join ", "))
 
-      - name: Add checksums and publish the release
+      - name: Publish the release
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $tag = $env:RELEASE_TAG
-          $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
-          $installers = @(
-            Get-ChildItem "target/release/bundle/nsis/FuryBuilder_${version}_x64-setup.exe" -ErrorAction SilentlyContinue
-          )
-          if ($installers.Count -ne 1) {
-            throw "Expected exactly the NSIS installer for version $version, found $($installers.Count)."
-          }
-
-          $lines = @("", "## SHA-256", "")
-          foreach ($file in $installers) {
-            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-            $url = "https://github.com/${{ github.repository }}/releases/download/$tag/$($file.Name)"
-            $lines += "- [$($file.Name)]($url) - ``$hash``"
-          }
-          Add-Content -Path release-notes.md -Value ($lines -join "`n") -Encoding utf8
-
           gh release edit $tag --notes-file release-notes.md --draft=false --latest
           if ($LASTEXITCODE -ne 0) { throw "Could not publish the release." }
 

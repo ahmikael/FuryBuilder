@@ -32,12 +32,7 @@ configurations that are not validated are in
 
 ## Install
 
-1. Verify the downloaded file against the SHA-256 published with the release:
-
-   ```powershell
-   Get-FileHash .\FuryBuilder_<version>_x64-setup.exe -Algorithm SHA256
-   ```
-
+1. Download the NSIS package from the official GitHub Releases page.
 2. Run the NSIS package and follow the wizard. The default installation is
    per-user and does not request administrator rights.
 3. Start FuryBuilder from the Start menu or the installer's finish page.
@@ -45,7 +40,7 @@ configurations that are not validated are in
 The beta installer is currently **not code-signed**. Windows SmartScreen may
 show an "Unknown publisher" warning; this is expected until a code-signing
 certificate is configured. Do not disable SmartScreen globally and do not run a
-package whose hash does not match the published value. The audit record and the
+package from an unofficial source. The audit record and the
 reason signing is still pending are in
 [legal/security-audit.md](legal/security-audit.md). `scripts/verify-release-artifacts.ps1`
 reproduces the hash, version and signature check for a local build; `-RequireSigned`
@@ -66,8 +61,8 @@ installation.
 Update signing uses a dedicated Tauri key, separate from Authenticode. The
 published `latest.json` contains the signed NSIS package URL; the application
 refuses a package whose signature does not match the embedded public key. If the
-check fails, confirm that GitHub Releases is reachable and verify the published
-SHA-256 before running a manual package.
+check fails, confirm that GitHub Releases is reachable and download the package
+again from the official release page before running it manually.
 
 The beta installer is still not Authenticode-signed, so Windows SmartScreen can
 warn about an unknown publisher on the first manual install. Downgrades are

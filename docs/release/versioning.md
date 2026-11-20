@@ -50,7 +50,7 @@ If a suffix is needed later, the release tooling and the installer must be teste
 together first.
 
 Git tags use `v<version>` (for example `v0.1.0`) and point at the commit whose changelog
-section and installer hashes were verified.
+section and release artifacts were verified.
 
 ## Independent version axes
 
@@ -80,10 +80,9 @@ through the backup.
 5. Build the NSIS installer with `pnpm tauri:build` and the updater signing environment, or let
    the tag workflow build it on `windows-latest`.
 6. Run `scripts/test-windows-installer.ps1` with the previous and new NSIS installers to
-   prove clean install, update and uninstall. Record new SHA-256 values.
+   prove clean install, update and uninstall. Record the verified artifact details.
 7. Run `scripts/verify-release-artifacts.ps1` on the NSIS package. Use `-RequireSigned` for a
-   public stable release; an unsigned beta passes only when the limitation is recorded and
-   published hashes are available.
+   public stable release; an unsigned beta passes only when the limitation is recorded.
 8. Run `scripts/test_windows_installer_evidence.py`, `scripts/test_release_security.py` and
    the remaining release documentation tests.
 9. Review the migrations section of [backup-policy.md](backup-policy.md) whenever a schema
@@ -91,7 +90,8 @@ through the backup.
 10. Commit the version bump, changelog, lock file and evidence together; tag `v<version>`
     and push the tag. The release workflow builds the packages, publishes `latest.json`
     and makes the GitHub release public.
-11. Do not publish a package whose installer hash is missing from the release notes.
+11. Do not publish until the workflow confirms that the NSIS installer, its updater
+    signature and `latest.json` are attached to the release.
 
 ## GitHub release automation
 
@@ -105,7 +105,7 @@ Pushing a tag named `v<version>` runs `.github/workflows/release.yml`. The workf
    separately;
 4. creates a draft GitHub release and builds the Windows NSIS installer on `windows-latest`;
 5. uploads the NSIS package, its updater signature and the static `latest.json`
-   manifest, then appends SHA-256 checksums and publishes the release.
+   manifest, verifies the expected assets and publishes the release.
 
 The workflow may also be started manually with the exact existing tag. It refuses to
 overwrite an already published release; bump the version and tag a new commit instead.

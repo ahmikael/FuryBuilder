@@ -98,7 +98,7 @@ against GitHub Releases: installed builds check after startup, verify the matchi
 package with the embedded updater public key, and preserve projects and settings.
 Update signing is a
 separate minisign key stored in repository secrets, not an Authenticode certificate.
-**Workaround:** verify the published SHA-256 before a manual install, keep a project backup
+**Workaround:** download only from the official GitHub release page, keep a project backup
 before updating, and use **Settings → Updates** for the signed automatic update path.
 **Evidence:** `docs/install-windows.md`, `docs/release/versioning.md`,
 `docs/legal/security-audit.md`,

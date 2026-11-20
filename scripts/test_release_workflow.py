@@ -68,7 +68,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("latest.json", self.workflow)
         self.assertIn("FuryBuilder_${version}_x64-setup.exe", self.workflow)
         self.assertIn("FuryBuilder_${version}_x64-setup.exe.sig", self.workflow)
-        self.assertIn("SHA-256", self.workflow)
+        self.assertIn("Publish the release", self.workflow)
+        self.assertNotIn("SHA-256", self.workflow)
         self.assertIn("--latest", self.workflow)
 
     def test_bundle_config_ships_only_the_nsis_installer(self):

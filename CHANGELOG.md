@@ -42,8 +42,8 @@ AI clients. The supported boundary and current limitations are documented in
   projects and settings.
 - Bundled self-authored demo project, real WebView2 screenshots, a deterministic observation
   map and a recorded read-only MCP probe that open without Minecraft or Java.
-- Windows beta packaging as a per-user NSIS installer with signed updater artifacts,
-  `latest.json` and SHA-256 checksums published with the release.
+- Windows beta packaging as a per-user NSIS installer with signed updater artifacts and
+  `latest.json` published with the release.
 - Command palette, dark/light themes, persistent panel layout, searchable block palette and
   beginner/advanced workflow guides.
 

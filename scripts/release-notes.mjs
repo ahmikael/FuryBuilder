@@ -110,13 +110,8 @@ export function renderNotes(commits, options = {}) {
     lines.push("No user-facing changes in this release.", "");
   }
 
-  lines.push("## Installing", "");
   lines.push(
-    "Download the NSIS installer from the assets below. Existing installations can use the built-in signed updater; projects and settings are preserved.",
-    "",
-  );
-  lines.push(
-    "> This beta build is not Authenticode-signed. Windows SmartScreen can warn about an unknown publisher. Verify the SHA-256 values added to this release before running the installer.",
+    "> This beta build is not Authenticode-signed. Windows SmartScreen can warn about an unknown publisher.",
     "",
   );
 
