@@ -24,6 +24,8 @@ export default defineConfig({
   build: {
     target: "es2022",
     sourcemap: true,
+    // The editor ships Three.js in the initial bundle; gzip stays around 360 kB.
+    chunkSizeWarningLimit: 1500,
   },
   test: {
     environment: "jsdom",
