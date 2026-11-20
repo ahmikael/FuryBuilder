@@ -14,14 +14,14 @@ manifest that Cargo, pnpm or the installer reads to agree with it:
 | `Cargo.toml`                             | `[workspace.package].version` |
 | `package.json`                           | `version`                     |
 | `apps/desktop/package.json`              | `version`                     |
-| `mcp/bridge/package.json`                | `version`                     |
 | `apps/desktop/src-tauri/tauri.conf.json` | `version`                     |
-| `mcp/bridge/src/capabilities.ts`         | `BRIDGE_VERSION`              |
-| `mcp/bridge/src/apps.ts`                 | `OBSERVATION_APP_VERSION`     |
+
+The Rust MCP crate inherits `version.workspace = true`, so it cannot drift from the
+workspace version.
 
 ```powershell
 pnpm version:check          # exits non-zero on drift
-pnpm version:set 0.2.0      # updates all eight files
+pnpm version:set 0.2.0      # updates all five manifests
 ```
 
 `pnpm version:set` does not edit `Cargo.lock`; run `cargo build` or `cargo metadata`

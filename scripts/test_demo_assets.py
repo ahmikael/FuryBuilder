@@ -326,7 +326,7 @@ class DemoAssetsTests(unittest.TestCase):
         mcp = (ROOT / "docs" / "mcp-setup.md").read_text(encoding="utf-8")
         self.assertIn("demo/README.md", mcp)
         self.assertIn("furybuilder-demo.furybuilder", mcp)
-        self.assertIn("probe-live-observation.mjs", mcp)
+        self.assertIn("cargo test -p furybuilder-mcp-bridge", mcp)
 
         root_readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("docs/demo/README.md", root_readme)

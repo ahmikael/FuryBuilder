@@ -1,7 +1,8 @@
 # Release security audit
 
 Recorded: 2026-11-19. Scope: the Windows beta artifacts produced by `pnpm tauri:build`,
-the Rust workspace and the two shipped Node packages (`apps/desktop`, `mcp/bridge`).
+the Rust workspace and the shipped Node package (`apps/desktop`). The MCP bridge is a Rust
+crate (`crates/mcp-bridge`) and is covered by the Rust inventory.
 
 This is a dependency and provenance audit, not a third-party penetration test. It records
 what was checked, what was fixed and what remains an external blocker.
@@ -20,8 +21,9 @@ what was checked, what was fixed and what remains an external blocker.
 
 The table above is the 2026-11-19 release snapshot. On 2026-11-20 the Tauri
 updater/process plugins were added for signed GitHub releases. Re-running the tools reported
-0 Rust vulnerabilities and 0 Node advisories (76 production and 401 full-tree dependencies);
-`pnpm licenses:check` passed with 495 Rust and 61 Node components and 29 notice-required. The
+0 Rust vulnerabilities. After the Rust MCP bridge migration removed the Node.js bridge,
+`pnpm audit` reported 0 advisories across 74 production and 310 full-tree dependencies, and
+`pnpm licenses:check` passed with 505 Rust and 58 Node components and 30 notice-required. The
 original evidence files are kept unchanged.
 
 Machine-readable evidence:

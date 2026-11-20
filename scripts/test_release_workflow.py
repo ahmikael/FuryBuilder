@@ -57,6 +57,8 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("TAURI_SIGNING_PRIVATE_KEY", self.workflow)
         self.assertIn("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", self.workflow)
         self.assertIn("--bundles nsis", self.workflow)
+        self.assertIn("scripts/build-mcp-sidecar.mjs", self.workflow)
+        self.assertIn("furybuilder-mcp-x86_64-pc-windows-msvc.exe", self.workflow)
         self.assertNotIn("--bundles nsis,msi", self.workflow)
         self.assertNotIn(".msi", self.workflow)
         self.assertIn("uploadUpdaterSignatures: true", self.workflow)
@@ -70,6 +72,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_bundle_config_ships_only_the_nsis_installer(self):
         bundle = self.config["bundle"]
         self.assertEqual(bundle["targets"], ["nsis"])
+        self.assertEqual(bundle["externalBin"], ["binaries/furybuilder-mcp"])
         self.assertNotIn("wix", bundle["windows"])
         self.assertEqual(bundle["windows"]["nsis"]["installMode"], "currentUser")
 

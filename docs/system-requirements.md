@@ -18,7 +18,7 @@ validated because the window opens. The maintained limitation list is
 | CPU              | 64-bit x86-64 CPU supported by the installed Windows version                                                                                       | Intel Core i5-9600KF (6 cores / 6 threads) tested; older/low-core CPUs and ARM64 are not tested                                               |
 | Memory           | 8 GB is the practical baseline target; 16 GB is the tested reference                                                                               | 16 GB measured; 8 GB has **not** been validated with this evidence set                                                                        |
 | Graphics         | WebGL 2.0-capable GPU with a working Direct3D 11 path; software WARP/SwiftShader can run but is much slower                                        | One physical NVIDIA GeForce GTX 1060 3 GB (driver `32.0.15.6094`) tested; integrated GPUs, switching and other vendors are not tested (KL-32) |
-| Disk             | About 19 MB for the installed executable; the installer is 5.9 MB (NSIS). Keep at least 1 GB free for projects and caches                            | Sizes measured from the 0.1.0 NSIS installer. Vanilla World dependencies took about 270 MB in the server test                                 |
+| Disk             | About 19 MB for the installed executable; the recorded 0.1.0 installer is 5.9 MB (NSIS). The next build also bundles the Rust MCP sidecar (about 6 MB uncompressed). Keep at least 1 GB free for projects and caches | Sizes measured from the 0.1.0 NSIS installer. Vanilla World dependencies took about 270 MB in the server test                                 |
 | Display/input    | A normal desktop session with a visible window; keyboard and mouse                                                                                 | MCP screenshots require a visible viewport (KL-36); headless and minimized capture are not supported                                          |
 | Network          | Not required for `Empty Project`, `Flat base`, `Import World`, structure exchange or local MCP. The updater contacts GitHub Releases after startup | Core offline work is the design; optional downloads, update checks and the WebView2 bootstrapper need network when used                       |
 | Permissions      | The NSIS package is per-user and does not require administrator rights                                                                             | NSIS install/update/uninstall tested without elevation                                                                                        |
@@ -26,15 +26,15 @@ validated because the window opens. The maintained limitation list is
 
 ## Feature dependencies
 
-| Feature                         | Minecraft install | Java 21 | Official `server.jar` | Node.js 26+ | Network                                          |
-| ------------------------------- | ----------------- | ------- | --------------------- | ----------- | ------------------------------------------------ |
-| `Empty Project` / `Flat base`   | No                | No      | No                    | No          | No                                               |
-| `Import World` (1.21.4)         | No                | No      | No                    | No          | No                                               |
-| Structure `.nbt` import/export  | No                | No      | No                    | No          | No                                               |
-| Real Minecraft textures         | Optional          | No      | No                    | No          | No                                               |
-| `Vanilla World` generation      | No                | Yes     | Yes                   | No          | Only for optional downloads; cache works offline |
-| MCP bridge (external AI client) | No                | No      | No                    | Yes         | No (local named pipe)                            |
-| Installing a newer beta         | No                | No      | No                    | No          | Yes (manual installer download)                  |
+| Feature                         | Minecraft install | Java 21 | Official `server.jar` | Network                                          |
+| ------------------------------- | ----------------- | ------- | --------------------- | ------------------------------------------------ |
+| `Empty Project` / `Flat base`   | No                | No      | No                    | No                                               |
+| `Import World` (1.21.4)         | No                | No      | No                    | No                                               |
+| Structure `.nbt` import/export  | No                | No      | No                    | No                                               |
+| Real Minecraft textures         | Optional          | No      | No                    | No                                               |
+| `Vanilla World` generation      | No                | Yes     | Yes                   | Only for optional downloads; cache works offline |
+| MCP bridge (external AI client) | No                | No      | No                    | No (local named pipe)                            |
+| Installing a newer beta         | No                | No      | No                    | Yes (manual installer download)                  |
 
 Notes:
 
@@ -42,8 +42,9 @@ Notes:
   never accepts it automatically and never bundles Java or the server JAR.
 - Real Minecraft textures use the user's legally installed 1.21.4 client JAR/assets or a
   chosen resource pack. Placeholder textures are used when no assets are configured.
-- The MCP bridge is a separate local process. The desktop application itself does not need
-  Node.js; only the external MCP client setup does.
+- The MCP bridge is a separate local process bundled with release builds from this source.
+  It is written in Rust and needs no Node.js, Java or Minecraft runtime; the external MCP
+  client only has to launch `furybuilder-mcp.exe`.
 - The official server and Java runtime stay in FuryBuilder-managed or user-selected caches;
   they are not part of the installer.
 
@@ -90,5 +91,5 @@ rendering evidence is a reference point, not a cross-vendor or minimum-hardware 
   install/update/uninstall and user-data location.
 - [Known limitations](known-limitations.md) — maintained, example-backed list.
 - [Java runtime and world generation](runtime/java-runtime.md) — optional Java/server setup.
-- [MCP setup](mcp-setup.md) — Node.js bridge and client configuration.
+- [MCP setup](mcp-setup.md) — bundled Rust bridge and client configuration.
 - [Test matrix](testing/test-matrix.md) — what is actually verified and where the evidence is.

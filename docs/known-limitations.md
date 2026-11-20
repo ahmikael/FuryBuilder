@@ -353,16 +353,19 @@ read-only and a narrowed policy is re-checked after confirmation. **Workaround:*
 
 ### KL-34 — Local Windows stdio transport only
 
-**Status:** by design. **Example:** clients launch `mcp/bridge/dist/main.js`, which talks over
-a per-user Windows named pipe; there is no TCP/HTTP listener, remote access or tested Unix
-socket path. **Workaround:** run the client and FuryBuilder as the same Windows user on the
-same machine. **Evidence:** `docs/mcp-setup.md`, `docs/testing/mcp-compatibility.md`.
+**Status:** by design. **Example:** clients launch `furybuilder-mcp.exe` (installed next to
+FuryBuilder or built from `crates/mcp-bridge`), which talks over a per-user Windows named
+pipe; there is no TCP/HTTP listener, remote access or tested Unix socket path.
+**Workaround:** run the client and FuryBuilder as the same Windows user on the same machine.
+**Evidence:** `docs/mcp-setup.md`, `docs/testing/mcp-compatibility.md`.
 
 ### KL-35 — Client compatibility is not universal
 
-**Status:** environment-specific. **Example:** OpenCode CLI 2.3.2 is the only real external
-client exercised end-to-end; Tasks is not implemented as an extension, so the bridge exposes
-fallback `start_job`/`get_job_status`/`cancel_job` tools; MCP Apps is optional and depends on
+**Status:** environment-specific. **Example:** OpenCode CLI 2.3.2 was the only real external
+client exercised end-to-end through the former TypeScript bridge; the Rust bridge is
+protocol-tested over stdio but a live-client rerun is still outstanding. Tasks is not
+implemented as an extension, so the bridge exposes fallback
+`start_job`/`get_job_status`/`cancel_job` tools; MCP Apps is optional and depends on
 host rendering. **Workaround:** use the documented fallback tools/resources; do not assume
 Tasks or Apps. **Evidence:** `docs/testing/mcp-compatibility.md`, `docs/mcp-setup.md`.
 

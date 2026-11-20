@@ -6,7 +6,7 @@
 | [002](ADR-002-project-format.md) | Native project format | Accepted |
 | [003](ADR-003-meshing-location.md) | Meshing location | Accepted (initial) |
 | [004](ADR-004-assets.md) | Minecraft assets and resource packs | Accepted |
-| [005](ADR-005-mcp-runtime.md) | MCP runtime and local bridge | Accepted |
+| [005](ADR-005-mcp-runtime.md) | MCP runtime and local bridge | Accepted; language superseded by 017 |
 | [006](ADR-006-renderer.md) | Renderer baseline | Accepted |
 | [007](ADR-007-format-scope.md) | Format scope and first export | Accepted |
 | [008](ADR-008-history.md) | History and undo model | Accepted |
@@ -18,3 +18,4 @@
 | [014](ADR-014-creation-modes.md) | Creation modes and Vanilla World | Accepted |
 | [015](ADR-015-dependencies.md) | Java/server dependency provisioning | Accepted |
 | [016](ADR-016-core-boundary.md) | Rust Core boundary | Accepted |
+| [017](ADR-017-mcp-rust-bridge.md) | Rust MCP bridge | Accepted |

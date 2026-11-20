@@ -42,6 +42,10 @@ project schema, the world snapshot format and the MCP tool schema; see
 
 ### Changed
 
+- Replaced the Node.js/TypeScript MCP bridge with a Rust `rmcp` sidecar bundled in the
+  installer, so MCP clients no longer need Node.js. Tool names, JSON payloads, prompts,
+  both protocol eras and the MCP Apps fallback are unchanged; the sidecar is built with
+  `pnpm mcp:build` and staged for the installer with `pnpm mcp:sidecar`.
 - Viewport capture metadata now names its texture source (`placeholder` or
   `minecraft_assets`) instead of always claiming placeholder textures.
 - Removed the MSI package. The Windows beta now builds and publishes only the

@@ -34,9 +34,9 @@ milestone is complete.
 
 ## Architecture and design
 
-- [Architecture decisions (ADR)](adr/README.md) — Java target, project format, meshing,
+- [Architecture decisions (ADR)](adr/README.md) - Java target, project format, meshing,
   assets, MCP runtime, renderer, formats, history, deployment, scene graph, Build DSL,
-  compatibility, creation modes, dependencies and the core boundary.
+  compatibility, creation modes, dependencies, the core boundary and the Rust MCP bridge.
 - [Dependency architecture](architecture/dependencies.md)
 - [World API contracts](api/world-api.md), [observation API](api/observation.md) and
   [IPC/contract notes](api/contracts.md)

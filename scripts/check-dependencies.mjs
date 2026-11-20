@@ -3,8 +3,9 @@
  * Builds the third-party dependency inventory and enforces the license policy.
  *
  * Rust: resolved registry packages from `cargo metadata --locked`.
- * Node: production dependencies reported by `pnpm licenses list --prod` for the two
- * shipped packages (`apps/desktop` and `mcp/bridge`).
+ * Node: production dependencies reported by `pnpm licenses list --prod` for the shipped
+ * Node package (`apps/desktop`). The MCP sidecar is a Rust crate, so its third-party
+ * crates are covered by the Rust inventory.
  *
  * MPL-2.0, Unicode-3.0 and CDLA-Permissive-2.0 are accepted with notices; copyleft
  * licenses (GPL/AGPL/SSPL) and non-commercial licenses are rejected.
@@ -268,10 +269,9 @@ function main() {
   const rust = rustPackages().map((pkg) =>
     classify("rust", pkg.name, pkg.version, pkg.license),
   );
-  const node = [
-    ...pnpmPackages("apps/desktop"),
-    ...pnpmPackages("mcp/bridge"),
-  ].map((pkg) => classify("node", pkg.name, pkg.version, pkg.license));
+  const node = pnpmPackages("apps/desktop").map((pkg) =>
+    classify("node", pkg.name, pkg.version, pkg.license),
+  );
   const all = [...rust, ...node];
   const denied = all.filter((pkg) => pkg.status === "denied");
   const unknown = all.filter((pkg) => pkg.status === "unknown");

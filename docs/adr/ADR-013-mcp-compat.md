@@ -33,6 +33,14 @@ The installed OpenCode CLI `2.3.0` supports local stdio servers via
 `opencode mcp add <name> -- <command...>`. The real-client negotiation test is still
 outstanding and must not be claimed before it runs.
 
+## Implementation note (2026-11-20)
+
+The compatibility strategy was preserved when the bridge moved to the official Rust SDK
+(`rmcp` 3.11). The SDK negotiates `2026-07-28` through `server/discover` and per-request
+`_meta`, and keeps the legacy `initialize` lifecycle. Tests spawn the real
+`furybuilder-mcp` binary for both eras. Tool names, schemas, prompts and the MCP Apps
+fallback are unchanged. See [ADR-017](ADR-017-mcp-rust-bridge.md).
+
 ## Consequences
 
 - Tool handlers are pure request/response and safe to retry with idempotency keys.

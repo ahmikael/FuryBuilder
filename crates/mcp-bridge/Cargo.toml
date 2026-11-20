@@ -1,0 +1,28 @@
+[package]
+name = "furybuilder-mcp-bridge"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Local MCP stdio bridge for the FuryBuilder desktop app"
+
+[[bin]]
+name = "furybuilder-mcp"
+path = "src/main.rs"
+
+[lib]
+name = "mcp_bridge"
+
+[dependencies]
+rmcp = { version = "3.11.0", default-features = false, features = ["server", "transport-io"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "net", "time"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+base64 = { workspace = true }
+sha2 = { workspace = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "net", "time", "process"] }
+uuid = { workspace = true }

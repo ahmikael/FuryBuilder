@@ -496,6 +496,10 @@ flowchart LR
 - **Security:** проверять авторизацию каждого вызова, ограничивать сетевые поверхности, размер ответов и длительность работ; все операции с побочными эффектами остаются под preview/permission/idempotency/transaction. Для HTTP отдельно проверить требования к origin/host и заголовкам.
 - **SDK и совместимость:** для нового TypeScript bridge ориентироваться на официальный **MCP TS SDK v2** (`@modelcontextprotocol/server`), но не навязывать обновление клиентам: фиксировать поддерживаемые версии, тестировать stdio и fallback для фактически используемых OpenCode/IDE/чат-клиентов. Реализовать capability negotiation вместо хардкода «все понимают Tasks/Apps».
 
+> **2026-11-20:** The bridge is now a Rust `rmcp` sidecar in `crates/mcp-bridge`
+> (ADR-017). Tool names, JSON contracts, prompts, both protocol eras and the MCP Apps
+> fallback are unchanged; the installer no longer needs Node.js for MCP.
+
 **Техническое правило:** MCP — **адаптер** над Application API. Ни Tasks, ни Apps, ни stateless-протокол не должны подменять Rust World Core или дублировать в MCP логику мира.
 
 ---
@@ -777,10 +781,7 @@ furybuilder/
 │   ├── world-io/
 │   ├── world-generation/
 │   └── world-application/
-├── packages/
-│   └── contracts/              # TS contracts / generated bindings
-├── mcp/
-│   └── bridge/                 # thin stdio adapter, language TBD
+├── crates/mcp-bridge/       # Rust rmcp stdio adapter (ADR-017)
 ├── fixtures/                   # только разрешённые маленькие тестовые миры
 ├── scripts/
 ├── Cargo.toml                  # Rust workspace

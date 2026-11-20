@@ -83,7 +83,7 @@ class SystemRequirementsTests(unittest.TestCase):
 
     def test_feature_dependencies_match_the_supported_modes(self):
         empty = self.row("`Empty Project` / `Flat base`")
-        self.assertEqual(empty.count("| No"), 5, empty)
+        self.assertEqual(empty.count("| No"), 4, empty)
 
         vanilla = self.row("`Vanilla World` generation")
         self.assertIn("| No", vanilla, "Vanilla World must not require a client install")
@@ -91,8 +91,8 @@ class SystemRequirementsTests(unittest.TestCase):
         self.assertIn("Only for optional downloads", vanilla, vanilla)
 
         mcp = self.row("MCP bridge")
-        self.assertIn("| Yes", mcp, "MCP needs the Node.js bridge")
         self.assertIn("local named pipe", mcp, mcp)
+        self.assertIn("no Node.js", self.text, "the Rust bridge needs no Node.js runtime")
 
         self.assertIn("never accepts it automatically", self.text)
         self.assertIn("never bundles Java or the server JAR", self.text)

@@ -104,5 +104,8 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace
 
+      - name: Stage the MCP sidecar
+        run: node scripts/build-mcp-sidecar.mjs --debug
+
       - name: Rust workspace build
         run: cargo build --workspace

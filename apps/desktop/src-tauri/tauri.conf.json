@@ -41,6 +41,7 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": ["nsis"],
+    "externalBin": ["binaries/furybuilder-mcp"],
     "publisher": "FuryBuilder contributors",
     "copyright": "Copyright (c) 2026 FuryBuilder contributors",
     "licenseFile": "../../../LICENSE",

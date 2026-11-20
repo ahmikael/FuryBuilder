@@ -94,6 +94,9 @@ jobs:
       - name: Rust tests
         run: cargo test --workspace
 
+      - name: Build the MCP sidecar for the installer
+        run: node scripts/build-mcp-sidecar.mjs
+
       - name: License policy
         run: pnpm licenses:check
 
@@ -178,6 +181,10 @@ jobs:
             if ($assets -notcontains $asset) {
               throw "Release asset '$asset' is missing. Auto-update or the documented installer set would be incomplete."
             }
+          }
+          $sidecar = "apps/desktop/src-tauri/binaries/furybuilder-mcp-x86_64-pc-windows-msvc.exe"
+          if (-not (Test-Path $sidecar)) {
+            throw "The MCP sidecar was not staged at $sidecar; the installer would ship without its MCP bridge."
           }
           Write-Output ("Assets: " + ($assets -join ", "))
 

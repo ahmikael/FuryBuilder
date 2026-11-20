@@ -1,22 +1,24 @@
 # MCP compatibility
 
-Status: implemented and verified against a real external MCP client (OpenCode CLI 2.3.2),
-including a complete AI explore/build/screenshot/fix/undo loop with real confirmation
-dialogs. Setup, access modes and revocation: `docs/mcp-setup.md`.
+Status: the bridge is a Rust `rmcp` sidecar (`crates/mcp-bridge`) bundled with the installer.
+Its protocol surface is tested over real stdio in both eras against a mock desktop endpoint.
+The live-app evidence below was collected on the former TypeScript bridge and is kept as
+historical provenance; an OpenCode + live-app rerun against the Rust binary is still
+outstanding and is not claimed. Setup, access modes and revocation: `docs/mcp-setup.md`.
 
 ## Bridge baseline
 
 | Item                | Value                                                             |
 | ------------------- | ----------------------------------------------------------------- |
-| Bridge package      | `mcp/bridge`, `@furybuilder/mcp-bridge` 0.1.0                     |
-| SDK                 | `@modelcontextprotocol/server` 2.4.0 (pinned)                     |
-| Modern revision     | MCP `2026-07-28`                                                  |
-| Legacy fallback     | 2025-era clients served from the same factory                     |
+| Bridge crate        | `crates/mcp-bridge`, binary `furybuilder-mcp` 0.1.0               |
+| SDK                 | `rmcp` 3.11.0 (pinned)                                            |
+| Modern revision     | MCP `2026-07-28` via `server/discover` and per-request `_meta`    |
+| Legacy fallback     | 2025-era `initialize` lifecycle served by the same handler        |
 | MCP transport       | stdio only; no network listener                                   |
 | Desktop transport   | authenticated local socket (Windows named pipe), protocol 1       |
 | Discovery           | `%APPDATA%\com.furybuilder.desktop\mcp\runtime.json`              |
 | Context policy      | explicit per request; no project/selection/job in transport state |
-| Optional extensions | Tasks and Apps are **not** advertised yet                         |
+| Optional extensions | MCP Apps advertised; Tasks remains an explicit fallback option    |
 | Job tools           | `start_job`, `get_job_status`, `cancel_job` always registered     |
 
 ## Desktop local endpoint
@@ -222,17 +224,35 @@ response reports `mode: "fallback"` with a specific reason
 
 ## Automated evidence
 
-Command:
+Current commands:
 
 ```powershell
-pnpm --filter @furybuilder/mcp-bridge test
-pnpm --filter @furybuilder/mcp-bridge typecheck
-pnpm --filter @furybuilder/mcp-bridge build
+cargo test -p furybuilder-mcp-bridge
+cargo clippy -p furybuilder-mcp-bridge --all-targets -- -D warnings
 ```
 
-Observed: 25 bridge tests passed, typecheck and build clean; the Rust desktop test binary
-runs 33 tests, `world-application` 45, and the frontend 142. The TypeScript tests spawn the
-real bridge over stdio with `tsx src/main.ts` and use `@modelcontextprotocol/client` 2.4.0:
+Observed on 2026-11-20: 26 unit tests, 4 desktop-tool integration tests and 3 protocol
+integration tests passed. The integration tests spawn the real `furybuilder-mcp` binary
+over stdio against a mock named-pipe desktop endpoint:
+
+- a legacy client completes `initialize`, lists all 27 tools, reads the observation
+  resource, loads both prompts and receives honest `runtime_file_missing` /
+  `job_api_unavailable` errors when the desktop is absent;
+- a modern client uses `server/discover` with per-request `_meta`, negotiates
+  `2026-07-28`, sees both protocol eras and gets `apps_negotiated` when it declares the
+  Apps extension;
+- a live mock desktop reports project/revision context, read-only or edit access, renderer
+  readiness, the job queue and pending confirmations through `bridge_info`;
+- read tools forward exact `projectId`, `worldRevision`, bounds and positions, normalize
+  operation defaults, and return real PNG image blocks with byte counts and SHA-256;
+- write tools require `world_revision`, forward idempotency keys, and surface the
+  desktop's authoritative `permission_denied` code;
+- job tools return authoritative snapshots and never invent completion.
+
+### Historical TypeScript bridge evidence (2026-11-18)
+
+The former TypeScript bridge was exercised with 25 tests, typecheck and build, plus the
+live probes described below. Those runs remain recorded but do not prove the Rust binary.
 
 - a client pinned to `2026-07-28` connects in the modern era, lists `bridge_info`
   and receives an explicit project/revision response;
@@ -323,11 +343,11 @@ probe writes nothing and does not print the token. The app was force-stopped aft
 probe, so its stale discovery file was removed manually; a normal exit removes it. Raw
 output: `docs/testing/evidence/2026-11-18-structured-observation.txt`.
 
-## Live MCP observation probe
+## Live MCP observation probe (historical, TypeScript bridge)
 
-`mcp/bridge/scripts/probe-live-observation.mjs` connects to the running app through a real
-stdio bridge and the modern MCP era. It calls `bridge_info`, `world_info`, `get_block`,
-`inspect_region`, a stale read and `capture_viewport`, then asserts:
+The former `mcp/bridge/scripts/probe-live-observation.mjs` connected to the running app
+through a real stdio bridge and the modern MCP era. It called `bridge_info`, `world_info`,
+`get_block`, `inspect_region`, a stale read and `capture_viewport`, then asserted:
 
 - block and region responses carry the exact `worldRevision` from `world_info`;
 - the region palette counts add up to the 27-block volume and `nonAirBlocks` stays within it;
@@ -347,6 +367,8 @@ On 2026-11-18 **OpenCode CLI 2.3.2** connected to the bridge over stdio and drov
 through a test agent with `--agent plan --auto`. The server was configured as a local MCP
 server with the bridge's own working directory, `codemode: false`, and an explicit runtime
 path:
+
+Historical configuration (former TypeScript bridge):
 
 ```jsonc
 {

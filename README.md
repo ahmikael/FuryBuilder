@@ -32,8 +32,7 @@ crates/world-io/       Versioned NBT / structure / Anvil adapters
 crates/world-generation/ Deterministic local terrain and object generators
 crates/world-application/ Command/query API, projects, jobs, permissions
 crates/project-store/  Versioned project folders, atomic snapshots, recovery
-packages/contracts/    Shared TypeScript contracts for IPC and MCP
-mcp/bridge/            Local stdio MCP adapter
+crates/mcp-bridge/     Local stdio MCP adapter (Rust, bundled sidecar)
 docs/                  ADRs, format notes, testing matrix, UX notes
 fixtures/              Small self-authored test structures (no Mojang assets)
 ```

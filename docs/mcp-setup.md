@@ -5,20 +5,23 @@ bridge, how to point an MCP client at it, what the access modes allow, how to re
 common error codes and how to turn access off again.
 
 FuryBuilder itself does not contain or call an AI model. The client (OpenCode, an IDE, a
-chat app) owns the model and starts a small `mcp/bridge` process. That process talks to the
-running desktop app over an authenticated Windows named pipe. Every read and write still
+chat app) owns the model and starts a small `furybuilder-mcp` process. That process talks to
+the running desktop app over an authenticated Windows named pipe. Every read and write still
 goes through the same Rust Application API as the UI; the bridge has no direct file or shell
 access to the world.
 
-**Verified client:** OpenCode CLI 2.3.2 on Windows, `protocol: "auto"` (MCP `2026-07-28`)
-and `protocol: "legacy"`. Other stdio clients are expected to work but are not claimed as
-tested; see `docs/testing/mcp-compatibility.md` for the matrix.
+**Client status:** OpenCode CLI 2.3.2 on Windows was verified through the former TypeScript
+bridge, with `protocol: "auto"` (MCP `2026-07-28`) and `protocol: "legacy"`. The Rust bridge
+is protocol-tested over real stdio in both eras; an OpenCode + live-app rerun is still
+outstanding and is not claimed until recorded. Other stdio clients are expected to work but
+are not claimed as tested; see `docs/testing/mcp-compatibility.md` for the matrix.
 
 ## Prerequisites
 
 - Windows. The local endpoint is a Windows named pipe; Unix domain socket code exists but is
   unexercised.
-- Node.js 26 or newer for the bridge process.
+- The `furybuilder-mcp.exe` sidecar installed with FuryBuilder, or a Rust build from this
+  checkout. No Node.js runtime is required.
 - The FuryBuilder desktop app running (`pnpm tauri:dev` in a checkout, or an installed
   build). The browser-only Vite preview has no Rust backend and cannot serve MCP.
 - A project open in FuryBuilder. The active project ID is part of every MCP call.
@@ -36,8 +39,8 @@ machine without Minecraft or Java.
 3. Call `bridge_info`, `world_info`, `get_block` at `(0, 64, 0)` and `capture_viewport`.
    Revision `1` must be reported consistently.
 4. The recorded result of this exact read-only check is
-   [`docs/demo/mcp-probe.json`](demo/mcp-probe.json), produced by
-   `mcp/bridge/scripts/probe-live-observation.mjs`.
+   [`docs/demo/mcp-probe.json`](demo/mcp-probe.json), produced against the former
+   TypeScript bridge. The Rust bridge preserves the same tool contract.
 
 The demo is also the target used by the screenshot and project checks in
 [`scripts/test_demo_assets.py`](../scripts/test_demo_assets.py).
@@ -55,25 +58,33 @@ the token.
 
 ## Build the bridge
 
-From the repository root:
+The packaged release from this source bundles `furybuilder-mcp.exe` next to
+`FuryBuilder.exe` (under `%LOCALAPPDATA%\FuryBuilder`). The published 0.1.0 installer
+predates the Rust sidecar, so rebuild from current source or use the next release. To build
+the bridge from a checkout:
 
 ```powershell
-pnpm install
-pnpm --filter @furybuilder/mcp-bridge build
+cargo build -p furybuilder-mcp-bridge
+# target\debug\furybuilder-mcp.exe
 ```
 
-This produces `mcp\bridge\dist\main.js`. For development you can skip the build and let the
-client run `node --import tsx src/main.ts` with `cwd` set to `mcp\bridge`; `tsx` is a dev
-dependency, so the built `dist/main.js` is the portable choice.
+For a release build that Tauri can bundle:
 
-No network port is opened and no firewall rule is needed.
+```powershell
+pnpm mcp:sidecar
+# stages apps\desktop\src-tauri\binaries\furybuilder-mcp-<target-triple>.exe
+```
+
+`pnpm tauri:build` runs the sidecar staging step automatically. The bridge speaks MCP over
+stdin/stdout and writes diagnostics to stderr; no network port is opened and no firewall
+rule is needed.
 
 ## Configure the client
 
-### OpenCode (tested)
+### OpenCode (historically verified)
 
-Add a local MCP server to `opencode.json`. Use absolute paths for the Node executable and
-the bridge entry point:
+Add a local MCP server to `opencode.json`. Use the absolute path to the installed sidecar
+(or to `target\debug\furybuilder-mcp.exe` when running from a checkout):
 
 ```json
 {
@@ -83,8 +94,7 @@ the bridge entry point:
       "furybuilder": {
         "type": "local",
         "command": [
-          "C:\\Program Files\\nodejs\\node.exe",
-          "C:\\path\\to\\FuryBuilder\\mcp\\bridge\\dist\\main.js"
+          "C:\\Users\\<you>\\AppData\\Local\\FuryBuilder\\furybuilder-mcp.exe"
         ],
         "environment": {
           "FURYBUILDER_MCP_RUNTIME": "C:\\Users\\<you>\\AppData\\Roaming\\com.furybuilder.desktop\\mcp\\runtime.json"
@@ -114,16 +124,16 @@ Restart OpenCode after editing the config so it launches a fresh bridge process.
 
 ### Other stdio clients
 
-Use the same command and environment in the client's stdio-server schema:
+Use the same executable and environment in the client's stdio-server schema:
 
 ```text
-command: C:\Program Files\nodejs\node.exe
-args:    C:\path\to\FuryBuilder\mcp\bridge\dist\main.js
+command: C:\Users\<you>\AppData\Local\FuryBuilder\furybuilder-mcp.exe
+args:    (none)
 env:     FURYBUILDER_MCP_RUNTIME=...   (optional)
 ```
 
-Clients that call a shell to start servers should still receive the two arguments as
-separate values. The bridge speaks MCP over stdin/stdout and writes diagnostics to stderr.
+Clients that call a shell to start servers should still receive the executable as a single
+argument. The bridge speaks MCP over stdin/stdout and writes diagnostics to stderr.
 
 ## First connection checklist
 
@@ -345,7 +355,7 @@ also returns structured `details`). The table lists the actionable ones.
 | `app_not_running`               | The pipe is closed or the discovery file is stale (often after a force-kill).                                                                                                               | Start the app again; it rewrites the discovery file. A stale file alone is harmless and does not grant access.                            |
 | `invalid_runtime_file`          | The discovery file is not valid JSON or has an unsupported schema.                                                                                                                          | Restart the app. Do not hand-edit the file. If it persists, delete it while the app is closed and restart.                                |
 | `authentication_failed`         | The bridge token does not match this app launch.                                                                                                                                            | Restart the MCP client so it starts a new bridge; the token changes on every app launch.                                                  |
-| `protocol_mismatch`             | The desktop and bridge builds speak different endpoint versions.                                                                                                                            | Update/rebuild both from the same source (`pnpm --filter @furybuilder/mcp-bridge build`), then restart both.                              |
+| `protocol_mismatch`             | The desktop and bridge builds speak different endpoint versions.                                                                                                                            | Update/rebuild both from the same source (`cargo build -p furybuilder-mcp-bridge`), then restart both.                                      |
 | `timeout`                       | The desktop did not answer in time. Reads use 5 s, writes up to 120 s.                                                                                                                      | Check that the confirmation dialog is open and answer it. For reads, open the project and keep the window responsive.                     |
 | `desktop_error`                 | The endpoint answered with an unexpected failure or the pipe failed mid-request.                                                                                                            | Retry once; if it persists, restart the app and the client. The message carries the Rust error code when one exists.                      |
 | `invalid_response`              | The endpoint returned malformed or oversized JSON, or closed without an answer.                                                                                                             | Restart both. If it repeats, capture `bridge_info` and the app version; do not hand-edit the discovery file.                              |
@@ -387,27 +397,31 @@ desktop only.
 
 ## Verification without a model
 
-Two scripts exercise the path without asking a model to plan anything:
+Two checks exercise the path without asking a model to plan anything:
 
 ```powershell
 # while the desktop app is running
 node scripts/probe-local-bridge.mjs
-node mcp/bridge/scripts/probe-live-observation.mjs
+cargo test -p furybuilder-mcp-bridge
 ```
 
 The first checks discovery, reads, a PNG capture, read-only refusal and the activity
-journal. The second starts a real stdio bridge and verifies structured observations through
-MCP: revision attribution, region palette totals, stale-revision rejection and screenshot
-metadata/digest consistency. Both are read-only.
+journal. The second spawns the real `furybuilder-mcp` binary over stdio for both protocol
+eras and drives a mock named-pipe desktop endpoint through reads, writes, jobs, prompts and
+the MCP Apps resource. Both are read-only. Historical live-app evidence produced by the
+former TypeScript bridge remains in `docs/testing/evidence/` with its original provenance.
 
 ## Known limitations
 
 - The workflow prompts are guidance for the model, not an orchestrator or an access grant.
   The bridge does not run a plan by itself and cannot prove that an agent followed every
   stage; Core policy, limits, revisions and confirmations remain the enforcement layer.
-- OpenCode 2.3.2 is the only real external client exercised end-to-end. Tasks remains an
-  explicit option with fallback job tools; MCP Apps is implemented and negotiated by the
-  bridge, but inline rendering depends on the host and is not a release gate.
+- OpenCode 2.3.2 is the only real external client exercised end-to-end through the former
+  TypeScript bridge. The Rust bridge is tested over real stdio in both eras against a mock
+  desktop endpoint; an OpenCode + live-app rerun is still outstanding and is not claimed
+  until recorded. Tasks remains an explicit option with fallback job tools; MCP Apps is
+  implemented and negotiated by the bridge, but inline rendering depends on the host and is
+  not a release gate.
 - Screenshots require a mounted, visible editor viewport. A minimized or headless window is
   not promised to capture.
 - The observation API supports six deterministic map modes (top-down, heightmap,

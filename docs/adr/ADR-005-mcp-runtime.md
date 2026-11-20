@@ -1,6 +1,7 @@
 # ADR-005: MCP runtime and connection to the desktop app
 
-- **Status:** Accepted
+- **Status:** Accepted; bridge implementation language superseded by
+  [ADR-017](ADR-017-mcp-rust-bridge.md) (2026-11-20)
 - **Date:** 2026-11-17
 
 ## Decision
@@ -129,11 +130,20 @@ The first transport slice is implemented and exercised against the real Tauri pr
   file relies on the per-user application data directory ACL, so multi-user pipe hardening
   remains a review item.
 
+## Implementation note (2026-11-20)
+
+The bridge was migrated from the TypeScript SDK to the official Rust SDK (`rmcp` 3.11).
+The decision above is unchanged: the stdio bridge is a thin adapter over the authenticated
+local endpoint and owns no world logic. ADR-017 records the migration and its packaging
+consequences. `crates/mcp-bridge` preserves the tool names, JSON contracts, prompts, MCP
+Apps resource and both protocol eras.
+
 ## Rationale
 
-External AI clients start stdio servers easily. A sidecar on the official TS SDK avoids
-coupling MCP protocol churn to the Rust core, while keeping every write behind the same
-validation, transaction and audit path as the UI.
+External AI clients start stdio servers easily. A small sidecar avoids coupling MCP protocol
+churn to the Rust core, while keeping every write behind the same validation, transaction
+and audit path as the UI. Rust keeps the sidecar in the same language and dependency policy
+as the Core and removes the Node.js runtime requirement from the installer.
 
 ## Consequences
 

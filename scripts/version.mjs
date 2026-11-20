@@ -17,18 +17,7 @@ const SOURCE_FILE = "version.json";
 const JSON_TARGETS = [
   "package.json",
   "apps/desktop/package.json",
-  "mcp/bridge/package.json",
   "apps/desktop/src-tauri/tauri.conf.json",
-];
-const TEXT_TARGETS = [
-  {
-    file: "mcp/bridge/src/capabilities.ts",
-    pattern: /(export const BRIDGE_VERSION = ")([^"]+)(")/,
-  },
-  {
-    file: "mcp/bridge/src/apps.ts",
-    pattern: /(export const OBSERVATION_APP_VERSION = ")([^"]+)(")/,
-  },
 ];
 
 function readText(root, relative) {
@@ -99,22 +88,6 @@ function setJsonVersion(root, relative, version) {
   writeText(root, relative, text.replace(pattern, `"version": "${version}"`));
 }
 
-function readTextVersion(root, target) {
-  const match = target.pattern.exec(readText(root, target.file));
-  if (!match) {
-    throw new Error(`${target.file} has no version constant`);
-  }
-  return match[2];
-}
-
-function setTextVersion(root, target, version) {
-  const text = readText(root, target.file);
-  if (!target.pattern.test(text)) {
-    throw new Error(`${target.file} has no version constant`);
-  }
-  writeText(root, target.file, text.replace(target.pattern, `$1${version}$3`));
-}
-
 function setCargoVersion(root, version) {
   const text = readText(root, "Cargo.toml");
   const start = text.indexOf("[workspace.package]");
@@ -144,10 +117,6 @@ function collect(root) {
       file,
       version: readJsonVersion(root, file),
     })),
-    ...TEXT_TARGETS.map((target) => ({
-      file: target.file,
-      version: readTextVersion(root, target),
-    })),
     { file: "Cargo.toml", version: readCargoVersion(root) },
   ];
   return { version, findings };
@@ -175,14 +144,9 @@ function setVersion(root, version) {
   for (const file of JSON_TARGETS) {
     setJsonVersion(root, file, version);
   }
-  for (const target of TEXT_TARGETS) {
-    setTextVersion(root, target, version);
-  }
   setCargoVersion(root, version);
   writeText(root, SOURCE_FILE, `${JSON.stringify({ version }, null, 2)}\n`);
-  console.log(
-    `Updated ${JSON_TARGETS.length + TEXT_TARGETS.length + 2} manifests to ${version}.`,
-  );
+  console.log(`Updated ${JSON_TARGETS.length + 2} manifests to ${version}.`);
   console.log(
     "Cargo.lock will be refreshed by the next cargo build; commit it with the bump.",
   );

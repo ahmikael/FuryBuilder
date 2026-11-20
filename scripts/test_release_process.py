@@ -14,7 +14,6 @@ SEMVER = re.compile(r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$")
 VERSION_FILES = [
     "package.json",
     "apps/desktop/package.json",
-    "mcp/bridge/package.json",
     "apps/desktop/src-tauri/tauri.conf.json",
 ]
 
@@ -40,15 +39,14 @@ class ReleaseProcessTests(unittest.TestCase):
         section = re.search(r"\[workspace\.package\](.*?)(?=\n\[|\Z)", cargo, re.S)
         self.assertIsNotNone(section)
         self.assertIn(f'version = "{version}"', section.group(1))
-        bridge = (ROOT / "mcp" / "bridge" / "src" / "capabilities.ts").read_text(encoding="utf-8")
-        self.assertIn(f'export const BRIDGE_VERSION = "{version}"', bridge)
-        apps = (ROOT / "mcp" / "bridge" / "src" / "apps.ts").read_text(encoding="utf-8")
-        self.assertIn(f'export const OBSERVATION_APP_VERSION = "{version}"', apps)
+        bridge = ROOT / "crates" / "mcp-bridge" / "Cargo.toml"
+        self.assertTrue(bridge.is_file())
+        self.assertIn("version.workspace = true", bridge.read_text(encoding="utf-8"))
 
     def test_version_check_passes_on_the_repository(self):
         result = run_node("check")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("matches 8 manifests", result.stdout)
+        self.assertIn("matches 5 manifests", result.stdout)
 
     def test_version_check_detects_drift_and_set_repairs_it(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -57,11 +55,8 @@ class ReleaseProcessTests(unittest.TestCase):
                 "version.json": '{\n  "version": "0.1.0"\n}\n',
                 "package.json": '{\n  "version": "0.1.0"\n}\n',
                 "apps/desktop/package.json": '{\n  "version": "0.1.0"\n}\n',
-                "mcp/bridge/package.json": '{\n  "version": "0.1.0"\n}\n',
                 "apps/desktop/src-tauri/tauri.conf.json": '{\n  "version": "0.1.0"\n}\n',
                 "Cargo.toml": '[workspace.package]\nversion = "0.1.0"\n',
-                "mcp/bridge/src/capabilities.ts": 'export const BRIDGE_VERSION = "0.1.0";\n',
-                "mcp/bridge/src/apps.ts": 'export const OBSERVATION_APP_VERSION = "0.1.0";\n',
             }
             for relative, content in files.items():
                 target = root / relative
@@ -83,10 +78,6 @@ class ReleaseProcessTests(unittest.TestCase):
             )
             self.assertIn(
                 'version = "1.2.3"', (root / "Cargo.toml").read_text(encoding="utf-8")
-            )
-            self.assertIn(
-                'BRIDGE_VERSION = "1.2.3"',
-                (root / "mcp/bridge/src/capabilities.ts").read_text(encoding="utf-8"),
             )
 
     def test_changelog_is_maintained_and_current(self):

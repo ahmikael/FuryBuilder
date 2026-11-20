@@ -1,7 +1,7 @@
 # Complex AI task rules
 
-Status: implemented in the MCP bridge (`mcp/bridge/src/workflow.ts`) as standard MCP
-prompts plus a machine-readable summary in `bridge_info.bridge.workflow`.
+Status: implemented in the Rust MCP bridge (`crates/mcp-bridge/src/prompts.rs`) as standard
+MCP prompts plus a machine-readable summary in `bridge_info.bridge.workflow`.
 
 This document defines how an AI client should plan, checkpoint, execute, verify and report a
 multi-step build in FuryBuilder. The rules are guidance for the model, not a grant of
@@ -200,7 +200,7 @@ reject a request earlier.
 | Limit                    | Value     | Source                                    |
 | ------------------------ | --------- | ----------------------------------------- |
 | Write steps per plan     | 12        | workflow guidance                         |
-| `apply_operations_batch` | 8,192     | `mcp/bridge/src/write-tools.ts`           |
+| `apply_operations_batch` | 8,192     | `crates/mcp-bridge/src/args.rs`           |
 | One operation            | 1,000,000 | `crates/world-operations/src/lib.rs`      |
 | `get_region` read        | 65,536    | `crates/world-application/src/service.rs` |
 | `inspect_region` summary | 1,000,000 | `crates/world-application/src/service.rs` |

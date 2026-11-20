@@ -15,6 +15,7 @@ members = [
     "crates/structure-library",
     "crates/asset-source",
     "crates/runtime-manager",
+    "crates/mcp-bridge",
     "apps/desktop/src-tauri",
 ]
 

@@ -1,8 +1,8 @@
 # Windows installation, update and removal
 
 This page describes the Windows beta installer produced by `pnpm tauri:build`.
-The installer contains FuryBuilder only. It does not contain Minecraft, Java,
-Mojang assets or a `server.jar`.
+The installer built from this source contains FuryBuilder and its `furybuilder-mcp.exe`
+sidecar. It does not contain Minecraft, Java, Mojang assets or a `server.jar`.
 
 ## Package
 

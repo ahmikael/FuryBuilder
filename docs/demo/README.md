@@ -84,11 +84,11 @@ The demo is a good first target for the setup in [MCP setup](../mcp-setup.md):
 4. Only after that, switch to **Edit in selection**, keep approval enabled, and apply one
    bounded operation. Return to read-only when finished.
 
-[`mcp-probe.json`](mcp-probe.json) is the recorded result of the real stdio probe
-`mcp/bridge/scripts/probe-live-observation.mjs` against this project. It reports the modern
-protocol era, `minecraft:grass_block` at `(0, 64, 0)`, a 27-block region summary, a deliberate
-stale-revision rejection and a real viewport capture whose metadata agrees with the world
-revision.
+[`mcp-probe.json`](mcp-probe.json) is the recorded result of a real stdio probe against this
+project. It reports the modern protocol era, `minecraft:grass_block` at `(0, 64, 0)`, a
+27-block region summary, a deliberate stale-revision rejection and a real viewport capture
+whose metadata agrees with the world revision. The probe was written against the former
+TypeScript bridge; the Rust bridge preserves the same tool contract and protocol surface.
 
 ## Reproduce the demo and screenshots
 
