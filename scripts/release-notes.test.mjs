@@ -41,17 +41,18 @@ test("parses conventional commits and breaking changes", () => {
   assert.equal(parsed.breakingNote, "notices replace the old about box");
 });
 
-test("groups user-facing commits and hides internal types by default", () => {
+test("groups conventional commits and keeps internal types", () => {
   const { groups, breaking } = groupCommits(commits);
   assert.equal(groups.get("Features").length, 1);
   assert.equal(groups.get("Bug Fixes").length, 1);
+  assert.equal(groups.get("Chores").length, 1);
   assert.equal(groups.get("Other Changes").length, 1);
   assert.equal(breaking.length, 1);
   assert.equal(
     [...groups.values()]
       .flat()
       .some((commit) => commit.subject.startsWith("chore")),
-    false,
+    true,
   );
 });
 
@@ -65,22 +66,34 @@ test("renders sections, links and installation guidance", () => {
   assert.match(notes, /### Breaking Changes/);
   assert.match(notes, /### Features/);
   assert.match(notes, /### Bug Fixes/);
+  assert.match(notes, /### Chores/);
   assert.match(notes, /### Other Changes/);
+  assert.match(notes, /bump manifests/);
   assert.match(notes, /compare\/v0\.1\.0\.\.\.v0\.2\.0/);
   assert.match(notes, /NSIS installer/);
-  assert.doesNotMatch(notes, /chore\(release\)/);
 });
 
-test("can include internal commits explicitly", () => {
-  const { groups } = groupCommits(commits, { includeInternal: true });
-  assert.equal(
-    [...groups.values()]
-      .flat()
-      .some((commit) => commit.subject.startsWith("chore")),
-    true,
+test("keeps every conventional commit type in its own section", () => {
+  const samples = [
+    ["build(deps): refresh lockfile", "Build System"],
+    ["test(editor): cover undo", "Tests"],
+    ["ci(release): pin actions", "Continuous Integration"],
+    ["style(ui): format settings", "Code Style"],
+    ["chore(release): bump manifests", "Chores"],
+  ];
+  const { groups } = groupCommits(
+    samples.map(([subject], index) => ({
+      hash: String(index + 1).padStart(40, "0"),
+      subject,
+      body: "",
+    })),
   );
+  for (const [subject, title] of samples) {
+    assert.equal(groups.get(title).length, 1, `${subject} should be in ${title}`);
+    assert.equal(groups.get("Other Changes").length, 0);
+  }
   assert.equal(
-    parseConventionalCommit("chore(release): bump manifests").internal,
-    true,
+    parseConventionalCommit("chore(release): bump manifests").type,
+    "chore",
   );
 });

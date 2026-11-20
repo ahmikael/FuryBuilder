@@ -85,7 +85,15 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_release_notes_script_is_documented_and_current(self):
         notes = (ROOT / "scripts" / "release-notes.mjs").read_text(encoding="utf-8")
-        for term in ("parseConventionalCommit", "Breaking Changes", "includeInternal"):
+        for term in (
+            "parseConventionalCommit",
+            "Breaking Changes",
+            "Build System",
+            "Tests",
+            "Continuous Integration",
+            "Code Style",
+            "Chores",
+        ):
             self.assertIn(term, notes)
         for term in ("release-notes.mjs", "Conventional Commits", "latest.json"):
             self.assertIn(term, self.versioning)

@@ -100,8 +100,9 @@ Pushing a tag named `v<version>` runs `.github/workflows/release.yml`. The workf
 1. checks that the tag matches `version.json` and that every manifest agrees;
 2. runs the frontend and Rust checks, including the release-notes tool tests;
 3. generates release notes from Conventional Commits with `scripts/release-notes.mjs`;
-   internal `chore`, `test`, `ci`, `build` and `style` commits are omitted, and breaking
-   changes are listed separately;
+   every commit type gets its own section, including `chore`, `test`, `ci`, `build` and
+   `style`, while untyped commits go to Other Changes and breaking changes are listed
+   separately;
 4. creates a draft GitHub release and builds both Windows installers on `windows-latest`;
 5. uploads the NSIS/MSI packages, their updater signatures and the static `latest.json`
    manifest, then appends SHA-256 checksums and publishes the release.

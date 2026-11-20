@@ -7,7 +7,6 @@ import { pathToFileURL } from "node:url";
 const TAG_PATTERN = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const CONVENTIONAL_PATTERN =
   /^([a-zA-Z][a-zA-Z0-9]*)(?:\(([^)\r\n]+)\))?(!)?:\s+(.+)$/;
-const INTERNAL_TYPES = new Set(["build", "chore", "ci", "style", "test"]);
 
 const TYPE_SECTIONS = [
   ["feat", "Features"],
@@ -15,6 +14,11 @@ const TYPE_SECTIONS = [
   ["perf", "Performance Improvements"],
   ["refactor", "Refactoring"],
   ["docs", "Documentation"],
+  ["build", "Build System"],
+  ["test", "Tests"],
+  ["ci", "Continuous Integration"],
+  ["style", "Code Style"],
+  ["chore", "Chores"],
   ["revert", "Reverts"],
 ];
 
@@ -28,7 +32,6 @@ export function parseConventionalCommit(subject, body = "") {
   const breakingMatch = /^BREAKING[ -]CHANGE:\s*(.+)$/m.exec(body);
   return {
     type: SECTION_TITLES.has(type) ? type : "other",
-    internal: INTERNAL_TYPES.has(type),
     scope: rawScope?.trim() || null,
     description: rawDescription.trim(),
     breaking: Boolean(bang) || Boolean(breakingMatch),
@@ -36,7 +39,7 @@ export function parseConventionalCommit(subject, body = "") {
   };
 }
 
-export function groupCommits(commits, { includeInternal = false } = {}) {
+export function groupCommits(commits) {
   const groups = new Map(
     [...SECTION_TITLES.values(), "Other Changes"].map((title) => [title, []]),
   );
@@ -50,7 +53,6 @@ export function groupCommits(commits, { includeInternal = false } = {}) {
         .push({ ...commit, scope: null, description: commit.subject });
       continue;
     }
-    if (!includeInternal && parsed.internal) continue;
     const title = SECTION_TITLES.get(parsed.type) ?? "Other Changes";
     groups.get(title).push({ ...commit, ...parsed });
     if (parsed.breaking) {
@@ -76,9 +78,8 @@ export function renderNotes(commits, options = {}) {
     tag,
     previousTag = null,
     repository = null,
-    includeInternal = false,
   } = options;
-  const { groups, breaking } = groupCommits(commits, { includeInternal });
+  const { groups, breaking } = groupCommits(commits);
   const lines = ["## What's Changed", ""];
 
   if (breaking.length > 0) {
@@ -187,7 +188,6 @@ function parseArgs(argv) {
     from: null,
     output: null,
     repository: process.env.GITHUB_REPOSITORY || repositoryFromRemote(),
-    includeInternal: false,
   };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
@@ -213,12 +213,9 @@ function parseArgs(argv) {
         options.repository = next;
         index += 1;
         break;
-      case "--include-internal":
-        options.includeInternal = true;
-        break;
       case "--help":
         console.log(
-          "Usage: node scripts/release-notes.mjs --tag v1.2.3 [--output release-notes.md] [--from v1.2.2] [--include-internal]",
+          "Usage: node scripts/release-notes.mjs --tag v1.2.3 [--output release-notes.md] [--from v1.2.2]",
         );
         process.exit(0);
         break;
@@ -252,7 +249,6 @@ export function main(argv = process.argv.slice(2)) {
     tag: options.tag,
     previousTag,
     repository: options.repository,
-    includeInternal: options.includeInternal,
   });
 
   if (options.output) {
