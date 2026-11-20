@@ -2,9 +2,11 @@
 
 Status: the bridge is a Rust `rmcp` sidecar (`crates/mcp-bridge`) bundled with the installer.
 Its protocol surface is tested over real stdio in both eras against a mock desktop endpoint.
-The live-app evidence below was collected on the former TypeScript bridge and is kept as
-historical provenance; an OpenCode + live-app rerun against the Rust binary is still
-outstanding and is not claimed. Setup, access modes and revocation: `docs/mcp-setup.md`.
+On 2026-11-20 the installed NSIS package was exercised against the live desktop with a manual
+stdio harness: 27 tools, ready read-only context, real `world_info`, and `permission_denied`
+for writes. The historical live-app evidence below was collected on the former TypeScript
+bridge and is kept as provenance. An OpenCode + live-app rerun against the Rust binary is
+still outstanding and is not claimed. Setup, access modes and revocation: `docs/mcp-setup.md`.
 
 ## Bridge baseline
 
@@ -249,6 +251,26 @@ over stdio against a mock named-pipe desktop endpoint:
   desktop's authoritative `permission_denied` code;
 - job tools return authoritative snapshots and never invent completion.
 
+### Installed Rust sidecar against the live desktop (2026-11-20)
+
+The release NSIS package (7,297,851 bytes, SHA-256 `8da07fc5…`) contained
+`furybuilder-desktop.exe` and `furybuilder-mcp.exe` (3,331,072 bytes). After a silent
+install, a manual Node.js stdio harness started the installed sidecar with
+`FURYBUILDER_MCP_RUNTIME` pointing at the live `runtime.json`. It listed all 27 tools and
+reported:
+
+- `bridge_info`: `desktop.connected: true`, `context.state: "ready"` for the open
+  `local-project` at revision 0, `jobs.available: true`, target Minecraft `1.21.4`
+  (`DataVersion 4189`), `access.mode: "read_only"` and `writesEnabled: false`;
+- `world_info`: revision 0 with the overworld, nether and end dimensions;
+- `preview_operation`: `allowed: false` with `permission_denied`, without changing the world;
+- `apply_operation`: structured `permission_denied`.
+
+A clean exit removed `runtime.json`; the silent uninstall removed the install directory
+including `furybuilder-mcp.exe` and preserved `%APPDATA%\com.furybuilder.desktop`. Evidence:
+`docs/testing/evidence/2026-11-20-windows-installer-sidecar.json`. The harness was manual, not
+OpenCode; write mode with a real user grant and the auto-update cycle are still not claimed.
+
 ### Historical TypeScript bridge evidence (2026-11-18)
 
 The former TypeScript bridge was exercised with 25 tests, typecheck and build, plus the
@@ -482,8 +504,10 @@ negotiated era; `opencode mcp list` does not show it.
 - Unix domain socket support exists only as unexercised code; Windows is the tested target.
 - The discovery token relies on the per-user application data directory ACL; stronger
   named-pipe ACLs are still a security review item.
-- OpenCode 2.3.2 is the only real external client exercised. Claude Desktop and other hosts
-  remain untested, and the modern run used Code Mode disabled so tools were listed directly.
+- OpenCode 2.3.2 is the only real external client exercised end-to-end, and that run used the
+  former TypeScript bridge; the installed Rust sidecar was checked with a manual stdio
+  harness, not OpenCode. Claude Desktop and other hosts remain untested, and the modern run
+  used Code Mode disabled so tools were listed directly.
   Only one end-to-end model/client combination was exercised; GPT-6 Luna Max was blocked by
   the provider's region policy, so the loop used a free DeepSeek model. This is not evidence
   of parity with every model or with real Minecraft gameplay.

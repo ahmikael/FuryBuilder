@@ -551,6 +551,12 @@ documents the client configuration and the fail-closed behaviour.
 > The 2026-11-19 run also exercised an MSI by administrative extraction. The MSI was
 > removed from the release on 2026-11-20; the row and its evidence are retained as a
 > historical record, and only the NSIS package is shipped.
+>
+> The 2026-11-20 release build additionally verified that the NSIS package contains
+> `furybuilder-mcp.exe`, that a silent install places it beside `furybuilder-desktop.exe`,
+> that the installed sidecar reaches the live desktop over stdio and the named pipe, and
+> that uninstall removes it while preserving `%APPDATA%`. Evidence:
+> `docs/testing/evidence/2026-11-20-windows-installer-sidecar.json`.
 
 ## M11.2 versioning, changelog, migrations and backup policy
 

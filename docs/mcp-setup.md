@@ -12,9 +12,11 @@ access to the world.
 
 **Client status:** OpenCode CLI 2.3.2 on Windows was verified through the former TypeScript
 bridge, with `protocol: "auto"` (MCP `2026-07-28`) and `protocol: "legacy"`. The Rust bridge
-is protocol-tested over real stdio in both eras; an OpenCode + live-app rerun is still
-outstanding and is not claimed until recorded. Other stdio clients are expected to work but
-are not claimed as tested; see `docs/testing/mcp-compatibility.md` for the matrix.
+is protocol-tested over real stdio in both eras; on 2026-11-20 the installed sidecar was also
+exercised against the live desktop with a manual stdio harness (27 tools, ready read-only
+context, writes refused). An OpenCode + live-app rerun is still outstanding and is not claimed
+until recorded. Other stdio clients are expected to work but are not claimed as tested; see
+`docs/testing/mcp-compatibility.md` for the matrix.
 
 ## Prerequisites
 
@@ -416,9 +418,10 @@ former TypeScript bridge remains in `docs/testing/evidence/` with its original p
 - The workflow prompts are guidance for the model, not an orchestrator or an access grant.
   The bridge does not run a plan by itself and cannot prove that an agent followed every
   stage; Core policy, limits, revisions and confirmations remain the enforcement layer.
-- OpenCode 2.3.2 is the only real external client exercised end-to-end through the former
-  TypeScript bridge. The Rust bridge is tested over real stdio in both eras against a mock
-  desktop endpoint; an OpenCode + live-app rerun is still outstanding and is not claimed
+- OpenCode 2.3.2 is the only real external client exercised end-to-end, and that run used the
+  former TypeScript bridge. The Rust bridge is tested over real stdio in both eras against a
+  mock desktop endpoint and was exercised against the live desktop with a manual stdio
+  harness on 2026-11-20; an OpenCode + live-app rerun is still outstanding and is not claimed
   until recorded. Tasks remains an explicit option with fallback job tools; MCP Apps is
   implemented and negotiated by the bridge, but inline rendering depends on the host and is
   not a release gate.
