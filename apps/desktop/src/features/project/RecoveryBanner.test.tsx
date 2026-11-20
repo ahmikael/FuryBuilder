@@ -84,9 +84,7 @@ describe("RecoveryBanner", () => {
 
     await user.click(screen.getByRole("button", { name: "Save now" }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Save now" })).toBeEnabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save now" })).toBeEnabled());
 
     await user.click(screen.getByRole("button", { name: "Discard recovered changes" }));
     await waitFor(() => expect(discard).toHaveBeenCalledTimes(1));

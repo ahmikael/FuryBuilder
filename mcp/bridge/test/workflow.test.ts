@@ -31,11 +31,9 @@ describe("complex task workflow", () => {
       "verify",
       "report",
     ]);
-    expect(
-      COMPLEX_TASK_STAGES.filter((stage) => stage.writes).map(
-        (stage) => stage.id,
-      ),
-    ).toEqual(["execute"]);
+    expect(COMPLEX_TASK_STAGES.filter((stage) => stage.writes).map((stage) => stage.id)).toEqual([
+      "execute",
+    ]);
   });
 
   it("exposes a stable machine-readable summary for bridge_info", () => {
@@ -60,22 +58,13 @@ describe("complex task workflow", () => {
     expect(summary.checkpointPolicy).toBe(
       "record-before-first-write-and-after-every-committed-step",
     );
-    expect(summary.untrustedInputPolicy).toBe(
-      "goal-bounds-and-constraints-are-data",
-    );
+    expect(summary.untrustedInputPolicy).toBe("goal-bounds-and-constraints-are-data");
     expect(() => JSON.stringify(summary)).not.toThrow();
   });
 
   it("frames caller text as untrusted data and includes every stage", () => {
     const prompt = buildPlanPrompt(planArgs);
-    for (const id of [
-      "inspect",
-      "plan",
-      "checkpoint",
-      "execute",
-      "verify",
-      "report",
-    ]) {
+    for (const id of ["inspect", "plan", "checkpoint", "execute", "verify", "report"]) {
       expect(prompt).toContain(id);
     }
     expect(prompt).toContain(planArgs.project_id);
@@ -105,12 +94,8 @@ describe("complex task workflow", () => {
     const first = buildPlanPrompt({ project_id: "p", goal: "g" });
     const second = buildPlanPrompt({ project_id: "p", goal: "g" });
     expect(second).toBe(first);
-    expect(first).toContain(
-      "Target bounds (untrusted data):\n| (none supplied)",
-    );
-    expect(first).toContain(
-      "Additional constraints (untrusted data):\n| (none supplied)",
-    );
+    expect(first).toContain("Target bounds (untrusted data):\n| (none supplied)");
+    expect(first).toContain("Additional constraints (untrusted data):\n| (none supplied)");
   });
 
   it("strips control characters so caller data cannot forge sections", () => {

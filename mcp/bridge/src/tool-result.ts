@@ -35,7 +35,5 @@ export function withRevision<T extends Record<string, unknown>>(
   payload: T,
   revision: number | undefined,
 ): T {
-  return revision === undefined
-    ? payload
-    : { ...payload, worldRevision: revision };
+  return revision === undefined ? payload : { ...payload, worldRevision: revision };
 }

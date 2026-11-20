@@ -5,11 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { MODERN_PROTOCOL_VERSION } from "../src/capabilities.js";
-import {
-  okResult,
-  startMockDesktop,
-  type MockDesktop,
-} from "./mock-desktop.js";
+import { okResult, startMockDesktop, type MockDesktop } from "./mock-desktop.js";
 
 const bridgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const clients: Client[] = [];
@@ -36,10 +32,8 @@ describe("MCP bridge to the authoritative desktop API", () => {
     let observedClientId: string | null = null;
     const harness = await startMockDesktop((request) => {
       observedToken = typeof request.token === "string" ? request.token : null;
-      observedMethod =
-        typeof request.method === "string" ? request.method : null;
-      observedClientId =
-        typeof request.clientId === "string" ? request.clientId : null;
+      observedMethod = typeof request.method === "string" ? request.method : null;
+      observedClientId = typeof request.clientId === "string" ? request.clientId : null;
       return okResult(request, {
         app: { name: "FuryBuilder", version: "0.1.0" },
         project: {
@@ -149,11 +143,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
       succeeded: 2,
     });
     expect(info.bridge.jobs.backendConnected).toBe(true);
-    expect(info.bridge.jobs.fallbackTools).toEqual([
-      "start_job",
-      "get_job_status",
-      "cancel_job",
-    ]);
+    expect(info.bridge.jobs.fallbackTools).toEqual(["start_job", "get_job_status", "cancel_job"]);
     expect(info.bridge.desktop.pendingConfirmations).toBe(1);
     expect(info.bridge.connection).toMatchObject({
       state: "ready",
@@ -174,9 +164,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
       arguments: { project_id: "project-live", world_revision: 8 },
     });
     const staleText = stale.content.find((block) => block.type === "text");
-    const staleInfo = JSON.parse(
-      staleText?.type === "text" ? staleText.text : "{}",
-    ) as {
+    const staleInfo = JSON.parse(staleText?.type === "text" ? staleText.text : "{}") as {
       bridge: {
         connection: { state: string };
         context: {
@@ -286,9 +274,10 @@ describe("MCP bridge to the authoritative desktop API", () => {
       },
     });
     const startText = started.content.find((block) => block.type === "text");
-    const startSnapshot = JSON.parse(
-      startText?.type === "text" ? startText.text : "{}",
-    ) as { jobId: string; state: string };
+    const startSnapshot = JSON.parse(startText?.type === "text" ? startText.text : "{}") as {
+      jobId: string;
+      state: string;
+    };
     expect(startSnapshot).toMatchObject({ jobId: "job-1", state: "queued" });
     const startRequest = seen.find((request) => request.method === "start_job");
     expect(startRequest?.params).toMatchObject({
@@ -297,31 +286,30 @@ describe("MCP bridge to the authoritative desktop API", () => {
       idempotencyKey: "job-key-1",
       worldRevision: 9,
     });
-    expect(
-      (
-        startRequest?.params as {
+    const startParams = startRequest?.params as
+      | {
           parameters: { operation: { type: string } };
         }
-      ).parameters.operation.type,
-    ).toBe("set_block");
+      | undefined;
+    expect(startParams?.parameters.operation.type).toBe("set_block");
 
     const status = await client.callTool({
       name: "get_job_status",
       arguments: { project_id: "project-live", job_id: "job-1" },
     });
     const statusText = status.content.find((block) => block.type === "text");
-    expect(
-      JSON.parse(statusText?.type === "text" ? statusText.text : "{}"),
-    ).toMatchObject({ jobId: "job-1", state: "running", progress: 42 });
+    expect(JSON.parse(statusText?.type === "text" ? statusText.text : "{}")).toMatchObject({
+      jobId: "job-1",
+      state: "running",
+      progress: 42,
+    });
 
     const cancelled = await client.callTool({
       name: "cancel_job",
       arguments: { project_id: "project-live", job_id: "job-1" },
     });
     const cancelText = cancelled.content.find((block) => block.type === "text");
-    expect(
-      JSON.parse(cancelText?.type === "text" ? cancelText.text : "{}"),
-    ).toMatchObject({
+    expect(JSON.parse(cancelText?.type === "text" ? cancelText.text : "{}")).toMatchObject({
       jobId: "job-1",
       state: "cancelled",
       cancelRequested: true,
@@ -339,9 +327,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
     });
     expect(denied.isError).toBe(true);
     const deniedText = denied.content.find((block) => block.type === "text");
-    expect(deniedText?.type === "text" ? deniedText.text : "").toMatch(
-      /^permission_denied: /,
-    );
+    expect(deniedText?.type === "text" ? deniedText.text : "").toMatch(/^permission_denied: /);
   });
 
   it("serves world, block, camera and capture reads from the live endpoint", async () => {
@@ -461,9 +447,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
       },
     });
     const blockText = block.content.find((entry) => entry.type === "text");
-    const blockResult = JSON.parse(
-      blockText?.type === "text" ? blockText.text : "{}",
-    ) as {
+    const blockResult = JSON.parse(blockText?.type === "text" ? blockText.text : "{}") as {
       type: string;
       worldRevision: number;
       data: { state: { name: string } };
@@ -485,9 +469,7 @@ describe("MCP bridge to the authoritative desktop API", () => {
       },
     });
     const regionText = region.content.find((entry) => entry.type === "text");
-    const regionResult = JSON.parse(
-      regionText?.type === "text" ? regionText.text : "{}",
-    ) as {
+    const regionResult = JSON.parse(regionText?.type === "text" ? regionText.text : "{}") as {
       type: string;
       worldRevision: number;
       data: {
@@ -500,18 +482,17 @@ describe("MCP bridge to the authoritative desktop API", () => {
     expect(regionResult.worldRevision).toBe(9);
     expect(regionResult.data.blocks).toBe(27);
     expect(regionResult.data.nonAirBlocks).toBe(1);
-    expect(regionResult.data.palette).toEqual([
-      { state: "minecraft:stone", count: 1 },
-    ]);
+    expect(regionResult.data.palette).toEqual([{ state: "minecraft:stone", count: 1 }]);
 
     const camera = await client.callTool({
       name: "get_camera",
       arguments: { project_id: "project-live" },
     });
     const cameraText = camera.content.find((entry) => entry.type === "text");
-    const cameraResult = JSON.parse(
-      cameraText?.type === "text" ? cameraText.text : "{}",
-    ) as { kind: string; pose: { fov: number } };
+    const cameraResult = JSON.parse(cameraText?.type === "text" ? cameraText.text : "{}") as {
+      kind: string;
+      pose: { fov: number };
+    };
     expect(cameraResult.kind).toBe("camera");
     expect(cameraResult.pose.fov).toBe(70);
 
@@ -530,9 +511,10 @@ describe("MCP bridge to the authoritative desktop API", () => {
       data: "iVBORw0KGgo=",
     });
     const captureText = capture.content.find((entry) => entry.type === "text");
-    const captureMetadata = JSON.parse(
-      captureText?.type === "text" ? captureText.text : "{}",
-    ) as { metadata: { partial: boolean }; verification: { partial: boolean } };
+    const captureMetadata = JSON.parse(captureText?.type === "text" ? captureText.text : "{}") as {
+      metadata: { partial: boolean };
+      verification: { partial: boolean };
+    };
     expect(captureMetadata.metadata.partial).toBe(true);
     expect(captureMetadata.verification.partial).toBe(true);
   });
@@ -629,18 +611,14 @@ describe("MCP bridge to the authoritative desktop API", () => {
       },
     });
     const appliedText = applied.content.find((entry) => entry.type === "text");
-    expect(appliedText?.type === "text" ? appliedText.text : "").toContain(
-      '"operationId": "op-1"',
-    );
+    expect(appliedText?.type === "text" ? appliedText.text : "").toContain('"operationId": "op-1"');
 
     const status = await client.callTool({
       name: "get_operation_status",
       arguments: { project_id: "project-live", operation_id: "op-1" },
     });
     const statusText = status.content.find((entry) => entry.type === "text");
-    expect(statusText?.type === "text" ? statusText.text : "").toContain(
-      '"job": {',
-    );
+    expect(statusText?.type === "text" ? statusText.text : "").toContain('"job": {');
 
     const undone = await client.callTool({
       name: "undo_operation",
@@ -651,13 +629,11 @@ describe("MCP bridge to the authoritative desktop API", () => {
       },
     });
     const undoneText = undone.content.find((entry) => entry.type === "text");
-    expect(undoneText?.type === "text" ? undoneText.text : "").toContain(
-      '"worldRevision": 11',
-    );
+    expect(undoneText?.type === "text" ? undoneText.text : "").toContain('"worldRevision": 11');
 
-    const applyRequest = observed.find(
-      (request) => request.method === "apply_operation",
-    ) as { params?: Record<string, unknown> } | undefined;
+    const applyRequest = observed.find((request) => request.method === "apply_operation") as
+      | { params?: Record<string, unknown> }
+      | undefined;
     expect(applyRequest?.params).toMatchObject({
       projectId: "project-live",
       worldRevision: 9,
@@ -667,9 +643,9 @@ describe("MCP bridge to the authoritative desktop API", () => {
         dimension: "minecraft:overworld",
       },
     });
-    const undoRequest = observed.find(
-      (request) => request.method === "undo_operation",
-    ) as { params?: Record<string, unknown> } | undefined;
+    const undoRequest = observed.find((request) => request.method === "undo_operation") as
+      | { params?: Record<string, unknown> }
+      | undefined;
     expect(undoRequest?.params).toMatchObject({
       projectId: "project-live",
       worldRevision: 10,

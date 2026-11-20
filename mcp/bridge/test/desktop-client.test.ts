@@ -11,11 +11,7 @@ import {
   readDesktopRuntime,
   runtimeFilePath,
 } from "../src/desktop-client.js";
-import {
-  okResult,
-  startMockDesktop,
-  type MockDesktop,
-} from "./mock-desktop.js";
+import { okResult, startMockDesktop, type MockDesktop } from "./mock-desktop.js";
 
 const harnesses: MockDesktop[] = [];
 
@@ -78,9 +74,7 @@ describe("desktop local IPC client", () => {
     const directory = await mkdtemp(join(tmpdir(), "furybuilder-desktop-"));
     try {
       const missing = join(directory, "missing.json");
-      await expect(readDesktopRuntime(missing)).rejects.toBeInstanceOf(
-        DesktopUnavailableError,
-      );
+      await expect(readDesktopRuntime(missing)).rejects.toBeInstanceOf(DesktopUnavailableError);
       await expect(readDesktopRuntime(missing)).rejects.toMatchObject({
         reason: "runtime_file_missing",
       });
@@ -134,9 +128,7 @@ describe("desktop local IPC client", () => {
           startedAtMs: 1,
         }),
       );
-      const error = await readDesktopRuntime(path).catch(
-        (failure: unknown) => failure,
-      );
+      const error = await readDesktopRuntime(path).catch((failure: unknown) => failure);
       expect(error).toBeInstanceOf(DesktopUnavailableError);
       expect(String((error as Error).message)).not.toContain("short");
     } finally {
@@ -149,17 +141,13 @@ describe("desktop local IPC client", () => {
     harnesses.push(harness);
 
     await expect(
-      callDesktop(
-        "ping",
-        {},
-        { runtimePath: harness.runtimePath, timeoutMs: 100 },
-      ),
+      callDesktop("ping", {}, { runtimePath: harness.runtimePath, timeoutMs: 100 }),
     ).rejects.toMatchObject({ reason: "timeout" });
   });
 
   it("honours the runtime path override without guessing a private location", () => {
-    expect(
-      runtimeFilePath({ FURYBUILDER_MCP_RUNTIME: "C:\\custom\\runtime.json" }),
-    ).toBe("C:\\custom\\runtime.json");
+    expect(runtimeFilePath({ FURYBUILDER_MCP_RUNTIME: "C:\\custom\\runtime.json" })).toBe(
+      "C:\\custom\\runtime.json",
+    );
   });
 });

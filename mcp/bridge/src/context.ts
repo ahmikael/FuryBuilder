@@ -18,7 +18,10 @@ export interface ActiveContext {
 }
 
 export type ContextState =
-  "ready" | "desktop_unavailable" | "project_mismatch" | "revision_mismatch";
+  | "ready"
+  | "desktop_unavailable"
+  | "project_mismatch"
+  | "revision_mismatch";
 
 export interface ContextEvaluation {
   state: ContextState;
@@ -38,8 +41,7 @@ export function evaluateContext(
       state: "desktop_unavailable",
       valid: false,
       code: "desktop_unavailable",
-      message:
-        "The FuryBuilder desktop app is not connected; no world context is available.",
+      message: "The FuryBuilder desktop app is not connected; no world context is available.",
       requested,
       active: null,
     };
@@ -49,16 +51,12 @@ export function evaluateContext(
       state: "project_mismatch",
       valid: false,
       code: "project_mismatch",
-      message:
-        "project_id does not match the project currently open in FuryBuilder.",
+      message: "project_id does not match the project currently open in FuryBuilder.",
       requested,
       active,
     };
   }
-  if (
-    requested.worldRevision !== null &&
-    requested.worldRevision !== active.worldRevision
-  ) {
+  if (requested.worldRevision !== null && requested.worldRevision !== active.worldRevision) {
     return {
       state: "revision_mismatch",
       valid: false,

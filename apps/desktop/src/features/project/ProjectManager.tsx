@@ -47,7 +47,10 @@ import {
 import { cn } from "@/lib/utils";
 
 type PendingAction =
-  { kind: "open"; folder: string; name: string } | { kind: "close" } | { kind: "create" } | null;
+  | { kind: "open"; folder: string; name: string }
+  | { kind: "close" }
+  | { kind: "create" }
+  | null;
 
 function ProjectRow({
   name,

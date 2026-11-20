@@ -1,7 +1,12 @@
 import type { Bounds3 } from "@/renderer/types";
 
 export type ObservationMode =
-  "top_down" | "heightmap" | "material_map" | "biome_map" | "cross_section" | "revision_diff";
+  | "top_down"
+  | "heightmap"
+  | "material_map"
+  | "biome_map"
+  | "cross_section"
+  | "revision_diff";
 
 export type ObservationSliceAxis = "x" | "y" | "z";
 

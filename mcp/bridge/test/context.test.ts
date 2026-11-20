@@ -4,10 +4,7 @@ import { evaluateContext } from "../src/context.js";
 
 describe("explicit MCP request context", () => {
   it("reports desktop unavailability instead of inventing a project", () => {
-    const evaluation = evaluateContext(
-      { projectId: "project-1", worldRevision: 3 },
-      null,
-    );
+    const evaluation = evaluateContext({ projectId: "project-1", worldRevision: 3 }, null);
     expect(evaluation).toMatchObject({
       state: "desktop_unavailable",
       valid: false,

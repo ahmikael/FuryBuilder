@@ -793,7 +793,7 @@ furybuilder/
 
 ### 14.2 Coding standards
 
-- TypeScript `strict`, без бесконтрольного `any`; ESLint/Prettier или аналог, единые aliases/import order.
+- TypeScript `strict`, без бесконтрольного `any`; Oxlint/Oxfmt или аналог, единые aliases/import order.
 - Rust `cargo fmt`, `cargo clippy` и тесты; возвращать структурированные ошибки, не использовать `unwrap()` в парсерах недоверенных файлов.
 - Именование команд согласовано между UI, Rust и MCP; публичные API не менять без миграции.
 - Использовать **design tokens** (цвета/радиусы/типографика), Tailwind-стандарты вместо случайных хардкодов.

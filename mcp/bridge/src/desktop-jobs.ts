@@ -51,10 +51,7 @@ function mapDesktopError(error: unknown): never {
 
 function validateSnapshot(value: unknown): JobSnapshot {
   if (typeof value !== "object" || value === null) {
-    throw new JobApiError(
-      "invalid_response",
-      "FuryBuilder returned no job snapshot",
-    );
+    throw new JobApiError("invalid_response", "FuryBuilder returned no job snapshot");
   }
   const record = value as Record<string, unknown>;
   if (
@@ -65,10 +62,7 @@ function validateSnapshot(value: unknown): JobSnapshot {
     typeof record.progress !== "number" ||
     !Number.isFinite(record.progress)
   ) {
-    throw new JobApiError(
-      "invalid_response",
-      "FuryBuilder returned an incomplete job snapshot",
-    );
+    throw new JobApiError("invalid_response", "FuryBuilder returned an incomplete job snapshot");
   }
   return value as unknown as JobSnapshot;
 }

@@ -28,9 +28,7 @@ export interface AppsSupportDecision {
   mimeType: string;
 }
 
-function appsSettings(
-  clientCapabilities: unknown,
-): Record<string, unknown> | null {
+function appsSettings(clientCapabilities: unknown): Record<string, unknown> | null {
   if (typeof clientCapabilities !== "object" || clientCapabilities === null) {
     return null;
   }
@@ -67,9 +65,7 @@ export function resolveAppsSupport(input: {
   const supportsMimeType =
     Array.isArray(mimeTypes) &&
     mimeTypes.some(
-      (value) =>
-        typeof value === "string" &&
-        value.toLowerCase() === APPS_RESOURCE_MIME_TYPE,
+      (value) => typeof value === "string" && value.toLowerCase() === APPS_RESOURCE_MIME_TYPE,
     );
   if (!supportsMimeType) {
     return {

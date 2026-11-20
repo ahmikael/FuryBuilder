@@ -32,10 +32,7 @@ export async function startMockDesktop(
       buffer += chunk;
       const newline = buffer.indexOf("\n");
       if (newline < 0) return;
-      const request = JSON.parse(buffer.slice(0, newline)) as Record<
-        string,
-        unknown
-      >;
+      const request = JSON.parse(buffer.slice(0, newline)) as Record<string, unknown>;
       if (options.respond === false) return;
       socket.end(`${JSON.stringify(handler(request))}\n`);
     });
@@ -70,9 +67,6 @@ export async function startMockDesktop(
   };
 }
 
-export function okResult(
-  request: Record<string, unknown>,
-  result: unknown,
-): unknown {
+export function okResult(request: Record<string, unknown>, result: unknown): unknown {
   return { protocol: 1, id: request.id, ok: true, result };
 }

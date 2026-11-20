@@ -228,7 +228,14 @@ export function operationLabel(operation: EditorOperation): string {
 }
 
 export type GhostKind =
-  "place" | "remove" | "brush" | "box" | "line" | "fill" | "replace" | "paste";
+  | "place"
+  | "remove"
+  | "brush"
+  | "box"
+  | "line"
+  | "fill"
+  | "replace"
+  | "paste";
 
 export interface GhostPreview {
   bounds: BoxBounds;

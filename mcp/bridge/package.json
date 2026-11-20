@@ -12,8 +12,9 @@
     "dev": "tsx src/main.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "lint": "oxlint src test scripts",
+    "format": "oxfmt --write .",
+    "format:check": "oxfmt --check ."
   },
   "dependencies": {
     "@modelcontextprotocol/core": "2.4.0",
@@ -23,7 +24,6 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",
     "@types/node": "^26.6.6",
-    "prettier": "^3.6.0",
     "tsx": "^4.20.0",
     "typescript": "~5.9.3",
     "vitest": "^5.1.0"

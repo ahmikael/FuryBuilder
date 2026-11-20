@@ -45,9 +45,9 @@ describe("MCP Apps negotiation", () => {
       extensionAdvertised: false,
       mimeType: APPS_RESOURCE_MIME_TYPE,
     });
-    expect(
-      resolveAppsSupport({ clientCapabilities: { roots: {} } }).reason,
-    ).toBe("client_did_not_declare_apps");
+    expect(resolveAppsSupport({ clientCapabilities: { roots: {} } }).reason).toBe(
+      "client_did_not_declare_apps",
+    );
     expect(
       resolveAppsSupport({
         clientCapabilities: {
@@ -79,9 +79,7 @@ describe("observation app resource", () => {
     expect(OBSERVATION_APP_HTML).toContain("ui/notifications/initialized");
     expect(OBSERVATION_APP_HTML).toContain("ui/notifications/tool-result");
     expect(OBSERVATION_APP_HTML).toContain("ui/resource-teardown");
-    expect(OBSERVATION_APP_HTML).toContain(
-      `version: "${OBSERVATION_APP_VERSION}"`,
-    );
+    expect(OBSERVATION_APP_HTML).toContain(`version: "${OBSERVATION_APP_VERSION}"`);
     expect(OBSERVATION_APP_HTML).not.toMatch(/https?:\/\//);
     expect(OBSERVATION_APP_HTML).not.toContain("<script src");
     expect(OBSERVATION_APP_HTML).not.toContain("<link");

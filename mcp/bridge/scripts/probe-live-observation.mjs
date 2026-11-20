@@ -20,21 +20,10 @@ const bridgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = resolve(bridgeRoot, "..", "..");
 const runtimePath =
   process.env.FURYBUILDER_MCP_RUNTIME ||
-  join(
-    process.env.APPDATA ?? "",
-    "com.furybuilder.desktop",
-    "mcp",
-    "runtime.json",
-  );
+  join(process.env.APPDATA ?? "", "com.furybuilder.desktop", "mcp", "runtime.json");
 const evidencePath =
   process.env.FURYBUILDER_OBSERVATION_EVIDENCE ||
-  join(
-    repoRoot,
-    "docs",
-    "testing",
-    "evidence",
-    "2026-11-18-mcp-observation.json",
-  );
+  join(repoRoot, "docs", "testing", "evidence", "2026-11-18-mcp-observation.json");
 
 function sleep(ms) {
   return new Promise((done) => setTimeout(done, ms));
@@ -69,7 +58,7 @@ function fail(message) {
 }
 
 async function main() {
-  const runtime = await waitForRuntime(120_000);
+  await waitForRuntime(120_000);
   const client = new Client(
     { name: "furybuilder-live-observation", version: "1.0.0" },
     {
@@ -134,9 +123,7 @@ async function main() {
     }
     const block = jsonOf(blockResult);
     if (block.worldRevision !== revision) {
-      fail(
-        `get_block reported revision ${block.worldRevision}, expected ${revision}`,
-      );
+      fail(`get_block reported revision ${block.worldRevision}, expected ${revision}`);
     }
     if (typeof block.data?.state?.name !== "string") {
       fail("get_block returned no block state");
@@ -158,14 +145,10 @@ async function main() {
       fail(`inspect_region failed: ${textOf(regionResult)}`);
     }
     const region = jsonOf(regionResult);
-    const palette = Array.isArray(region.data?.palette)
-      ? region.data.palette
-      : [];
+    const palette = Array.isArray(region.data?.palette) ? region.data.palette : [];
     const paletteTotal = palette.reduce((sum, entry) => sum + entry.count, 0);
     if (region.worldRevision !== revision) {
-      fail(
-        `inspect_region reported revision ${region.worldRevision}, expected ${revision}`,
-      );
+      fail(`inspect_region reported revision ${region.worldRevision}, expected ${revision}`);
     }
     if (region.data?.blocks !== 27 || paletteTotal !== 27) {
       fail(
@@ -187,9 +170,7 @@ async function main() {
     });
     const staleText = textOf(stale);
     if (!stale.isError || !staleText.startsWith("revision_mismatch: ")) {
-      fail(
-        `a stale observation was not rejected as revision_mismatch: ${staleText}`,
-      );
+      fail(`a stale observation was not rejected as revision_mismatch: ${staleText}`);
     }
 
     // The viewport may still be mounting right after startup; retry only the
@@ -223,9 +204,7 @@ async function main() {
       fail("capture_viewport returned no image block");
     }
     const captureMeta = jsonOf(capture);
-    const sha256 = createHash("sha256")
-      .update(Buffer.from(image.data, "base64"))
-      .digest("hex");
+    const sha256 = createHash("sha256").update(Buffer.from(image.data, "base64")).digest("hex");
     if (captureMeta.image?.sha256 !== sha256) {
       fail("capture image digest disagrees with the published metadata");
     }

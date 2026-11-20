@@ -15,11 +15,7 @@ const jobId = z.string().min(1).max(128);
 
 const startJobInput = z.object({
   project_id: z.string().min(1).max(128),
-  kind: z
-    .string()
-    .min(1)
-    .max(64)
-    .describe("Job kind understood by the Application API."),
+  kind: z.string().min(1).max(64).describe("Job kind understood by the Application API."),
   parameters: z.record(z.string(), z.unknown()).default({}),
   idempotency_key: z.string().min(1).max(128),
   expected_revision: z
@@ -118,8 +114,7 @@ export function registerJobTools(server: McpServer, jobs: JobApi): void {
     "get_job_status",
     {
       title: "Get job status",
-      description:
-        "Reads progress and the final result of a job from the Job API.",
+      description: "Reads progress and the final result of a job from the Job API.",
       inputSchema: jobQueryInput,
       annotations: {
         readOnlyHint: true,
@@ -130,9 +125,7 @@ export function registerJobTools(server: McpServer, jobs: JobApi): void {
     },
     async ({ project_id, job_id }) => {
       try {
-        return snapshotResult(
-          await jobs.status(requireProjectId(project_id), job_id),
-        );
+        return snapshotResult(await jobs.status(requireProjectId(project_id), job_id));
       } catch (error) {
         return errorResult(error);
       }
@@ -155,9 +148,7 @@ export function registerJobTools(server: McpServer, jobs: JobApi): void {
     },
     async ({ project_id, job_id }) => {
       try {
-        return snapshotResult(
-          await jobs.cancel(requireProjectId(project_id), job_id),
-        );
+        return snapshotResult(await jobs.cancel(requireProjectId(project_id), job_id));
       } catch (error) {
         return errorResult(error);
       }
@@ -165,9 +156,5 @@ export function registerJobTools(server: McpServer, jobs: JobApi): void {
   );
 }
 
-export const JOB_TOOL_NAMES = [
-  "start_job",
-  "get_job_status",
-  "cancel_job",
-] as const;
+export const JOB_TOOL_NAMES = ["start_job", "get_job_status", "cancel_job"] as const;
 export { JOB_API_UNAVAILABLE };

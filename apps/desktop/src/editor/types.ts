@@ -17,7 +17,13 @@ export interface BoxBounds {
 
 /** Deterministic terrain surface brushes. They never generate a whole world. */
 export type TerrainBrushKind =
-  "raise" | "lower" | "smooth" | "flatten" | "noise" | "erode" | "terrace";
+  | "raise"
+  | "lower"
+  | "smooth"
+  | "flatten"
+  | "noise"
+  | "erode"
+  | "terrace";
 
 /** Deterministic bounded heightmap patch. It is a local construction tool, not worldgen. */
 export interface HeightmapOperation {
@@ -178,7 +184,14 @@ export interface RegionBlocks {
 }
 
 export type EditorTool =
-  "select" | "place" | "remove" | "brush" | "box" | "fill" | "line" | "replace";
+  | "select"
+  | "place"
+  | "remove"
+  | "brush"
+  | "box"
+  | "fill"
+  | "line"
+  | "replace";
 
 export type SavedState = "clean" | "dirty" | "saving" | "saved";
 

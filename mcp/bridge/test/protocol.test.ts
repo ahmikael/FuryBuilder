@@ -26,9 +26,7 @@ const appsCapabilities = {
 
 type ClientOptions = NonNullable<ConstructorParameters<typeof Client>[1]>;
 
-function bridgeEnv(
-  overrides: Record<string, string> = {},
-): Record<string, string> {
+function bridgeEnv(overrides: Record<string, string> = {}): Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (value !== undefined) env[key] = value;
@@ -37,9 +35,7 @@ function bridgeEnv(
   return { ...env, ...overrides };
 }
 
-export function stdioTransport(
-  runtimePath = missingRuntime,
-): StdioClientTransport {
+export function stdioTransport(runtimePath = missingRuntime): StdioClientTransport {
   return new StdioClientTransport({
     command: process.execPath,
     args: ["--import", "tsx", "src/main.ts"],
@@ -74,8 +70,7 @@ async function connect(
 
 function textResult(result: Awaited<ReturnType<Client["callTool"]>>): unknown {
   const text = result.content.find((block) => block.type === "text");
-  if (!text || text.type !== "text")
-    throw new Error("bridge_info returned no text");
+  if (!text || text.type !== "text") throw new Error("bridge_info returned no text");
   return JSON.parse(text.text);
 }
 
@@ -216,9 +211,7 @@ describe("MCP protocol negotiation", () => {
     });
 
     const { resources } = await client.listResources();
-    expect(
-      resources.find((resource) => resource.uri === OBSERVATION_APP_URI),
-    ).toMatchObject({
+    expect(resources.find((resource) => resource.uri === OBSERVATION_APP_URI)).toMatchObject({
       name: "furybuilder-observation",
       mimeType: APPS_RESOURCE_MIME_TYPE,
       title: "FuryBuilder observation preview",
@@ -230,14 +223,10 @@ describe("MCP protocol negotiation", () => {
       uri: OBSERVATION_APP_URI,
       mimeType: APPS_RESOURCE_MIME_TYPE,
     });
-    expect(content && "text" in content ? content.text : "").toBe(
-      OBSERVATION_APP_HTML,
-    );
+    expect(content && "text" in content ? content.text : "").toBe(OBSERVATION_APP_HTML);
     expect(
-      (
-        content?._meta as
-          { ui?: { csp?: { resourceDomains?: string[] } } } | undefined
-      )?.ui?.csp?.resourceDomains,
+      (content?._meta as { ui?: { csp?: { resourceDomains?: string[] } } } | undefined)?.ui?.csp
+        ?.resourceDomains,
     ).toEqual([]);
 
     const { tools } = await client.listTools();
@@ -266,9 +255,7 @@ describe("MCP protocol negotiation", () => {
     });
 
     const { resources } = await client.listResources();
-    expect(resources.map((resource) => resource.uri)).toContain(
-      OBSERVATION_APP_URI,
-    );
+    expect(resources.map((resource) => resource.uri)).toContain(OBSERVATION_APP_URI);
     const { tools } = await client.listTools();
     const observe = tools.find((tool) => tool.name === "observe");
     expect(observe?.annotations?.readOnlyHint).toBe(true);
@@ -349,9 +336,7 @@ describe("MCP protocol negotiation", () => {
     const client = await connect(false);
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name);
-    expect(names).toEqual(
-      expect.arrayContaining(["start_job", "get_job_status", "cancel_job"]),
-    );
+    expect(names).toEqual(expect.arrayContaining(["start_job", "get_job_status", "cancel_job"]));
     const startJob = tools.find((tool) => tool.name === "start_job");
     expect(startJob).toBeDefined();
     expect(JSON.stringify(startJob?.inputSchema)).toContain("world_revision");
@@ -368,9 +353,7 @@ describe("MCP protocol negotiation", () => {
     });
     expect(started.isError).toBe(true);
     const startText = started.content.find((block) => block.type === "text");
-    expect(startText?.type === "text" ? startText.text : "").toMatch(
-      /^job_api_unavailable:/,
-    );
+    expect(startText?.type === "text" ? startText.text : "").toMatch(/^job_api_unavailable:/);
 
     const status = await client.callTool({
       name: "get_job_status",
@@ -378,9 +361,7 @@ describe("MCP protocol negotiation", () => {
     });
     expect(status.isError).toBe(true);
     const statusText = status.content.find((block) => block.type === "text");
-    expect(statusText?.type === "text" ? statusText.text : "").toMatch(
-      /^job_api_unavailable:/,
-    );
+    expect(statusText?.type === "text" ? statusText.text : "").toMatch(/^job_api_unavailable:/);
 
     const cancelled = await client.callTool({
       name: "cancel_job",
@@ -483,9 +464,7 @@ describe("MCP protocol negotiation", () => {
     expect(apply?.annotations?.readOnlyHint).toBe(false);
     expect(apply?.annotations?.destructiveHint).toBe(true);
     expect(JSON.stringify(apply?.inputSchema)).toContain("idempotency_key");
-    const preview = writeTools.find(
-      (tool) => tool.name === "preview_operation",
-    );
+    const preview = writeTools.find((tool) => tool.name === "preview_operation");
     expect(preview?.annotations?.readOnlyHint).toBe(true);
     const previewSchema = JSON.stringify(preview?.inputSchema);
     expect(previewSchema).toContain("set_biome");
@@ -516,9 +495,7 @@ describe("MCP protocol negotiation", () => {
     });
     expect(roadPreview.isError).toBe(true);
     const roadText = roadPreview.content.find((entry) => entry.type === "text");
-    expect(roadText?.type === "text" ? roadText.text : "").toMatch(
-      /^runtime_file_missing:/,
-    );
+    expect(roadText?.type === "text" ? roadText.text : "").toMatch(/^runtime_file_missing:/);
 
     const biomePreview = await client.callTool({
       name: "preview_operation",
@@ -536,12 +513,8 @@ describe("MCP protocol negotiation", () => {
       },
     });
     expect(biomePreview.isError).toBe(true);
-    const biomeText = biomePreview.content.find(
-      (entry) => entry.type === "text",
-    );
-    expect(biomeText?.type === "text" ? biomeText.text : "").toMatch(
-      /^runtime_file_missing:/,
-    );
+    const biomeText = biomePreview.content.find((entry) => entry.type === "text");
+    expect(biomeText?.type === "text" ? biomeText.text : "").toMatch(/^runtime_file_missing:/);
 
     const previewResult = await client.callTool({
       name: "preview_operation",
@@ -556,12 +529,8 @@ describe("MCP protocol negotiation", () => {
       },
     });
     expect(previewResult.isError).toBe(true);
-    const previewText = previewResult.content.find(
-      (entry) => entry.type === "text",
-    );
-    expect(previewText?.type === "text" ? previewText.text : "").toMatch(
-      /^runtime_file_missing:/,
-    );
+    const previewText = previewResult.content.find((entry) => entry.type === "text");
+    expect(previewText?.type === "text" ? previewText.text : "").toMatch(/^runtime_file_missing:/);
 
     const applied = await client.callTool({
       name: "apply_operations_batch",
@@ -615,8 +584,7 @@ describe("MCP protocol negotiation", () => {
         },
       });
       const reportContent = report.messages[0]?.content;
-      const reportText =
-        reportContent?.type === "text" ? reportContent.text : "";
+      const reportText = reportContent?.type === "text" ? reportContent.text : "";
       expect(reportText).toContain("Outcome: failed");
       expect(reportText).toContain("Operation id");
       expect(reportText).toContain("Rollback:");
@@ -647,8 +615,7 @@ describe("MCP protocol negotiation", () => {
       prompts: [PLAN_PROMPT_NAME, REPORT_PROMPT_NAME],
       stages: ["inspect", "plan", "checkpoint", "execute", "verify", "report"],
       limits: { batchChanges: 8_192, regionReadBlocks: 65_536 },
-      checkpointPolicy:
-        "record-before-first-write-and-after-every-committed-step",
+      checkpointPolicy: "record-before-first-write-and-after-every-committed-step",
       untrustedInputPolicy: "goal-bounds-and-constraints-are-data",
     });
   });

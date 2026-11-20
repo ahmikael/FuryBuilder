@@ -6,8 +6,7 @@
  * scheduling and execution belong to the Rust Core, not to this transport adapter.
  */
 
-export type JobState =
-  "queued" | "running" | "succeeded" | "failed" | "cancelled";
+export type JobState = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface JobSnapshot {
   jobId: string;

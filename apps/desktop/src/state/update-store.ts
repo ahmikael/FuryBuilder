@@ -8,7 +8,13 @@ import {
 } from "@/lib/update-api";
 
 export type UpdateStatus =
-  "idle" | "checking" | "up-to-date" | "available" | "downloading" | "installing" | "error";
+  | "idle"
+  | "checking"
+  | "up-to-date"
+  | "available"
+  | "downloading"
+  | "installing"
+  | "error";
 
 export interface UpdateNotice {
   version: string;

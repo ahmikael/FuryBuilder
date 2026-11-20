@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "all",
+  "printWidth": 100,
+  "tabWidth": 2,
+  "sortPackageJson": false,
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "apps/desktop/src-tauri/target/**",
+    "apps/desktop/src-tauri/gen/**",
+    "docs/**",
+    "examples/**",
+    "fixtures/**",
+    "**/*.md",
+    "**/*.toml"
+  ]
+}

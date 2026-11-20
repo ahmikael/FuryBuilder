@@ -440,7 +440,7 @@ $evidenceFullPath = if ([System.IO.Path]::IsPathRooted($EvidencePath)) { $Eviden
     ($evidence | ConvertTo-Json -Depth 24),
     [System.Text.UTF8Encoding]::new($false)
 )
-& (Join-Path $repoRoot 'apps\desktop\node_modules\.bin\prettier.cmd') --write $evidenceFullPath | Out-Host
+& (Join-Path $repoRoot 'node_modules\.bin\oxfmt.cmd') --write $evidenceFullPath | Out-Host
 
 "WORK_ROOT=$WorkRoot"
 "FIXTURE_FILES=$($fixtureBefore.Count) EXPORT_CHUNKS=$($probe.report.chunks) REPLACED_CHUNKS=$($probe.report.replacedChunks)"

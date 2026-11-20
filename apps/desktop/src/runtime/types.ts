@@ -1,7 +1,12 @@
 export type RuntimeSource = "managed" | "java_home" | "path" | "common" | "manual";
 
 export type RuntimeStatus =
-  "compatible" | "outdated" | "newer" | "unsupported_arch" | "not_java" | "unreadable";
+  | "compatible"
+  | "outdated"
+  | "newer"
+  | "unsupported_arch"
+  | "not_java"
+  | "unreadable";
 
 export interface JavaRuntimeReport {
   path: string;

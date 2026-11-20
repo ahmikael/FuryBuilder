@@ -14,6 +14,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
+    "format": "pnpm -r format",
+    "format:check": "pnpm -r format:check",
     "tauri": "pnpm --filter @furybuilder/desktop tauri",
     "tauri:dev": "pnpm --filter @furybuilder/desktop tauri dev",
     "tauri:build": "pnpm --filter @furybuilder/desktop tauri build",
@@ -23,5 +25,9 @@
     "version:set": "node scripts/version.mjs set",
     "licenses:check": "node scripts/check-dependencies.mjs --check",
     "licenses:update": "node scripts/check-dependencies.mjs"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.79.0",
+    "oxlint": "^1.94.0"
   }
 }

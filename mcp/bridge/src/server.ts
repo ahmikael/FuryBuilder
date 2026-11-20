@@ -53,9 +53,7 @@ const bridgeInfoInput = z.object({
  * calling this factory, so the returned instance serves exactly one client connection.
  * Handlers read explicit arguments; none of them consult transport-global project state.
  */
-export function createFuryBuilderServer(
-  dependencies: { jobs?: JobApi } = {},
-): McpServer {
+export function createFuryBuilderServer(dependencies: { jobs?: JobApi } = {}): McpServer {
   const jobs = dependencies.jobs ?? createUnavailableJobApi();
   const server = new McpServer(
     { name: BRIDGE_NAME, version: BRIDGE_VERSION },
@@ -91,14 +89,11 @@ export function createFuryBuilderServer(
       const projectId = requireProjectId(project_id);
       // The 2026-07-28 era attaches this envelope to every request. Its absence is the
       // legacy marker; neither path stores project context on the connection.
-      const envelope = ctx.mcpReq.envelope as
-        Record<string, unknown> | undefined;
+      const envelope = ctx.mcpReq.envelope as Record<string, unknown> | undefined;
       const era: ProtocolEra = envelope ? "modern" : "legacy";
       const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? null;
       const clientCapabilities =
-        envelope?.[CLIENT_CAPABILITIES_META_KEY] ??
-        server.server.getClientCapabilities() ??
-        null;
+        envelope?.[CLIENT_CAPABILITIES_META_KEY] ?? server.server.getClientCapabilities() ?? null;
       const desktop = await probeDesktop();
       const jobBackendConnected =
         jobs.connected && desktop.connected && desktop.jobs?.available === true;

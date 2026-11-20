@@ -43,7 +43,14 @@ export interface Bounds3 {
 }
 
 export type GhostStyle =
-  "place" | "remove" | "brush" | "box" | "line" | "fill" | "replace" | "paste";
+  | "place"
+  | "remove"
+  | "brush"
+  | "box"
+  | "line"
+  | "fill"
+  | "replace"
+  | "paste";
 
 export interface BlockSelection {
   dimension: string;

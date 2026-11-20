@@ -45,11 +45,7 @@ export class DesktopUnavailableError extends Error {
   readonly reason: DesktopUnavailableReason;
   readonly code: string | null;
 
-  constructor(
-    reason: DesktopUnavailableReason,
-    message: string,
-    code: string | null = null,
-  ) {
+  constructor(reason: DesktopUnavailableReason, message: string, code: string | null = null) {
     super(message);
     this.name = "DesktopUnavailableError";
     this.reason = reason;
@@ -117,22 +113,13 @@ export function runtimeFilePath(env: NodeJS.ProcessEnv = process.env): string {
     return join(appData, bundle, "mcp", "runtime.json");
   }
   if (process.platform === "darwin") {
-    return join(
-      homedir(),
-      "Library",
-      "Application Support",
-      bundle,
-      "mcp",
-      "runtime.json",
-    );
+    return join(homedir(), "Library", "Application Support", bundle, "mcp", "runtime.json");
   }
   const dataHome = env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
   return join(dataHome, bundle, "mcp", "runtime.json");
 }
 
-export async function readDesktopRuntime(
-  path = runtimeFilePath(),
-): Promise<DesktopRuntime> {
+export async function readDesktopRuntime(path = runtimeFilePath()): Promise<DesktopRuntime> {
   let bytes: Buffer;
   try {
     bytes = await readFile(path);
@@ -230,8 +217,7 @@ export async function callDesktop(
   params: unknown = {},
   options: CallDesktopOptions = {},
 ): Promise<unknown> {
-  const runtime =
-    options.runtime ?? (await readDesktopRuntime(options.runtimePath));
+  const runtime = options.runtime ?? (await readDesktopRuntime(options.runtimePath));
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const id = randomUUID();
   const request = JSON.stringify({
@@ -255,16 +241,11 @@ export async function callDesktop(
       socket.destroy();
       action();
     };
-    const fail = (
-      reason: DesktopUnavailableReason,
-      message: string,
-      code: string | null = null,
-    ) =>
+    const fail = (reason: DesktopUnavailableReason, message: string, code: string | null = null) =>
       finish(() => reject(new DesktopUnavailableError(reason, message, code)));
 
     const timer = setTimeout(
-      () =>
-        fail("timeout", `FuryBuilder did not answer within ${timeoutMs} ms`),
+      () => fail("timeout", `FuryBuilder did not answer within ${timeoutMs} ms`),
       timeoutMs,
     );
 
@@ -295,15 +276,11 @@ export async function callDesktop(
         response.id !== id ||
         typeof response.ok !== "boolean"
       ) {
-        fail(
-          "invalid_response",
-          "FuryBuilder returned an unexpected bridge response",
-        );
+        fail("invalid_response", "FuryBuilder returned an unexpected bridge response");
         return;
       }
       if (!response.ok) {
-        const code =
-          typeof response.error?.code === "string" ? response.error.code : null;
+        const code = typeof response.error?.code === "string" ? response.error.code : null;
         if (code === "unauthorized") {
           fail(
             "authentication_failed",
@@ -320,8 +297,7 @@ export async function callDesktop(
           );
           return;
         }
-        const message =
-          response.error?.message ?? "FuryBuilder rejected the bridge request";
+        const message = response.error?.message ?? "FuryBuilder rejected the bridge request";
         fail("desktop_error", message, code);
         return;
       }
@@ -344,25 +320,16 @@ export async function callDesktop(
     });
     socket.once("end", () => {
       if (!settled) {
-        fail(
-          "invalid_response",
-          "FuryBuilder closed the connection without a response",
-        );
+        fail("invalid_response", "FuryBuilder closed the connection without a response");
       }
     });
   });
 }
 
 /** Non-failing diagnostic used by `bridge_info`; no token or local path is exposed. */
-export async function probeDesktop(
-  options: CallDesktopOptions = {},
-): Promise<DesktopProbe> {
+export async function probeDesktop(options: CallDesktopOptions = {}): Promise<DesktopProbe> {
   try {
-    const result = (await callDesktop(
-      "ping",
-      {},
-      { ...options, timeoutMs: 2_000 },
-    )) as {
+    const result = (await callDesktop("ping", {}, { ...options, timeoutMs: 2_000 })) as {
       app?: unknown;
       project?: {
         projectId?: unknown;
@@ -412,16 +379,13 @@ export async function probeDesktop(
       app: result.app ?? null,
       project: {
         projectId: result.project.projectId,
-        name:
-          typeof result.project.name === "string" ? result.project.name : null,
+        name: typeof result.project.name === "string" ? result.project.name : null,
         worldRevision: result.project.worldRevision,
       },
       bridge: {
         protocolVersion: result.bridge.protocolVersion,
         transport:
-          typeof result.bridge.transport === "string"
-            ? result.bridge.transport
-            : "unknown",
+          typeof result.bridge.transport === "string" ? result.bridge.transport : "unknown",
         pid: typeof result.bridge.pid === "number" ? result.bridge.pid : 0,
       },
       access:
@@ -463,9 +427,7 @@ export async function probeDesktop(
             }
           : null,
       pendingConfirmations:
-        typeof result.pendingConfirmations === "number"
-          ? result.pendingConfirmations
-          : 0,
+        typeof result.pendingConfirmations === "number" ? result.pendingConfirmations : 0,
     };
   } catch (error) {
     if (error instanceof DesktopUnavailableError) {

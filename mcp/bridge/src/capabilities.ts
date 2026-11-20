@@ -57,8 +57,7 @@ export function resolveTasksSupport(input: {
   jobBackendConnected: boolean;
   bridgeImplementsTasks?: boolean;
 }): TasksSupportDecision {
-  const implementsTasks =
-    input.bridgeImplementsTasks ?? BRIDGE_IMPLEMENTS_TASKS;
+  const implementsTasks = input.bridgeImplementsTasks ?? BRIDGE_IMPLEMENTS_TASKS;
   if (!clientDeclaresTasks(input.clientCapabilities)) {
     return {
       mode: "fallback",
