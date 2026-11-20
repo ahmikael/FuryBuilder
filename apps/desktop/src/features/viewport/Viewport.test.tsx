@@ -167,6 +167,7 @@ describe("Viewport", () => {
           }
         );
       }
+      if (command === "renderer_ready") return undefined;
       throw new Error(`unexpected command ${command}`);
     });
 
@@ -247,6 +248,7 @@ describe("Viewport", () => {
       if (command === "render_chunks") {
         return { dimension: "minecraft:overworld", revision: 2, chunks: [snapshot.chunks[0]] };
       }
+      if (command === "renderer_ready") return undefined;
       throw new Error(`unexpected command ${command}`);
     });
 
@@ -313,6 +315,7 @@ describe("Viewport", () => {
           replayed: false,
         };
       }
+      if (command === "renderer_ready") return undefined;
       throw new Error(`unexpected command ${command}`);
     });
 
