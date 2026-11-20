@@ -155,7 +155,8 @@ mod tests {
         store.clear().expect("clear");
         assert!(store.selected().is_none());
         let text = fs::read_to_string(&path).expect("settings file");
-        assert!(text.contains("\"schemaVersion\": 1"), "{text}");
+        let value: serde_json::Value = serde_json::from_str(&text).expect("settings JSON");
+        assert_eq!(value["schemaVersion"], 1);
 
         fs::write(&path, br#"{"schemaVersion":99,"selectedJava":null}"#).expect("bad file");
         let store = RuntimeSettingsStore::new(&path);

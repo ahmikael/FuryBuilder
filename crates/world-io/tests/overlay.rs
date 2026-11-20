@@ -552,9 +552,12 @@ fn document_round_trips_and_rejects_tampering() {
         .expect("second edit");
 
     let json = overlay.to_json_pretty().expect("serialize overlay");
-    assert!(json.contains("\"schemaVersion\": 2"));
-    assert!(json.contains("\"dataVersion\": 4189"));
-    assert!(json.contains("\"bitsPerIndex\""));
+    let value: Value = serde_json::from_str(&json).expect("overlay JSON");
+    assert_eq!(value["schemaVersion"], 2);
+    assert_eq!(value["dataVersion"], 4189);
+    assert!(value["chunks"][0]["sections"][0]
+        .get("bitsPerIndex")
+        .is_some());
     let loaded = WorldOverlay::from_json(&source, &json).expect("load overlay");
     assert_eq!(loaded.change_count(), overlay.change_count());
     assert_eq!(loaded.dirty_section_count(), overlay.dirty_section_count());
@@ -885,7 +888,13 @@ fn edits_biome_cells_without_touching_blocks_and_round_trips() {
     assert_eq!(decoded.block_at(1, -64, 2), Some(&state("minecraft:stone")));
 
     let json = overlay.to_json_pretty().expect("serialize overlay");
-    assert!(json.contains("\"biomes\""));
+    let value: Value = serde_json::from_str(&json).expect("overlay JSON");
+    assert_eq!(
+        value["chunks"][0]["biomes"]
+            .as_array()
+            .map(|biomes| biomes.len()),
+        Some(1)
+    );
     let loaded = WorldOverlay::from_json(&source, &json).expect("load overlay");
     assert_eq!(
         loaded

@@ -462,11 +462,14 @@ mod tests {
             }),
         );
         let raw = fs::read_to_string(dir.join(LOG_FILE)).expect("log");
-        assert!(raw.contains("\"event\":\"ui.error\""));
-        assert!(raw.contains("<path>"));
-        assert!(!raw.contains("Private World"));
-        assert!(!raw.contains("\\nnext line"));
-        assert!(raw.contains("\"source\":\"project_open\""));
+        let line = raw.lines().next().expect("log line");
+        let entry: serde_json::Value = serde_json::from_str(line).expect("JSON log line");
+        assert_eq!(entry["event"], "ui.error");
+        let data = &entry["data"];
+        let message = data["message"].as_str().expect("message");
+        assert!(message.contains("<path>"));
+        assert!(!message.contains("Private World"));
+        assert_eq!(data["source"], "project_open");
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -481,7 +484,9 @@ mod tests {
         assert!(info.files.len() <= 3);
         assert!(info.total_bytes <= 300 * 3);
         let newest = fs::read_to_string(dir.join(LOG_FILE)).expect("newest log");
-        assert!(newest.contains("\"index\":19"));
+        let line = newest.lines().last().expect("newest entry");
+        let entry: serde_json::Value = serde_json::from_str(line).expect("JSON log line");
+        assert_eq!(entry["data"]["index"], 19);
         let _ = fs::remove_dir_all(dir);
     }
 

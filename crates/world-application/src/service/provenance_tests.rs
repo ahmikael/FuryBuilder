@@ -66,9 +66,12 @@ fn batch_parameter_summary_is_bounded() {
     let audit = &service.audit_log()[0];
     assert_eq!(audit.changed_blocks, 1000);
     assert_eq!(audit.parameter_summary["changes"], 1000);
-    let serialized = serde_json::to_string(&audit.parameter_summary).unwrap();
-    assert!(
-        serialized.len() < 200,
-        "parameter summary must not dump every block: {serialized}"
+    assert_eq!(
+        audit
+            .parameter_summary
+            .as_object()
+            .map(|summary| summary.len()),
+        Some(3),
+        "the summary must contain the type, dimension and count, not every block"
     );
 }

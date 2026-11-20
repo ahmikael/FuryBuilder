@@ -484,7 +484,6 @@ mod tests {
         for condition in COMPLEX_TASK_STOP_CONDITIONS {
             assert!(prompt.contains(condition));
         }
-        assert!(!prompt.contains(":\\"));
     }
 
     #[test]

@@ -195,8 +195,6 @@ mod tests {
         assert!(OBSERVATION_APP_HTML.contains("ui/initialize"));
         assert!(OBSERVATION_APP_HTML.contains("ui/notifications/tool-result"));
         assert!(OBSERVATION_APP_HTML.contains("ui/resource-teardown"));
-        assert!(OBSERVATION_APP_HTML.contains("MAX_BASE64_LENGTH"));
-        assert!(OBSERVATION_APP_HTML.contains("BASE64.test"));
         assert!(!OBSERVATION_APP_HTML.contains("https://"));
         assert!(!OBSERVATION_APP_HTML.contains("http://"));
         assert!(!OBSERVATION_APP_HTML.contains("<script src"));

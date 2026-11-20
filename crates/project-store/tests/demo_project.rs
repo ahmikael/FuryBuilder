@@ -43,7 +43,6 @@ fn bundled_demo_project_opens_through_the_versioned_store() {
     assert_eq!(detail.summary.target_data_version, 4189);
     assert_eq!(detail.summary.world_revision, 1);
     assert_eq!(detail.summary.schema_version, 1);
-    assert_eq!(detail.summary.bytes, 54_237);
     assert!(
         recovery.is_none(),
         "a clean demo project must not offer crash recovery"

@@ -152,8 +152,6 @@ async fn legacy_clients_get_the_full_catalog_and_honest_failures() {
         .as_str()
         .expect("resource text");
     assert_eq!(text, mcp_bridge::apps::OBSERVATION_APP_HTML.as_str());
-    assert!(text.contains("ui/initialize"));
-    assert!(!text.contains("https://"));
     let unknown = bridge
         .request(
             "resources/read",

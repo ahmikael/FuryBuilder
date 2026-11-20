@@ -1966,9 +1966,11 @@ mod workspace_tests {
             .expect("create");
         let raw = std::fs::read_to_string(root.join(&detail.summary.folder).join(PROJECT_FILE))
             .expect("manifest");
-        assert!(!raw.contains("\"workspace\""));
-        assert!(!raw.contains("\"scene\""));
-        assert!(!raw.contains("\"parametric\""));
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("manifest JSON");
+        let editor_state = &value["editorState"];
+        assert!(editor_state.get("workspace").is_none());
+        assert!(editor_state.get("scene").is_none());
+        assert!(editor_state.get("parametric").is_none());
     }
 
     #[test]
@@ -2035,8 +2037,11 @@ mod workspace_tests {
         assert_eq!(manifest.world_revision, detail.summary.world_revision);
 
         let raw = std::fs::read_to_string(root.join(&folder).join(PROJECT_FILE)).expect("manifest");
-        assert!(raw.contains("\"scene\""));
-        assert!(raw.contains("\"style\""));
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("manifest JSON");
+        assert_eq!(
+            value["editorState"]["scene"]["objects"][0]["tags"]["style"],
+            "medieval"
+        );
     }
 
     #[test]
@@ -2105,9 +2110,10 @@ mod workspace_tests {
         let manifest = store.manifest(&root.join(&folder)).unwrap();
         assert_eq!(manifest.world_checksum, checksum_before);
         let raw = std::fs::read_to_string(root.join(&folder).join(PROJECT_FILE)).expect("manifest");
-        assert!(raw.contains("\"parametric\""));
-        assert!(raw.contains("\"stone-house\""));
-        assert!(raw.contains("\"baseline\""));
+        let value: serde_json::Value = serde_json::from_str(&raw).expect("manifest JSON");
+        let parametric = &value["editorState"]["parametric"]["objects"][0];
+        assert_eq!(parametric["id"], "stone-house");
+        assert!(parametric.get("baseline").is_some());
     }
 
     #[test]
