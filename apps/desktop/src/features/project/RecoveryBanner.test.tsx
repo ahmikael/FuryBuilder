@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -48,6 +48,9 @@ describe("RecoveryBanner", () => {
   });
 
   afterEach(() => {
+    // Unmount before resetting the shared store so the reset cannot update a
+    // still-mounted banner outside React's act scope.
+    cleanup();
     useProjectStore.setState({
       recovery: null,
       current: null,
