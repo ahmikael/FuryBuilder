@@ -70,7 +70,6 @@ test("renders sections and links without install or checksum guidance", () => {
   assert.match(notes, /### Other Changes/);
   assert.match(notes, /bump manifests/);
   assert.match(notes, /compare\/v0\.1\.0\.\.\.v0\.2\.0/);
-  assert.match(notes, /not Authenticode-signed/);
   assert.doesNotMatch(notes, /## Installing/);
   assert.doesNotMatch(notes, /SHA-256/);
   assert.doesNotMatch(notes, /MSI/);

@@ -110,11 +110,6 @@ export function renderNotes(commits, options = {}) {
     lines.push("No user-facing changes in this release.", "");
   }
 
-  lines.push(
-    "> This beta build is not Authenticode-signed. Windows SmartScreen can warn about an unknown publisher.",
-    "",
-  );
-
   if (previousTag) {
     lines.push(
       `**Full Changelog**: https://github.com/${repository || "ahmikael/FuryBuilder"}/compare/${previousTag}...${tag}`,
