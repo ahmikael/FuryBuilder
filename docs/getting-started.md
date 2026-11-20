@@ -267,5 +267,4 @@ textures and never changes block data.
   parametric objects, Build DSL, observation, validation, large pastes, MCP and performance.
 - [MCP setup](mcp-setup.md) — connect an AI client, access modes, confirmations and errors.
 - [Documentation index](README.md) — formats, runtimes, testing evidence and ADRs.
-- [Master plan](../FURYBUILDER_MASTER_PLAN.md) — the authoritative roadmap and acceptance
-  criteria.
+- [Test matrix](testing/test-matrix.md) — what is verified, how, and where the evidence lives.

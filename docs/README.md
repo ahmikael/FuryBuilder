@@ -1,8 +1,7 @@
 # FuryBuilder documentation
 
-Start with the guide that matches your task. The [master plan](../FURYBUILDER_MASTER_PLAN.md)
-is the authoritative roadmap; a checked item is not, by itself, a guarantee that a whole
-milestone is complete.
+Start with the guide that matches your task. The [test matrix](testing/test-matrix.md) records
+what is verified, and [known limitations](known-limitations.md) records what is not.
 
 ## User guides
 

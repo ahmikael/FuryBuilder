@@ -74,9 +74,8 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 ## Current status
 
 M0–M10 are complete. M11 (public beta/release) is in progress; installer, versioning,
-changelog, migrations and backup policy are implemented and tested. The authoritative status
-is tracked in `FURYBUILDER_MASTER_PLAN.md`. The functional baseline below is implemented and
-verified. The read-only 1.21.4 classic reader
+changelog, migrations and backup policy are implemented and tested. The functional baseline
+below is implemented and verified. The read-only 1.21.4 classic reader
 validates `level.dat` and decodes region `.mca`/chunk NBT, including negative
 coordinates and proto-chunks, then decodes block-state palettes, sections and
 biomes without writing to the source world. A byte-preserving, fail-closed copy
@@ -291,9 +290,9 @@ verified against real game-saved fixtures, a real Tauri IPC flow and an official
 block entities are refused rather than silently dropped. Sponge `.schem` is the
 next format and is not enabled in the UI. External AI clients can read, build,
 screenshot, correct and undo through MCP, with read-only access by default and a
-real confirmation dialog for writes. Milestone progress is tracked in
-`FURYBUILDER_MASTER_PLAN.md`; a checked implementation item is not by itself a
-guarantee that its whole milestone is complete.
+real confirmation dialog for writes. Implemented behaviour is described here; unresolved
+items remain in [Known limitations](docs/known-limitations.md) and the
+[test matrix](docs/testing/test-matrix.md).
 
 ## Documentation
 

@@ -148,7 +148,6 @@ class ReleaseProcessTests(unittest.TestCase):
 
     def test_no_unrelated_repository_state_is_required(self):
         # Guard against accidentally pointing the test at a copied scratch tree.
-        self.assertTrue((ROOT / "FURYBUILDER_MASTER_PLAN.md").is_file())
         self.assertTrue((ROOT / "scripts" / "version.mjs").is_file())
         self.assertTrue(shutil.which("node"), "node is required for the version tooling")
 

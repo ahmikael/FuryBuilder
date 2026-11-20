@@ -367,4 +367,3 @@ and avoid treating the tested ceiling as a normal working radius.
 - [World export notes](formats/java-world-export.md)
 - [Performance runs](testing/perf-runs.md)
 - [Test matrix](testing/test-matrix.md)
-- [Master plan](../FURYBUILDER_MASTER_PLAN.md)

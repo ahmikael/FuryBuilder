@@ -265,8 +265,8 @@ slice can add shell extraction or per-layer slices.
 
 ## MCP position
 
-The master plan lists `read_reference_image` as an extended MCP tool. It is **not**
-implemented here. If added, it should:
+`read_reference_image` was proposed as an extended MCP tool. It is **not** implemented
+here. If added, it should:
 
 - accept `project_id` and `reference_id`, never a filesystem path;
 - return only a normalized image at a bounded resolution (for example ≤ 1024 px) plus

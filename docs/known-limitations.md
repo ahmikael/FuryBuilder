@@ -4,10 +4,9 @@ Status: **Windows beta 0.1.0**, target Minecraft Java **1.21.4 / DataVersion 418
 2026-11-19.
 
 This is the maintained, example-backed list of things FuryBuilder does not do, does only
-partially, or does only on specific hardware. It is not a roadmap: planned work lives in
-[`FURYBUILDER_MASTER_PLAN.md`](../FURYBUILDER_MASTER_PLAN.md). A limitation stays here until
-the behaviour, tests and documentation actually change. The supported baseline and tested
-reference machine are in [`system-requirements.md`](system-requirements.md).
+partially, or does only on specific hardware. It is not a roadmap. A limitation stays here
+until the behaviour, tests and documentation actually change. The supported baseline and
+tested reference machine are in [`system-requirements.md`](system-requirements.md).
 
 How to read an entry:
 
