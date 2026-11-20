@@ -140,7 +140,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Could not read the draft release id." }
           "id=$id" >> $env:GITHUB_OUTPUT
 
-      - name: Build Windows installers and updater artifacts
+      - name: Build the Windows installer and updater artifacts
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -153,11 +153,10 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          updaterJsonPreferNsis: true
           uploadUpdaterJson: true
           uploadUpdaterSignatures: true
           tauriScript: pnpm tauri
-          args: --bundles nsis,msi
+          args: --bundles nsis
 
       - name: Verify updater manifest and signatures
         shell: pwsh
@@ -170,9 +169,7 @@ jobs:
           $required = @(
             "latest.json",
             "FuryBuilder_${version}_x64-setup.exe",
-            "FuryBuilder_${version}_x64-setup.exe.sig",
-            "FuryBuilder_${version}_x64_en-US.msi",
-            "FuryBuilder_${version}_x64_en-US.msi.sig"
+            "FuryBuilder_${version}_x64-setup.exe.sig"
           )
           foreach ($asset in $required) {
             if ($assets -notcontains $asset) {
@@ -190,10 +187,9 @@ jobs:
           $version = (Get-Content version.json -Raw | ConvertFrom-Json).version
           $installers = @(
             Get-ChildItem "target/release/bundle/nsis/FuryBuilder_${version}_x64-setup.exe" -ErrorAction SilentlyContinue
-            Get-ChildItem "target/release/bundle/msi/FuryBuilder_${version}_x64_en-US.msi" -ErrorAction SilentlyContinue
           )
-          if ($installers.Count -ne 2) {
-            throw "Expected exactly the NSIS and MSI installers for version $version, found $($installers.Count)."
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly the NSIS installer for version $version, found $($installers.Count)."
           }
 
           $lines = @("", "## SHA-256", "")

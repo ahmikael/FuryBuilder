@@ -548,12 +548,16 @@ documents the client configuration and the fail-closed behaviour.
 | Evidence                             | `docs/testing/evidence/2026-11-19-windows-installer/` with the JSON result, transcript and README                                                                                                                                       |
 | Honest limitations                   | Packages are unsigned; only one Windows 11 machine and one WebView2 version were used; MSI install/uninstall was not exercised because it requires elevation; a clean Windows machine without Minecraft/Java is a separate M11 task     |
 
+> The 2026-11-19 run also exercised an MSI by administrative extraction. The MSI was
+> removed from the release on 2026-11-20; the row and its evidence are retained as a
+> historical record, and only the NSIS package is shipped.
+
 ## M11.2 versioning, changelog, migrations and backup policy
 
 | Requirement                 | Automated / recorded evidence                                                                                                                                                                                           |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Single application version  | `version.json` is the source; `scripts/version.mjs` checks Cargo, pnpm, Tauri and MCP bridge manifests. `pnpm version:check` runs in CI and `scripts/test_release_process.py` verifies both success and drift detection |
-| Release versioning policy   | `docs/release/versioning.md` defines SemVer, independent schema/protocol axes, numeric installer versions, the pinned WiX upgrade code, downgrade blocking and the release checklist                                    |
+| Release versioning policy   | `docs/release/versioning.md` defines SemVer, independent schema/protocol axes, numeric installer versions, downgrade blocking and the release checklist                                                                 |
 | Changelog                   | `CHANGELOG.md` follows Keep a Changelog with an `Unreleased` section and a dated `0.1.0` baseline; the release test checks required sections                                                                            |
 | Project schema migration    | `crates/project-store/tests/migrations.rs` proves that a draft manifest is migrated and that `project.json.v0.bak` is byte-identical to the pre-migration file; newer schemas are refused                               |
 | Migration failure safety    | The backup copy happens before migration and aborts it on failure; the original manifest is never rewritten first                                                                                                       |

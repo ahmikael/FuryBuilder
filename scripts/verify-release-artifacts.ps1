@@ -29,8 +29,7 @@
 
 .EXAMPLE
     pwsh -File scripts/verify-release-artifacts.ps1 `
-        -Artifact target/release/bundle/nsis/FuryBuilder_0.1.0_x64-setup.exe, `
-                  target/release/bundle/msi/FuryBuilder_0.1.0_x64_en-US.msi `
+        -Artifact target/release/bundle/nsis/FuryBuilder_0.1.0_x64-setup.exe `
         -ExpectedVersion 0.1.0
 #>
 [CmdletBinding()]

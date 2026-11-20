@@ -79,7 +79,11 @@ instead of assuming this assessment stays valid.
 
 ## Signature status
 
-The 0.1.0 NSIS and MSI packages and the application executable are **unsigned**:
+The 2026-11-19 evidence set includes an MSI that was evaluated before the package was
+removed from the release on 2026-11-20. Only the NSIS package is shipped; the MSI row
+below records the historical audit, not a current artifact.
+
+The 0.1.0 NSIS package and the application executable are **unsigned**:
 
 | Artifact                          | Version | Authenticode |
 | --------------------------------- | ------- | ------------ |
@@ -135,7 +139,8 @@ unknown license or loses license metadata. Regenerate the inventory with
   vulnerabilities and do not replace a manual review of security-sensitive code.
 - The audit covers resolved dependencies, not the Rust toolchain, WebView2 runtime, GPU driver
   or Windows itself.
-- The MSI per-machine install path still needs an elevated test session.
+- The historical MSI was validated by administrative extraction only; it is no longer
+  shipped and no elevated MSI test is required.
 - The beta was audited on one Windows 11 machine; platform-specific behavior on Windows 10
   is not proven by this audit.
 
@@ -150,8 +155,7 @@ pnpm licenses:check
 
 pnpm tauri:build
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-release-artifacts.ps1 `
-  -Artifact target/release/bundle/nsis/FuryBuilder_0.1.0_x64-setup.exe, `
-            target/release/bundle/msi/FuryBuilder_0.1.0_x64_en-US.msi `
+  -Artifact target/release/bundle/nsis/FuryBuilder_0.1.0_x64-setup.exe `
   -ExpectedVersion 0.1.0
 ```
 

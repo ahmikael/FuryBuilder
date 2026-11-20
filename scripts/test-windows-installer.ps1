@@ -5,9 +5,9 @@
 
 .DESCRIPTION
     Exercises the NSIS installer end to end: clean install, application startup,
-    upgrade over an existing install, and uninstall. The MSI package is validated
-    by an administrative extraction because a per-machine MSI install requires
-    elevation and this harness never prompts for UAC.
+    upgrade over an existing install, and uninstall. The optional MSI path
+    reproduces the historical 2026-11-19 evidence; current releases build only
+    the NSIS package.
 
     The real application data directory is backed up before the test and restored
     afterwards. A marker file created inside it proves that an upgrade keeps
@@ -21,7 +21,8 @@
     recorded as skipped.
 
 .PARAMETER MsiInstaller
-    Optional MSI package to validate by administrative extraction.
+    Optional legacy MSI package to validate by administrative extraction.
+    Retained to reproduce the 2026-11-19 evidence; it is not part of current releases.
 
 .PARAMETER OutDir
     Evidence directory. Receives installer-evidence.json and installer-test.log.
@@ -29,8 +30,7 @@
 .EXAMPLE
     pwsh -File scripts/test-windows-installer.ps1 `
         -OldInstaller target/release/bundle/nsis/FuryBuilder_0.1.0_x64-setup.exe `
-        -NewInstaller target/release/bundle/nsis/FuryBuilder_0.1.1_x64-setup.exe `
-        -MsiInstaller target/release/bundle/msi/FuryBuilder_0.1.0_x64_en-US.msi
+        -NewInstaller target/release/bundle/nsis/FuryBuilder_0.1.1_x64-setup.exe
 #>
 [CmdletBinding()]
 param(

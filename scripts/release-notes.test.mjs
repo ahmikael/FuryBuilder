@@ -71,6 +71,7 @@ test("renders sections, links and installation guidance", () => {
   assert.match(notes, /bump manifests/);
   assert.match(notes, /compare\/v0\.1\.0\.\.\.v0\.2\.0/);
   assert.match(notes, /NSIS installer/);
+  assert.doesNotMatch(notes, /MSI/);
 });
 
 test("keeps every conventional commit type in its own section", () => {

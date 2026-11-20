@@ -108,7 +108,7 @@ class ReleaseProcessTests(unittest.TestCase):
             "PROJECT_SCHEMA_VERSION",
             "SNAPSHOT_FORMAT_VERSION",
             "allowDowngrades",
-            "ed1f6f4c-a0f3-52c1-8d7a-18326f6a292c",
+            "NSIS",
             "CHANGELOG.md",
         ):
             self.assertIn(term, versioning)

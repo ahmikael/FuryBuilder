@@ -1,18 +1,17 @@
 # Windows installation, update and removal
 
-This page describes the Windows beta packages produced by `pnpm tauri:build`.
-The installers contain FuryBuilder only. They do not contain Minecraft, Java,
+This page describes the Windows beta installer produced by `pnpm tauri:build`.
+The installer contains FuryBuilder only. It does not contain Minecraft, Java,
 Mojang assets or a `server.jar`.
 
-## Packages
+## Package
 
 | Package                                    | Default scope | Elevation    | Notes                                                                  |
 | ------------------------------------------ | ------------- | ------------ | ---------------------------------------------------------------------- |
-| NSIS `FuryBuilder_<version>_x64-setup.exe` | Current user  | Not required | Recommended beta package. Installs under `%LOCALAPPDATA%\FuryBuilder`. |
-| MSI `FuryBuilder_<version>_x64_en-US.msi`  | All users     | Required     | For managed deployment; installs under `Program Files`.                |
+| NSIS `FuryBuilder_<version>_x64-setup.exe` | Current user  | Not required | Installs under `%LOCALAPPDATA%\FuryBuilder`.                           |
 
-Both packages declare the same application identifier and version. Install one
-format at a time; do not keep an NSIS and an MSI installation side by side.
+Only the per-user NSIS package is published. It declares the application
+identifier and version from `version.json`.
 
 ## Requirements
 
@@ -43,7 +42,7 @@ configurations that are not validated are in
    per-user and does not request administrator rights.
 3. Start FuryBuilder from the Start menu or the installer's finish page.
 
-The beta packages are currently **not code-signed**. Windows SmartScreen may
+The beta installer is currently **not code-signed**. Windows SmartScreen may
 show an "Unknown publisher" warning; this is expected until a code-signing
 certificate is configured. Do not disable SmartScreen globally and do not run a
 package whose hash does not match the published value. The audit record and the
@@ -56,22 +55,21 @@ turns missing signatures into a failure once a certificate exists.
 
 The built-in auto-update channel checks GitHub Releases four seconds after
 startup. When a newer published version exists, a banner and
-**Settings → Updates** show the version and release notes. Choosing **Install and restart** downloads the NSIS or MSI
-package that matches the installed application, verifies its Tauri updater
-signature, then Windows briefly closes FuryBuilder and installs the new build.
-Projects, settings and downloaded runtime caches are preserved. NSIS installs
-update per-user without elevation; an MSI install is per-machine, so its update
-can show a UAC prompt. A failed or unavailable update check does not block the
+**Settings → Updates** show the version and release notes. Choosing **Install and restart**
+downloads the NSIS package, verifies its Tauri updater signature, then Windows
+briefly closes FuryBuilder and installs the new build. Projects, settings and
+downloaded runtime caches are preserved. The NSIS package updates per user
+without elevation. A failed or unavailable update check does not block the
 editor; the newer installer can still be run manually over the current
 installation.
 
 Update signing uses a dedicated Tauri key, separate from Authenticode. The
-published `latest.json` contains the signed NSIS and MSI package URLs; the
-application refuses a package whose signature does not match the embedded
-public key. If the check fails, confirm that GitHub Releases is reachable and
-verify the published SHA-256 before running a manual package.
+published `latest.json` contains the signed NSIS package URL; the application
+refuses a package whose signature does not match the embedded public key. If the
+check fails, confirm that GitHub Releases is reachable and verify the published
+SHA-256 before running a manual package.
 
-The beta packages are still not Authenticode-signed, so Windows SmartScreen can
+The beta installer is still not Authenticode-signed, so Windows SmartScreen can
 warn about an unknown publisher on the first manual install. Downgrades are
 blocked by the bundle configuration, so an older installer cannot silently
 replace a newer one. Back up projects before a beta update anyway.
@@ -91,7 +89,7 @@ directory, so projects and the downloaded runtime cache survive an uninstall or
 a reinstall. Delete that directory manually only when you also want to remove
 all projects and cached downloads.
 
-## Build the packages
+## Build the installer
 
 From the repository root:
 
@@ -104,10 +102,9 @@ Artifacts are written to:
 
 ```text
 target\release\bundle\nsis\
-target\release\bundle\msi\
 ```
 
-A production build that should produce updater packages also needs the signing
+A production build that should produce updater artifacts also needs the signing
 environment used by the release workflow:
 
 ```powershell

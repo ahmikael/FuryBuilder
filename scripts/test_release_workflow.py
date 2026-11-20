@@ -56,16 +56,22 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("tauri-apps/tauri-action@v0", self.workflow)
         self.assertIn("TAURI_SIGNING_PRIVATE_KEY", self.workflow)
         self.assertIn("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", self.workflow)
-        self.assertIn("--bundles nsis,msi", self.workflow)
-        self.assertIn("updaterJsonPreferNsis: true", self.workflow)
+        self.assertIn("--bundles nsis", self.workflow)
+        self.assertNotIn("--bundles nsis,msi", self.workflow)
+        self.assertNotIn(".msi", self.workflow)
         self.assertIn("uploadUpdaterSignatures: true", self.workflow)
         self.assertIn("releaseBody: ${{ steps.notes.outputs.body }}", self.workflow)
         self.assertIn("latest.json", self.workflow)
         self.assertIn("FuryBuilder_${version}_x64-setup.exe", self.workflow)
-        self.assertIn("FuryBuilder_${version}_x64_en-US.msi", self.workflow)
-        self.assertIn("FuryBuilder_${version}_x64_en-US.msi.sig", self.workflow)
+        self.assertIn("FuryBuilder_${version}_x64-setup.exe.sig", self.workflow)
         self.assertIn("SHA-256", self.workflow)
         self.assertIn("--latest", self.workflow)
+
+    def test_bundle_config_ships_only_the_nsis_installer(self):
+        bundle = self.config["bundle"]
+        self.assertEqual(bundle["targets"], ["nsis"])
+        self.assertNotIn("wix", bundle["windows"])
+        self.assertEqual(bundle["windows"]["nsis"]["installMode"], "currentUser")
 
     def test_updater_is_configured_and_exposes_only_required_permissions(self):
         bundle = self.config["bundle"]
@@ -99,6 +105,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
             self.assertIn(term, self.versioning)
         for term in ("auto-update", "updater", "GitHub Releases"):
             self.assertIn(term, self.install)
+        self.assertNotIn("MSI", notes)
+        self.assertNotIn("MSI", self.install)
+        self.assertNotIn("MSI", self.limitations)
         self.assertNotIn("Tauri auto-updater is not configured", self.versioning)
         self.assertNotIn("no auto-update channel", self.limitations)
 

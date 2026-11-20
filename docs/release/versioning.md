@@ -44,9 +44,9 @@ FuryBuilder uses `MAJOR.MINOR.PATCH` with [Semantic Versioning](https://semver.o
 - **PATCH** — compatible fixes, data-loss prevention, security patches and documentation.
 
 The release package version is numeric only. Pre-release channels are expressed by release
-notes and installer distribution, not by suffixes such as `-beta.1`, because Windows Installer
-`ProductVersion` and the current NSIS/WiX version derivation expect numeric components.
-If a suffix is needed later, the release tooling and both installer formats must be tested
+notes and installer distribution, not by suffixes such as `-beta.1`, because the NSIS
+version derivation expects numeric components.
+If a suffix is needed later, the release tooling and the installer must be tested
 together first.
 
 Git tags use `v<version>` (for example `v0.1.0`) and point at the commit whose changelog
@@ -77,11 +77,11 @@ through the backup.
 4. Run `cargo audit`, `pnpm audit --prod`, `pnpm licenses:check` and refresh the inventory
    with `pnpm licenses:update` when dependencies changed. Zero denied/unknown licenses are
    required.
-5. Build both installers with `pnpm tauri:build` and the updater signing environment, or let
-   the tag workflow build them on `windows-latest`.
+5. Build the NSIS installer with `pnpm tauri:build` and the updater signing environment, or let
+   the tag workflow build it on `windows-latest`.
 6. Run `scripts/test-windows-installer.ps1` with the previous and new NSIS installers to
    prove clean install, update and uninstall. Record new SHA-256 values.
-7. Run `scripts/verify-release-artifacts.ps1` on both packages. Use `-RequireSigned` for a
+7. Run `scripts/verify-release-artifacts.ps1` on the NSIS package. Use `-RequireSigned` for a
    public stable release; an unsigned beta passes only when the limitation is recorded and
    published hashes are available.
 8. Run `scripts/test_windows_installer_evidence.py`, `scripts/test_release_security.py` and
@@ -103,8 +103,8 @@ Pushing a tag named `v<version>` runs `.github/workflows/release.yml`. The workf
    every commit type gets its own section, including `chore`, `test`, `ci`, `build` and
    `style`, while untyped commits go to Other Changes and breaking changes are listed
    separately;
-4. creates a draft GitHub release and builds both Windows installers on `windows-latest`;
-5. uploads the NSIS/MSI packages, their updater signatures and the static `latest.json`
+4. creates a draft GitHub release and builds the Windows NSIS installer on `windows-latest`;
+5. uploads the NSIS package, its updater signature and the static `latest.json`
    manifest, then appends SHA-256 checksums and publishes the release.
 
 The workflow may also be started manually with the exact existing tag. It refuses to
@@ -126,15 +126,12 @@ is always present so release preparation has a single place to curate.
 ## Installer metadata and updates
 
 - NSIS installs per user under `%LOCALAPPDATA%\FuryBuilder` and does not require elevation.
-- MSI targets a per-machine install and requires elevation for a real install.
-- The WiX upgrade code is pinned in `tauri.conf.json`
-  (`ed1f6f4c-a0f3-52c1-8d7a-18326f6a292c`) and must never change for the same product.
 - `bundle.windows.allowDowngrades` is `false`, so a silent or passive older package cannot
   replace a newer installation.
 - The Tauri auto-updater is configured against
   `https://github.com/ahmikael/FuryBuilder/releases/latest/download/latest.json`. Installed
   copies check four seconds after startup, download only after confirmation and verify the
-  matching NSIS or MSI package against the configured updater public key. Update signing
+  NSIS package against the configured updater public key. Update signing
   uses the `TAURI_SIGNING_PRIVATE_KEY` secret; Authenticode signing remains a separate
   external gate.
 - Beta releases are published as normal GitHub releases, not prereleases, because the

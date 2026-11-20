@@ -112,7 +112,7 @@ export function renderNotes(commits, options = {}) {
 
   lines.push("## Installing", "");
   lines.push(
-    "Download the NSIS installer from the assets below. The MSI is available for managed deployments. Existing installations can use the built-in signed updater; projects and settings are preserved.",
+    "Download the NSIS installer from the assets below. Existing installations can use the built-in signed updater; projects and settings are preserved.",
     "",
   );
   lines.push(

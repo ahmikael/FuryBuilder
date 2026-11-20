@@ -41,6 +41,8 @@ class WindowsInstallerEvidenceTests(unittest.TestCase):
         self.assertIs(self.data["appDataBackedUpAndRestored"], True)
 
     def test_every_installer_artifact_is_hashed(self):
+        # The 2026-11-19 evidence includes an MSI that was later removed from the
+        # product. It is retained unchanged as historical provenance.
         formats = {item["format"] for item in self.installers}
         self.assertEqual(formats, {"nsis", "msi"})
         self.assertGreaterEqual(len(self.installers), 3, "old NSIS, new NSIS and MSI are expected")

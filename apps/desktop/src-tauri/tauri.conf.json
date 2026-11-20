@@ -40,7 +40,7 @@
   "bundle": {
     "active": true,
     "createUpdaterArtifacts": true,
-    "targets": ["msi", "nsis"],
+    "targets": ["nsis"],
     "publisher": "FuryBuilder contributors",
     "copyright": "Copyright (c) 2026 FuryBuilder contributors",
     "licenseFile": "../../../LICENSE",
@@ -64,10 +64,6 @@
         "installMode": "currentUser",
         "displayLanguageSelector": false,
         "compression": "lzma"
-      },
-      "wix": {
-        "upgradeCode": "ed1f6f4c-a0f3-52c1-8d7a-18326f6a292c",
-        "language": "en-US"
       }
     }
   }

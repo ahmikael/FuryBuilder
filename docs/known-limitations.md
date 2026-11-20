@@ -92,11 +92,11 @@ before copying a project folder. **Evidence:** `docs/design/projects.md` (M5 lim
 
 ### KL-04 — Beta installers are unsigned; signed auto-updates are configured
 
-**Status:** pending M11 (external code-signing certificate). **Example:** the NSIS and MSI
-packages are built, installed and update-tested, but they are not Authenticode-signed and
+**Status:** pending M11 (external code-signing certificate). **Example:** the NSIS
+package is built, installed and update-tested, but it is not Authenticode-signed and
 Windows SmartScreen can warn about an unknown publisher. The Tauri updater is configured
-against GitHub Releases: installed builds check after startup, verify the matching NSIS or
-MSI package with the embedded updater public key, and preserve projects and settings.
+against GitHub Releases: installed builds check after startup, verify the matching NSIS
+package with the embedded updater public key, and preserve projects and settings.
 Update signing is a
 separate minisign key stored in repository secrets, not an Authenticode certificate.
 **Workaround:** verify the published SHA-256 before a manual install, keep a project backup

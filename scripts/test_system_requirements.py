@@ -33,7 +33,7 @@ class SystemRequirementsTests(unittest.TestCase):
         self.assertIn("# System requirements (Windows beta)", self.text)
         self.assertIn("Windows beta 0.1.0", self.text)
         self.assertIn("Minecraft Java **1.21.4 / DataVersion 4189**", self.text)
-        self.assertIn("Last reviewed: 2026-11-19", self.text)
+        self.assertIn("Last reviewed: 2026-11-20", self.text)
 
     def test_supported_baseline_is_explicit(self):
         for term in (
@@ -44,13 +44,13 @@ class SystemRequirementsTests(unittest.TestCase):
             "8 GB is the practical baseline target",
             "16 GB is the tested reference",
             "5.9 MB (NSIS)",
-            "7.8 MB (MSI)",
             "Keep at least 1 GB free",
             "visible viewport",
             "Not required for `Empty Project`",
             "%APPDATA%\\com.furybuilder.desktop",
         ):
             self.assertIn(term, self.text, f"missing baseline statement: {term}")
+        self.assertNotIn("MSI", self.text, "the MSI package is no longer shipped")
 
     def test_tested_reference_values_match_recorded_evidence(self):
         for term in (
@@ -63,9 +63,7 @@ class SystemRequirementsTests(unittest.TestCase):
             "157.0.4341.60",
             "209d4f0c849ad952494cbd4a7947f880cb2c1ac61402bf848b504014eae7eea9",
             "5,879,723",
-            "7,802,880",
             "ad21b7f37ed092fa1b7a0e82b3b30631deb62cdda6f392037d85ed1e02ec209c",
-            "52622c9b503e7a3b0156d3649c1c87b25fc85f58558e6d4c4caf06e0fadc618e",
             "21.0.12.1+1",
             "4707d00eb834b446575d89a61a11b5d548d8c001",
             "OpenCode CLI `2.3.2`",
@@ -80,7 +78,7 @@ class SystemRequirementsTests(unittest.TestCase):
             / "2026-11-19-windows-installer"
             / "README.md"
         )
-        for term in ("5,879,723", "7,802,880", "ad21b7f3", "52622c9b"):
+        for term in ("5,879,723", "ad21b7f3"):
             self.assertIn(term, installer_readme, f"installer evidence lacks {term}")
 
     def test_feature_dependencies_match_the_supported_modes(self):
