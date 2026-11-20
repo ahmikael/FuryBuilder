@@ -48,7 +48,7 @@ provided or downloaded only after explicit consent.
 
 Building from source additionally needs:
 
-- Node.js >= 22 and pnpm >= 10
+- Node.js >= 26 and pnpm >= 10
 - Rust stable (MSVC toolchain) and Visual Studio Build Tools
 - WebView2 runtime (preinstalled on current Windows 10/11)
 

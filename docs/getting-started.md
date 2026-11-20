@@ -18,7 +18,7 @@ for blocks; the viewport is a derived view.
 - Windows 10 or 11 (64-bit) with the WebView2 runtime (normally preinstalled).
 - No Minecraft installation, Java runtime or server JAR is required for `Empty Project`,
   `Flat base`, `Import World` or structure import/export.
-- Building from source additionally needs Node.js 22+, pnpm 10+ and Rust stable with the
+- Building from source additionally needs Node.js 26+, pnpm 10+ and Rust stable with the
   MSVC toolchain and Visual Studio Build Tools.
 
 Minecraft assets, Java and the official server JAR are optional additions for realistic

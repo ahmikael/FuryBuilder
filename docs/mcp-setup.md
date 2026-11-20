@@ -18,7 +18,7 @@ tested; see `docs/testing/mcp-compatibility.md` for the matrix.
 
 - Windows. The local endpoint is a Windows named pipe; Unix domain socket code exists but is
   unexercised.
-- Node.js 22 or newer for the bridge process.
+- Node.js 26 or newer for the bridge process.
 - The FuryBuilder desktop app running (`pnpm tauri:dev` in a checkout, or an installed
   build). The browser-only Vite preview has no Rust backend and cannot serve MCP.
 - A project open in FuryBuilder. The active project ID is part of every MCP call.

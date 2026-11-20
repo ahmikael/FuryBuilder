@@ -51,6 +51,8 @@ project schema, the world snapshot format and the MCP tool schema; see
 - Raised the minimum supported Rust version to 1.88, as required by `zip 9.7.3`.
 - Raised the minimum supported Rust version to 1.90, as required by the Tauri updater and
   process plugins.
+- Raised the Node.js runtime requirement to 26 and aligned the CI/release workflows and
+  `@types/node` with it.
 - Project schema migration now copies the original `project.json` byte for byte before
   applying the migration, instead of writing a rewritten document as the backup.
 - Per-save `project.json.bak-*` copies are now bounded to the newest five revisions.

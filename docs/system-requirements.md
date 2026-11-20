@@ -26,7 +26,7 @@ validated because the window opens. The maintained limitation list is
 
 ## Feature dependencies
 
-| Feature                         | Minecraft install | Java 21 | Official `server.jar` | Node.js 22+ | Network                                          |
+| Feature                         | Minecraft install | Java 21 | Official `server.jar` | Node.js 26+ | Network                                          |
 | ------------------------------- | ----------------- | ------- | --------------------- | ----------- | ------------------------------------------------ |
 | `Empty Project` / `Flat base`   | No                | No      | No                    | No          | No                                               |
 | `Import World` (1.21.4)         | No                | No      | No                    | No          | No                                               |
