@@ -1849,7 +1849,7 @@ mod tests {
         idle_timeout: Duration,
         min_generation: Duration,
         cancel_after: Option<Duration>,
-    ) -> GenerationReport {
+    ) -> (GenerationReport, Option<Duration>) {
         let root = std::env::temp_dir().join(format!(
             "furybuilder-fake-server-{}-{}-{}",
             std::process::id(),
@@ -1862,17 +1862,20 @@ mod tests {
         let plan = test_plan(&root, &exe, expected_chunks, idle_timeout, min_generation);
         let snapshot = Arc::new(Mutex::new(initial_snapshot(&plan)));
         let cancel = Arc::new(AtomicBool::new(false));
-        let report = if let Some(delay) = cancel_after {
+        let (report, cancel_latency) = if let Some(delay) = cancel_after {
             let cancel_thread = Arc::clone(&cancel);
             let handle = thread::spawn(move || execute(plan, cancel, snapshot));
             thread::sleep(delay);
+            // PowerShell compiles the C# fixture slowly on CI; time only cancellation.
+            let requested = Instant::now();
             cancel_thread.store(true, Ordering::SeqCst);
-            handle.join().expect("fake server thread")
+            let report = handle.join().expect("fake server thread");
+            (report, Some(requested.elapsed()))
         } else {
-            execute(plan, cancel, snapshot)
+            (execute(plan, cancel, snapshot), None)
         };
         let _ = fs::remove_dir_all(&root);
-        report
+        (report, cancel_latency)
     }
 
     #[cfg(windows)]
@@ -1903,7 +1906,7 @@ public class FakeServer {
     #[cfg(windows)]
     #[test]
     fn fake_server_completes_and_exits_cleanly() {
-        let report = run_fake(
+        let (report, _) = run_fake(
             FAKE_SERVER,
             0,
             Duration::from_secs(30),
@@ -1921,8 +1924,7 @@ public class FakeServer {
     #[cfg(windows)]
     #[test]
     fn fake_server_cancel_terminates_quickly() {
-        let started = Instant::now();
-        let report = run_fake(
+        let (report, cancel_latency) = run_fake(
             FAKE_SERVER,
             100_000,
             Duration::from_secs(300),
@@ -1931,7 +1933,11 @@ public class FakeServer {
         );
         assert_eq!(report.stop_reason, GenerationStopReason::Cancelled);
         assert_eq!(report.snapshot.phase, GenerationPhase::Cancelled);
-        assert!(started.elapsed() < Duration::from_secs(20));
+        let cancel_latency = cancel_latency.expect("cancel latency");
+        assert!(
+            cancel_latency < Duration::from_secs(10),
+            "cancellation took {cancel_latency:?}"
+        );
     }
 
     #[cfg(windows)]
@@ -1949,7 +1955,7 @@ public class FakeCrash {
     }
 }
 "#;
-        let report = run_fake(source, 9, Duration::from_secs(30), Duration::ZERO, None);
+        let (report, _) = run_fake(source, 9, Duration::from_secs(30), Duration::ZERO, None);
         assert_eq!(report.stop_reason, GenerationStopReason::Crashed);
         assert_eq!(report.snapshot.phase, GenerationPhase::Failed);
         assert_eq!(report.exit_code, Some(7));
