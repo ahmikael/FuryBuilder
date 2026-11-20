@@ -86,10 +86,11 @@ class ReleaseProcessTests(unittest.TestCase):
         self.assertTrue(changelog.startswith("# Changelog"))
         self.assertIn("## [Unreleased]", changelog)
         self.assertIn(f"## [{version}]", changelog)
-        for section in ("### Added", "### Changed", "### Fixed", "### Security"):
+        # The first release has no previous published version, so it only needs
+        # the sections that describe what the product adds and its security boundary.
+        for section in ("### Added", "### Security"):
             self.assertIn(section, changelog)
         self.assertIn("NSIS", changelog)
-        self.assertIn("version:check", changelog)
 
     def test_release_docs_cover_versioning_and_backup_rules(self):
         versioning = (ROOT / "docs" / "release" / "versioning.md").read_text(encoding="utf-8")

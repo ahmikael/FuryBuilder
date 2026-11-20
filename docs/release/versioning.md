@@ -121,7 +121,9 @@ future updates signed with a replacement key.
 `CHANGELOG.md` follows Keep a Changelog. Every user-visible change, data migration, security
 fix and known break goes under `Added`, `Changed`, `Deprecated`, `Removed`, `Fixed` or
 `Security`. Internal refactors without user impact may be omitted. The `[Unreleased]` section
-is always present so release preparation has a single place to curate.
+is always present so release preparation has a single place to curate. An initial release
+normally uses only `Added` and `Security`; `Changed`, `Deprecated`, `Removed` and `Fixed`
+describe differences from a previously published version and appear once one exists.
 
 ## Installer metadata and updates
 

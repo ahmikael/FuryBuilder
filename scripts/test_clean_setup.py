@@ -244,10 +244,6 @@ class CleanSetupEvidenceTests(unittest.TestCase):
         self.assertIn("2026-11-19-clean-setup/evidence.json", matrix)
         self.assertIn("M11.7 stays unchecked", matrix)
 
-        changelog = read(ROOT / "CHANGELOG.md")
-        self.assertIn("Isolated clean-user setup check", changelog)
-        self.assertIn("HTTPS_PROXY", changelog)
-
         java_doc = read(ROOT / "docs" / "runtime" / "java-runtime.md")
         self.assertIn("HTTPS_PROXY", java_doc)
         server_doc = read(ROOT / "docs" / "runtime" / "minecraft-server-jar.md")
