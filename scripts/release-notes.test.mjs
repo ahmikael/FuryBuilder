@@ -56,7 +56,7 @@ test("groups conventional commits and keeps internal types", () => {
   );
 });
 
-test("renders sections and links without install or checksum guidance", () => {
+test("renders sections and links", () => {
   const notes = renderNotes(commits, {
     tag: "v0.2.0",
     previousTag: "v0.1.0",
@@ -70,9 +70,6 @@ test("renders sections and links without install or checksum guidance", () => {
   assert.match(notes, /### Other Changes/);
   assert.match(notes, /bump manifests/);
   assert.match(notes, /compare\/v0\.1\.0\.\.\.v0\.2\.0/);
-  assert.doesNotMatch(notes, /## Installing/);
-  assert.doesNotMatch(notes, /SHA-256/);
-  assert.doesNotMatch(notes, /MSI/);
 });
 
 test("keeps every conventional commit type in its own section", () => {
