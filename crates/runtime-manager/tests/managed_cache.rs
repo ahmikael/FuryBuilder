@@ -118,6 +118,16 @@ fn write_archive(dir: &Path, name: &str, entries: &[(&str, &[u8], u32)]) -> Path
     path
 }
 
+/// Staging accepts only the host platform's `bin/java` entry, so synthetic
+/// archives must use the same layout a real Temurin build has on this OS.
+fn java_entry(root: &str) -> String {
+    if cfg!(windows) {
+        format!("{root}/bin/java.exe")
+    } else {
+        format!("{root}/bin/java")
+    }
+}
+
 fn manifest() -> furybuilder_runtime_manager::RuntimeManifest {
     furybuilder_runtime_manager::RuntimeManifest {
         id: "temurin-21.0.13+9-windows-x64".to_owned(),
@@ -152,11 +162,12 @@ fn probe_21() -> furybuilder_runtime_manager::JavaRuntimeReport {
 fn stages_commits_lists_and_clears_only_managed_runtimes() {
     let dir = TempDir::new("cache");
     let cache = ManagedRuntimeCache::new(dir.path().join("runtimes"));
+    let java = java_entry("jdk-21.0.13+9-jre");
     let archive = write_archive(
         dir.path(),
         "temurin.zip",
         &[
-            ("jdk-21.0.13+9-jre/bin/java.exe", b"fake-java", 0),
+            (java.as_str(), b"fake-java", 0),
             ("jdk-21.0.13+9-jre/release", b"JAVA_VERSION=\"21.0.13\"", 0),
             ("jdk-21.0.13+9-jre/LICENSE", b"GPLv2+CE", 0),
         ],
@@ -205,14 +216,12 @@ fn stages_commits_lists_and_clears_only_managed_runtimes() {
 fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
     let dir = TempDir::new("unsafe");
     let cache = ManagedRuntimeCache::new(dir.path().join("runtimes"));
+    let java = java_entry("jdk");
 
     let traversal = write_archive(
         dir.path(),
         "traversal.zip",
-        &[
-            ("../escape.txt", b"escape", 0),
-            ("jdk/bin/java.exe", b"java", 0),
-        ],
+        &[("../escape.txt", b"escape", 0), (java.as_str(), b"java", 0)],
     );
     let error = cache
         .stage(&traversal, &manifest(), &|_| {})
@@ -223,10 +232,7 @@ fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
     let symlink = write_archive(
         dir.path(),
         "symlink.zip",
-        &[
-            ("jdk/bin/java.exe", b"java", 0),
-            ("jdk/link", b"java.exe", 0o120777),
-        ],
+        &[(java.as_str(), b"java", 0), ("jdk/link", b"java", 0o120777)],
     );
     let error = cache
         .stage(&symlink, &manifest(), &|_| {})
@@ -239,7 +245,7 @@ fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
         .expect_err("missing java must fail");
     assert!(matches!(error, RuntimeError::Archive(_)), "{error:?}");
 
-    let archive = write_archive(dir.path(), "old.zip", &[("jdk/bin/java.exe", b"java", 0)]);
+    let archive = write_archive(dir.path(), "old.zip", &[(java.as_str(), b"java", 0)]);
     let staged = cache
         .stage(&archive, &manifest(), &|_| {})
         .expect("stage old archive");
