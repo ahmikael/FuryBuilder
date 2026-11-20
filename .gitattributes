@@ -1,0 +1,4 @@
+# The demo project is a byte-for-byte fixture whose manifest is checksummed in
+# docs/demo/evidence.json. Disable EOL conversion so every platform checks out
+# exactly the bytes that were recorded.
+examples/furybuilder-demo.furybuilder/** -text
