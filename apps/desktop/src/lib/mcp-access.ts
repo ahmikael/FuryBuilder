@@ -1,6 +1,6 @@
 import { listen } from "@tauri-apps/api/event";
 
-import { invokeCommand } from "@/lib/ipc";
+import { invokeCommand, isTauriRuntime } from "@/lib/ipc";
 
 /**
  * MCP access policy and write approvals. The browser can request a policy change, but
@@ -156,6 +156,7 @@ export async function submitMcpConfirmation(requestId: string, approved: boolean
 export async function listenForMcpConfirmations(
   handler: (request: McpConfirmationRequest) => void,
 ): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {};
   try {
     return await listen<McpConfirmationRequest>(MCP_CONFIRMATION_EVENT, (event) => {
       handler(event.payload);
@@ -174,6 +175,7 @@ export async function listenForMcpConfirmations(
 export async function listenForMcpWorldChanges(
   handler: (change: McpWorldChange) => void,
 ): Promise<() => void> {
+  if (!isTauriRuntime()) return () => {};
   try {
     return await listen<McpWorldChange>(MCP_WORLD_CHANGED_EVENT, (event) => {
       handler(event.payload);

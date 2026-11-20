@@ -1,3 +1,4 @@
+import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Box,
@@ -432,17 +433,15 @@ export function Viewport() {
     if (!tauri) return;
     let disposed = false;
     let unlisten: (() => void) | null = null;
-    void import("@tauri-apps/api/event")
-      .then(({ listen }) =>
-        listen("furybuilder-assets-changed", () => {
-          if (disposed) return;
-          assetSignature.current = "";
-          void refreshAssets(true);
-        }).then((stop) => {
-          if (disposed) stop();
-          else unlisten = stop;
-        }),
-      )
+    void listen("furybuilder-assets-changed", () => {
+      if (disposed) return;
+      assetSignature.current = "";
+      void refreshAssets(true);
+    })
+      .then((stop) => {
+        if (disposed) stop();
+        else unlisten = stop;
+      })
       .catch(() => {
         // The event API is only present inside Tauri; the placeholder stays usable.
       });

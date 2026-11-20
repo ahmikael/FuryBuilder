@@ -16,6 +16,7 @@ import {
   submitMcpConfirmation,
   type McpConfirmationRequest,
 } from "@/lib/mcp-access";
+import { isTauriRuntime } from "@/lib/ipc";
 
 function positionLabel(position: { x: number; y: number; z: number }): string {
   return `${position.x}, ${position.y}, ${position.z}`;
@@ -51,21 +52,23 @@ export function McpConfirmationHost() {
       else unlisten();
     });
     // A WebView reload loses the event but not the pending request in Rust.
-    void getMcpAccessStatus()
-      .then((status) => {
-        if (!active) return;
-        setQueue((current) => {
-          const known = new Set(current.map((entry) => entry.requestId));
-          const restored = status.pendingConfirmations.filter(
-            (entry) => !known.has(entry.requestId) && entry.expiresAtMs > Date.now() - 1000,
-          );
-          return [...current, ...restored];
+    if (isTauriRuntime()) {
+      void getMcpAccessStatus()
+        .then((status) => {
+          if (!active) return;
+          setQueue((current) => {
+            const known = new Set(current.map((entry) => entry.requestId));
+            const restored = status.pendingConfirmations.filter(
+              (entry) => !known.has(entry.requestId) && entry.expiresAtMs > Date.now() - 1000,
+            );
+            return [...current, ...restored];
+          });
+        })
+        .catch((error: unknown) => {
+          // Browser preview has no desktop command; the live listener still works.
+          console.debug("FuryBuilder could not restore pending MCP confirmations", error);
         });
-      })
-      .catch((error: unknown) => {
-        // Browser preview has no desktop command; the live listener still works.
-        console.debug("FuryBuilder could not restore pending MCP confirmations", error);
-      });
+    }
     return () => {
       active = false;
       stop?.();

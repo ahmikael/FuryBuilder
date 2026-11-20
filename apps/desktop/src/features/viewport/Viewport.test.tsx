@@ -61,6 +61,10 @@ vi.mock("@/lib/ipc", async (importOriginal) => {
   return { ...actual, isTauriRuntime: () => ipc.tauri, invokeCommand: ipc.invoke };
 });
 
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn().mockResolvedValue(() => undefined),
+}));
+
 import { Viewport } from "@/features/viewport/Viewport";
 
 const snapshot: RenderSnapshot = snapshotFromBlocks(

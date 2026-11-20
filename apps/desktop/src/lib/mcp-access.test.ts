@@ -16,6 +16,7 @@ import {
 
 vi.mock("@/lib/ipc", () => ({
   invokeCommand: vi.fn().mockResolvedValue(undefined),
+  isTauriRuntime: () => true,
 }));
 
 vi.mock("@tauri-apps/api/event", () => ({

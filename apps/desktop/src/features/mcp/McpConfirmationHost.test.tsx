@@ -11,6 +11,12 @@ import {
 } from "@/lib/mcp-access";
 
 import type * as McpAccessModule from "@/lib/mcp-access";
+import type * as IpcModule from "@/lib/ipc";
+
+vi.mock("@/lib/ipc", async (importOriginal) => {
+  const actual = await importOriginal<typeof IpcModule>();
+  return { ...actual, isTauriRuntime: () => true };
+});
 
 vi.mock("@/lib/mcp-access", async (importOriginal) => {
   const actual = await importOriginal<typeof McpAccessModule>();
