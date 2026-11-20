@@ -10,8 +10,8 @@ Application API over MCP.
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.21.4)
   and `Vanilla World` (official local 1.21.4 generator after explicit dependency setup)
   are available.
-- **License:** MIT for FuryBuilder code. Minecraft game assets are **not** distributed with
-  this repository; see `docs/legal/third-party-notices.md`.
+- **License:** Apache-2.0 for FuryBuilder code; see `LICENSE` and `NOTICE`. Minecraft game
+  assets are **not** distributed with this repository; see `docs/legal/third-party-notices.md`.
 
 ## Demo
 

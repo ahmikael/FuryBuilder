@@ -1,6 +1,7 @@
 # Third-party notices and legal boundaries
 
-FuryBuilder code is MIT-licensed. This file tracks non-code obligations.
+FuryBuilder code is Apache-2.0-licensed; the project `NOTICE` file records the copyright and
+trademark disclaimer. This file tracks non-code obligations.
 
 ## Minecraft
 
@@ -36,7 +37,7 @@ FuryBuilder code is MIT-licensed. This file tracks non-code obligations.
 - MPL-2.0 components are used unmodified as dependencies; their source is available from the
   published package archives and upstream projects. FuryBuilder does not relicense them.
   Unicode-3.0 and CDLA-Permissive-2.0 components are data/license texts used under their terms.
-- Placeholder textures are original works created for FuryBuilder and licensed MIT.
+- Placeholder textures are original works created for FuryBuilder and licensed Apache-2.0.
 
 ## Release security
 

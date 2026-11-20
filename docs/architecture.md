@@ -101,7 +101,7 @@ Imported files and MCP clients are untrusted input. The desktop process is autho
 
 Dependencies are pinned by `Cargo.lock` and `pnpm-lock.yaml`. No crate enters a domain crate
 if it pulls in Tauri, an async runtime or filesystem policy that belongs to an adapter.
-Every new dependency is checked for MIT-compatible licensing and security advisories.
+Every new dependency is checked for license compatibility and security advisories.
 NBT parsing is implemented and verified against round-trip fixtures first; a third-party
 parser is adopted only if it preserves unknown tags or is used strictly read-only.
 Generated contracts must be versioned; no duplicated hand-maintained Rust/TypeScript

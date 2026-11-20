@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Offline-first 3D studio for Minecraft Java worlds and structures",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "packageManager": "pnpm@12.21.0",
   "engines": {
     "node": ">=26"
