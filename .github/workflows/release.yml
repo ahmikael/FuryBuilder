@@ -100,11 +100,6 @@ jobs:
       - name: License policy
         run: pnpm licenses:check
 
-      - name: Release policy checks
-        run: |
-          python scripts/test_release_process.py
-          python scripts/test_release_workflow.py
-
       - name: Generate release notes from conventional commits
         shell: pwsh
         run: |

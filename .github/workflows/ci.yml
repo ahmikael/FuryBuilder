@@ -65,9 +65,6 @@ jobs:
       - name: Frontend production build
         run: pnpm build
 
-      - name: Release workflow and updater configuration
-        run: python scripts/test_release_workflow.py
-
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

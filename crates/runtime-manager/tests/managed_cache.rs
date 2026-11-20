@@ -1,6 +1,6 @@
 //! M9.3 tests: managed runtime archive safety, cache inventory and stale selections.
-//! Fixtures are synthetic archives; real Temurin download evidence is produced by
-//! `examples/runtime_probe.rs` and `scripts/runtime-webview2-smoke.mjs`.
+//! Fixtures are synthetic archives; `examples/runtime_probe.rs` exercises the real
+//! discovery path against a local Java installation.
 
 use std::fs;
 use std::io::Write;

@@ -18,7 +18,7 @@ Both files are GZIP-compressed Java structure NBT with `DataVersion` 4189.
 Their integrity and semantic contents are checked by:
 
 ```powershell
-python -m unittest discover -s scripts -p "test_java_reference_structures.py" -v
+cargo test -p furybuilder-world-io --test game_fixtures
 ```
 
 These reference **inputs** do not establish that FuryBuilder's exported

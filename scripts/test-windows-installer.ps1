@@ -5,9 +5,7 @@
 
 .DESCRIPTION
     Exercises the NSIS installer end to end: clean install, application startup,
-    upgrade over an existing install, and uninstall. The optional MSI path
-    reproduces the historical 2026-11-19 evidence; current releases build only
-    the NSIS package.
+    upgrade over an existing install, and uninstall.
 
     The real application data directory is backed up before the test and restored
     afterwards. A marker file created inside it proves that an upgrade keeps
@@ -19,10 +17,6 @@
 .PARAMETER NewInstaller
     Optional NSIS installer for the upgrade. When omitted, the upgrade scenario is
     recorded as skipped.
-
-.PARAMETER MsiInstaller
-    Optional legacy MSI package to validate by administrative extraction.
-    Retained to reproduce the 2026-11-19 evidence; it is not part of current releases.
 
 .PARAMETER OutDir
     Evidence directory. Receives installer-evidence.json and installer-test.log.
@@ -36,7 +30,6 @@
 param(
     [Parameter(Mandatory = $true)][string]$OldInstaller,
     [string]$NewInstaller,
-    [string]$MsiInstaller,
     [string]$OutDir = "artifacts/windows-installer"
 )
 
@@ -325,10 +318,6 @@ $newPath = $null
 if (-not [string]::IsNullOrWhiteSpace($NewInstaller)) {
     $newPath = Resolve-ExistingPath -Path $NewInstaller -Label "New NSIS installer"
 }
-$msiPath = $null
-if (-not [string]::IsNullOrWhiteSpace($MsiInstaller)) {
-    $msiPath = Resolve-ExistingPath -Path $MsiInstaller -Label "MSI package"
-}
 
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 $oldRecord = Get-FileRecord -Path $oldPath -Format "nsis"
@@ -344,13 +333,6 @@ if ($null -ne $newPath) {
     if ((Split-Path -Leaf $newPath) -match '_(\d+\.\d+\.\d+)_') { $newVersion = $Matches[1] }
     $newRecord | Add-Member -NotePropertyName version -NotePropertyValue $newVersion
     $script:installers.Add($newRecord) | Out-Null
-}
-if ($null -ne $msiPath) {
-    $msiRecord = Get-FileRecord -Path $msiPath -Format "msi"
-    $msiVersion = "unknown"
-    if ((Split-Path -Leaf $msiPath) -match '_(\d+\.\d+\.\d+)_') { $msiVersion = $Matches[1] }
-    $msiRecord | Add-Member -NotePropertyName version -NotePropertyValue $msiVersion
-    $script:installers.Add($msiRecord) | Out-Null
 }
 
 $machine = [pscustomobject]@{
@@ -462,34 +444,6 @@ try {
         appDataPreserved     = $dataSurvived
     }) | Out-Null
     Write-Log "Uninstall OK: executable and registry entry removed, app data present=$dataSurvived"
-
-    if ($null -ne $msiPath) {
-        Write-Log "Starting MSI administrative extraction scenario"
-        $extractDir = Join-Path $env:TEMP ("furybuilder-msi-admin-" + [guid]::NewGuid().ToString("N"))
-        New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
-        $msiArgs = "/a `"$msiPath`" /qn TARGETDIR=`"$extractDir`""
-        $msiProcess = Start-Process -FilePath "msiexec.exe" -ArgumentList $msiArgs -PassThru -Wait
-        if ($msiProcess.ExitCode -ne 0) {
-            throw "msiexec /a exited with code $($msiProcess.ExitCode)"
-        }
-        $extractedExe = Get-ChildItem -LiteralPath $extractDir -Recurse -File -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -in @("FuryBuilder.exe", "furybuilder-desktop.exe") } |
-            Select-Object -First 1
-        if ($null -eq $extractedExe) {
-            throw "MSI administrative extraction did not contain a known FuryBuilder executable"
-        }
-        $msiVersion = Get-ExeProductVersion -Path $extractedExe.FullName
-        $script:scenarios.Add([pscustomobject]@{
-            name                      = "msi-package-extraction"
-            ok                        = $true
-            mode                      = "administrative extraction (msiexec /a); per-machine install requires elevation"
-            extractedVersion          = $msiVersion
-            extractedExecutableSha256 = Get-Sha256 -Path $extractedExe.FullName
-        }) | Out-Null
-        $script:limitations.Add("The MSI was validated by administrative extraction only. A silent per-machine install needs an elevated session, which this non-elevated harness does not request.")
-        Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Log "MSI extraction OK: v$msiVersion"
-    }
 
     $pass = $true
     $exitCode = 0

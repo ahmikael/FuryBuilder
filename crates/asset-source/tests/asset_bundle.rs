@@ -1,7 +1,7 @@
 //! M9.2 tests: blockstates, models, textures, resource-pack priority and atlas caching.
 //!
 //! Fixtures are synthetic ZIP archives. The real-JAR render probe lives in
-//! `examples/asset_bundle_probe.rs` and `scripts/probe_asset_bundle.ps1`.
+//! `examples/asset_bundle_probe.rs`.
 
 use std::fs;
 use std::io::Write;

@@ -394,19 +394,13 @@ desktop only.
 
 ## Verification without a model
 
-Two checks exercise the path without asking a model to plan anything:
+The bridge test spawns the real `furybuilder-mcp` binary over stdio for both protocol eras
+and drives a mock named-pipe desktop endpoint through reads, writes, jobs, prompts and the
+MCP Apps resource. It is read-only:
 
 ```powershell
-# while the desktop app is running
-node scripts/probe-local-bridge.mjs
 cargo test -p furybuilder-mcp-bridge
 ```
-
-The first checks discovery, reads, a PNG capture, read-only refusal and the activity
-journal. The second spawns the real `furybuilder-mcp` binary over stdio for both protocol
-eras and drives a mock named-pipe desktop endpoint through reads, writes, jobs, prompts and
-the MCP Apps resource. Both are read-only. Historical live-app evidence produced by the
-former TypeScript bridge is preserved in git history with its original provenance.
 
 ## Known limitations
 

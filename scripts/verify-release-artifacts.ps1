@@ -48,25 +48,6 @@ function Get-Sha256 {
     (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash.ToLowerInvariant()
 }
 
-function Get-MsiProductVersion {
-    param([string]$Path)
-    try {
-        $installer = New-Object -ComObject WindowsInstaller.Installer
-        $database = $installer.GetType().InvokeMember("OpenDatabase", "InvokeMethod", $null, $installer, @($Path, 0))
-        $view = $database.GetType().InvokeMember("OpenView", "InvokeMethod", $null, $database, @("SELECT Value FROM Property WHERE Property='ProductVersion'"))
-        $view.GetType().InvokeMember("Execute", "InvokeMethod", $null, $view, $null) | Out-Null
-        $record = $view.GetType().InvokeMember("Fetch", "InvokeMethod", $null, $view, $null)
-        if ($null -eq $record) { return $null }
-        $values = @($record.GetType().InvokeMember("StringData", "GetProperty", $null, $record, 1))
-        $text = @($values | Where-Object { $null -ne $_ -and "$_".Trim() -ne "" })
-        if ($text.Count -eq 0) { return $null }
-        return [string]$text[$text.Count - 1]
-    }
-    catch {
-        return $null
-    }
-}
-
 function Get-ArtifactRecord {
     param([string]$Path)
     if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
@@ -79,9 +60,6 @@ function Get-ArtifactRecord {
         $signer = $signature.SignerCertificate.Subject
     }
     $version = $item.VersionInfo.ProductVersion
-    if ([string]::IsNullOrWhiteSpace($version) -and $item.Extension -eq ".msi") {
-        $version = Get-MsiProductVersion -Path $item.FullName
-    }
     [pscustomobject]@{
         file            = $item.Name
         bytes           = $item.Length
