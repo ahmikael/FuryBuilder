@@ -245,9 +245,9 @@ beforeEach(() => {
     editorState: null,
     availableCheckpoints: 0,
   });
-  api.rename.mockReset().mockImplementation(async (_folder: string, name: string) => ({
+  api.rename.mockReset().mockImplementation(async (folder: string, name: string) => ({
     ...opened(first).detail,
-    summary: { ...first, name },
+    summary: { ...first, folder, name },
   }));
   api.analyze.mockReset();
   api.importWorld.mockReset();

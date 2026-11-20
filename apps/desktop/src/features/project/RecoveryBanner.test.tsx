@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,10 +80,16 @@ describe("RecoveryBanner", () => {
     expect(screen.getByText(/Autosave revision 6/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Save now" }));
-    expect(save).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save now" })).toBeEnabled(),
+    );
 
     await user.click(screen.getByRole("button", { name: "Discard recovered changes" }));
-    expect(discard).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(discard).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Discard recovered changes" })).toBeEnabled(),
+    );
   });
 
   it("explains an unverified autosave without offering to save it", async () => {
