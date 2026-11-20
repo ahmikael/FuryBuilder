@@ -72,7 +72,7 @@ class ReleaseSecurityTests(unittest.TestCase):
         )
         self.assertIn('zip = { version = "9"', runtime_cargo)
         workspace = (ROOT / "Cargo.toml").read_text(encoding="utf-8")
-        self.assertIn('rust-version = "1.88"', workspace)
+        self.assertIn('rust-version = "1.90"', workspace)
 
         zip_packages = [
             item

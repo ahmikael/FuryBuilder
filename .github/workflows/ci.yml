@@ -34,6 +34,9 @@ jobs:
       - name: Version consistency
         run: pnpm version:check
 
+      - name: Release notes tool tests
+        run: pnpm test:release-notes
+
       - name: TypeScript typecheck
         run: pnpm typecheck
 
@@ -59,6 +62,9 @@ jobs:
 
       - name: Clean setup evidence
         run: python scripts/test_clean_setup.py
+
+      - name: Release workflow and updater configuration
+        run: python scripts/test_release_workflow.py
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable

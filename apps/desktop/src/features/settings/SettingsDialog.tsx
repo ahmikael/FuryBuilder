@@ -14,6 +14,7 @@ import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
 import { MinecraftServerSection } from "@/features/settings/MinecraftServerSection";
 import { DependencyReadiness } from "@/features/settings/DependencyReadiness";
 import { DiagnosticsSection } from "@/features/settings/DiagnosticsSection";
+import { UpdatesSection } from "@/features/settings/UpdatesSection";
 import type { BackendState } from "@/hooks/use-backend";
 import { MAX_UI_SCALE, MIN_UI_SCALE, type ThemeMode, useEditorStore } from "@/state/editor-store";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,10 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
           </div>
           {backend.error ? <p className="text-[10px] text-status-warn">{backend.error}</p> : null}
         </section>
+
+        <Separator />
+
+        <UpdatesSection currentVersion={backend.info?.version ?? null} />
 
         <Separator />
 

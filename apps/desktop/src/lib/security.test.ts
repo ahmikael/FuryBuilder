@@ -14,10 +14,15 @@ function readCapability(): Capability {
 }
 
 describe("tauri capability policy", () => {
-  it("grants core defaults and only the native folder picker", () => {
+  it("grants core defaults, the native folder picker and only required update permissions", () => {
     const capability = readCapability();
     expect(capability.windows).toEqual(["main"]);
-    expect(capability.permissions).toEqual(["core:default", "dialog:allow-open"]);
+    expect(capability.permissions).toEqual([
+      "core:default",
+      "dialog:allow-open",
+      "process:allow-restart",
+      "updater:default",
+    ]);
     expect(
       capability.permissions.some((permission) => permission.startsWith("dialog:allow-save")),
     ).toBe(false);

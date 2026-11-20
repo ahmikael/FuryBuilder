@@ -18,6 +18,12 @@ what was checked, what was fixed and what remains an external blocker.
 | Installer hashes and versions | `scripts/verify-release-artifacts.ps1`            | SHA-256, `ProductVersion` and Authenticode status recorded for both packages                                                                                                          |
 | Authenticode signature        | `Get-AuthenticodeSignature`                       | **Not signed** — see the external blocker below                                                                                                                                       |
 
+The table above is the 2026-11-19 release snapshot. On 2026-11-20 the Tauri
+updater/process plugins were added for signed GitHub releases. Re-running the tools reported
+0 Rust vulnerabilities and 0 Node advisories (76 production and 401 full-tree dependencies);
+`pnpm licenses:check` passed with 495 Rust and 61 Node components and 29 notice-required. The
+original evidence files are kept unchanged.
+
 Machine-readable evidence:
 
 - `docs/testing/evidence/2026-11-19-release-security/cargo-audit.json`
@@ -40,7 +46,9 @@ used to extract managed Java runtimes:
 
 The dependency was upgraded from `zip 2` to `zip 9.7.3`, which is patched for all six
 (`>= 9.0.0`, and `>= 9.0.5` for RUSTSEC-2026-0548). `zip 9.7.3` requires Rust 1.88, so the
-workspace minimum supported Rust version was raised from 1.80 to 1.88. The extraction path
+workspace minimum supported Rust version was raised from 1.80 to 1.88. The signed updater
+and process plugins added on 2026-11-20 require Rust 1.90, so the current workspace MSRV is
+1.90. The extraction path
 still applies its own defensive checks: entry-count and size limits, backslash rejection,
 `enclosed_name`, explicit symlink rejection and bounded streaming writes. The runtime-manager
 tests that cover traversal, symlinks, missing Java and wrong versions pass.
@@ -88,6 +96,14 @@ verify the published SHA-256 before running a package.
 The release is therefore **reproducible and hash-verifiable, but not publisher-authenticated**.
 This limitation is stated in `docs/install-windows.md`, `docs/known-limitations.md` and the
 release checklist.
+
+Automatic updates use a separate Tauri updater keypair. The public key is embedded in
+`apps/desktop/src-tauri/tauri.conf.json`; the private key and password are repository secrets
+used by the release workflow. A valid updater signature proves that the package was signed by
+the holder of that key, but it is not an Authenticode publisher signature and does not remove
+the SmartScreen warning on a first manual install. Losing the updater private key prevents
+already installed copies from accepting newly signed updates, so both key and password must be
+backed up offline.
 
 ## Third-party notices
 

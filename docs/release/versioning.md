@@ -77,7 +77,8 @@ through the backup.
 4. Run `cargo audit`, `pnpm audit --prod`, `pnpm licenses:check` and refresh the inventory
    with `pnpm licenses:update` when dependencies changed. Zero denied/unknown licenses are
    required.
-5. Build both installers with `pnpm tauri:build`.
+5. Build both installers with `pnpm tauri:build` and the updater signing environment, or let
+   the tag workflow build them on `windows-latest`.
 6. Run `scripts/test-windows-installer.ps1` with the previous and new NSIS installers to
    prove clean install, update and uninstall. Record new SHA-256 values.
 7. Run `scripts/verify-release-artifacts.ps1` on both packages. Use `-RequireSigned` for a
@@ -87,8 +88,32 @@ through the backup.
    the remaining release documentation tests.
 9. Review the migrations section of [backup-policy.md](backup-policy.md) whenever a schema
    constant changed.
-10. Commit the version bump, changelog, lock file and evidence together; tag `v<version>`.
+10. Commit the version bump, changelog, lock file and evidence together; tag `v<version>`
+    and push the tag. The release workflow builds the packages, publishes `latest.json`
+    and makes the GitHub release public.
 11. Do not publish a package whose installer hash is missing from the release notes.
+
+## GitHub release automation
+
+Pushing a tag named `v<version>` runs `.github/workflows/release.yml`. The workflow:
+
+1. checks that the tag matches `version.json` and that every manifest agrees;
+2. runs the frontend and Rust checks, including the release-notes tool tests;
+3. generates release notes from Conventional Commits with `scripts/release-notes.mjs`;
+   internal `chore`, `test`, `ci`, `build` and `style` commits are omitted, and breaking
+   changes are listed separately;
+4. creates a draft GitHub release and builds both Windows installers on `windows-latest`;
+5. uploads the NSIS/MSI packages, their updater signatures and the static `latest.json`
+   manifest, then appends SHA-256 checksums and publishes the release.
+
+The workflow may also be started manually with the exact existing tag. It refuses to
+overwrite an already published release; bump the version and tag a new commit instead.
+
+Updater signing is independent from Authenticode. The public key lives in
+`apps/desktop/src-tauri/tauri.conf.json`; the private key and its password are stored as
+the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository
+secrets. Back both up offline: if they are lost, already installed copies will refuse
+future updates signed with a replacement key.
 
 ## Changelog policy
 
@@ -105,5 +130,11 @@ is always present so release preparation has a single place to curate.
   (`ed1f6f4c-a0f3-52c1-8d7a-18326f6a292c`) and must never change for the same product.
 - `bundle.windows.allowDowngrades` is `false`, so a silent or passive older package cannot
   replace a newer installation.
-- The Tauri auto-updater is not configured. A release update is a manual run of the newer
-  installer; user data survives it.
+- The Tauri auto-updater is configured against
+  `https://github.com/ahmikael/FuryBuilder/releases/latest/download/latest.json`. Installed
+  copies check four seconds after startup, download only after confirmation and verify the
+  matching NSIS or MSI package against the configured updater public key. Update signing
+  uses the `TAURI_SIGNING_PRIVATE_KEY` secret; Authenticode signing remains a separate
+  external gate.
+- Beta releases are published as normal GitHub releases, not prereleases, because the
+  `/releases/latest` updater endpoint does not consider prereleases or drafts.

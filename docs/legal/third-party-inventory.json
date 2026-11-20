@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-11-19T17:48:50.114Z",
+  "generatedAt": "2026-11-20T10:05:03.095Z",
   "policy": "Permissive licenses only; MPL-2.0, Unicode-3.0 and CDLA-Permissive-2.0 require notices. Dual licenses pass with any allowed branch.",
   "rust": {
-    "packageCount": 469,
+    "packageCount": 495,
     "licenses": {
       "(MIT OR Apache-2.0) AND Unicode-3.0": 1,
       "0BSD": 2,
@@ -13,8 +13,8 @@
       "Apache-2.0 / MIT": 1,
       "Apache-2.0 AND ISC": 1,
       "Apache-2.0 AND MIT": 1,
-      "Apache-2.0 OR ISC OR MIT": 1,
-      "Apache-2.0 OR MIT": 39,
+      "Apache-2.0 OR ISC OR MIT": 3,
+      "Apache-2.0 OR MIT": 42,
       "Apache-2.0 WITH LLVM-exception": 1,
       "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT": 5,
       "Apache-2.0/MIT": 3,
@@ -23,20 +23,20 @@
       "BSD-3-Clause OR MIT OR Apache-2.0": 2,
       "BSD-3-Clause/MIT": 1,
       "CC0-1.0 OR MIT-0 OR Apache-2.0": 2,
-      "CDLA-Permissive-2.0": 2,
+      "CDLA-Permissive-2.0": 3,
       "ISC": 3,
-      "MIT": 108,
-      "MIT OR Apache-2.0": 215,
+      "MIT": 110,
+      "MIT OR Apache-2.0": 231,
       "MIT OR Apache-2.0 OR LGPL-2.1-or-later": 2,
       "MIT OR Apache-2.0 OR Zlib": 2,
       "MIT OR Zlib OR Apache-2.0": 2,
-      "MIT/Apache-2.0": 12,
+      "MIT/Apache-2.0": 13,
       "MPL-2.0": 7,
       "Unicode-3.0": 18,
       "Unlicense OR MIT": 9,
       "Unlicense/MIT": 2,
       "Zlib": 2,
-      "Zlib OR Apache-2.0 OR MIT": 17
+      "Zlib OR Apache-2.0 OR MIT": 18
     },
     "packages": [
       {
@@ -275,6 +275,11 @@
         "license": "MIT OR Apache-2.0"
       },
       {
+        "name": "core-foundation",
+        "version": "0.9.4",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "core-foundation-sys",
         "version": "0.8.7",
         "license": "MIT OR Apache-2.0"
@@ -498,6 +503,11 @@
         "name": "field-offset",
         "version": "0.3.6",
         "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "filetime",
+        "version": "0.2.30",
+        "license": "MIT/Apache-2.0"
       },
       {
         "name": "find-msvc-tools",
@@ -750,6 +760,11 @@
         "license": "MIT"
       },
       {
+        "name": "hyper-rustls",
+        "version": "0.27.10",
+        "license": "Apache-2.0 OR ISC OR MIT"
+      },
+      {
         "name": "hyper-util",
         "version": "0.1.21",
         "license": "MIT"
@@ -890,6 +905,16 @@
         "license": "MIT/Apache-2.0"
       },
       {
+        "name": "jni",
+        "version": "0.22.4",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "jni-macros",
+        "version": "0.22.4",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "jni-sys",
         "version": "0.3.1",
         "license": "MIT OR Apache-2.0"
@@ -1003,6 +1028,11 @@
         "name": "mime",
         "version": "0.3.18",
         "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "minisign-verify",
+        "version": "0.3.0",
+        "license": "MIT"
       },
       {
         "name": "miniz_oxide",
@@ -1135,6 +1165,11 @@
         "license": "Zlib OR Apache-2.0 OR MIT"
       },
       {
+        "name": "objc2-osa-kit",
+        "version": "0.3.2",
+        "license": "Zlib OR Apache-2.0 OR MIT"
+      },
+      {
         "name": "objc2-quartz-core",
         "version": "0.3.2",
         "license": "Zlib OR Apache-2.0 OR MIT"
@@ -1160,9 +1195,19 @@
         "license": "MIT OR Apache-2.0"
       },
       {
+        "name": "openssl-probe",
+        "version": "0.2.2",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "option-ext",
         "version": "0.2.0",
         "license": "MPL-2.0"
+      },
+      {
+        "name": "osakit",
+        "version": "0.3.1",
+        "license": "MIT OR Apache-2.0"
       },
       {
         "name": "pango",
@@ -1420,8 +1465,23 @@
         "license": "Apache-2.0 OR ISC OR MIT"
       },
       {
+        "name": "rustls-native-certs",
+        "version": "0.8.5",
+        "license": "Apache-2.0 OR ISC OR MIT"
+      },
+      {
         "name": "rustls-pki-types",
         "version": "1.16.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "rustls-platform-verifier",
+        "version": "0.7.1",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "rustls-platform-verifier-android",
+        "version": "0.2.0",
         "license": "MIT OR Apache-2.0"
       },
       {
@@ -1438,6 +1498,11 @@
         "name": "same-file",
         "version": "1.0.6",
         "license": "Unlicense/MIT"
+      },
+      {
+        "name": "schannel",
+        "version": "0.1.30",
+        "license": "MIT"
       },
       {
         "name": "schemars",
@@ -1462,6 +1527,16 @@
       {
         "name": "scopeguard",
         "version": "1.2.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "security-framework",
+        "version": "3.7.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "security-framework-sys",
+        "version": "2.17.0",
         "license": "MIT OR Apache-2.0"
       },
       {
@@ -1575,9 +1650,19 @@
         "license": "MIT OR Apache-2.0"
       },
       {
+        "name": "simd_cesu8",
+        "version": "1.2.0",
+        "license": "Apache-2.0 OR MIT"
+      },
+      {
         "name": "simd-adler32",
         "version": "0.3.10",
         "license": "MIT"
+      },
+      {
+        "name": "simdutf8",
+        "version": "0.1.5",
+        "license": "MIT OR Apache-2.0"
       },
       {
         "name": "siphasher",
@@ -1685,6 +1770,16 @@
         "license": "MIT"
       },
       {
+        "name": "system-configuration",
+        "version": "0.7.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "system-configuration-sys",
+        "version": "0.6.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "system-deps",
         "version": "6.2.2",
         "license": "MIT OR Apache-2.0"
@@ -1697,6 +1792,11 @@
       {
         "name": "tao-macros",
         "version": "0.1.4",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "tar",
+        "version": "0.4.46",
         "license": "MIT OR Apache-2.0"
       },
       {
@@ -1737,6 +1837,16 @@
       {
         "name": "tauri-plugin-fs",
         "version": "2.7.1",
+        "license": "Apache-2.0 OR MIT"
+      },
+      {
+        "name": "tauri-plugin-process",
+        "version": "2.4.0",
+        "license": "Apache-2.0 OR MIT"
+      },
+      {
+        "name": "tauri-plugin-updater",
+        "version": "2.14.1",
         "license": "Apache-2.0 OR MIT"
       },
       {
@@ -1818,6 +1928,11 @@
         "name": "tokio",
         "version": "1.54.1",
         "license": "MIT"
+      },
+      {
+        "name": "tokio-rustls",
+        "version": "0.26.6",
+        "license": "MIT OR Apache-2.0"
       },
       {
         "name": "tokio-util",
@@ -2070,6 +2185,11 @@
         "license": "MIT"
       },
       {
+        "name": "webpki-root-certs",
+        "version": "1.0.12",
+        "license": "CDLA-Permissive-2.0"
+      },
+      {
         "name": "webpki-roots",
         "version": "0.26.11",
         "license": "CDLA-Permissive-2.0"
@@ -2240,6 +2360,11 @@
         "license": "MIT OR Apache-2.0"
       },
       {
+        "name": "windows-registry",
+        "version": "0.6.1",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "windows-result",
         "version": "0.4.1",
         "license": "MIT OR Apache-2.0"
@@ -2325,6 +2450,11 @@
         "license": "MIT"
       },
       {
+        "name": "xattr",
+        "version": "1.7.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "yoke",
         "version": "0.8.4",
         "license": "Unicode-3.0"
@@ -2387,14 +2517,14 @@
     ]
   },
   "node": {
-    "packageCount": 59,
+    "packageCount": 61,
     "licenses": {
       "0BSD": 1,
       "Apache-2.0": 3,
       "Apache-2.0 OR MIT": 1,
       "ISC": 1,
       "MIT": 52,
-      "MIT OR Apache-2.0": 1
+      "MIT OR Apache-2.0": 3
     },
     "packages": [
       {
@@ -2663,6 +2793,16 @@
         "license": "MIT OR Apache-2.0"
       },
       {
+        "name": "@tauri-apps/plugin-process",
+        "version": "2.4.0",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
+        "name": "@tauri-apps/plugin-updater",
+        "version": "2.14.1",
+        "license": "MIT OR Apache-2.0"
+      },
+      {
         "name": "class-variance-authority",
         "version": "0.7.1",
         "license": "Apache-2.0"
@@ -2802,6 +2942,12 @@
       "name": "unicode-ident",
       "version": "1.0.27",
       "license": "(MIT OR Apache-2.0) AND Unicode-3.0"
+    },
+    {
+      "ecosystem": "rust",
+      "name": "webpki-root-certs",
+      "version": "1.0.12",
+      "license": "CDLA-Permissive-2.0"
     },
     {
       "ecosystem": "rust",

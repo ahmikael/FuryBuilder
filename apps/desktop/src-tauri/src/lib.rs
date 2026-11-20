@@ -27,6 +27,8 @@ fn app_data_dir(app: &tauri::AppHandle) -> Result<PathBuf, Box<dyn std::error::E
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app_data_dir(app.handle())?;
             let projects_root = data_dir.join("projects");

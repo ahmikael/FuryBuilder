@@ -12,6 +12,8 @@ import { McpConfirmationHost } from "@/features/mcp/McpConfirmationHost";
 import { McpWorldChangeHost } from "@/features/mcp/McpWorldChangeHost";
 import { ProjectManager, useProjectAutosave } from "@/features/project/ProjectManager";
 import { RecoveryBanner } from "@/features/project/RecoveryBanner";
+import { UpdateBanner } from "@/features/updates/UpdateBanner";
+import { useAutoUpdate } from "@/features/updates/use-auto-update";
 import { Toaster } from "@/components/ui/toaster";
 import { useBackendInfo } from "@/hooks/use-backend";
 import { useAppliedScale, useAppliedTheme } from "@/app/theme";
@@ -38,6 +40,7 @@ export function App() {
   useEditorHotkeys();
   useAppHotkeys();
   useProjectAutosave();
+  useAutoUpdate();
 
   const currentResolvedTheme =
     theme === "system"
@@ -57,6 +60,7 @@ export function App() {
           onOpenMcpAccess={() => setMcpAccessOpen(true)}
         />
         <RecoveryBanner />
+        <UpdateBanner />
         <div className="flex min-h-0 flex-1">
           {leftPanelOpen ? <WorldTree /> : null}
           <Viewport />

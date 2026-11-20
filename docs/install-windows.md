@@ -54,10 +54,27 @@ turns missing signatures into a failure once a certificate exists.
 
 ## Update
 
-Run the installer for a newer version over the existing installation. The
-installer replaces program files in place and leaves user data untouched.
-Downgrades are blocked by the bundle configuration, so an older installer cannot
-silently replace a newer one. Back up projects before a beta update anyway.
+The built-in auto-update channel checks GitHub Releases four seconds after
+startup. When a newer published version exists, a banner and
+**Settings → Updates** show the version and release notes. Choosing **Install and restart** downloads the NSIS or MSI
+package that matches the installed application, verifies its Tauri updater
+signature, then Windows briefly closes FuryBuilder and installs the new build.
+Projects, settings and downloaded runtime caches are preserved. NSIS installs
+update per-user without elevation; an MSI install is per-machine, so its update
+can show a UAC prompt. A failed or unavailable update check does not block the
+editor; the newer installer can still be run manually over the current
+installation.
+
+Update signing uses a dedicated Tauri key, separate from Authenticode. The
+published `latest.json` contains the signed NSIS and MSI package URLs; the
+application refuses a package whose signature does not match the embedded
+public key. If the check fails, confirm that GitHub Releases is reachable and
+verify the published SHA-256 before running a manual package.
+
+The beta packages are still not Authenticode-signed, so Windows SmartScreen can
+warn about an unknown publisher on the first manual install. Downgrades are
+blocked by the bundle configuration, so an older installer cannot silently
+replace a newer one. Back up projects before a beta update anyway.
 
 ## User data and uninstall
 
@@ -89,6 +106,20 @@ Artifacts are written to:
 target\release\bundle\nsis\
 target\release\bundle\msi\
 ```
+
+A production build that should produce updater packages also needs the signing
+environment used by the release workflow:
+
+```powershell
+$env:TAURI_SIGNING_PRIVATE_KEY = Get-Content $HOME\.tauri\furybuilder-updater.key -Raw
+$env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = Get-Content $HOME\.tauri\furybuilder-updater.password -Raw
+pnpm tauri:build
+```
+
+Without the key Tauri cannot create the `.sig` files or `latest.json` used by
+auto-update. GitHub Actions reads the same values from the
+`TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository
+secrets.
 
 The repeatable install/update/uninstall check is
 `scripts/test-windows-installer.ps1`. It backs up and restores the real

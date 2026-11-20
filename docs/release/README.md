@@ -10,3 +10,5 @@
 - [Windows installation and updates](../install-windows.md) — package types, install, update,
   uninstall and user-data location.
 - [Changelog](../../CHANGELOG.md) — user-visible changes by release.
+- [Release workflow](../../.github/workflows/release.yml) — tag-driven Windows build, signed
+  updater artifacts, conventional-commit release notes and GitHub release publication.

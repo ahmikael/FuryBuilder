@@ -107,7 +107,7 @@ class SystemRequirementsTests(unittest.TestCase):
             "integrated GPUs, switching and other vendors are not tested",
             "only one physical display adapter",
             "Windows 10, Windows on ARM, Windows Server",
-            "Code-signed installers, automatic updates",
+            "Code-signed installers and a stable (non-beta) update channel",
             "External beta-user field data",
             "KL-43",
         ):

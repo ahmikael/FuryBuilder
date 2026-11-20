@@ -69,9 +69,11 @@ validates both files (8 tests).
   tasks.
 - Uninstall intentionally keeps the user data directory. Removing it is a
   separate, manual action.
-- FuryBuilder does not configure the Tauri auto-updater. An update is a manual
-  run of the newer installer; downgrades are blocked by
-  `bundle.windows.allowDowngrades: false`.
+- This evidence was recorded before the tag-driven release workflow and signed
+  Tauri updater were added. At that point an update meant running the newer
+  installer manually; downgrades are still blocked by
+  `bundle.windows.allowDowngrades: false`. Current update behavior is documented
+  in `docs/install-windows.md` and `docs/release/versioning.md`.
 - The installer installs `furybuilder-desktop.exe`; the Start menu shortcut and
   the uninstall entry use the product name `FuryBuilder`.
 - The first harness run observed a stale uninstaller that delayed registry

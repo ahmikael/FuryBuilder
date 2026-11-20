@@ -21,51 +21,51 @@ manually. Create a checkpoint first and keep the original world untouched.
 
 ## Summary
 
-| ID    | Area             | Limitation                                                                          | Status               |
-| ----- | ---------------- | ----------------------------------------------------------------------------------- | -------------------- |
-| KL-01 | Platform         | Windows-first; macOS/Linux are not tested                                           | by design            |
-| KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                              | by design            |
-| KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                     | by design            |
-| KL-04 | Distribution     | Beta installers are unsigned; no auto-update channel is configured                  | pending M11          |
-| KL-05 | Version support  | Only Java 1.21.4 / DV 4189; other versions and Bedrock are refused                  | by design            |
-| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split/legacy refused            | by design            |
-| KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                  | by design            |
-| KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle           | not implemented      |
-| KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                 | not implemented      |
-| KL-10 | World export     | Complete world-folder export has no one-click UI action                             | not implemented      |
-| KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                     | by design            |
-| KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                    | by design            |
-| KL-13 | Vanilla World    | Requires Java 21, official server JAR, EULA and possibly a download                 | by design            |
-| KL-14 | Vanilla World    | Generation is bounded; only completed runs can become projects                      | by design            |
-| KL-15 | Vanilla parity   | Parity check is untouched-revision block states only, not general parity            | by design            |
-| KL-16 | Vanilla settings | Only `generate-structures` is exposed; data-pack behaviour is not tested            | not implemented      |
-| KL-17 | Editor           | Box selection is two clicks; no drag selection or multi-selection                   | by design            |
-| KL-18 | Landscape        | Terrain/heightmap/generator tools are local and do not rebuild light                | by design            |
-| KL-19 | Brush            | Brush replaces every state in its sphere; no “only air” mode                        | not implemented      |
-| KL-20 | Clipboard        | Clipboard is in-memory and is lost on restart                                       | by design            |
-| KL-21 | History          | Undo history is bounded to 100; checkpoints are manual and capped at 5              | by design            |
-| KL-22 | Shortcuts        | Shortcuts are fixed; no user keybinding editor                                      | by design            |
-| KL-23 | Build DSL        | Recipes are transient, house/repeat only, and budget-limited                        | not implemented      |
-| KL-24 | Parametric       | Only house v1; manual edits block transform unless Override is chosen               | by design            |
-| KL-25 | Semantic objects | Metadata only; no MCP write path and no automatic recognition                       | by design            |
-| KL-26 | Policy           | One active mask; no multi-select layers/masks                                       | by design            |
-| KL-27 | References       | PNG/schematic reference overlays are researched but not enabled                     | not implemented      |
-| KL-28 | Rendering        | Nether/End are listed but only the overworld is streamed                            | not implemented      |
-| KL-29 | Assets           | Mojang assets are not bundled; placeholders and approximate shapes                  | by design            |
-| KL-30 | Assets           | Model subset: no entity/block-entity models, fluid flow or animations               | not implemented      |
-| KL-31 | Performance      | Large-scene envelope is machine-specific; radius 32 is stress-only                  | environment-specific |
-| KL-32 | Performance      | Only one physical GPU tested; WARP/SwiftShader are software                         | environment-specific |
-| KL-33 | MCP              | Read-only by default; access resets on restart                                      | by design            |
-| KL-34 | MCP              | Windows stdio named pipe only; no HTTP or remote transport                          | by design            |
-| KL-35 | MCP              | Only OpenCode 2.3.2 is a verified real client; Tasks is fallback-only               | environment-specific |
-| KL-36 | MCP screenshots  | A visible viewport is required; no headless or minimized capture                    | not implemented      |
-| KL-37 | MCP audit        | Activity journal is in-memory and bounded; no durable audit trail                   | by design            |
-| KL-38 | Security         | Local OS account and client stdin memory are outside the threat model               | by design            |
-| KL-39 | Recovery         | Autosave runs every 30 s; a hard crash can lose up to 30 s of edits                 | by design            |
-| KL-40 | Recovery         | A damaged autosave is not recovered; the last saved revision opens                  | by design            |
-| KL-41 | Diagnostics      | Logs are local, bounded and redacted; no telemetry or crash upload                  | by design            |
-| KL-42 | Project storage  | No project deletion or folder relocation in the UI; rename is display-only          | not implemented      |
-| KL-43 | Release evidence | No external beta-user field data yet; checks use internal harnesses and one machine | pending M11          |
+| ID    | Area             | Limitation                                                                             | Status               |
+| ----- | ---------------- | -------------------------------------------------------------------------------------- | -------------------- |
+| KL-01 | Platform         | Windows-first; macOS/Linux are not tested                                              | by design            |
+| KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 | by design            |
+| KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        | by design            |
+| KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured | pending M11          |
+| KL-05 | Version support  | Only Java 1.21.4 / DV 4189; other versions and Bedrock are refused                     | by design            |
+| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split/legacy refused               | by design            |
+| KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     | by design            |
+| KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              | not implemented      |
+| KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                    | not implemented      |
+| KL-10 | World export     | Complete world-folder export has no one-click UI action                                | not implemented      |
+| KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                        | by design            |
+| KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                       | by design            |
+| KL-13 | Vanilla World    | Requires Java 21, official server JAR, EULA and possibly a download                    | by design            |
+| KL-14 | Vanilla World    | Generation is bounded; only completed runs can become projects                         | by design            |
+| KL-15 | Vanilla parity   | Parity check is untouched-revision block states only, not general parity               | by design            |
+| KL-16 | Vanilla settings | Only `generate-structures` is exposed; data-pack behaviour is not tested               | not implemented      |
+| KL-17 | Editor           | Box selection is two clicks; no drag selection or multi-selection                      | by design            |
+| KL-18 | Landscape        | Terrain/heightmap/generator tools are local and do not rebuild light                   | by design            |
+| KL-19 | Brush            | Brush replaces every state in its sphere; no “only air” mode                           | not implemented      |
+| KL-20 | Clipboard        | Clipboard is in-memory and is lost on restart                                          | by design            |
+| KL-21 | History          | Undo history is bounded to 100; checkpoints are manual and capped at 5                 | by design            |
+| KL-22 | Shortcuts        | Shortcuts are fixed; no user keybinding editor                                         | by design            |
+| KL-23 | Build DSL        | Recipes are transient, house/repeat only, and budget-limited                           | not implemented      |
+| KL-24 | Parametric       | Only house v1; manual edits block transform unless Override is chosen                  | by design            |
+| KL-25 | Semantic objects | Metadata only; no MCP write path and no automatic recognition                          | by design            |
+| KL-26 | Policy           | One active mask; no multi-select layers/masks                                          | by design            |
+| KL-27 | References       | PNG/schematic reference overlays are researched but not enabled                        | not implemented      |
+| KL-28 | Rendering        | Nether/End are listed but only the overworld is streamed                               | not implemented      |
+| KL-29 | Assets           | Mojang assets are not bundled; placeholders and approximate shapes                     | by design            |
+| KL-30 | Assets           | Model subset: no entity/block-entity models, fluid flow or animations                  | not implemented      |
+| KL-31 | Performance      | Large-scene envelope is machine-specific; radius 32 is stress-only                     | environment-specific |
+| KL-32 | Performance      | Only one physical GPU tested; WARP/SwiftShader are software                            | environment-specific |
+| KL-33 | MCP              | Read-only by default; access resets on restart                                         | by design            |
+| KL-34 | MCP              | Windows stdio named pipe only; no HTTP or remote transport                             | by design            |
+| KL-35 | MCP              | Only OpenCode 2.3.2 is a verified real client; Tasks is fallback-only                  | environment-specific |
+| KL-36 | MCP screenshots  | A visible viewport is required; no headless or minimized capture                       | not implemented      |
+| KL-37 | MCP audit        | Activity journal is in-memory and bounded; no durable audit trail                      | by design            |
+| KL-38 | Security         | Local OS account and client stdin memory are outside the threat model                  | by design            |
+| KL-39 | Recovery         | Autosave runs every 30 s; a hard crash can lose up to 30 s of edits                    | by design            |
+| KL-40 | Recovery         | A damaged autosave is not recovered; the last saved revision opens                     | by design            |
+| KL-41 | Diagnostics      | Logs are local, bounded and redacted; no telemetry or crash upload                     | by design            |
+| KL-42 | Project storage  | No project deletion or folder relocation in the UI; rename is display-only             | not implemented      |
+| KL-43 | Release evidence | No external beta-user field data yet; checks use internal harnesses and one machine    | pending M11          |
 
 ## Platform and distribution
 
@@ -90,14 +90,19 @@ no cloud sync, shared editing or server. The desktop also does not take an OS fi
 detect a second live session. **Workaround:** use one instance per project; make a checkpoint
 before copying a project folder. **Evidence:** `docs/design/projects.md` (M5 limitations).
 
-### KL-04 — Beta installers are unsigned and there is no auto-update
+### KL-04 — Beta installers are unsigned; signed auto-updates are configured
 
-**Status:** pending M11. **Example:** the NSIS and MSI packages are built, installed and
-update-tested, but they are not Authenticode-signed and Windows SmartScreen can warn about an
-unknown publisher. The Tauri auto-updater is not configured; updating means running a newer
-installer over the old one. **Workaround:** verify the published SHA-256 before running a
-package, and keep a project backup before updating. **Evidence:**
-`docs/install-windows.md`, `docs/legal/security-audit.md`,
+**Status:** pending M11 (external code-signing certificate). **Example:** the NSIS and MSI
+packages are built, installed and update-tested, but they are not Authenticode-signed and
+Windows SmartScreen can warn about an unknown publisher. The Tauri updater is configured
+against GitHub Releases: installed builds check after startup, verify the matching NSIS or
+MSI package with the embedded updater public key, and preserve projects and settings.
+Update signing is a
+separate minisign key stored in repository secrets, not an Authenticode certificate.
+**Workaround:** verify the published SHA-256 before a manual install, keep a project backup
+before updating, and use **Settings → Updates** for the signed automatic update path.
+**Evidence:** `docs/install-windows.md`, `docs/release/versioning.md`,
+`docs/legal/security-audit.md`,
 `docs/testing/evidence/2026-11-19-release-security/signature-evidence.json`.
 
 ## Minecraft versions, import and export

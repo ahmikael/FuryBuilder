@@ -17,6 +17,8 @@
     "tauri": "pnpm --filter @furybuilder/desktop tauri",
     "tauri:dev": "pnpm --filter @furybuilder/desktop tauri dev",
     "tauri:build": "pnpm --filter @furybuilder/desktop tauri build",
+    "release:notes": "node scripts/release-notes.mjs",
+    "test:release-notes": "node --test scripts/release-notes.test.mjs",
     "version:check": "node scripts/version.mjs check",
     "version:set": "node scripts/version.mjs set",
     "licenses:check": "node scripts/check-dependencies.mjs --check",

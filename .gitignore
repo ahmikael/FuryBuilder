@@ -28,6 +28,13 @@ Thumbs.db
 .env
 .env.local
 
+# Signing keys and passwords (updater and future Authenticode material)
+.tauri/
+*.key
+*.password
+*.pem
+*.pfx
+
 # Test output
 test-results/
 playwright-report/
