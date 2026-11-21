@@ -1,7 +1,7 @@
 {
   "name": "furybuilder",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Offline-first 3D studio for Minecraft Java worlds and structures",
   "license": "Apache-2.0",
   "packageManager": "pnpm@12.21.0",

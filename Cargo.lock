@@ -933,7 +933,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-asset-source"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
@@ -947,7 +947,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-build-dsl"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-scene-model",
  "furybuilder-world-domain",
@@ -959,7 +959,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-desktop"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "furybuilder-asset-source",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-mcp-bridge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "rmcp",
@@ -996,7 +996,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-observation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-world-domain",
  "png 0.17.16",
@@ -1007,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-project-store"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-scene-model",
  "furybuilder-workspace-model",
@@ -1021,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-runtime-manager"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "libc",
@@ -1037,7 +1037,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-scene-model"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-world-domain",
  "serde",
@@ -1047,7 +1047,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-structure-library"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-world-domain",
  "furybuilder-world-io",
@@ -1061,7 +1061,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-validation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-world-domain",
  "furybuilder-world-operations",
@@ -1072,7 +1072,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-workspace-model"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-world-domain",
  "serde",
@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-world-application"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "furybuilder-build-dsl",
@@ -1100,7 +1100,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-world-domain"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1109,14 +1109,14 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-world-generation"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror 2.0.21",
 ]
 
 [[package]]
 name = "furybuilder-world-io"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "flate2",
  "furybuilder-world-domain",
@@ -1128,7 +1128,7 @@ dependencies = [
 
 [[package]]
 name = "furybuilder-world-operations"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "furybuilder-world-domain",
  "furybuilder-world-generation",

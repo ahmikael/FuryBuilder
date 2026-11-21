@@ -6,6 +6,38 @@ Notable user-visible changes to FuryBuilder.
 
 _Nothing yet._
 
+## [0.2.0] - 2026-11-21
+
+A focused interface release: the desktop UI is rebuilt on shadcn/ui with Base UI primitives,
+the Neutral theme and the Geist font family, while world editing, projects and the MCP bridge
+keep their existing behavior.
+
+### Added
+
+- New FuryBuilder application icon and a transparent logo in the toolbar.
+- Bundled Geist and Geist Mono font licenses are recorded under `docs/legal/licenses/`.
+
+### Changed
+
+- Complete desktop interface redesign on shadcn/ui: consistent toolbar, navigation, panels,
+  forms, cards, tables, dialogs, empty states and status surfaces.
+- The UI uses the shadcn Neutral theme, standard component sizes and tokens, more generous
+  spacing, Geist for interface text and Geist Mono for technical data.
+- Native selects and checkboxes were replaced by the shadcn native select and checkbox
+  components without changing their behavior.
+- The project is now licensed under Apache-2.0.
+- Windows releases remain per-user NSIS installers with signed updater artifacts.
+
+### Fixed
+
+- Generation cancellation is timed from the cancel request instead of the original start, so
+  the cancellation window is no longer shortened by elapsed generation time.
+
+### Security
+
+- The dependency license policy now accepts the SIL Open Font License 1.1 used by the bundled
+  fonts and requires their notices to be shipped with the project documentation.
+
 ## [0.1.0] - 2026-11-20
 
 First public beta: a local Windows desktop editor for Minecraft Java Edition 1.21.4
