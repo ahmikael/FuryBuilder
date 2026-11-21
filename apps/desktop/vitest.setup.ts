@@ -7,7 +7,23 @@ Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
   value: vi.fn(() => null),
 });
 
-// Radix and the theme resolver use matchMedia; provide a deterministic stub.
+// Base UI measures finite animations when scroll areas mount; jsdom has no Web Animations API.
+if (!Element.prototype.getAnimations) {
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    configurable: true,
+    value: () => [],
+  });
+}
+
+// cmdk scrolls the selected command into view; jsdom does not implement scrolling.
+if (!Element.prototype.scrollIntoView) {
+  Object.defineProperty(Element.prototype, "scrollIntoView", {
+    configurable: true,
+    value: () => {},
+  });
+}
+
+// The theme resolver uses matchMedia; provide a deterministic stub.
 if (!window.matchMedia) {
   Object.defineProperty(window, "matchMedia", {
     configurable: true,

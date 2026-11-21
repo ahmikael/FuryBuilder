@@ -110,7 +110,7 @@ describe("editor UX scenarios", () => {
 
     expect(useEditorStore.getState().bottomPanelTab).toBe("history");
     expect(useEditorStore.getState().bottomPanelOpen).toBe(true);
-    expect(screen.getByRole("tab", { name: /History/ })).toHaveAttribute("data-state", "active");
+    expect(screen.getByRole("tab", { name: /History/ })).toHaveAttribute("aria-selected", "true");
   });
 
   it("filters the world tree instead of showing a dead search field", async () => {

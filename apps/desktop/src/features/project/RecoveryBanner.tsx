@@ -1,7 +1,7 @@
 import { AlertTriangle, CheckCircle2, RotateCcw, Save, X } from "lucide-react";
 import { useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/state/project-store";
 
 function formatRecoveredAt(ms: number): string | null {
@@ -49,27 +49,22 @@ export function RecoveryBanner() {
   };
 
   return (
-    <div
+    <Alert
       role="alert"
       aria-label="Crash recovery"
-      className={cn(
-        "flex flex-wrap items-start gap-3 border-b px-3 py-2 text-[11px]",
-        available
-          ? "border-status-warn/40 bg-status-warn/10"
-          : "border-border bg-muted/40 text-muted-foreground",
-      )}
+      className="rounded-none border-x-0 border-t-0 border-status-warn/40 bg-status-warn/10 px-4 py-3"
     >
       {available ? (
-        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-status-warn" />
+        <CheckCircle2 className="text-status-warn" />
       ) : (
-        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-status-warn" />
+        <AlertTriangle className="text-status-warn" />
       )}
-      <div className="min-w-48 flex-1 space-y-0.5">
-        <p className="font-medium text-foreground">
-          {available ? "Recovered unsaved changes" : "Crash recovery could not be applied"}
-        </p>
-        <p className="leading-relaxed">{recovery.reason}</p>
-        <p className="text-muted-foreground">
+      <AlertTitle className="text-sm">
+        {available ? "Recovered unsaved changes" : "Crash recovery could not be applied"}
+      </AlertTitle>
+      <AlertDescription>
+        <p className="text-sm text-status-warn">{recovery.reason}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
           {available ? (
             <>
               Autosave revision {autosaveRevision}
@@ -89,30 +84,30 @@ export function RecoveryBanner() {
             </>
           )}
         </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-1.5">
-        {available ? (
-          <>
-            <Button size="sm" onClick={() => void saveRecovered()} disabled={busy !== null}>
-              <Save className="size-3.5" />
-              {busy === "save" ? "Saving..." : "Save now"}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void discard()}
-              disabled={busy !== null}
-            >
-              <RotateCcw className="size-3.5" />
-              {busy === "discard" ? "Discarding..." : "Discard recovered changes"}
-            </Button>
-          </>
-        ) : null}
-        <Button size="sm" variant="ghost" onClick={dismissRecovery} disabled={busy !== null}>
-          <X className="size-3.5" />
-          {available ? "Later" : "Dismiss"}
-        </Button>
-      </div>
-    </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {available ? (
+            <>
+              <Button size="sm" onClick={() => void saveRecovered()} disabled={busy !== null}>
+                <Save data-icon="inline-start" />
+                {busy === "save" ? "Saving..." : "Save now"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void discard()}
+                disabled={busy !== null}
+              >
+                <RotateCcw data-icon="inline-start" />
+                {busy === "discard" ? "Discarding..." : "Discard recovered changes"}
+              </Button>
+            </>
+          ) : null}
+          <Button size="sm" variant="ghost" onClick={dismissRecovery} disabled={busy !== null}>
+            <X data-icon="inline-start" />
+            {available ? "Later" : "Dismiss"}
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
   );
 }

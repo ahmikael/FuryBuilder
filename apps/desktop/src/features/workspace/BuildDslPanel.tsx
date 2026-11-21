@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { Braces, Loader2, Play, RotateCcw, ScanLine } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { applyEditorOperation } from "@/editor/commands";
 import { previewBuildDsl } from "@/lib/build-dsl-api";
@@ -25,7 +34,7 @@ export function BuildDslPanel() {
 
   if (!editing) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Braces className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
           Build DSL recipes are validated and compiled by the Rust Core. Open the desktop app to
@@ -87,24 +96,20 @@ export function BuildDslPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 gap-2 text-[11px]" data-testid="build-dsl-panel">
-      <div className="flex min-h-0 flex-1 flex-col gap-1.5 rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-1.5">
+    <div className="flex min-h-0 flex-1 gap-4 text-sm" data-testid="build-dsl-panel">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 rounded-xl border bg-card p-4">
+        <div className="flex items-center gap-2">
           <Braces className="size-3 text-muted-foreground" />
-          <span className="text-[10px] font-semibold tracking-wide uppercase">Build DSL</span>
-          <span className="font-mono text-[8px] text-muted-foreground">schema 1 · house v1</span>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="ml-auto h-6 px-1.5 text-[10px]"
-            onClick={reset}
-            disabled={busy}
-          >
+          <span className="text-base font-semibold">Build DSL</span>
+          <Badge variant="secondary" className="font-mono">
+            schema 1 · house v1
+          </Badge>
+          <Button size="sm" variant="ghost" className="ml-auto" onClick={reset} disabled={busy}>
             <RotateCcw className="mr-1 size-3" /> Reset sample
           </Button>
         </div>
-        <textarea
-          className="scrollbar-thin min-h-0 flex-1 resize-none rounded border border-border bg-background p-2 font-mono text-[10px] leading-relaxed outline-none focus:border-primary/60"
+        <Textarea
+          className="scrollbar-thin min-h-0 flex-1 resize-none font-mono text-sm leading-relaxed"
           value={text}
           spellCheck={false}
           aria-label="Build DSL recipe"
@@ -139,18 +144,18 @@ export function BuildDslPanel() {
             <Play className="mr-1 size-3" /> Apply compiled
           </Button>
         </div>
-        <p className="text-[9px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Data only: no JavaScript, shell or file access. The Core compiles the recipe into one
           reversible Batch (max 64 houses, 16,384 blocks), then the ordinary preview and workspace
           policy run before any write.
         </p>
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-2 overflow-y-auto rounded border border-border bg-background/40 p-2">
-        <div className="text-[10px] font-semibold tracking-wide uppercase">Preview</div>
+      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-3 overflow-y-auto rounded-xl border bg-card p-4">
+        <div className="text-sm font-semibold">Preview</div>
         {preview ? (
           <>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[9px] text-muted-foreground">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-muted-foreground">
               <span>houses: {preview.summary.houses}</span>
               <span>blocks: {preview.summary.blocks.toLocaleString()}</span>
               <span>affected: {preview.preview.affectedBlocks.toLocaleString()}</span>
@@ -164,23 +169,30 @@ export function BuildDslPanel() {
               <span className="col-span-2">dirty chunks: {preview.preview.dirtyChunks.length}</span>
             </div>
             {[...preview.summary.warnings, ...preview.preview.warnings].map((warning) => (
-              <p key={warning} className="text-[9px] text-status-warn">
+              <p key={warning} className="text-xs text-status-warn">
                 {warning}
               </p>
             ))}
-            <p className="text-[9px] text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               Apply uses the same revision-checked operation path as manual edits. The compiled
               operation is not written until you press Apply.
             </p>
           </>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-[10px] text-muted-foreground">
-            <Braces className="size-5 text-muted-foreground/50" />
-            <p>Compile a recipe to see its budget and exact preview.</p>
-          </div>
+          <Empty className="h-full border-0">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Braces />
+              </EmptyMedia>
+              <EmptyTitle>Nothing compiled yet</EmptyTitle>
+              <EmptyDescription>
+                Compile a recipe to see its budget and exact preview.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {error ? (
-          <div className="rounded border border-status-error/30 bg-status-error/5 p-1 text-[9px] text-status-error">
+          <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
             {error}
           </div>
         ) : null}

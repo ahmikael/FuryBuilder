@@ -1,5 +1,7 @@
 import { Moon, Sun, SunMoon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +11,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Slider } from "@/components/ui/slider";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { MinecraftAssetsSection } from "@/features/settings/MinecraftAssetsSection";
 import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
 import { MinecraftServerSection } from "@/features/settings/MinecraftServerSection";
@@ -31,6 +35,10 @@ const themes: Array<{ value: ThemeMode; label: string; icon: typeof Sun }> = [
   { value: "system", label: "System", icon: SunMoon },
 ];
 
+function isThemeMode(value: string | undefined): value is ThemeMode {
+  return value === "dark" || value === "light" || value === "system";
+}
+
 export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogProps) {
   const theme = useEditorStore((state) => state.theme);
   const setTheme = useEditorStore((state) => state.setTheme);
@@ -39,74 +47,89 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] max-w-xl overflow-x-hidden overflow-y-auto">
+      <DialogContent className="max-h-[90vh] max-w-4xl gap-8 overflow-x-hidden overflow-y-auto p-8">
         <DialogHeader>
-          <DialogTitle>Settings</DialogTitle>
+          <DialogTitle className="text-xl">Settings</DialogTitle>
           <DialogDescription>
             UI preferences are stored locally. World data is never stored in the browser.
           </DialogDescription>
         </DialogHeader>
 
-        <section className="space-y-2">
-          <h3 className="text-[11px] font-semibold tracking-wide uppercase">Appearance</h3>
-          <div className="flex items-center gap-1">
-            {themes.map((option) => {
-              const Icon = option.icon;
-              return (
-                <Button
-                  key={option.value}
-                  variant={theme === option.value ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setTheme(option.value)}
+        <section className="space-y-4">
+          <h3 className="text-base font-semibold">Appearance</h3>
+          <Card className="gap-0 py-0">
+            <CardContent className="space-y-6 p-6">
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="w-24 text-sm text-muted-foreground">Theme</span>
+                <ToggleGroup
+                  variant="outline"
+                  spacing={0}
+                  value={[theme]}
+                  onValueChange={(value) => {
+                    const next = value[0];
+                    if (isThemeMode(next)) setTheme(next);
+                  }}
                 >
-                  <Icon /> {option.label}
-                </Button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-3 pt-1">
-            <span className="w-24 text-[11px] text-muted-foreground">UI scale</span>
-            <input
-              type="range"
-              min={MIN_UI_SCALE}
-              max={MAX_UI_SCALE}
-              step={0.05}
-              value={uiScale}
-              onChange={(event) => setUiScale(Number(event.target.value))}
-              className="h-1.5 flex-1 accent-[var(--primary)]"
-              aria-label="UI scale"
-            />
-            <span className="w-10 text-right font-mono text-[11px]">
-              {Math.round(uiScale * 100)}%
-            </span>
-          </div>
+                  {themes.map((option) => {
+                    const Icon = option.icon;
+                    return (
+                      <ToggleGroupItem key={option.value} value={option.value}>
+                        <Icon data-icon="inline-start" />
+                        {option.label}
+                      </ToggleGroupItem>
+                    );
+                  })}
+                </ToggleGroup>
+              </div>
+              <div className="flex flex-wrap items-center gap-4">
+                <span className="w-24 text-sm text-muted-foreground">UI scale</span>
+                <Slider
+                  min={MIN_UI_SCALE}
+                  max={MAX_UI_SCALE}
+                  step={0.05}
+                  value={uiScale}
+                  onValueChange={(value) => {
+                    const next = Array.isArray(value) ? value[0] : value;
+                    if (typeof next === "number") setUiScale(next);
+                  }}
+                  aria-label="UI scale"
+                  className="max-w-md flex-1"
+                />
+                <Badge variant="secondary" className="w-14 justify-center font-mono">
+                  {Math.round(uiScale * 100)}%
+                </Badge>
+              </div>
+            </CardContent>
+          </Card>
         </section>
 
         <Separator />
 
-        <section className="space-y-1.5">
-          <h3 className="text-[11px] font-semibold tracking-wide uppercase">Backend</h3>
-          <div className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1 rounded border border-border bg-background/40 p-2 text-[11px]">
-            <span className="text-muted-foreground">Status</span>
-            <span
-              className={cn(
-                "font-mono",
-                backend.status === "online" ? "text-status-ok" : "text-status-warn",
-              )}
-            >
-              {backend.status}
-            </span>
-            <span className="text-muted-foreground">Application</span>
-            <span className="font-mono">{backend.info?.name ?? "FuryBuilder"}</span>
-            <span className="text-muted-foreground">Version</span>
-            <span className="font-mono">{backend.info?.version ?? "0.1.0"}</span>
-            <span className="text-muted-foreground">Minecraft target</span>
-            <span className="font-mono">
-              {backend.info?.targetMinecraftVersion ?? "1.21.4"} · DV{" "}
-              {backend.info?.targetDataVersion ?? 4189}
-            </span>
-          </div>
-          {backend.error ? <p className="text-[10px] text-status-warn">{backend.error}</p> : null}
+        <section className="space-y-4">
+          <h3 className="text-base font-semibold">Backend</h3>
+          <Card className="gap-0 py-0">
+            <CardContent className="grid grid-cols-[160px_1fr] gap-x-4 gap-y-3 p-6 text-sm">
+              <span className="text-muted-foreground">Status</span>
+              <span
+                className={cn(
+                  "font-mono",
+                  backend.status === "online" ? "text-status-ok" : "text-status-warn",
+                )}
+              >
+                {backend.status}
+              </span>
+              <span className="text-muted-foreground">Application</span>
+              <span className="font-mono">{backend.info?.name ?? "FuryBuilder"}</span>
+              <span className="text-muted-foreground">Version</span>
+              <span className="font-mono">{backend.info?.version ?? "0.1.0"}</span>
+              <span className="text-muted-foreground">Minecraft target</span>
+              <span className="font-mono">
+                {backend.info?.targetMinecraftVersion ?? "1.21.4"} · DV{" "}
+                {backend.info?.targetDataVersion ?? 4189}
+              </span>
+            </CardContent>
+          </Card>
+          {backend.error ? <p className="text-sm text-status-warn">{backend.error}</p> : null}
         </section>
 
         <Separator />
@@ -119,17 +142,13 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
         <Separator />
 
-        <div className="min-w-0 space-y-3">
-          <div className="space-y-1">
+        <div className="min-w-0 space-y-4">
+          <div className="space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-[11px] font-semibold tracking-wide uppercase">
-                Java &amp; World Generation
-              </h3>
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
-                Optional for Empty Project
-              </span>
+              <h3 className="text-base font-semibold">Java &amp; World Generation</h3>
+              <Badge variant="secondary">Optional for Empty Project</Badge>
             </div>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-sm text-muted-foreground">
               These components are only needed to generate a real Vanilla World. Discovery is local;
               downloads start only from the explicit buttons below and are verified before use.
             </p>
@@ -147,7 +166,7 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
         <DiagnosticsSection />
 
         <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>

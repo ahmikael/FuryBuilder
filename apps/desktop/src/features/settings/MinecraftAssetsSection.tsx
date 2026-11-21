@@ -11,7 +11,17 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import type {
   AssetDiscoveryReport,
   AssetPathReport,
@@ -237,178 +247,197 @@ export function MinecraftAssetsSection() {
     : "Minecraft 1.21.4 · DV 4189 · pack format 46";
 
   return (
-    <section className="min-w-0 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-semibold tracking-wide uppercase">Minecraft assets</h3>
-        <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-muted-foreground">
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Minecraft assets</h3>
+        <Badge variant="secondary" className="font-mono">
           {targetVersion}
-        </span>
+        </Badge>
       </div>
 
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Read-only discovery of an installed Java Edition. FuryBuilder never downloads, extracts or
         redistributes Mojang files; Empty Project keeps using placeholder textures when nothing is
         found.
       </p>
 
       {busy === "load" ? (
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-          <Loader2 className="size-3 animate-spin" /> Scanning launcher folders…
-        </div>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Scanning launcher folders…
+        </p>
       ) : null}
 
       {saved?.source ? (
-        <div className="space-y-1 rounded border border-border bg-card/60 p-2 text-[10px]">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="rounded bg-status-ok/15 px-1 py-0.5 text-[8px] font-semibold uppercase text-status-ok">
-              selected
-            </span>
-            <span className="font-mono">{saved.source.kind.replaceAll("_", " ")}</span>
-          </div>
-          <div className="truncate font-mono text-muted-foreground" title={saved.source.path}>
-            {compactPath(saved.source.path)}
-          </div>
-          {saved.report && !saved.report.valid ? (
-            <div className="text-status-error">
-              The saved path is no longer valid: {saved.report.errors[0]}
+        <Card className="gap-0 py-0">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge>Selected</Badge>
+              <span className="font-mono text-sm">{saved.source.kind.replaceAll("_", " ")}</span>
             </div>
-          ) : null}
-          {saved.loadWarning ? (
-            <div className="text-status-warn">Settings warning: {saved.loadWarning}</div>
-          ) : null}
-        </div>
+            <p
+              className="truncate font-mono text-xs text-muted-foreground"
+              title={saved.source.path}
+            >
+              {compactPath(saved.source.path)}
+            </p>
+            {saved.report && !saved.report.valid ? (
+              <p className="text-sm text-status-error">
+                The saved path is no longer valid: {saved.report.errors[0]}
+              </p>
+            ) : null}
+            {saved.loadWarning ? (
+              <p className="text-sm text-status-warn">Settings warning: {saved.loadWarning}</p>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : (
-        <div className="rounded border border-border bg-background/40 p-2 text-[10px] text-muted-foreground">
-          No Minecraft asset source is selected. Placeholder textures remain active.
-        </div>
+        <Empty className="border p-6">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <HardDrive />
+            </EmptyMedia>
+            <EmptyTitle>No asset source selected</EmptyTitle>
+            <EmptyDescription>
+              No Minecraft asset source is selected. Placeholder textures remain active.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
-      <div className="space-y-1.5 rounded border border-border bg-card/40 p-2 text-[10px]">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold tracking-wide uppercase">
-            Resource pack stack
-          </span>
-          <span className="font-mono text-[9px] text-muted-foreground">
-            {packs.length}/16 · highest first
-          </span>
-        </div>
-        {packs.length === 0 ? (
-          <p className="text-[10px] text-muted-foreground">
-            No user packs. Verified assets from the selected source are used directly.
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {packs.map((pack, index) => (
-              <div
-                key={pack.path}
-                className="rounded border border-border/70 bg-background/40 p-1.5"
-              >
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-mono text-[9px] text-muted-foreground">#{index + 1}</span>
-                  <span className="truncate font-medium" title={pack.name}>
-                    {pack.name}
-                  </span>
-                  <span
-                    className={cn(
-                      "ml-auto rounded px-1 py-0.5 font-mono text-[8px]",
-                      pack.status === "compatible"
-                        ? "bg-status-ok/15 text-status-ok"
-                        : "bg-status-warn/15 text-status-warn",
-                    )}
-                  >
-                    format {pack.packFormat ?? "?"} · {pack.status.replaceAll("_", " ")}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    aria-label={`Move ${pack.name} up`}
-                    disabled={index === 0 || busy !== null}
-                    onClick={() => void movePack(index, -1)}
-                  >
-                    <ArrowUp />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6"
-                    aria-label={`Move ${pack.name} down`}
-                    disabled={index === packs.length - 1 || busy !== null}
-                    onClick={() => void movePack(index, 1)}
-                  >
-                    <ArrowDown />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="size-6 text-status-warn"
-                    aria-label={`Remove ${pack.name}`}
-                    disabled={busy !== null}
-                    onClick={() => void removePack(pack.path)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-                <div
-                  className="truncate font-mono text-[9px] text-muted-foreground"
-                  title={pack.path}
-                >
-                  {compactPath(pack.path)}
-                </div>
-                {pack.errors.slice(0, 2).map((message) => (
-                  <div key={message} className="text-[9px] text-status-warn">
-                    {message}
-                  </div>
-                ))}
-              </div>
-            ))}
+      <Card className="gap-0 py-0">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-sm font-medium">Resource pack stack</h4>
+            <span className="font-mono text-xs text-muted-foreground">
+              {packs.length}/16 · highest first
+            </span>
           </div>
-        )}
-        <div className="flex flex-wrap gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void addPack("zip")}
-            disabled={busy !== null}
-          >
-            {busy === "pack" ? <Loader2 className="animate-spin" /> : <FolderOpen />} Add pack .zip
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void addPack("folder")}
-            disabled={busy !== null}
-          >
-            {busy === "pack" ? <Loader2 className="animate-spin" /> : <FolderOpen />} Add pack
-            folder
-          </Button>
-          {packs.length > 0 ? (
+          {packs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No user packs. Verified assets from the selected source are used directly.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {packs.map((pack, index) => (
+                <div key={pack.path} className="rounded-xl border bg-background p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-xs text-muted-foreground">#{index + 1}</span>
+                    <span className="truncate text-sm font-medium" title={pack.name}>
+                      {pack.name}
+                    </span>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "ml-auto font-mono",
+                        pack.status === "compatible" ? "text-status-ok" : "text-status-warn",
+                      )}
+                    >
+                      format {pack.packFormat ?? "?"} · {pack.status.replaceAll("_", " ")}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Move ${pack.name} up`}
+                      disabled={index === 0 || busy !== null}
+                      onClick={() => void movePack(index, -1)}
+                    >
+                      <ArrowUp />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Move ${pack.name} down`}
+                      disabled={index === packs.length - 1 || busy !== null}
+                      onClick={() => void movePack(index, 1)}
+                    >
+                      <ArrowDown />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-status-warn"
+                      aria-label={`Remove ${pack.name}`}
+                      disabled={busy !== null}
+                      onClick={() => void removePack(pack.path)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <p
+                    className="mt-1 truncate font-mono text-xs text-muted-foreground"
+                    title={pack.path}
+                  >
+                    {compactPath(pack.path)}
+                  </p>
+                  {pack.errors.slice(0, 2).map((message) => (
+                    <p key={message} className="mt-1 text-xs text-status-warn">
+                      {message}
+                    </p>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              onClick={() => void writePacks([], "Resource pack stack cleared.")}
+              onClick={() => void addPack("zip")}
               disabled={busy !== null}
             >
-              <X /> Clear stack
+              {busy === "pack" ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <FolderOpen data-icon="inline-start" />
+              )}
+              Add pack .zip
             </Button>
-          ) : null}
-        </div>
-        <p className="text-[9px] text-muted-foreground">
-          Packs override blockstates, models and textures by path. Files are read in memory;
-          traversal, symlinks and wrong pack formats are refused.
-        </p>
-      </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void addPack("folder")}
+              disabled={busy !== null}
+            >
+              {busy === "pack" ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <FolderOpen data-icon="inline-start" />
+              )}
+              Add pack folder
+            </Button>
+            {packs.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => void writePacks([], "Resource pack stack cleared.")}
+                disabled={busy !== null}
+              >
+                <X data-icon="inline-start" />
+                Clear stack
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Packs override blockstates, models and textures by path. Files are read in memory;
+            traversal, symlinks and wrong pack formats are refused.
+          </p>
+        </CardContent>
+      </Card>
 
       {discovery ? (
-        <div className="space-y-1.5">
+        <div className="space-y-3">
+          <h4 className="text-sm font-medium">Detected installations</h4>
           {discovery.installations.length === 0 ? (
-            <div className="space-y-1 rounded border border-status-warn/30 bg-status-warn/5 p-2 text-[10px] text-status-warn">
-              <div className="font-medium">Automatic detection found no Java Edition.</div>
-              {discovery.problems.map((problem) => (
-                <div key={problem}>{problem}</div>
-              ))}
-              <div className="text-muted-foreground">{discovery.manualHint}</div>
-            </div>
+            <Alert className="p-4">
+              <ShieldAlert />
+              <AlertTitle>Automatic detection found no Java Edition.</AlertTitle>
+              <AlertDescription>
+                {discovery.problems.map((problem) => (
+                  <p key={problem}>{problem}</p>
+                ))}
+                <p>{discovery.manualHint}</p>
+              </AlertDescription>
+            </Alert>
           ) : (
             discovery.installations.map((installation) => (
               <InstallationCard
@@ -424,19 +453,28 @@ export function MinecraftAssetsSection() {
       {inspection ? <InspectionCard report={inspection} /> : null}
 
       {error ? (
-        <div className="rounded border border-status-error/30 bg-status-error/5 p-2 text-[10px] text-status-error">
-          {error}
-        </div>
+        <Alert variant="destructive" className="p-4">
+          <ShieldAlert />
+          <AlertTitle>Asset source error</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
       {notice ? (
-        <div className="rounded border border-status-ok/30 bg-status-ok/5 p-2 text-[10px] text-status-ok">
-          {notice}
-        </div>
+        <Alert className="p-4">
+          <CheckCircle2 />
+          <AlertTitle>Minecraft assets updated</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         <Button variant="outline" size="sm" onClick={() => void detect()} disabled={busy !== null}>
-          {busy === "detect" ? <Loader2 className="animate-spin" /> : <RefreshCw />} Detect again
+          {busy === "detect" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <RefreshCw data-icon="inline-start" />
+          )}
+          Detect again
         </Button>
         <Button
           variant="outline"
@@ -444,7 +482,12 @@ export function MinecraftAssetsSection() {
           onClick={() => void chooseFolder("minecraft_root", "root")}
           disabled={busy !== null}
         >
-          {busy === "root" ? <Loader2 className="animate-spin" /> : <FolderOpen />} .minecraft
+          {busy === "root" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <FolderOpen data-icon="inline-start" />
+          )}
+          .minecraft
         </Button>
         <Button
           variant="outline"
@@ -452,7 +495,12 @@ export function MinecraftAssetsSection() {
           onClick={() => void chooseFile("client_jar", "jar")}
           disabled={busy !== null}
         >
-          {busy === "jar" ? <Loader2 className="animate-spin" /> : <HardDrive />} client.jar
+          {busy === "jar" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <HardDrive data-icon="inline-start" />
+          )}
+          client.jar
         </Button>
         <Button
           variant="outline"
@@ -460,7 +508,12 @@ export function MinecraftAssetsSection() {
           onClick={() => void chooseFile("resource_pack", "pack-zip")}
           disabled={busy !== null}
         >
-          {busy === "pack-zip" ? <Loader2 className="animate-spin" /> : <FolderOpen />} Pack .zip
+          {busy === "pack-zip" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <FolderOpen data-icon="inline-start" />
+          )}
+          Pack .zip
         </Button>
         <Button
           variant="outline"
@@ -468,12 +521,21 @@ export function MinecraftAssetsSection() {
           onClick={() => void chooseFolder("resource_pack", "pack-folder")}
           disabled={busy !== null}
         >
-          {busy === "pack-folder" ? <Loader2 className="animate-spin" /> : <FolderOpen />} Pack
-          folder
+          {busy === "pack-folder" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <FolderOpen data-icon="inline-start" />
+          )}
+          Pack folder
         </Button>
         {saved?.source ? (
           <Button variant="ghost" size="sm" onClick={() => void forget()} disabled={busy !== null}>
-            {busy === "clear" ? <Loader2 className="animate-spin" /> : <X />} Forget
+            {busy === "clear" ? (
+              <Loader2 data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <X data-icon="inline-start" />
+            )}
+            Forget
           </Button>
         ) : null}
         <Button
@@ -483,11 +545,16 @@ export function MinecraftAssetsSection() {
           disabled={busy !== null}
           aria-label="Clear derived asset cache"
         >
-          {busy === "cache" ? <Loader2 className="animate-spin" /> : <Trash2 />} Clear asset cache
+          {busy === "cache" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <Trash2 data-icon="inline-start" />
+          )}
+          Clear asset cache
         </Button>
       </div>
 
-      <p className="text-[9px] text-muted-foreground">
+      <p className="text-xs leading-relaxed text-muted-foreground">
         Derived model/texture bundles are cached in memory so repeated viewport loads stay fast.
         Clear the asset cache after replacing a JAR or pack outside FuryBuilder; world data is never
         touched. JARs are pinned to the client SHA-1 declared by the launcher metadata. Archive
@@ -510,55 +577,48 @@ function InstallationCard({
     (version) => version.status === "compatible" || version.status === "compatible_unverified",
   );
   return (
-    <div className="space-y-1 rounded border border-border bg-card/60 p-2 text-[10px]">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className={cn(
-            "rounded px-1 py-0.5 text-[8px] font-semibold uppercase",
-            compatible.length > 0
-              ? "bg-status-ok/15 text-status-ok"
-              : "bg-status-warn/15 text-status-warn",
-          )}
-        >
-          {compatible.length > 0 ? "target found" : "no target"}
-        </span>
-        <span className="font-mono text-muted-foreground">
-          {installation.source.replaceAll("_", " ")}
-        </span>
-        <span className="truncate font-mono" title={installation.root}>
-          {compactPath(installation.root, 48)}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-1 text-[9px] text-muted-foreground">
-        <span>{installation.versions.length} version(s)</span>
-        <span>·</span>
-        <span>{installation.assetIndexes} asset index(es)</span>
-        <span>·</span>
-        <span>{installation.resourcePacks.length} resource pack(s)</span>
-        {installation.compatibleVersions.length > 0 ? (
-          <>
-            <span>·</span>
-            <span className="text-status-ok">{installation.compatibleVersions.join(", ")}</span>
-          </>
-        ) : null}
-      </div>
-      {compatible.length > 0 ? (
-        compatible
-          .slice(0, 3)
-          .map((version) => <VersionLine key={version.id} version={version} target={target} />)
-      ) : (
-        <div className="text-status-warn">
-          No verified {target} client. {installation.warnings[0] ?? "Choose a client.jar manually."}
+    <Card className="gap-0 py-0">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={compatible.length > 0 ? "secondary" : "outline"} className="uppercase">
+            {compatible.length > 0 ? "target found" : "no target"}
+          </Badge>
+          <span className="font-mono text-xs text-muted-foreground">
+            {installation.source.replaceAll("_", " ")}
+          </span>
+          <span className="truncate font-mono text-xs" title={installation.root}>
+            {compactPath(installation.root, 48)}
+          </span>
         </div>
-      )}
-    </div>
+        <p className="text-xs text-muted-foreground">
+          {installation.versions.length} version(s) · {installation.assetIndexes} asset index(es) ·{" "}
+          {installation.resourcePacks.length} resource pack(s)
+          {installation.compatibleVersions.length > 0 ? (
+            <>
+              {" · "}
+              <span className="text-status-ok">{installation.compatibleVersions.join(", ")}</span>
+            </>
+          ) : null}
+        </p>
+        {compatible.length > 0 ? (
+          compatible
+            .slice(0, 3)
+            .map((version) => <VersionLine key={version.id} version={version} target={target} />)
+        ) : (
+          <p className="text-sm text-status-warn">
+            No verified {target} client.{" "}
+            {installation.warnings[0] ?? "Choose a client.jar manually."}
+          </p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 function VersionLine({ version, target }: { version: VersionReport; target: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-1.5 text-[9px]">
-      <CheckCircle2 className="size-3 text-status-ok" />
+    <div className="flex flex-wrap items-center gap-2 text-xs">
+      <CheckCircle2 className="size-3.5 text-status-ok" />
       <span className="font-mono">{version.id}</span>
       <span className="text-muted-foreground">DV {version.worldVersion ?? "?"}</span>
       <span className="text-muted-foreground">
@@ -576,63 +636,58 @@ function VersionLine({ version, target }: { version: VersionReport; target: stri
 
 function InspectionCard({ report }: { report: AssetPathReport }) {
   return (
-    <div className="space-y-1 rounded border border-border bg-background/40 p-2 text-[10px]">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span
-          className={cn(
-            "rounded px-1 py-0.5 text-[8px] font-semibold uppercase",
-            report.valid
-              ? "bg-status-ok/15 text-status-ok"
-              : "bg-status-error/15 text-status-error",
-          )}
-        >
-          {report.valid ? "usable" : "refused"}
-        </span>
-        <span className="font-mono">{report.kind.replaceAll("_", " ")}</span>
-        <span className="truncate text-muted-foreground" title={report.path}>
-          {compactPath(report.path, 46)}
-        </span>
-      </div>
-      {report.version ? (
-        <div className="flex flex-wrap items-center gap-1.5 text-[9px]">
-          {report.version.checksumVerified ? (
-            <CheckCircle2 className="size-3 text-status-ok" />
-          ) : (
-            <ShieldAlert className="size-3 text-status-warn" />
-          )}
-          <span className="font-mono">{report.version.id}</span>
-          <span className="text-muted-foreground">
-            {report.version.status.replaceAll("_", " ")}
-          </span>
-          <span className="text-muted-foreground">DV {report.version.worldVersion ?? "?"}</span>
-          <span className="text-muted-foreground">
-            pack {report.version.resourcePackFormat ?? "?"}
+    <Card className="gap-0 py-0">
+      <CardContent className="space-y-3 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={report.valid ? "secondary" : "outline"} className="uppercase">
+            {report.valid ? "usable" : "refused"}
+          </Badge>
+          <span className="font-mono text-sm">{report.kind.replaceAll("_", " ")}</span>
+          <span className="truncate text-xs text-muted-foreground" title={report.path}>
+            {compactPath(report.path, 46)}
           </span>
         </div>
-      ) : null}
-      {report.resourcePack ? (
-        <div className="flex flex-wrap items-center gap-1.5 text-[9px]">
-          <span className="font-mono">{report.resourcePack.name}</span>
-          <span className="text-muted-foreground">
-            {report.resourcePack.status.replaceAll("_", " ")}
-          </span>
-          <span className="text-muted-foreground">
-            format {report.resourcePack.packFormat ?? report.resourcePack.supportedFormats ?? "?"}
-          </span>
-          <span className="text-muted-foreground">{report.resourcePack.entryCount} entries</span>
-        </div>
-      ) : null}
-      {report.errors.slice(0, 3).map((error) => (
-        <div key={error} className="text-status-error">
-          {error}
-        </div>
-      ))}
-      {report.warnings.slice(0, 3).map((warning) => (
-        <div key={warning} className="text-status-warn">
-          {warning}
-        </div>
-      ))}
-    </div>
+        {report.version ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {report.version.checksumVerified ? (
+              <CheckCircle2 className="size-3.5 text-status-ok" />
+            ) : (
+              <ShieldAlert className="size-3.5 text-status-warn" />
+            )}
+            <span className="font-mono">{report.version.id}</span>
+            <span className="text-muted-foreground">
+              {report.version.status.replaceAll("_", " ")}
+            </span>
+            <span className="text-muted-foreground">DV {report.version.worldVersion ?? "?"}</span>
+            <span className="text-muted-foreground">
+              pack {report.version.resourcePackFormat ?? "?"}
+            </span>
+          </div>
+        ) : null}
+        {report.resourcePack ? (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="font-mono">{report.resourcePack.name}</span>
+            <span className="text-muted-foreground">
+              {report.resourcePack.status.replaceAll("_", " ")}
+            </span>
+            <span className="text-muted-foreground">
+              format {report.resourcePack.packFormat ?? report.resourcePack.supportedFormats ?? "?"}
+            </span>
+            <span className="text-muted-foreground">{report.resourcePack.entryCount} entries</span>
+          </div>
+        ) : null}
+        {report.errors.slice(0, 3).map((error) => (
+          <p key={error} className="text-sm text-status-error">
+            {error}
+          </p>
+        ))}
+        {report.warnings.slice(0, 3).map((warning) => (
+          <p key={warning} className="text-sm text-status-warn">
+            {warning}
+          </p>
+        ))}
+      </CardContent>
+    </Card>
   );
 }
 

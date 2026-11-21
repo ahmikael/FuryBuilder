@@ -24,8 +24,26 @@ import {
   Wrench,
   X,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BackendState } from "@/hooks/use-backend";
 import type { BlockDefinition } from "@/editor/types";
@@ -102,21 +120,32 @@ function PalettePanel() {
 
   if (!isTauriRuntime()) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
-        <Blocks className="size-5 text-muted-foreground/60" />
-        <p className="max-w-md leading-relaxed">
-          The block catalog is served by the Rust core (curated 1.21.4 states). Browser preview mode
-          can inspect the demo scene, but palette selection and world edits need the desktop app.
-        </p>
-      </div>
+      <Empty className="h-full border-0">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <Blocks />
+          </EmptyMedia>
+          <EmptyTitle>Desktop core required</EmptyTitle>
+          <EmptyDescription>
+            The block catalog is served by the Rust core (curated 1.21.4 states). Browser preview
+            mode can inspect the demo scene, but palette selection and world edits need the desktop
+            app.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   if (error) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 text-[11px] text-muted-foreground">
-        <AlertTriangle className="size-5 text-status-warn" />
-        <p>Block catalog unavailable: {error}</p>
+      <Empty className="h-full border-0">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <AlertTriangle className="text-status-warn" />
+          </EmptyMedia>
+          <EmptyTitle>Block catalog unavailable</EmptyTitle>
+          <EmptyDescription>{error}</EmptyDescription>
+        </EmptyHeader>
         <Button
           size="sm"
           variant="outline"
@@ -131,17 +160,17 @@ function PalettePanel() {
         >
           Retry
         </Button>
-      </div>
+      </Empty>
     );
   }
 
   return (
-    <div className="flex min-h-0 flex-1 gap-2">
-      <div className="flex min-h-0 w-72 flex-col gap-1.5">
+    <div className="flex min-h-0 flex-1 gap-4">
+      <div className="flex min-h-0 w-80 flex-col gap-3">
         <div className="relative">
-          <Search className="absolute top-1/2 left-2 size-3 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            className="h-6 pl-7"
+            className="h-9 pl-9"
             placeholder={catalog ? `Search ${catalog.length} blocks…` : "Loading catalog…"}
             value={search}
             disabled={!catalog}
@@ -149,13 +178,13 @@ function PalettePanel() {
             aria-label="Search blocks"
           />
         </div>
-        <div className="scrollbar-thin flex min-h-0 flex-1 flex-wrap content-start gap-1 overflow-y-auto">
+        <div className="scrollbar-thin flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto">
           {!catalog ? (
-            <div className="flex items-center gap-1.5 p-1 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1.5 p-1 text-xs text-muted-foreground">
               <Loader2 className="size-3 animate-spin" /> Reading block registry…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-1 text-[10px] text-muted-foreground">
+            <div className="p-1 text-xs text-muted-foreground">
               No curated block matches “{search}”.
             </div>
           ) : (
@@ -174,19 +203,17 @@ function PalettePanel() {
                     })
                   }
                   className={cn(
-                    "flex items-center gap-1.5 rounded border px-1.5 py-1",
+                    "flex items-center gap-2 rounded-md border px-2 py-1.5 transition-colors",
                     active
                       ? "border-primary/60 bg-primary/15 text-foreground"
-                      : "border-border bg-background/40 text-muted-foreground hover:border-border hover:bg-accent/40",
+                      : "border-border bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground",
                   )}
                 >
                   <span
-                    className="size-3.5 rounded-[2px] border border-black/30"
+                    className="size-4 rounded-sm border border-black/30"
                     style={{ backgroundColor: blockColor(entry.name) }}
                   />
-                  <span className="font-mono text-[9px]">
-                    {entry.name.replace("minecraft:", "")}
-                  </span>
+                  <span className="font-mono text-xs">{entry.name.replace("minecraft:", "")}</span>
                 </button>
               );
             })
@@ -194,93 +221,91 @@ function PalettePanel() {
         </div>
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 w-64 shrink-0 flex-col overflow-y-auto rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-2">
-          <span
-            className="size-6 rounded border border-black/30"
-            style={{ backgroundColor: blockColor(selectedBlock.name) }}
-          />
-          <div className="min-w-0">
-            <div className="truncate font-mono text-[10px]">{selectedBlock.name}</div>
-            <div className="text-[9px] text-muted-foreground">
-              {definition ? "Curated state" : "Custom state"} · brush/paste target
+      <Card className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-0 overflow-y-auto py-0">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex items-center gap-3">
+            <span
+              className="size-9 rounded-lg border border-black/30"
+              style={{ backgroundColor: blockColor(selectedBlock.name) }}
+            />
+            <div className="min-w-0">
+              <div className="truncate font-mono text-sm">{selectedBlock.name}</div>
+              <div className="text-xs text-muted-foreground">
+                {definition ? "Curated state" : "Custom state"} · brush/paste target
+              </div>
             </div>
           </div>
-        </div>
 
-        <div className="mt-2 space-y-1">
-          {properties.length === 0 ? (
-            <div className="text-[10px] text-muted-foreground">No state properties.</div>
-          ) : (
-            properties.map(([key, value]) => (
-              <label key={key} className="grid grid-cols-[1fr_1.4fr] items-center gap-1.5">
-                <span className="truncate font-mono text-[9px] text-muted-foreground">{key}</span>
-                <Input
-                  className="h-5 px-1 font-mono text-[9px]"
-                  value={value}
-                  aria-label={`Property ${key}`}
-                  onChange={(event) =>
-                    setSelectedBlock({
-                      ...selectedBlock,
-                      properties: {
-                        ...selectedBlock.properties,
-                        [key]: event.target.value,
-                      },
-                    })
-                  }
-                />
-              </label>
-            ))
-          )}
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-1">
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[10px]"
-            disabled={!definition}
-            onClick={() => {
-              if (definition) {
-                setSelectedBlock({
-                  name: definition.name,
-                  properties: { ...definition.properties },
-                });
-              }
-            }}
-          >
-            <RotateCcw className="mr-1 size-3" /> Defaults
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[10px]"
-            onClick={() => setReplaceFrom(selectedBlock)}
-          >
-            Use as replace source
-          </Button>
-        </div>
-
-        <div className="mt-2 rounded border border-border bg-card/40 p-1.5 text-[9px] leading-relaxed text-muted-foreground">
-          Replace source:{" "}
-          <span className="font-mono text-foreground/80">
-            {replaceFrom?.name.replace("minecraft:", "") ?? "not set"}
-          </span>
-          {replaceFrom ? (
-            <button
-              type="button"
-              aria-label="Clear replace source"
-              className="ml-1 rounded p-0.5 hover:bg-accent"
-              onClick={() => setReplaceFrom(null)}
-            >
-              <X className="inline size-2.5" />
-            </button>
-          ) : null}
-          <div className="mt-1">
-            Unknown property values are rejected by the Rust registry, never silently coerced.
+          <div className="space-y-2">
+            {properties.length === 0 ? (
+              <div className="text-xs text-muted-foreground">No state properties.</div>
+            ) : (
+              properties.map(([key, value]) => (
+                <label key={key} className="grid grid-cols-[1fr_1.4fr] items-center gap-1.5">
+                  <span className="truncate font-mono text-xs text-muted-foreground">{key}</span>
+                  <Input
+                    className="h-8 px-2 font-mono text-xs"
+                    value={value}
+                    aria-label={`Property ${key}`}
+                    onChange={(event) =>
+                      setSelectedBlock({
+                        ...selectedBlock,
+                        properties: {
+                          ...selectedBlock.properties,
+                          [key]: event.target.value,
+                        },
+                      })
+                    }
+                  />
+                </label>
+              ))
+            )}
           </div>
-        </div>
-      </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!definition}
+              onClick={() => {
+                if (definition) {
+                  setSelectedBlock({
+                    name: definition.name,
+                    properties: { ...definition.properties },
+                  });
+                }
+              }}
+            >
+              <RotateCcw data-icon="inline-start" />
+              Defaults
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setReplaceFrom(selectedBlock)}>
+              Use as replace source
+            </Button>
+          </div>
+
+          <div className="rounded-xl border bg-background p-3 text-xs leading-relaxed text-muted-foreground">
+            Replace source:{" "}
+            <span className="font-mono text-foreground/80">
+              {replaceFrom?.name.replace("minecraft:", "") ?? "not set"}
+            </span>
+            {replaceFrom ? (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="ml-1"
+                aria-label="Clear replace source"
+                onClick={() => setReplaceFrom(null)}
+              >
+                <X />
+              </Button>
+            ) : null}
+            <div className="mt-1.5">
+              Unknown property values are rejected by the Rust registry, never silently coerced.
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -297,19 +322,18 @@ function ToolsPanel() {
   const editing = isTauriRuntime();
 
   return (
-    <div className="flex gap-3">
-      <div className="flex max-w-sm flex-wrap content-start gap-1">
+    <div className="flex flex-wrap gap-4">
+      <div className="flex max-w-md flex-wrap content-start gap-2">
         {TOOLS.map((entry) => (
           <Button
             key={entry}
             size="sm"
             variant={tool === entry ? "default" : "outline"}
-            className="h-6 px-2 text-[10px]"
             disabled={!editing}
             onClick={() => setTool(entry)}
           >
             {TOOL_LABELS[entry]}
-            <span className="ml-1 font-mono text-[8px] opacity-60">
+            <span className="ml-1 font-mono text-xs opacity-60">
               {Object.entries(TOOL_SHORTCUTS)
                 .find(([, value]) => value === entry)?.[0]
                 ?.replace("Digit", "")}
@@ -318,73 +342,77 @@ function ToolsPanel() {
         ))}
       </div>
 
-      <div className="w-64 space-y-1 rounded border border-border bg-background/40 p-2 text-[10px]">
-        <label className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground">Brush radius</span>
-          <input
-            type="range"
-            min={1}
-            max={4}
-            step={1}
-            value={brushRadius}
-            disabled={!editing}
-            aria-label="Brush radius slider"
-            onChange={(event) => setBrushRadius(Number(event.target.value))}
-          />
-          <span className="font-mono">{brushRadius}</span>
-        </label>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-muted-foreground">Selection</span>
-          <span className="font-mono">
-            {selection
-              ? `${selection.max.x - selection.min.x + 1}×${selection.max.y - selection.min.y + 1}×${selection.max.z - selection.min.z + 1}`
-              : "—"}
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1 pt-1">
-          <Button
-            size="sm"
-            className="h-6 px-2 text-[10px]"
-            disabled={!editing || !selection || Boolean(job)}
-            onClick={() => void applyActiveTool("fill")}
-          >
-            Fill
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[10px]"
-            disabled={!editing || !selection || Boolean(job)}
-            onClick={() => void applyActiveTool("replace")}
-          >
-            Replace
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-6 px-2 text-[10px]"
-            disabled={!editing || !selection || Boolean(job)}
-            onClick={() => void deleteSelection()}
-          >
-            Delete
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-6 px-2 text-[10px]"
-            disabled={!selection}
-            onClick={() => setSelection(null)}
-          >
-            Clear selection
-          </Button>
-        </div>
-        <div className="truncate pt-1 text-[9px] text-muted-foreground">
-          Last operation:{" "}
-          {lastOperation
-            ? `${lastOperation.changedBlocks} blocks · rev ${lastOperation.revision}`
-            : "none"}
-        </div>
-      </div>
+      <Card className="w-80 shrink-0 gap-0 py-0">
+        <CardContent className="space-y-4 p-4 text-sm">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground">Brush radius</span>
+              <Badge variant="secondary" className="font-mono">
+                {brushRadius}
+              </Badge>
+            </div>
+            <Slider
+              min={1}
+              max={4}
+              step={1}
+              value={[brushRadius]}
+              disabled={!editing}
+              aria-label="Brush radius slider"
+              onValueChange={(value) => {
+                const next = Array.isArray(value) ? value[0] : value;
+                if (typeof next === "number") setBrushRadius(next);
+              }}
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-muted-foreground">Selection</span>
+            <span className="font-mono text-xs">
+              {selection
+                ? `${selection.max.x - selection.min.x + 1}×${selection.max.y - selection.min.y + 1}×${selection.max.z - selection.min.z + 1}`
+                : "—"}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              disabled={!editing || !selection || Boolean(job)}
+              onClick={() => void applyActiveTool("fill")}
+            >
+              Fill
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!editing || !selection || Boolean(job)}
+              onClick={() => void applyActiveTool("replace")}
+            >
+              Replace
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={!editing || !selection || Boolean(job)}
+              onClick={() => void deleteSelection()}
+            >
+              Delete
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={!selection}
+              onClick={() => setSelection(null)}
+            >
+              Clear selection
+            </Button>
+          </div>
+          <p className="truncate text-xs text-muted-foreground">
+            Last operation:{" "}
+            {lastOperation
+              ? `${lastOperation.changedBlocks} blocks · rev ${lastOperation.revision}`
+              : "none"}
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -436,110 +464,112 @@ function HistoryPanel() {
 
   return (
     <div className="flex h-full flex-col gap-1.5">
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           variant="outline"
-          className="h-6 px-2 text-[10px]"
           disabled={!editing || Boolean(job) || !canUndo}
           onClick={() => void undoWorld()}
         >
-          <Undo2 className="mr-1 size-3" /> Undo
+          <Undo2 data-icon="inline-start" />
+          Undo
         </Button>
         <Button
           size="sm"
           variant="outline"
-          className="h-6 px-2 text-[10px]"
           disabled={!editing || Boolean(job) || !canRedo}
           onClick={() => void redoWorld()}
         >
-          <Redo2 className="mr-1 size-3" /> Redo
+          <Redo2 data-icon="inline-start" />
+          Redo
         </Button>
-        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" onClick={refreshAll}>
-          <RotateCcw className="mr-1 size-3" /> Refresh
+        <Button size="sm" variant="ghost" onClick={refreshAll}>
+          <RotateCcw data-icon="inline-start" />
+          Refresh
         </Button>
-        <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+        <Badge variant="secondary" className="ml-auto font-mono">
           {loading ? "loading…" : `${entries.length} transaction(s)`}
-        </span>
+        </Badge>
       </div>
 
       {error ? (
-        <div className="text-[10px] text-status-warn">History unavailable: {error}</div>
+        <p className="text-sm text-status-warn">History unavailable: {error}</p>
       ) : entries.length === 0 ? (
-        <div className="flex flex-1 items-center gap-2 text-[11px] text-muted-foreground">
-          <History className="size-3.5" /> No transactions yet. Committed edits appear here.
-        </div>
+        <Empty className="min-h-24 border-0">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <History />
+            </EmptyMedia>
+            <EmptyTitle>No transactions yet</EmptyTitle>
+            <EmptyDescription>Committed edits appear here.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       ) : (
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto rounded border border-border">
-          <table className="w-full font-mono text-[9px]">
-            <thead className="sticky top-0 bg-card text-left text-muted-foreground">
-              <tr>
-                <th className="px-2 py-1 font-normal">operation</th>
-                <th className="px-2 py-1 font-normal">source</th>
-                <th className="px-2 py-1 font-normal">blocks</th>
-                <th className="px-2 py-1 font-normal">revision</th>
-                <th className="px-2 py-1 font-normal">time</th>
-              </tr>
-            </thead>
-            <tbody>
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto rounded-lg border">
+          <Table>
+            <TableHeader className="sticky top-0 bg-card">
+              <TableRow>
+                <TableHead>operation</TableHead>
+                <TableHead>source</TableHead>
+                <TableHead>blocks</TableHead>
+                <TableHead>revision</TableHead>
+                <TableHead>time</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {[...entries].reverse().map((entry) => (
-                <tr key={entry.operationId} className="border-t border-border/60">
-                  <td className="px-2 py-0.5">{entry.operationId.slice(0, 12)}</td>
-                  <td className="px-2 py-0.5">{entry.source}</td>
-                  <td className="px-2 py-0.5">{entry.changedBlocks.toLocaleString()}</td>
-                  <td className="px-2 py-0.5">
+                <TableRow key={entry.operationId} className="font-mono text-xs">
+                  <TableCell>{entry.operationId.slice(0, 12)}</TableCell>
+                  <TableCell>{entry.source}</TableCell>
+                  <TableCell>{entry.changedBlocks.toLocaleString()}</TableCell>
+                  <TableCell>
                     {entry.revisionBefore}→{entry.revisionAfter}
-                  </td>
-                  <td className="px-2 py-0.5">
-                    {new Date(entry.timestampMs).toLocaleTimeString()}
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{new Date(entry.timestampMs).toLocaleTimeString()}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       )}
 
       {project?.folder ? (
-        <div className="shrink-0 rounded border border-border bg-background/40">
-          <div className="flex items-center gap-1.5 border-b border-border/60 px-2 py-0.5 text-[9px] text-muted-foreground">
-            <Terminal className="size-2.5" />
+        <div className="shrink-0 rounded-lg border bg-background">
+          <div className="flex items-center gap-2 border-b px-3 py-2 text-xs text-muted-foreground">
+            <Terminal className="size-3.5" />
             <span>MCP activity</span>
             <span className="font-mono">
               {mcpActivityError ? "unavailable" : `${mcpActivity.length} recent call(s)`}
             </span>
           </div>
           {mcpActivityError ? (
-            <div className="px-2 py-1 text-[9px] text-status-warn">{mcpActivityError}</div>
+            <p className="px-3 py-2 text-sm text-status-warn">{mcpActivityError}</p>
           ) : mcpActivity.length === 0 ? (
-            <div className="px-2 py-1 text-[9px] text-muted-foreground">
+            <p className="px-3 py-2 text-sm text-muted-foreground">
               No authenticated MCP calls for this project yet.
-            </div>
+            </p>
           ) : (
-            <div className="scrollbar-thin max-h-20 overflow-y-auto">
-              <table className="w-full font-mono text-[9px]">
-                <thead className="sticky top-0 bg-card text-left text-muted-foreground">
-                  <tr>
-                    <th className="px-2 py-0.5 font-normal">time</th>
-                    <th className="px-2 py-0.5 font-normal">call</th>
-                    <th className="px-2 py-0.5 font-normal">status</th>
-                    <th className="px-2 py-0.5 font-normal">operation</th>
-                    <th className="px-2 py-0.5 font-normal">blocks</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="scrollbar-thin max-h-24 overflow-y-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-card">
+                  <TableRow>
+                    <TableHead>time</TableHead>
+                    <TableHead>call</TableHead>
+                    <TableHead>status</TableHead>
+                    <TableHead>operation</TableHead>
+                    <TableHead>blocks</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {mcpActivity.map((entry) => (
-                    <tr key={entry.sequence} className="border-t border-border/60">
-                      <td className="px-2 py-0.5">
-                        {new Date(entry.timestampMs).toLocaleTimeString()}
-                      </td>
-                      <td className="px-2 py-0.5">
+                    <TableRow key={entry.sequence} className="font-mono text-xs">
+                      <TableCell>{new Date(entry.timestampMs).toLocaleTimeString()}</TableCell>
+                      <TableCell>
                         {entry.method.replace(/_operation$/, "")}
                         {entry.confirmation ? ` · ${entry.confirmation}` : ""}
-                      </td>
-                      <td
+                      </TableCell>
+                      <TableCell
                         className={cn(
-                          "px-2 py-0.5",
                           entry.status === "ok"
                             ? "text-status-ok"
                             : entry.status === "denied"
@@ -549,17 +579,17 @@ function HistoryPanel() {
                         title={entry.errorCode ?? undefined}
                       >
                         {entry.status}
-                      </td>
-                      <td className="px-2 py-0.5">
+                      </TableCell>
+                      <TableCell>
                         {entry.operationId ? entry.operationId.slice(0, 12) : "—"}
-                      </td>
-                      <td className="px-2 py-0.5">
+                      </TableCell>
+                      <TableCell>
                         {entry.changedBlocks !== null ? entry.changedBlocks.toLocaleString() : "—"}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           )}
         </div>
@@ -574,55 +604,70 @@ function ConsolePanel({ backend }: { backend: BackendState }) {
   const syncState = useToolStore((state) => state.syncState);
   const revision = useWorldStore((state) => state.revision);
   return (
-    <div className="scrollbar-thin h-full overflow-y-auto rounded border border-border bg-background/60 p-2 font-mono text-[10px] leading-relaxed">
-      <div className="text-muted-foreground">FuryBuilder desktop · alpha</div>
-      <div>
-        <span className="text-status-ok">core</span>{" "}
-        {backend.status === "online"
-          ? `connected · v${backend.info?.version ?? "?"}`
-          : backend.status === "connecting"
-            ? "connecting…"
-            : "unavailable (browser preview)"}
-      </div>
-      {backend.error ? <div className="text-status-warn">{backend.error}</div> : null}
-      <div>world revision {revision}</div>
-      <div>save state {syncState}</div>
-      {job ? <div className="text-primary">job: {job.label}</div> : null}
-      {lastOperation ? (
-        <div className="text-muted-foreground">
-          last op {lastOperation.operationId.slice(0, 12)} · {lastOperation.changedBlocks} blocks ·
-          rev {lastOperation.revision}
-          {lastOperation.warnings.map((warning) => (
-            <div key={warning} className="text-status-warn">
-              warning: {warning}
-            </div>
-          ))}
+    <Card className="scrollbar-thin h-full gap-0 overflow-y-auto py-0 font-mono text-xs leading-relaxed">
+      <CardContent className="p-4">
+        <div className="text-muted-foreground">FuryBuilder desktop · alpha</div>
+        <div>
+          <span className="text-status-ok">core</span>{" "}
+          {backend.status === "online"
+            ? `connected · v${backend.info?.version ?? "?"}`
+            : backend.status === "connecting"
+              ? "connecting…"
+              : "unavailable (browser preview)"}
         </div>
-      ) : (
-        <div className="text-muted-foreground">No operations in this session yet.</div>
-      )}
-    </div>
+        {backend.error ? <div className="text-status-warn">{backend.error}</div> : null}
+        <div>world revision {revision}</div>
+        <div>save state {syncState}</div>
+        {job ? <div className="text-primary">job: {job.label}</div> : null}
+        {lastOperation ? (
+          <div className="text-muted-foreground">
+            last op {lastOperation.operationId.slice(0, 12)} · {lastOperation.changedBlocks} blocks
+            · rev {lastOperation.revision}
+            {lastOperation.warnings.map((warning) => (
+              <div key={warning} className="text-status-warn">
+                warning: {warning}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-muted-foreground">No operations in this session yet.</div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 function WarningsPanel() {
   const lastOperation = useToolStore((state) => state.lastOperation);
   const warnings = lastOperation?.warnings ?? [];
+  if (warnings.length === 0) {
+    return (
+      <Empty className="h-full border-0">
+        <EmptyHeader>
+          <EmptyMedia variant="icon">
+            <ShieldCheck />
+          </EmptyMedia>
+          <EmptyTitle>No operation warnings</EmptyTitle>
+          <EmptyDescription>Committed edits and validation issues appear here.</EmptyDescription>
+        </EmptyHeader>
+      </Empty>
+    );
+  }
   return (
-    <div className="space-y-1.5 text-[11px]">
+    <div className="space-y-2 text-sm">
       <div className="flex items-center gap-2 text-muted-foreground">
-        <AlertTriangle className="size-3.5" />
-        {warnings.length === 0 ? "No operation warnings." : `${warnings.length} warning(s)`}
+        <AlertTriangle className="size-4" />
+        {warnings.length} warning(s)
       </div>
       {warnings.map((warning) => (
         <div
           key={warning}
-          className="rounded border border-status-warn/30 bg-status-warn/5 px-2 py-1 text-[10px]"
+          className="rounded border border-status-warn/30 bg-status-warn/5 px-2 py-1 text-xs"
         >
           {warning}
         </div>
       ))}
-      <ul className="list-disc space-y-0.5 pl-5 text-[10px] text-muted-foreground">
+      <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
         <li>Textures are original placeholders, not Minecraft assets.</li>
         <li>Slabs, stairs, snow and torches use approximate shapes.</li>
         <li>Project persistence arrives in M5; edits live in the Rust session.</li>
@@ -657,7 +702,7 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
   const setBottomPanelTab = useEditorStore((state) => state.setBottomPanelTab);
   const setPanelOpen = useEditorStore((state) => state.setPanelOpen);
   return (
-    <section className="flex h-44 shrink-0 flex-col border-t border-border bg-card/50">
+    <section className="flex h-64 shrink-0 flex-col border-t bg-background">
       <Tabs
         value={bottomPanelTab}
         onValueChange={(value) => {
@@ -665,65 +710,68 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
         }}
         className="min-h-0 flex-1"
       >
-        <div className="flex h-8 items-center gap-2 border-b border-border px-2">
-          <TabsList>
-            {BOTTOM_PANEL_TABS.map((tab) => (
-              <TabsTrigger key={tab.id} value={tab.id}>
-                {TAB_ICONS[tab.id]} {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+        <div className="flex h-12 items-center gap-3 border-b px-3">
+          <div className="min-w-0 overflow-x-auto">
+            <TabsList>
+              {BOTTOM_PANEL_TABS.map((tab) => (
+                <TabsTrigger key={tab.id} value={tab.id}>
+                  {TAB_ICONS[tab.id]} {tab.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
+          <span className="ml-auto hidden shrink-0 font-mono text-xs text-muted-foreground lg:inline">
             active tool · {TOOL_LABELS[tool]}
           </span>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0"
             aria-label="Hide bottom panel"
             title="Hide bottom panel"
-            className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             onClick={() => setPanelOpen("bottom", false)}
           >
-            <PanelBottomClose className="size-3.5" />
-          </button>
+            <PanelBottomClose />
+          </Button>
         </div>
 
-        <TabsContent value="palette" className="m-0 flex min-h-0 flex-col p-2">
+        <TabsContent value="palette" className="m-0 flex min-h-0 flex-col p-4">
           <PalettePanel />
         </TabsContent>
 
-        <TabsContent value="tools" className="m-0 p-2">
+        <TabsContent value="tools" className="m-0 p-4">
           <ToolsPanel />
         </TabsContent>
 
-        <TabsContent value="terrain" className="m-0 p-2">
+        <TabsContent value="terrain" className="m-0 p-4">
           <TerrainPanel />
         </TabsContent>
 
-        <TabsContent value="heightmap" className="m-0 p-2">
+        <TabsContent value="heightmap" className="m-0 p-4">
           <HeightmapPanel />
         </TabsContent>
 
-        <TabsContent value="biomes" className="m-0 p-2">
+        <TabsContent value="biomes" className="m-0 p-4">
           <BiomePanel />
         </TabsContent>
 
-        <TabsContent value="generators" className="m-0 p-2">
+        <TabsContent value="generators" className="m-0 p-4">
           <GeneratorsPanel />
         </TabsContent>
 
-        <TabsContent value="layers" className="m-0 flex min-h-0 flex-col p-2">
+        <TabsContent value="layers" className="m-0 flex min-h-0 flex-col p-4">
           <WorkspacePanel />
         </TabsContent>
 
-        <TabsContent value="templates" className="m-0 flex min-h-0 flex-col p-2">
+        <TabsContent value="templates" className="m-0 flex min-h-0 flex-col p-4">
           <TemplateLibraryPanel />
         </TabsContent>
 
-        <TabsContent value="objects" className="m-0 flex min-h-0 flex-col p-2">
+        <TabsContent value="objects" className="m-0 flex min-h-0 flex-col p-4">
           <ScenePanel />
         </TabsContent>
 
-        <TabsContent value="parametric" className="m-0 flex min-h-0 flex-col p-2">
+        <TabsContent value="parametric" className="m-0 flex min-h-0 flex-col p-4">
           <ParametricPanel />
         </TabsContent>
 
@@ -751,7 +799,7 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
           <WarningsPanel />
         </TabsContent>
       </Tabs>
-      <div className="flex h-6 shrink-0 items-center gap-2 border-t border-border px-2 text-[10px] text-muted-foreground">
+      <div className="flex h-6 shrink-0 items-center gap-2 border-t border-border px-2 text-xs text-muted-foreground">
         {job ? (
           <>
             <Loader2 className="size-3 animate-spin text-primary" />
@@ -761,7 +809,7 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
               <Button
                 size="sm"
                 variant="ghost"
-                className="h-5 px-1.5 text-[9px]"
+                className="h-5 px-1.5 text-xs"
                 onClick={() => useToolStore.getState().requestCancel()}
               >
                 Cancel

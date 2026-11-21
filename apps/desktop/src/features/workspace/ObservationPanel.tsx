@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { AlertTriangle, Crosshair, Loader2, ScanLine } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { observeRegion } from "@/lib/observation-api";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import {
@@ -37,7 +39,7 @@ export function ObservationPanel() {
 
   if (!editing) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <ScanLine className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
           Observation maps are rendered and bounded by the Rust Core. Open the desktop app to
@@ -81,63 +83,62 @@ export function ObservationPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 gap-2 text-[11px]" data-testid="observation-panel">
-      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-1.5 overflow-y-auto rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-1.5">
+    <div className="flex min-h-0 flex-1 gap-4 text-sm" data-testid="observation-panel">
+      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-1.5 overflow-y-auto rounded-xl border bg-card p-4">
+        <div className="flex items-center gap-2">
           <ScanLine className="size-3 text-muted-foreground" />
-          <span className="text-[10px] font-semibold tracking-wide uppercase">Observation</span>
-          <span className="ml-auto font-mono text-[8px] text-muted-foreground">
+          <span className="text-base font-semibold">Observation</span>
+          <span className="ml-auto font-mono text-xs text-muted-foreground">
             schema 1 · revision {revision}
           </span>
         </div>
 
-        <label className="flex flex-col gap-0.5 text-[9px] text-muted-foreground">
+        <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
           <span>Mode</span>
-          <select
-            className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+          <NativeSelect
+            className="w-fit"
             value={mode}
             aria-label="Observation mode"
             onChange={(event) => changeMode(event.target.value as ObservationMode)}
           >
             {OBSERVATION_MODES.map((entry) => (
-              <option key={entry.value} value={entry.value}>
+              <NativeSelectOption key={entry.value} value={entry.value}>
                 {entry.label}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
-        <p className="text-[9px] leading-relaxed text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           {OBSERVATION_MODES.find((entry) => entry.value === mode)?.description}
         </p>
 
-        <div className="rounded border border-border/70 p-1.5">
-          <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+        <div className="rounded-lg border p-3">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Crosshair className="size-3" /> Selection bounds
           </div>
-          <p className="mt-0.5 break-all font-mono text-[9px]">
+          <p className="mt-0.5 break-all font-mono text-xs">
             {selection ? observationBoundsLabel(selection) : "Select a box in the viewport."}
           </p>
         </div>
 
         {mode === "cross_section" ? (
           <div className="grid grid-cols-2 gap-1">
-            <label className="flex flex-col gap-0.5 text-[9px] text-muted-foreground">
+            <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
               <span>Slice axis</span>
-              <select
-                className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+              <NativeSelect
+                className="w-fit"
                 value={sliceAxis}
                 aria-label="Slice axis"
                 onChange={(event) => setSliceAxis(event.target.value as ObservationSliceAxis)}
               >
-                <option value="x">X plane</option>
-                <option value="y">Y plane</option>
-                <option value="z">Z plane</option>
-              </select>
+                <NativeSelectOption value="x">X plane</NativeSelectOption>
+                <NativeSelectOption value="y">Y plane</NativeSelectOption>
+                <NativeSelectOption value="z">Z plane</NativeSelectOption>
+              </NativeSelect>
             </label>
-            <label className="flex flex-col gap-0.5 text-[9px] text-muted-foreground">
+            <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
               <span>Slice coordinate</span>
               <Input
-                className="h-6"
                 type="number"
                 value={sliceCoordinate}
                 aria-label="Slice coordinate"
@@ -148,10 +149,9 @@ export function ObservationPanel() {
         ) : null}
 
         {mode === "revision_diff" ? (
-          <label className="flex flex-col gap-0.5 text-[9px] text-muted-foreground">
+          <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
             <span>From revision</span>
             <Input
-              className="h-6"
               type="number"
               min={0}
               max={revision}
@@ -175,25 +175,25 @@ export function ObservationPanel() {
           )}
           Render observation
         </Button>
-        <p className="text-[9px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Read-only. Up to 512×512 pixels and 8,000,000 scanned blocks; revision diff fails closed
           when the requested revision is no longer retained in history.
         </p>
-        {error ? <p className="text-[10px] text-status-error">{error}</p> : null}
+        {error ? <p className="text-xs text-status-error">{error}</p> : null}
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded border border-border bg-background/40 p-2">
+      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-xl border bg-card p-4">
         {observation ? (
           <>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className="flex flex-wrap items-center gap-2">
               <ScanLine className="size-3 text-muted-foreground" />
-              <span className="text-[11px] font-semibold">
+              <span className="text-base font-semibold">
                 {observationModeLabel(observation.mode)}
               </span>
-              <span className="rounded border border-border px-1 font-mono text-[8px] text-muted-foreground">
+              <Badge variant="outline" className="font-mono">
                 {observation.dimension.replace("minecraft:", "")}
-              </span>
-              <span className="ml-auto font-mono text-[8px] text-muted-foreground">
+              </Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
                 world revision {observation.worldRevision}
               </span>
             </div>
@@ -201,11 +201,11 @@ export function ObservationPanel() {
             <img
               src={observation.image}
               alt={`${observationModeLabel(observation.mode)} observation`}
-              className="max-h-64 w-full rounded border border-border bg-black/30 object-contain"
+              className="max-h-64 w-full rounded-lg border bg-muted/40 object-contain"
               style={{ imageRendering: "pixelated" }}
             />
 
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[9px] text-muted-foreground">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-muted-foreground">
               <span>
                 image {observation.width}×{observation.height}
               </span>
@@ -234,16 +234,16 @@ export function ObservationPanel() {
             </div>
 
             <div className="space-y-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-semibold tracking-wide uppercase">Legend</span>
+              <div className="flex items-center gap-2">
+                <span className="text-base font-semibold">Legend</span>
                 {observation.legendTruncated ? (
-                  <span className="font-mono text-[8px] text-status-warning">
+                  <span className="font-mono text-xs text-status-warn">
                     truncated to 16 entries
                   </span>
                 ) : null}
               </div>
               {observation.legend.length === 0 ? (
-                <p className="text-[9px] text-muted-foreground">No legend entries.</p>
+                <p className="text-sm text-muted-foreground">No legend entries.</p>
               ) : (
                 <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                   {observation.legend.map((entry) => (
@@ -253,10 +253,10 @@ export function ObservationPanel() {
                         style={{ background: entry.color }}
                         aria-hidden="true"
                       />
-                      <span className="truncate text-[9px]" title={entry.label}>
+                      <span className="truncate text-xs" title={entry.label}>
                         {entry.label}
                       </span>
-                      <span className="ml-auto font-mono text-[8px] text-muted-foreground">
+                      <span className="ml-auto font-mono text-xs text-muted-foreground">
                         {entry.count.toLocaleString()}
                       </span>
                     </div>
@@ -266,12 +266,9 @@ export function ObservationPanel() {
             </div>
 
             {observation.warnings.length > 0 ? (
-              <div className="rounded border border-status-warning/40 bg-status-warning/5 p-1.5">
+              <div className="rounded-lg border border-status-warn/40 bg-status-warn/5 p-3 text-sm">
                 {observation.warnings.map((warning) => (
-                  <p
-                    key={warning}
-                    className="flex items-start gap-1 text-[9px] text-status-warning"
-                  >
+                  <p key={warning} className="flex items-start gap-1 text-xs text-status-warn">
                     <AlertTriangle className="mt-0.5 size-3 shrink-0" /> {warning}
                   </p>
                 ))}
@@ -280,14 +277,14 @@ export function ObservationPanel() {
 
             <div className="space-y-0.5">
               {observation.notes.map((note) => (
-                <p key={note} className="text-[9px] text-muted-foreground">
+                <p key={note} className="text-xs text-muted-foreground">
                   {note}
                 </p>
               ))}
             </div>
           </>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-[10px] text-muted-foreground">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
             <ScanLine className="size-5 text-muted-foreground/50" />
             <p>Select a region and render a deterministic map from the authoritative revision.</p>
           </div>

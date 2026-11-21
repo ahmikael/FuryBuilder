@@ -1,10 +1,16 @@
 import { Circle, Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import type { BackendState } from "@/hooks/use-backend";
 import { TOOL_LABELS } from "@/editor/session";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
+
+function BarSeparator() {
+  return <Separator orientation="vertical" className="!h-4" />;
+}
 
 export function StatusBar({ backend }: { backend: BackendState }) {
   const revision = useWorldStore((state) => state.revision);
@@ -22,7 +28,7 @@ export function StatusBar({ backend }: { backend: BackendState }) {
   const autosaved = dirty && project?.autosavedRevision === revision;
 
   return (
-    <footer className="flex h-6 shrink-0 items-center gap-3 border-t border-border bg-card/80 px-2.5 text-[10px] text-muted-foreground">
+    <footer className="flex h-8 shrink-0 items-center gap-2 border-t bg-background px-4 text-xs text-muted-foreground">
       <span className="inline-flex items-center gap-1.5">
         <Circle
           className={cn(
@@ -34,27 +40,27 @@ export function StatusBar({ backend }: { backend: BackendState }) {
         />
         {backend.status === "online" ? "Core connected" : "Core offline"}
       </span>
-      <span className="text-border">|</span>
-      <span className="max-w-40 truncate">{project?.name ?? "No project"}</span>
-      <span className="text-border">|</span>
-      <span>
+      <BarSeparator />
+      <span className="max-w-48 truncate">{project?.name ?? "No project"}</span>
+      <BarSeparator />
+      <span className="hidden truncate sm:inline">
         {project?.folder ? "Project layer" : source === "core" ? "Empty core" : "Preview scene"}
       </span>
-      <span className="text-border">|</span>
+      <BarSeparator />
       <span>{dimension.replace("minecraft:", "")}</span>
-      <span className="text-border">|</span>
-      <span className="inline-flex items-center gap-1">
-        {job ? <Loader2 className="size-2.5 animate-spin text-primary" /> : null}
+      <BarSeparator />
+      <span className="inline-flex items-center gap-1.5">
+        {job ? <Loader2 className="size-3 animate-spin text-primary" /> : null}
         {job ? job.label : project?.folder ? `tool: ${TOOL_LABELS[tool]}` : "no project open"}
       </span>
       {selection ? (
         <>
-          <span className="text-border">|</span>
-          <span className="text-sky-300">box selected</span>
+          <BarSeparator />
+          <Badge variant="secondary">box selected</Badge>
         </>
       ) : null}
 
-      <span className="ml-auto font-mono">
+      <div className="ml-auto flex items-center gap-2">
         {!project?.folder ? (
           <span>no project</span>
         ) : dirty ? (
@@ -64,25 +70,27 @@ export function StatusBar({ backend }: { backend: BackendState }) {
         ) : (
           <span className="text-status-ok">saved r{project.savedRevision}</span>
         )}
-      </span>
-      <span className="text-border">|</span>
-      <span className="font-mono">rev {revision}</span>
-      <span className="text-border">|</span>
-      <span className="font-mono">{chunkCount} chunks</span>
-      <span className="text-border">|</span>
-      <span className="font-mono">{blockCount.toLocaleString()} blocks</span>
-      <span className="text-border">|</span>
-      <span className="font-mono">radius {loadRadius}</span>
-      <span className="text-border">|</span>
-      <span className="font-mono">
-        {metrics ? `${metrics.fps} fps · ${metrics.drawCalls} draws` : "— fps"}
-      </span>
-      <span className="text-border">|</span>
-      <span className="font-mono">
-        Minecraft {backend.info?.targetMinecraftVersion ?? "1.21.4"}
-      </span>
-      <span className="text-border">|</span>
-      <span className="font-mono">DV {backend.info?.targetDataVersion ?? 4189}</span>
+        <BarSeparator />
+        <span className="font-mono">rev {revision}</span>
+        <BarSeparator />
+        <span className="hidden font-mono md:inline">{chunkCount} chunks</span>
+        <BarSeparator />
+        <span className="font-mono">{blockCount.toLocaleString()} blocks</span>
+        <span className="hidden items-center gap-2 lg:flex">
+          <BarSeparator />
+          <span className="font-mono">radius {loadRadius}</span>
+          <BarSeparator />
+          <span className="font-mono">
+            {metrics ? `${metrics.fps} fps · ${metrics.drawCalls} draws` : "— fps"}
+          </span>
+          <BarSeparator />
+          <span className="font-mono">
+            Minecraft {backend.info?.targetMinecraftVersion ?? "1.21.4"}
+          </span>
+          <BarSeparator />
+          <span className="font-mono">DV {backend.info?.targetDataVersion ?? 4189}</span>
+        </span>
+      </div>
     </footer>
   );
 }

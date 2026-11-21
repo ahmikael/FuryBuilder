@@ -1,14 +1,16 @@
-import { Search } from "lucide-react";
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
+import { useMemo, useState } from "react";
 
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+  CommandShortcut,
+} from "@/components/ui/command";
+import { Kbd } from "@/components/ui/kbd";
 import { redoWorld, undoWorld } from "@/editor/commands";
 import {
   BOTTOM_PANEL_TABS,
@@ -24,7 +26,6 @@ import { useEditorStore, type PanelId, type ThemeMode } from "@/state/editor-sto
 import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useUiStore } from "@/state/ui-store";
-import { cn } from "@/lib/utils";
 
 export interface PaletteCommand {
   id: string;
@@ -229,8 +230,6 @@ export function CommandPalette() {
   const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
   const saveProject = useProjectStore((state) => state.save);
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
-  const listRef = useRef<HTMLUListElement | null>(null);
 
   const commands = useMemo(
     () =>
@@ -275,18 +274,19 @@ export function CommandPalette() {
     return coordinate ? [coordinate, ...matches] : matches;
   }, [commands, query]);
 
-  const active = filtered.length === 0 ? -1 : Math.min(activeIndex, filtered.length - 1);
-
-  useEffect(() => {
-    if (active < 0) return;
-    const node = listRef.current?.querySelector('[data-active="true"]');
-    node?.scrollIntoView?.({ block: "nearest" });
-  }, [active]);
+  const groups = useMemo(() => {
+    const grouped = new Map<string, PaletteCommand[]>();
+    for (const command of filtered) {
+      const entries = grouped.get(command.group) ?? [];
+      entries.push(command);
+      grouped.set(command.group, entries);
+    }
+    return [...grouped.entries()];
+  }, [filtered]);
 
   const closePalette = (): void => {
     setOpen(false);
     setQuery("");
-    setActiveIndex(0);
   };
 
   const execute = (command: PaletteCommand | undefined): void => {
@@ -295,146 +295,74 @@ export function CommandPalette() {
     command.run();
   };
 
-  const onInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>): void => {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      if (filtered.length > 0) setActiveIndex((active + 1) % filtered.length);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      if (filtered.length > 0) {
-        setActiveIndex((active - 1 + filtered.length) % filtered.length);
-      }
-      return;
-    }
-    if (event.key === "Home") {
-      event.preventDefault();
-      setActiveIndex(0);
-      return;
-    }
-    if (event.key === "End") {
-      event.preventDefault();
-      setActiveIndex(Math.max(0, filtered.length - 1));
-      return;
-    }
-    if (event.key === "Enter") {
-      event.preventDefault();
-      execute(filtered[active]);
-    }
-  };
-
   return (
-    <Dialog
+    <CommandDialog
       open={open}
       onOpenChange={(next) => {
         if (!next) closePalette();
         else setOpen(true);
       }}
+      title="Command palette"
+      description="Search editor commands, panels, themes, tools and coordinates. Use the arrow keys to choose a command and Enter to run it."
+      className="top-[18%] max-w-xl"
+      showCloseButton={false}
     >
-      <DialogContent
-        showCloseButton={false}
-        className="top-[18%] max-w-xl -translate-y-0 gap-2 p-2"
-      >
-        <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <DialogDescription className="sr-only">
-          Search editor commands, panels, themes, tools and coordinates. Use the arrow keys to
-          choose a command and Enter to run it.
-        </DialogDescription>
-
-        <div className="relative">
-          <Search className="absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            autoFocus
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setActiveIndex(0);
-            }}
-            onKeyDown={onInputKeyDown}
-            placeholder="Search commands, panels, themes or “x y z”…"
-            aria-label="Search commands"
-            role="combobox"
-            aria-expanded="true"
-            aria-controls="command-palette-list"
-            aria-autocomplete="list"
-            aria-activedescendant={
-              active >= 0 ? `command-palette-option-${filtered[active]?.id}` : undefined
-            }
-            className="h-8 pl-8"
-          />
-          <kbd className="absolute top-1/2 right-2 -translate-y-1/2 rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">
-            {COMMAND_PALETTE_SHORTCUT}
-          </kbd>
-        </div>
-
-        <div className="scrollbar-thin max-h-80 min-h-12 overflow-y-auto rounded border border-border bg-background/40">
+      <Command shouldFilter={false} loop label="Search commands">
+        <CommandInput
+          autoFocus
+          value={query}
+          onValueChange={setQuery}
+          placeholder="Search commands, panels, themes or “x y z”…"
+          aria-label="Search commands"
+        />
+        <CommandList aria-label="Commands">
           {filtered.length === 0 ? (
-            <div className="p-3 text-[11px] text-muted-foreground">
+            <CommandEmpty>
               No command matches “{query}”. Try “panel”, “theme”, “palette” or coordinates like “0
               64 0”.
-            </div>
+            </CommandEmpty>
           ) : (
-            <ul
-              id="command-palette-list"
-              ref={listRef}
-              role="listbox"
-              aria-label="Commands"
-              className="py-1"
-            >
-              {filtered.map((command, index) => {
-                const showGroup = index === 0 || filtered[index - 1]?.group !== command.group;
-                return (
-                  <li key={command.id} role="presentation">
-                    {showGroup ? (
-                      <div
-                        role="presentation"
-                        className="px-2 pt-2 pb-0.5 text-[9px] font-semibold tracking-wider text-muted-foreground uppercase"
-                      >
-                        {command.group}
-                      </div>
+            groups.map(([group, entries]) => (
+              <CommandGroup key={group} heading={group}>
+                {entries.map((command) => (
+                  <CommandItem
+                    key={command.id}
+                    value={command.id}
+                    onSelect={() => execute(command)}
+                  >
+                    <span className="truncate">{command.label}</span>
+                    {command.detail ? (
+                      <span className="truncate text-xs text-muted-foreground">
+                        {command.detail}
+                      </span>
                     ) : null}
-                    <button
-                      type="button"
-                      id={`command-palette-option-${command.id}`}
-                      role="option"
-                      aria-selected={index === active}
-                      data-active={index === active}
-                      onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => execute(command)}
-                      className={cn(
-                        "flex w-full items-center gap-2 px-2 py-1.5 text-left text-[11px]",
-                        index === active
-                          ? "bg-accent text-accent-foreground"
-                          : "text-foreground/80 hover:bg-accent/40",
-                      )}
-                    >
-                      <span className="truncate">{command.label}</span>
-                      {command.detail ? (
-                        <span className="truncate text-[9px] text-muted-foreground">
-                          {command.detail}
-                        </span>
-                      ) : null}
-                      {command.shortcut ? (
-                        <kbd className="ml-auto shrink-0 rounded border border-border bg-muted px-1 font-mono text-[9px] text-muted-foreground">
-                          {command.shortcut}
-                        </kbd>
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                    {command.shortcut ? (
+                      <CommandShortcut>{command.shortcut}</CommandShortcut>
+                    ) : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))
           )}
-        </div>
-
-        <div className="flex items-center gap-3 border-t border-border pt-1 text-[9px] text-muted-foreground">
-          <span>↑↓ Navigate</span>
-          <span>Enter Run</span>
-          <span>Esc Close</span>
+        </CommandList>
+        <div className="flex flex-wrap items-center gap-3 border-t p-3 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5">
+            <Kbd>↑</Kbd>
+            <Kbd>↓</Kbd>
+            Navigate
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Kbd>Enter</Kbd>
+            Run
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Kbd>Esc</Kbd>
+            Close
+          </span>
           <span className="ml-auto font-mono">{filtered.length} command(s)</span>
+          <Kbd>{COMMAND_PALETTE_SHORTCUT}</Kbd>
         </div>
-      </DialogContent>
-    </Dialog>
+      </Command>
+    </CommandDialog>
   );
 }

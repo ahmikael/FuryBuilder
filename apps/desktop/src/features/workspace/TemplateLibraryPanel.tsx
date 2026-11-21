@@ -10,7 +10,9 @@ import {
   Upload,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { reloadViewport } from "@/features/viewport/viewport-bus";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
@@ -102,7 +104,7 @@ export function TemplateLibraryPanel() {
 
   if (!editing) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Boxes className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
           The template library is stored inside the open project and verified by the Rust Core. Open
@@ -235,16 +237,16 @@ export function TemplateLibraryPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 gap-2 text-[11px]" data-testid="template-library">
-      <div className="flex min-h-0 w-80 shrink-0 flex-col gap-1.5 rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-1.5">
-          <Package className="size-3 text-muted-foreground" />
-          <span className="text-[10px] font-semibold tracking-wide uppercase">Library</span>
-          <span className="text-[9px] text-muted-foreground">{templates.length} / 128</span>
+    <div className="flex min-h-0 flex-1 gap-4 text-sm" data-testid="template-library">
+      <div className="flex min-h-0 w-80 shrink-0 flex-col gap-3 rounded-xl border bg-card p-4">
+        <div className="flex items-center gap-2">
+          <Package className="size-4 text-muted-foreground" />
+          <span className="text-base font-semibold">Library</span>
+          <span className="text-xs text-muted-foreground">{templates.length} / 128</span>
           <Button
             size="sm"
             variant="ghost"
-            className="ml-auto h-6 px-1"
+            className="ml-auto"
             aria-label="Refresh templates"
             disabled={loading}
             onClick={() => void refresh()}
@@ -258,7 +260,7 @@ export function TemplateLibraryPanel() {
         </div>
         <div className="scrollbar-thin min-h-0 flex-1 space-y-1 overflow-y-auto">
           {templates.length === 0 ? (
-            <p className="p-1 text-[10px] text-muted-foreground">
+            <p className="p-1 text-sm text-muted-foreground">
               No templates yet. Save the current selection or import a Java .nbt file.
             </p>
           ) : (
@@ -269,12 +271,12 @@ export function TemplateLibraryPanel() {
                 onClick={() => setSelectedId(entry.id)}
                 className={
                   entry.id === selectedId
-                    ? "w-full rounded border border-primary/60 bg-primary/10 px-1.5 py-1 text-left"
-                    : "w-full rounded border border-border/70 px-1.5 py-1 text-left hover:bg-accent/30"
+                    ? "w-full rounded-lg border border-primary/60 bg-primary/10 px-3 py-2.5 text-left"
+                    : "w-full rounded-lg border bg-card px-3 py-2.5 text-left hover:bg-accent"
                 }
               >
-                <div className="truncate text-[10px]">{entry.name}</div>
-                <div className="truncate font-mono text-[8px] text-muted-foreground">
+                <div className="truncate text-sm">{entry.name}</div>
+                <div className="truncate font-mono text-xs text-muted-foreground">
                   {entry.size[0]}×{entry.size[1]}×{entry.size[2]} ·{" "}
                   {entry.nonAirBlocks.toLocaleString()} blocks · {formatBytes(entry.bytes)}
                 </div>
@@ -282,9 +284,8 @@ export function TemplateLibraryPanel() {
             ))
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-2">
           <Input
-            className="h-6"
             value={name}
             onChange={(event) => setName(event.target.value)}
             aria-label="Template name"
@@ -316,32 +317,31 @@ export function TemplateLibraryPanel() {
         </Button>
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded border border-border bg-background/40 p-2">
+      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto rounded-xl border bg-card p-4">
         {selected ? (
           <>
-            <div className="flex items-center gap-1.5">
-              <Boxes className="size-3 text-muted-foreground" />
-              <span className="text-[11px] font-semibold">{selected.name}</span>
-              <span className="ml-auto rounded border border-border px-1 font-mono text-[8px] text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Boxes className="size-4 text-muted-foreground" />
+              <span className="text-base font-semibold">{selected.name}</span>
+              <Badge variant="secondary" className="ml-auto font-mono">
                 {selected.source}
-              </span>
+              </Badge>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[9px] text-muted-foreground">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono text-xs text-muted-foreground">
               <span>size: {selected.size.join(" × ")}</span>
               <span>non-air: {selected.nonAirBlocks.toLocaleString()}</span>
               <span>palette: {selected.paletteSize}</span>
               <span>bytes: {formatBytes(selected.bytes)}</span>
               <span className="col-span-2 truncate">sha256: {selected.sha256}</span>
             </div>
-            <label className="flex items-center gap-1.5 text-[10px]">
-              <input
-                type="checkbox"
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
                 checked={includeAir}
-                onChange={(event) => setIncludeAir(event.target.checked)}
+                onCheckedChange={(checked) => setIncludeAir(checked === true)}
               />
               Include explicit air (clears the target volume)
             </label>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
                 variant="outline"
@@ -369,41 +369,41 @@ export function TemplateLibraryPanel() {
             </div>
             {activePreview ? (
               <div
-                className="rounded border border-border bg-background/60 p-2 text-[10px]"
+                className="rounded border border-border bg-background/60 p-2 text-xs"
                 data-testid="template-preview"
               >
                 <div>
                   {activePreview.changedBlocks.toLocaleString()} block(s) would change out of{" "}
                   {activePreview.affectedBlocks.toLocaleString()} selected.
                 </div>
-                <div className="font-mono text-[8px] text-muted-foreground">
+                <div className="font-mono text-xs text-muted-foreground">
                   bounds ({activePreview.bounds.min.x},{activePreview.bounds.min.y},
                   {activePreview.bounds.min.z}) ..({activePreview.bounds.max.x},
                   {activePreview.bounds.max.y},{activePreview.bounds.max.z})
                 </div>
                 {activePreview.warnings.map((warning) => (
-                  <div key={warning} className="mt-1 flex gap-1 text-status-warn">
+                  <div key={warning} className="mt-1 flex gap-2 text-status-warn">
                     <ShieldAlert className="mt-0.5 size-3 shrink-0" />
                     <span>{warning}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-sm text-muted-foreground">
                 Preview first; insertion starts at the selection minimum and is one reversible
                 operation on the active layer.
               </p>
             )}
           </>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-[10px] text-muted-foreground">
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
             <Boxes className="size-5 text-muted-foreground/50" />
             <p>Select a template to preview or insert it.</p>
           </div>
         )}
-        {error ? <p className="text-[10px] text-status-error">{error}</p> : null}
+        {error ? <p className="text-xs text-status-error">{error}</p> : null}
         {busy ? (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" /> Working…
           </div>
         ) : null}

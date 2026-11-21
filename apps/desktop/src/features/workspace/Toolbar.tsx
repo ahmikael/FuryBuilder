@@ -1,6 +1,7 @@
 import {
   FolderOpen,
   HardDrive,
+  Moon,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -9,9 +10,9 @@ import {
   Search,
   Settings,
   Sun,
-  Moon,
   Undo2,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -80,39 +81,39 @@ export function Toolbar({
           : "Saved";
 
   return (
-    <header className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card/70 px-2">
-      <div className="flex items-center gap-2 pr-2">
-        <div className="grid size-6 place-items-center">
-          <img
-            src={logoUrl}
-            alt=""
-            aria-hidden="true"
-            draggable={false}
-            className="h-[22px] w-auto select-none"
-          />
-        </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-[13px] font-semibold tracking-tight">FuryBuilder</span>
-          <span className="text-[9px] font-medium tracking-[0.14em] text-muted-foreground uppercase">
-            alpha
-          </span>
-        </div>
+    <header className="flex h-14 shrink-0 items-center gap-1 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="flex items-center gap-2.5 pr-1">
+        <img
+          src={logoUrl}
+          alt=""
+          aria-hidden="true"
+          draggable={false}
+          className="h-7 w-auto select-none"
+        />
+        <span className="text-sm font-semibold tracking-tight">FuryBuilder</span>
+        <Badge
+          variant="secondary"
+          className="font-medium tracking-wider text-muted-foreground uppercase"
+        >
+          alpha
+        </Badge>
       </div>
 
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-1 !h-6" />
 
-      <nav className="flex items-center" aria-label="Main menu">
+      <nav className="flex items-center gap-0.5" aria-label="Main menu">
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className={cn("text-muted-foreground", projectOpen && "text-foreground")}
-              onClick={() => setManagerOpen(true)}
-            >
-              <FolderOpen className="mr-1 size-3.5" />
-              Project
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                className={cn("text-muted-foreground", projectOpen && "text-foreground")}
+                onClick={() => setManagerOpen(true)}
+              />
+            }
+          >
+            <FolderOpen data-icon="inline-start" />
+            Project
           </TooltipTrigger>
           <TooltipContent>
             Project manager — list, create, open, rename and checkpoints. Ctrl+S saves.
@@ -120,10 +121,10 @@ export function Toolbar({
         </Tooltip>
         <ViewMenu />
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
-              Tools
-            </Button>
+          <TooltipTrigger
+            render={<Button variant="ghost" className="text-muted-foreground" disabled />}
+          >
+            Tools
           </TooltipTrigger>
           <TooltipContent>
             Tools menus arrive with later milestones. Editing actions live in the viewport toolbar
@@ -131,25 +132,22 @@ export function Toolbar({
           </TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={onOpenMcpAccess}
-            >
-              AI / MCP
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button variant="ghost" className="text-muted-foreground" onClick={onOpenMcpAccess} />
+            }
+          >
+            AI / MCP
           </TooltipTrigger>
           <TooltipContent>
             MCP access mode, write limits and confirmation. Read-only by default.
           </TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="sm" className="text-muted-foreground" disabled>
-              Export
-            </Button>
+          <TooltipTrigger
+            render={<Button variant="ghost" className="text-muted-foreground" disabled />}
+          >
+            Export
           </TooltipTrigger>
           <TooltipContent>
             Export controls live in the project manager. Supported formats and honest version limits
@@ -158,120 +156,119 @@ export function Toolbar({
         </Tooltip>
       </nav>
 
-      <div className="ml-2 flex items-center gap-1">
+      <div className="ml-1 flex items-center gap-0.5">
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Undo edit"
-              disabled={!editing || busy || !canUndo}
-              onClick={() => void undoWorld()}
-            >
-              <Undo2 />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Undo edit"
+                disabled={!editing || busy || !canUndo}
+                onClick={() => void undoWorld()}
+              />
+            }
+          >
+            <Undo2 />
           </TooltipTrigger>
           <TooltipContent>Undo · Ctrl+Z</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Redo edit"
-              disabled={!editing || busy || !canRedo}
-              onClick={() => void redoWorld()}
-            >
-              <Redo2 />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Redo edit"
+                disabled={!editing || busy || !canRedo}
+                onClick={() => void redoWorld()}
+              />
+            }
+          >
+            <Redo2 />
           </TooltipTrigger>
           <TooltipContent>Redo · Ctrl+Shift+Z</TooltipContent>
         </Tooltip>
       </div>
 
-      <div className="ml-auto flex items-center gap-1.5">
-        <div className="flex items-center">
+      <div className="ml-auto flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Toggle world panel"
-                aria-pressed={leftPanelOpen}
-                onClick={() => togglePanel("left")}
-                className={cn(!leftPanelOpen && "text-muted-foreground/60")}
-              >
-                <PanelLeft />
-              </Button>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Toggle world panel"
+                  aria-pressed={leftPanelOpen}
+                  onClick={() => togglePanel("left")}
+                  className={cn(!leftPanelOpen && "text-muted-foreground/60")}
+                />
+              }
+            >
+              <PanelLeft />
             </TooltipTrigger>
             <TooltipContent>World panel · {PANEL_SHORTCUTS.left}</TooltipContent>
           </Tooltip>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Toggle bottom panel"
-                aria-pressed={bottomPanelOpen}
-                onClick={() => togglePanel("bottom")}
-                className={cn(!bottomPanelOpen && "text-muted-foreground/60")}
-              >
-                <PanelBottom />
-              </Button>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Toggle bottom panel"
+                  aria-pressed={bottomPanelOpen}
+                  onClick={() => togglePanel("bottom")}
+                  className={cn(!bottomPanelOpen && "text-muted-foreground/60")}
+                />
+              }
+            >
+              <PanelBottom />
             </TooltipTrigger>
             <TooltipContent>Bottom panel · {PANEL_SHORTCUTS.bottom}</TooltipContent>
           </Tooltip>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Toggle inspector"
-                aria-pressed={rightPanelOpen}
-                onClick={() => togglePanel("right")}
-                className={cn(!rightPanelOpen && "text-muted-foreground/60")}
-              >
-                <PanelRight />
-              </Button>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Toggle inspector"
+                  aria-pressed={rightPanelOpen}
+                  onClick={() => togglePanel("right")}
+                  className={cn(!rightPanelOpen && "text-muted-foreground/60")}
+                />
+              }
+            >
+              <PanelRight />
             </TooltipTrigger>
             <TooltipContent>Inspector · {PANEL_SHORTCUTS.right}</TooltipContent>
           </Tooltip>
         </div>
 
-        <Separator orientation="vertical" className="mx-0.5 h-5" />
+        <Separator orientation="vertical" className="mx-1 !h-6" />
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              onClick={() => setManagerOpen(true)}
-              className={cn(
-                "mr-1 inline-flex max-w-56 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px]",
-                !projectOpen
-                  ? "border-border text-muted-foreground"
-                  : dirty
-                    ? "border-status-warn/40 text-status-warn"
-                    : "border-status-ok/30 text-status-ok",
-              )}
-            >
-              <span
-                className={cn(
-                  "size-1.5 shrink-0 rounded-full",
-                  !projectOpen
-                    ? "bg-muted-foreground/50"
-                    : dirty
-                      ? "bg-status-warn"
-                      : "bg-status-ok",
-                )}
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="max-w-64 gap-2 px-2.5 font-normal"
+                onClick={() => setManagerOpen(true)}
               />
-              <span className="truncate">{current?.name ?? saveState}</span>
-              {projectOpen ? (
-                <>
-                  <span className="text-border">·</span>
-                  <span className="truncate text-muted-foreground">{saveState}</span>
-                </>
-              ) : null}
-            </button>
+            }
+          >
+            <span
+              className={cn(
+                "size-2 shrink-0 rounded-full",
+                !projectOpen ? "bg-muted-foreground/50" : dirty ? "bg-status-warn" : "bg-status-ok",
+              )}
+            />
+            <span className="truncate">{current?.name ?? saveState}</span>
+            {projectOpen ? (
+              <span className="truncate text-muted-foreground">{saveState}</span>
+            ) : null}
           </TooltipTrigger>
           <TooltipContent>
             {projectOpen
@@ -280,10 +277,9 @@ export function Toolbar({
           </TooltipContent>
         </Tooltip>
 
-        <span
-          className={cn(
-            "mr-1 inline-flex items-center gap-1.5 rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground",
-          )}
+        <Badge
+          variant="outline"
+          className="gap-2 px-2.5 py-1 font-normal text-muted-foreground"
           title={
             backendStatus === "online"
               ? "Rust backend connected"
@@ -294,7 +290,7 @@ export function Toolbar({
         >
           <span
             className={cn(
-              "size-1.5 rounded-full",
+              "size-2 rounded-full",
               backendStatus === "online" && "bg-status-ok",
               backendStatus === "connecting" && "bg-status-warn",
               backendStatus === "offline" && "bg-status-error",
@@ -305,37 +301,41 @@ export function Toolbar({
             : backendStatus === "connecting"
               ? "Connecting"
               : "Preview mode"}
-        </span>
+        </Badge>
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hidden gap-1.5 font-mono text-[10px] text-muted-foreground md:inline-flex"
-              disabled
-            >
-              <span
-                className="size-2.5 rounded-[2px] border border-black/30"
-                style={{ backgroundColor: blockColor(selectedBlock.name) }}
+          <TooltipTrigger
+            render={
+              <Button
+                variant="outline"
+                size="sm"
+                className="hidden gap-2 font-mono font-normal text-muted-foreground md:inline-flex"
+                disabled
               />
-              {selectedBlock.name.replace("minecraft:", "")}
-            </Button>
+            }
+          >
+            <span
+              className="size-2.5 rounded-sm border border-black/30"
+              style={{ backgroundColor: blockColor(selectedBlock.name) }}
+            />
+            {selectedBlock.name.replace("minecraft:", "")}
           </TooltipTrigger>
           <TooltipContent>Active palette block (choose it in the Palette panel).</TooltipContent>
         </Tooltip>
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Save project"
-              disabled={!projectOpen || busy}
-              onClick={() => void useProjectStore.getState().save()}
-            >
-              <Save />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Save project"
+                disabled={!projectOpen || busy}
+                onClick={() => void useProjectStore.getState().save()}
+              />
+            }
+          >
+            <Save />
           </TooltipTrigger>
           <TooltipContent>
             {projectOpen
@@ -345,47 +345,60 @@ export function Toolbar({
         </Tooltip>
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Project storage"
-              onClick={() => setManagerOpen(true)}
-            >
-              <HardDrive />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Project storage"
+                onClick={() => setManagerOpen(true)}
+              />
+            }
+          >
+            <HardDrive />
           </TooltipTrigger>
           <TooltipContent>Project storage, checkpoints and recovery.</TooltipContent>
         </Tooltip>
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open command palette"
-              onClick={() => setCommandPaletteOpen(true)}
-            >
-              <Search />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open command palette"
+                onClick={() => setCommandPaletteOpen(true)}
+              />
+            }
+          >
+            <Search />
           </TooltipTrigger>
           <TooltipContent>Command palette · {COMMAND_PALETTE_SHORTCUT}</TooltipContent>
         </Tooltip>
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Toggle theme" onClick={onToggleTheme}>
-              {theme === "dark" ? <Sun /> : <Moon />}
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Toggle theme"
+                onClick={onToggleTheme}
+              />
+            }
+          >
+            {theme === "dark" ? <Sun /> : <Moon />}
           </TooltipTrigger>
           <TooltipContent>Toggle dark / light theme.</TooltipContent>
         </Tooltip>
 
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="Settings" onClick={onOpenSettings}>
-              <Settings />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button variant="ghost" size="icon" aria-label="Settings" onClick={onOpenSettings} />
+            }
+          >
+            <Settings />
           </TooltipTrigger>
           <TooltipContent>Settings.</TooltipContent>
         </Tooltip>

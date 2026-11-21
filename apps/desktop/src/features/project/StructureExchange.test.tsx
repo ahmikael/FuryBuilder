@@ -201,7 +201,7 @@ describe("structure exchange", () => {
     const checkbox = screen.getByRole("checkbox", { name: /Use box selection/ });
     expect(checkbox).toBeEnabled();
     await user.selectOptions(screen.getByLabelText("Export dimension"), "minecraft:the_nether");
-    expect(checkbox).toBeDisabled();
+    expect(checkbox).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/made in overworld/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Preview export/ }));
     await waitFor(() =>

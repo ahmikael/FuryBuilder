@@ -135,7 +135,7 @@ export function severityClass(severity: ValidationSeverity): string {
     case "error":
       return "text-status-error";
     case "warning":
-      return "text-status-warning";
+      return "text-status-warn";
     default:
       return "text-muted-foreground";
   }

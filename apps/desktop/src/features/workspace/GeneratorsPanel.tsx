@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, MapPin, Route, ScanLine, Trees, Waves } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { applyEditorOperation } from "@/editor/commands";
 import {
   boundsVolume,
@@ -237,16 +239,16 @@ export function GeneratorsPanel() {
   }
 
   return (
-    <div className="flex flex-wrap items-start gap-3 text-[10px]">
+    <div className="flex flex-wrap items-start gap-4 text-sm">
       <div className="flex w-80 flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <Route className="size-3.5 text-primary" />
           <span className="font-medium">Local generators</span>
-          <span className="rounded bg-muted px-1 py-0.5 text-[8px] uppercase text-muted-foreground">
+          <Badge variant="secondary" className="uppercase">
             deterministic
-          </span>
+          </Badge>
         </div>
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-2">
           {MODES.map((entry) => {
             const Icon = entry.icon;
             return (
@@ -254,7 +256,6 @@ export function GeneratorsPanel() {
                 key={entry.value}
                 size="sm"
                 variant={mode === entry.value ? "default" : "outline"}
-                className="h-6 px-2 text-[10px]"
                 aria-pressed={mode === entry.value}
                 onClick={() => {
                   setMode(entry.value);
@@ -342,9 +343,9 @@ export function GeneratorsPanel() {
             <div className="grid grid-cols-3 gap-1.5">
               <label className="flex flex-col gap-0.5">
                 <span className="text-muted-foreground">Axis</span>
-                <select
+                <NativeSelect
                   aria-label="Route axis"
-                  className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+                  className="w-fit"
                   value={axis}
                   disabled={busy}
                   onChange={(event) => {
@@ -352,9 +353,9 @@ export function GeneratorsPanel() {
                     resetPreview();
                   }}
                 >
-                  <option value="x">X</option>
-                  <option value="z">Z</option>
-                </select>
+                  <NativeSelectOption value="x">X</NativeSelectOption>
+                  <NativeSelectOption value="z">Z</NativeSelectOption>
+                </NativeSelect>
               </label>
               <NumberField
                 label="Seed"
@@ -452,7 +453,7 @@ export function GeneratorsPanel() {
                 </>
               ) : null}
             </div>
-            <div className="text-[9px] leading-relaxed text-muted-foreground">
+            <div className="text-sm leading-relaxed text-muted-foreground">
               Routes run between the selection edges on the chosen axis. They follow the topmost
               non-air surface, skip fluid columns, and never write outside the selection. Repeating
               the same seed and parameters is idempotent.
@@ -462,21 +463,20 @@ export function GeneratorsPanel() {
       </div>
 
       {mode === "sites" ? (
-        <div className="w-64 space-y-1 rounded border border-border bg-background/40 p-2">
+        <div className="w-64 space-y-3 rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground">Placement rules</span>
             <span className="font-mono">
               {selection ? `${boundsVolume(selection).toLocaleString()} blocks` : "no selection"}
             </span>
           </div>
-          <div className="text-[9px] leading-relaxed text-muted-foreground">
+          <div className="text-sm leading-relaxed text-muted-foreground">
             Greedy, non-overlapping search for flat, dry, clear footprints. This is a deterministic
             heuristic, not a claim about vanilla structure placement.
           </div>
-          <div className="flex flex-wrap gap-1 pt-0.5">
+          <div className="flex flex-wrap gap-2 pt-0.5">
             <Button
               size="sm"
-              className="h-6 px-2 text-[10px]"
               disabled={!editing || !siteQuery || busy}
               aria-label="Find structure sites"
               onClick={() => void searchSites()}
@@ -487,7 +487,6 @@ export function GeneratorsPanel() {
             <Button
               size="sm"
               variant="outline"
-              className="h-6 px-2 text-[10px]"
               disabled={!sites?.sites.length}
               aria-label="Use first structure site"
               onClick={selectFirstSite}
@@ -496,18 +495,18 @@ export function GeneratorsPanel() {
             </Button>
           </div>
           {!selection ? (
-            <div className="text-[9px] text-status-warn">
+            <div className="text-xs text-status-warn">
               Use the Box select tool over the area to inspect.
             </div>
           ) : null}
           {sitesError ? (
-            <div className="rounded border border-status-error/30 bg-status-error/5 p-1 text-[9px] text-status-error">
+            <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
               {sitesError}
             </div>
           ) : null}
           {sites ? (
             <div
-              className="rounded border border-status-ok/30 bg-status-ok/5 p-1 text-[9px] text-status-ok"
+              className="rounded-lg border border-status-ok/30 bg-status-ok/5 p-3 text-sm text-status-ok"
               data-testid="structure-sites-result"
             >
               {sites.sites.length} site(s) · scanned {sites.scannedCandidates.toLocaleString()} ·
@@ -530,7 +529,7 @@ export function GeneratorsPanel() {
           ) : null}
         </div>
       ) : (
-        <div className="w-44 space-y-1 rounded border border-border bg-background/40 p-2">
+        <div className="w-44 space-y-3 rounded-xl border bg-card p-4">
           {mode === "road" ? (
             <MaterialSelect
               label="Road surface"
@@ -602,16 +601,16 @@ export function GeneratorsPanel() {
             </>
           ) : null}
           {catalogError ? (
-            <div className="text-[9px] text-status-warn">Catalog unavailable: {catalogError}</div>
+            <div className="text-xs text-status-warn">Catalog unavailable: {catalogError}</div>
           ) : null}
-          <div className="text-[9px] leading-relaxed text-muted-foreground">
+          <div className="text-sm leading-relaxed text-muted-foreground">
             Trees need a free trunk and canopy volume; plants only fill existing air.
           </div>
         </div>
       )}
 
       {mode === "sites" ? null : (
-        <div className="w-64 space-y-1 rounded border border-border bg-background/40 p-2">
+        <div className="w-64 space-y-3 rounded-xl border bg-card p-4">
           <div className="flex items-center justify-between gap-2">
             <span className="text-muted-foreground">Selection</span>
             <span className="font-mono">
@@ -619,25 +618,24 @@ export function GeneratorsPanel() {
             </span>
           </div>
           {routeOperation ? (
-            <div className="font-mono text-[9px] text-muted-foreground">
+            <div className="font-mono text-xs text-muted-foreground">
               bounds Y {routeOperation.bounds.min.y}..{routeOperation.bounds.max.y} ·{" "}
               {volume.toLocaleString()} blocks
             </div>
           ) : (
-            <div className="text-[9px] text-status-warn">
+            <div className="text-xs text-status-warn">
               Use the Box select tool, then choose a generator.
             </div>
           )}
           {tooLarge ? (
-            <div className="text-[9px] text-status-error">
+            <div className="text-xs text-status-error">
               Footprint exceeds the {MAX_EDIT_VOLUME.toLocaleString()} block limit.
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-1 pt-0.5">
+          <div className="flex flex-wrap gap-2 pt-0.5">
             <Button
               size="sm"
               variant="outline"
-              className="h-6 px-2 text-[10px]"
               disabled={!editing || !routeOperation || busy || tooLarge}
               aria-label="Preview generator"
               onClick={() => void previewGenerator()}
@@ -651,7 +649,6 @@ export function GeneratorsPanel() {
             </Button>
             <Button
               size="sm"
-              className="h-6 px-2 text-[10px]"
               disabled={!editing || !routeOperation || busy || tooLarge}
               aria-label="Apply generator"
               onClick={() => void applyGenerator()}
@@ -662,7 +659,7 @@ export function GeneratorsPanel() {
           </div>
           {preview ? (
             <div
-              className="rounded border border-status-ok/30 bg-status-ok/5 p-1 text-[9px] text-status-ok"
+              className="rounded-lg border border-status-ok/30 bg-status-ok/5 p-3 text-sm text-status-ok"
               data-testid="generator-preview"
             >
               {preview.changedBlocks.toLocaleString()} block(s) would change out of{" "}
@@ -675,11 +672,11 @@ export function GeneratorsPanel() {
             </div>
           ) : null}
           {error ? (
-            <div className="rounded border border-status-error/30 bg-status-error/5 p-1 text-[9px] text-status-error">
+            <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
               {error}
             </div>
           ) : null}
-          <div className="text-[9px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             Local construction tools; no vanilla worldgen parity claim.
           </div>
         </div>
@@ -711,7 +708,6 @@ function NumberField({
         type="number"
         min={min}
         max={max}
-        className="h-6 px-1 text-[10px]"
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
@@ -736,19 +732,19 @@ function MaterialSelect({
   return (
     <label className="flex flex-col gap-1">
       <span className="text-muted-foreground">{label}</span>
-      <select
+      <NativeSelect
         aria-label={label}
-        className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+        className="w-fit"
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(event.target.value)}
       >
         {catalog?.map((entry) => (
-          <option key={entry.name} value={entry.name}>
+          <NativeSelectOption key={entry.name} value={entry.name}>
             {entry.name}
-          </option>
-        )) ?? <option value={value}>{value}</option>}
-      </select>
+          </NativeSelectOption>
+        )) ?? <NativeSelectOption value={value}>{value}</NativeSelectOption>}
+      </NativeSelect>
     </label>
   );
 }

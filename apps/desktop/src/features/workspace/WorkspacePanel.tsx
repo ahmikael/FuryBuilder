@@ -14,6 +14,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { isTauriRuntime } from "@/lib/ipc";
 import {
   withActiveLayer,
@@ -40,10 +41,10 @@ function SectionTitle({
   hint?: string;
 }) {
   return (
-    <div className="mb-1 flex items-center gap-1.5">
-      <Icon className="size-3 text-muted-foreground" />
-      <span className="text-[10px] font-semibold tracking-wide uppercase">{title}</span>
-      {hint ? <span className="text-[9px] text-muted-foreground">{hint}</span> : null}
+    <div className="mb-1 flex items-center gap-2">
+      <Icon className="size-4 text-muted-foreground" />
+      <span className="text-base font-semibold">{title}</span>
+      {hint ? <span className="text-xs text-muted-foreground">{hint}</span> : null}
     </div>
   );
 }
@@ -75,7 +76,7 @@ export function WorkspacePanel() {
 
   if (!editing) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Layers className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
           Layers, masks and protected regions are enforced by the Rust Core. Open the desktop app to
@@ -88,8 +89,8 @@ export function WorkspacePanel() {
   const activeMask = policy.masks.find((mask) => mask.id === policy.activeMaskId) ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 gap-2 text-[11px]" data-testid="workspace-panel">
-      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-2 overflow-y-auto rounded border border-border bg-background/40 p-2">
+    <div className="flex min-h-0 flex-1 gap-4 text-sm" data-testid="workspace-panel">
+      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border bg-card p-4">
         <SectionTitle icon={Layers} title="Layers" hint="active layer receives edits" />
         <div className="space-y-1">
           {policy.layers.map((layer) => {
@@ -99,12 +100,12 @@ export function WorkspacePanel() {
                 key={layer.id}
                 className={cn(
                   "flex items-center gap-1 rounded border px-1.5 py-1",
-                  active ? "border-primary/60 bg-primary/10" : "border-border/70",
+                  active ? "border-primary/60 bg-primary/10" : "bg-card",
                 )}
               >
                 <button
                   type="button"
-                  className="min-w-0 flex-1 truncate text-left font-mono text-[10px]"
+                  className="min-w-0 flex-1 truncate text-left font-mono text-xs"
                   title={active ? "Active layer" : "Make active"}
                   onClick={() =>
                     void commit(withActiveLayer(policy, layer.id), "Active layer changed")
@@ -161,9 +162,8 @@ export function WorkspacePanel() {
             );
           })}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-2">
           <Input
-            className="h-6"
             placeholder="Layer name"
             value={layerName}
             onChange={(event) => setLayerName(event.target.value)}
@@ -189,29 +189,28 @@ export function WorkspacePanel() {
         </div>
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-2 overflow-y-auto rounded border border-border bg-background/40 p-2">
+      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border bg-card p-4">
         <SectionTitle icon={Shield} title="Edit mask" hint="operations must fit inside" />
-        <select
-          className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+        <NativeSelect
+          className="w-fit"
           value={policy.activeMaskId ?? ""}
           aria-label="Active mask"
           onChange={(event) =>
             void commit(withActiveMask(policy, event.target.value || null), "Active mask changed")
           }
         >
-          <option value="">No mask</option>
+          <NativeSelectOption value="">No mask</NativeSelectOption>
           {policy.masks.map((mask) => (
-            <option key={mask.id} value={mask.id}>
+            <NativeSelectOption key={mask.id} value={mask.id}>
               {mask.name} ({mask.dimension.replace("minecraft:", "")})
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
-        <p className="text-[9px] text-muted-foreground">
+        </NativeSelect>
+        <p className="text-sm text-muted-foreground">
           The mask only constrains its own dimension. Empty means unrestricted.
         </p>
-        <div className="flex gap-1">
+        <div className="flex gap-2">
           <Input
-            className="h-6"
             value={maskName}
             onChange={(event) => setMaskName(event.target.value)}
             aria-label="New mask name"
@@ -250,7 +249,7 @@ export function WorkspacePanel() {
         <SectionTitle icon={ShieldCheck} title="Protected regions" hint="always fail closed" />
         <div className="space-y-1">
           {policy.protectedRegions.length === 0 ? (
-            <p className="text-[9px] text-muted-foreground">Nothing is protected yet.</p>
+            <p className="text-sm text-muted-foreground">Nothing is protected yet.</p>
           ) : (
             policy.protectedRegions.map((region) => (
               <div
@@ -258,8 +257,8 @@ export function WorkspacePanel() {
                 className="flex items-center gap-1 rounded border border-border/70 px-1.5 py-1"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[10px]">{region.name}</div>
-                  <div className="truncate font-mono text-[8px] text-muted-foreground">
+                  <div className="truncate text-xs">{region.name}</div>
+                  <div className="truncate font-mono text-xs text-muted-foreground">
                     {region.dimension.replace("minecraft:", "")} · ({region.bounds.min.x},
                     {region.bounds.min.y},{region.bounds.min.z})..({region.bounds.max.x},
                     {region.bounds.max.y},{region.bounds.max.z})
@@ -282,9 +281,8 @@ export function WorkspacePanel() {
             ))
           )}
         </div>
-        <div className="flex gap-1">
+        <div className="flex gap-2">
           <Input
-            className="h-6"
             value={protectedName}
             onChange={(event) => setProtectedName(event.target.value)}
             aria-label="New protected region name"
@@ -307,15 +305,15 @@ export function WorkspacePanel() {
             <Plus className="size-3" /> Protect selection
           </Button>
         </div>
-        <p className="text-[9px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Protection blocks new operations and templates. Undo/redo restore previous snapshots and
           remain available.
         </p>
       </div>
 
-      <div className="min-w-0 flex-1 rounded border border-border bg-background/40 p-2">
+      <div className="min-w-0 flex-1 rounded-xl border bg-card p-4">
         <SectionTitle icon={Layers} title="Policy state" />
-        <div className="space-y-1 font-mono text-[9px] text-muted-foreground">
+        <div className="space-y-1 font-mono text-xs text-muted-foreground">
           <div>layers: {policy.layers.length} / 64</div>
           <div>masks: {policy.masks.length} / 64</div>
           <div>protected: {policy.protectedRegions.length} / 64</div>
@@ -323,14 +321,14 @@ export function WorkspacePanel() {
           <div>active mask: {policy.activeMaskId ?? "none"}</div>
         </div>
         {saving ? (
-          <div className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground">
+          <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" /> Saving policy…
           </div>
         ) : null}
         {error || actionError ? (
-          <p className="mt-2 text-[10px] text-status-error">{actionError ?? error}</p>
+          <p className="mt-2 text-xs text-status-error">{actionError ?? error}</p>
         ) : (
-          <p className="mt-2 text-[10px] text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             Policy changes are stored in project.json and do not bump the world revision.
           </p>
         )}

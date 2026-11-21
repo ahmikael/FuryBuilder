@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Loader2, ScanLine, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { checkVanillaParity } from "@/lib/project-api";
 import type { VanillaParityReport, VanillaParityStatus } from "@/project/types";
@@ -45,28 +47,23 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
 
   const comparison = report?.comparison ?? null;
   return (
-    <section className="space-y-1.5 rounded border border-border bg-card/60 p-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <ShieldCheck className="size-3.5 text-primary" />
-        <span className="text-[10px] font-medium">Generated base verification</span>
+    <section className="space-y-4 rounded-xl border bg-card p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <ShieldCheck className="size-4 text-primary" />
+        <span className="text-base font-semibold">Generated base verification</span>
         {report ? (
-          <span
-            className={cn(
-              "rounded px-1 py-0.5 text-[8px] font-semibold uppercase",
-              STATUS_CLASS[report.status],
-            )}
-          >
+          <Badge variant="outline" className={cn("uppercase", STATUS_CLASS[report.status])}>
             {STATUS_LABEL[report.status]}
-          </span>
+          </Badge>
         ) : (
-          <span className="rounded bg-muted px-1 py-0.5 text-[8px] font-semibold uppercase text-muted-foreground">
+          <Badge variant="secondary" className="uppercase">
             not checked
-          </span>
+          </Badge>
         )}
         <Button
           size="sm"
           variant="outline"
-          className="ml-auto h-6 px-2 text-[10px]"
+          className="ml-auto"
           onClick={() => void verify()}
           disabled={busy}
           aria-label="Verify generated base"
@@ -79,21 +76,22 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
           Verify reference chunks
         </Button>
       </div>
-      <p className="text-[9px] leading-relaxed text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Compares the saved imported base with the original generator's requested overworld chunks.
         Only an untouched base (revision 1) can be checked; the generated source stays read-only.
       </p>
 
       {error ? (
-        <div className="flex gap-1.5 rounded border border-status-error/30 bg-status-error/5 p-1.5 text-[9px] text-status-error">
-          <ShieldAlert className="mt-0.5 size-3 shrink-0" />
-          <span>{error}</span>
-        </div>
+        <Alert variant="destructive" className="p-4">
+          <ShieldAlert />
+          <AlertTitle>Parity check failed</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       ) : null}
 
       {report ? (
-        <div className="space-y-1.5">
-          <div className="flex flex-wrap items-center gap-1.5 font-mono text-[9px] text-muted-foreground">
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2 font-mono text-xs text-muted-foreground">
             <span>seed {report.seed}</span>
             <span>preset {report.preset}</span>
             <span>
@@ -108,7 +106,7 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
           </div>
           {comparison ? (
             <>
-              <div className="text-[9px] text-muted-foreground" data-testid="vanilla-parity-counts">
+              <div className="text-sm text-muted-foreground" data-testid="vanilla-parity-counts">
                 checked{" "}
                 <span className="font-mono text-foreground">
                   {comparison.checkedChunks} of {comparison.sampledChunks}
@@ -133,7 +131,7 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
                 difference(s)
               </div>
               {comparison.mismatches.length > 0 ? (
-                <div className="scrollbar-thin max-h-24 space-y-0.5 overflow-y-auto rounded border border-status-error/30 bg-status-error/5 p-1.5 font-mono text-[8px] text-status-error">
+                <div className="scrollbar-thin max-h-28 space-y-1 overflow-y-auto rounded-lg border border-status-error/30 bg-status-error/5 p-3 font-mono text-xs text-status-error">
                   {comparison.mismatches.slice(0, 8).map((mismatch) => (
                     <div key={`${mismatch.x},${mismatch.y},${mismatch.z}`}>
                       ({mismatch.x}, {mismatch.y}, {mismatch.z}) reference {mismatch.reference} ·
@@ -143,7 +141,7 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
                 </div>
               ) : null}
               {comparison.missingProjectChunks.length > 0 ? (
-                <div className="text-[9px] text-status-error">
+                <div className="text-sm text-status-error">
                   {comparison.missingProjectChunks.length} reference chunk(s) have no matching
                   editable chunk.
                 </div>
@@ -151,23 +149,23 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
             </>
           ) : null}
           {report.refusals.length > 0 ? (
-            <div className="space-y-0.5 rounded border border-status-warn/30 bg-status-warn/5 p-1.5 text-[9px] text-status-warn">
+            <div className="space-y-1 rounded-lg border border-status-warn/30 bg-status-warn/5 p-3 text-sm text-status-warn">
               {report.refusals.map((refusal) => (
                 <div key={refusal}>{refusal}</div>
               ))}
             </div>
           ) : null}
           {report.fromAutosave ? (
-            <div className="text-[9px] text-status-warn">
+            <div className="text-sm text-status-warn">
               The verified autosave was checked instead of the last manual save.
             </div>
           ) : null}
           {report.limitations.length > 0 ? (
-            <details className="rounded border border-border bg-background/40 p-1.5">
-              <summary className="cursor-pointer text-[9px] font-medium">
+            <details className="rounded-lg border bg-muted/30 p-4">
+              <summary className="cursor-pointer text-sm font-medium">
                 Parity scope and limitations
               </summary>
-              <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[8px] text-muted-foreground">
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
                 {report.limitations.map((limitation) => (
                   <li key={limitation}>{limitation}</li>
                 ))}

@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, ShieldCheck, ShieldAlert } from "lucide-react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +27,6 @@ import {
 } from "@/lib/mcp-access";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
-import { cn } from "@/lib/utils";
 
 interface McpAccessDialogProps {
   open: boolean;
@@ -221,15 +226,18 @@ function McpAccessContent({ onClose }: { onClose: () => void }) {
   const editing = form.mode !== "read_only";
 
   return (
-    <DialogContent className="max-w-2xl">
+    <DialogContent className="max-h-[90vh] max-w-3xl gap-6 overflow-y-auto p-6">
       <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
+        <DialogTitle className="flex items-center gap-2 text-xl">
           {editing ? (
-            <ShieldAlert className="size-4 text-status-warn" />
+            <ShieldAlert className="size-5 text-status-warn" />
           ) : (
-            <ShieldCheck className="size-4 text-status-ok" />
+            <ShieldCheck className="size-5 text-status-ok" />
           )}
           AI / MCP access
+          <Badge variant={editing ? "secondary" : "outline"} className="ml-1">
+            {editing ? "Edit enabled" : "Read-only"}
+          </Badge>
         </DialogTitle>
         <DialogDescription>
           Controls what an external MCP client can read and change. The bridge cannot raise its own
@@ -238,143 +246,175 @@ function McpAccessContent({ onClose }: { onClose: () => void }) {
       </DialogHeader>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-6 text-xs text-muted-foreground">
-          <Loader2 className="size-3.5 animate-spin" /> Loading policy…
+        <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading policy…
         </div>
       ) : (
-        <div className="space-y-4">
-          <section className="space-y-1.5">
-            <h3 className="text-[11px] font-semibold tracking-wide uppercase">Mode</h3>
-            <div className="flex flex-wrap gap-1">
+        <div className="space-y-6">
+          <section className="space-y-3">
+            <h3 className="text-sm font-semibold">Mode</h3>
+            <ToggleGroup
+              variant="outline"
+              spacing={2}
+              value={[form.mode]}
+              onValueChange={(value) => {
+                const mode = value[0];
+                if (
+                  mode === "read_only" ||
+                  mode === "edit_in_selection" ||
+                  mode === "full_project"
+                ) {
+                  setForm((current) => ({ ...current, mode }));
+                }
+              }}
+              className="flex-wrap"
+            >
               {(["read_only", "edit_in_selection", "full_project"] as const).map((mode) => (
-                <Button
-                  key={mode}
-                  size="sm"
-                  variant={form.mode === mode ? "default" : "outline"}
-                  onClick={() => setForm((current) => ({ ...current, mode }))}
-                >
+                <ToggleGroupItem key={mode} value={mode}>
                   {ACCESS_MODE_LABELS[mode]}
-                </Button>
+                </ToggleGroupItem>
               ))}
-            </div>
-            <p className="text-[10px] text-muted-foreground">
+            </ToggleGroup>
+            <p className="text-sm leading-relaxed text-muted-foreground">
               Read-only is the default. Edit-in-selection limits every write and undo to a single
               dimension and box. Full project keeps the hard block limits.
             </p>
           </section>
 
           {form.mode === "edit_in_selection" ? (
-            <section className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <h3 className="text-[11px] font-semibold tracking-wide uppercase">Selection</h3>
-                <Button size="sm" variant="outline" onClick={useCurrentSelection}>
-                  Use current viewport selection
-                </Button>
-              </div>
-              <div className="grid grid-cols-[1fr_auto] gap-2">
-                <label className="text-[10px] text-muted-foreground">
-                  Dimension
-                  <Input
-                    value={form.dimension}
-                    onChange={(event) => update("dimension", event.target.value)}
-                    spellCheck={false}
-                  />
-                </label>
-                <span className="self-end pb-1 font-mono text-[10px] text-muted-foreground">
-                  {volume === null ? "invalid box" : `${volume} blocks`}
-                </span>
-              </div>
-              <div className="grid grid-cols-6 gap-1.5">
-                {(
-                  [
-                    ["minX", "min X"],
-                    ["minY", "min Y"],
-                    ["minZ", "min Z"],
-                    ["maxX", "max X"],
-                    ["maxY", "max Y"],
-                    ["maxZ", "max Z"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <label key={key} className="text-[10px] text-muted-foreground">
-                    {label}
+            <Card className="gap-0 py-0">
+              <CardContent className="space-y-4 p-6">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">Selection</h3>
+                  <Button size="sm" variant="outline" onClick={useCurrentSelection}>
+                    Use current viewport selection
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-end gap-3">
+                  <Field className="min-w-56 flex-1">
+                    <FieldLabel htmlFor="mcp-dimension">Dimension</FieldLabel>
                     <Input
-                      value={form[key]}
-                      inputMode="numeric"
-                      onChange={(event) => update(key, event.target.value)}
+                      id="mcp-dimension"
+                      value={form.dimension}
+                      onChange={(event) => update("dimension", event.target.value)}
+                      spellCheck={false}
                     />
-                  </label>
-                ))}
-              </div>
-            </section>
+                  </Field>
+                  <Badge variant="secondary" className="mb-1.5 font-mono">
+                    {volume === null ? "invalid box" : `${volume} blocks`}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {(
+                    [
+                      ["minX", "Min X"],
+                      ["minY", "Min Y"],
+                      ["minZ", "Min Z"],
+                      ["maxX", "Max X"],
+                      ["maxY", "Max Y"],
+                      ["maxZ", "Max Z"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <Field key={key}>
+                      <FieldLabel htmlFor={`mcp-${key}`}>{label}</FieldLabel>
+                      <Input
+                        id={`mcp-${key}`}
+                        value={form[key]}
+                        inputMode="numeric"
+                        onChange={(event) => update(key, event.target.value)}
+                      />
+                    </Field>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           ) : null}
 
-          <section className="space-y-2">
-            <h3 className="text-[11px] font-semibold tracking-wide uppercase">Limits</h3>
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[10px] text-muted-foreground">
-                Max blocks per operation
-                <Input
-                  value={form.maxBlocks}
-                  inputMode="numeric"
-                  onChange={(event) => update("maxBlocks", event.target.value)}
-                />
-              </label>
-              <label className="text-[10px] text-muted-foreground">
-                Max changes per batch
-                <Input
-                  value={form.maxBatchChanges}
-                  inputMode="numeric"
-                  onChange={(event) => update("maxBatchChanges", event.target.value)}
-                />
-              </label>
-            </div>
-          </section>
+          <Card className="gap-0 py-0">
+            <CardContent className="space-y-4 p-6">
+              <h3 className="text-sm font-semibold">Limits</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field>
+                  <FieldLabel htmlFor="mcp-max-blocks">Max blocks per operation</FieldLabel>
+                  <Input
+                    id="mcp-max-blocks"
+                    value={form.maxBlocks}
+                    inputMode="numeric"
+                    onChange={(event) => update("maxBlocks", event.target.value)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="mcp-max-batch">Max changes per batch</FieldLabel>
+                  <Input
+                    id="mcp-max-batch"
+                    value={form.maxBatchChanges}
+                    inputMode="numeric"
+                    onChange={(event) => update("maxBatchChanges", event.target.value)}
+                  />
+                </Field>
+              </div>
+            </CardContent>
+          </Card>
 
-          <section className="space-y-1.5">
-            <label className="flex items-start gap-2 rounded border border-border bg-background/40 p-2 text-[11px]">
-              <input
-                type="checkbox"
-                checked={form.requireConfirmation}
-                onChange={(event) => update("requireConfirmation", event.target.checked)}
-                className="mt-0.5 accent-[var(--primary)]"
-              />
-              <span>
-                Ask me to approve every apply and undo
-                <span className="block text-[10px] text-muted-foreground">
-                  Keep this on. The write waits for your answer and fails if you deny or do not
-                  respond.
-                </span>
-              </span>
-            </label>
-          </section>
+          <Card className="gap-0 py-0">
+            <CardContent className="p-6">
+              <div className="flex items-start gap-3">
+                <Checkbox
+                  id="mcp-confirmation"
+                  className="mt-0.5"
+                  checked={form.requireConfirmation}
+                  onCheckedChange={(checked) => update("requireConfirmation", checked === true)}
+                  aria-label="Ask me to approve every apply and undo"
+                />
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Ask me to approve every apply and undo</p>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    Keep this on. The write waits for your answer and fails if you deny or do not
+                    respond.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {editing ? (
-            <div className="rounded border border-status-warn/30 bg-status-warn/5 p-2 text-[10px] text-status-warn">
-              External clients can modify this project while edit access is enabled. Switch back to
-              Read-only when you are finished.
-            </div>
+            <Alert className="p-4">
+              <ShieldAlert />
+              <AlertTitle>External clients can modify this project</AlertTitle>
+              <AlertDescription>
+                Edit access is currently enabled. Switch back to Read-only when you are finished.
+              </AlertDescription>
+            </Alert>
           ) : null}
 
-          {error ? <p className="text-[11px] text-status-warn">{error}</p> : null}
+          {error ? (
+            <Alert variant="destructive" className="p-4">
+              <ShieldAlert />
+              <AlertTitle>Could not save the policy</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
           {saved ? (
-            <p className={cn("text-[11px]", "text-status-ok")}>
-              Policy saved. New requests use it immediately.
-            </p>
+            <Alert className="p-4">
+              <ShieldCheck />
+              <AlertTitle>Policy saved</AlertTitle>
+              <AlertDescription>New requests use it immediately.</AlertDescription>
+            </Alert>
           ) : null}
         </div>
       )}
 
       <Separator />
       <DialogFooter className="items-center justify-between gap-2 sm:justify-between">
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-xs text-muted-foreground">
           Changes apply to the running desktop only.
         </span>
-        <div className="flex gap-1.5">
+        <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onClose}>
             Close
           </Button>
           <Button size="sm" onClick={() => void save()} disabled={loading || saving}>
-            {saving ? <Loader2 className="animate-spin" /> : null}
+            {saving ? <Loader2 data-icon="inline-start" className="animate-spin" /> : null}
             Save policy
           </Button>
         </div>

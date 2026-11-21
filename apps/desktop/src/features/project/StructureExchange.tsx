@@ -11,9 +11,19 @@ import {
   ShieldAlert,
   Upload,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import {
   exportStructure,
@@ -46,9 +56,9 @@ function defaultOriginY(height: number, dimension: string): number {
 
 function Meta({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex min-w-0 items-baseline gap-1.5">
+    <div className="flex min-w-0 items-baseline gap-2">
       <span className="shrink-0 text-muted-foreground">{label}</span>
-      <span className="truncate font-mono text-foreground">{value}</span>
+      <span className="truncate font-mono text-xs text-foreground">{value}</span>
     </div>
   );
 }
@@ -56,22 +66,22 @@ function Meta({ label, value }: { label: string; value: ReactNode }) {
 function Palette({ preview }: { preview: StructureImportPreview | StructureExportPreview }) {
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-        <Boxes className="size-3" /> Palette ({preview.paletteSize})
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Boxes className="size-4" /> Palette ({preview.paletteSize})
       </div>
       <div className="flex max-h-16 flex-wrap gap-1 overflow-y-auto">
         {preview.palette.map((entry) => (
           <span
             key={entry.state}
             title={entry.state}
-            className="rounded border border-border bg-background/60 px-1 py-0.5 font-mono text-[8px] text-muted-foreground"
+            className="rounded-md border bg-muted/40 px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
           >
             {shortBlockState(entry.state)}{" "}
             <span className="text-foreground">×{entry.count.toLocaleString()}</span>
           </span>
         ))}
         {preview.paletteSize > preview.palette.length ? (
-          <span className="px-1 py-0.5 text-[8px] text-muted-foreground">
+          <span className="px-1 py-0.5 text-xs text-muted-foreground">
             +{preview.paletteSize - preview.palette.length} more
           </span>
         ) : null}
@@ -83,10 +93,10 @@ function Palette({ preview }: { preview: StructureImportPreview | StructureExpor
 function Warnings({ items }: { items: string[] }) {
   if (items.length === 0) return null;
   return (
-    <div className="space-y-0.5 rounded border border-status-warn/30 bg-status-warn/5 p-1.5 text-[9px] leading-relaxed text-status-warn">
+    <div className="space-y-1.5 rounded-xl border border-status-warn/30 bg-status-warn/5 p-4 text-sm leading-relaxed text-status-warn">
       {items.map((warning) => (
-        <div key={warning} className="flex gap-1">
-          <AlertTriangle className="mt-0.5 size-2.5 shrink-0" />
+        <div key={warning} className="flex gap-2">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
           <span>{warning}</span>
         </div>
       ))}
@@ -242,12 +252,11 @@ export function StructureExchange() {
   const newProjectBlocked = destination === "new" && dirty;
 
   return (
-    <div className="space-y-2 pt-0.5">
-      <div className="flex items-center gap-1">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
           variant={mode === "import" ? "default" : "outline"}
-          className="h-6 px-2 text-[10px]"
           onClick={() => setMode("import")}
         >
           <Upload className="mr-1 size-3" /> Import structure
@@ -255,12 +264,11 @@ export function StructureExchange() {
         <Button
           size="sm"
           variant={mode === "export" ? "default" : "outline"}
-          className="h-6 px-2 text-[10px]"
           onClick={() => setMode("export")}
         >
           <Download className="mr-1 size-3" /> Export structure
         </Button>
-        <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+        <span className="ml-auto font-mono text-xs text-muted-foreground">
           Java structure · Minecraft 1.21.4 · DataVersion 4189
         </span>
       </div>
@@ -268,20 +276,20 @@ export function StructureExchange() {
       <Separator />
 
       {!desktop ? (
-        <div className="rounded border border-status-warn/40 bg-status-warn/10 p-3 text-[11px] leading-relaxed text-muted-foreground">
-          <div className="mb-1 flex items-center gap-1.5 font-medium text-status-warn">
-            <ShieldAlert className="size-3.5" /> Desktop core required
-          </div>
-          Structure import/export runs in the Tauri backend where files can be verified and
-          published atomically. Browser preview mode cannot read or write project folders.
-        </div>
+        <Alert className="p-4">
+          <ShieldAlert />
+          <AlertTitle>Desktop core required</AlertTitle>
+          <AlertDescription>
+            Structure import/export runs in the Tauri backend where files can be verified and
+            published atomically. Browser preview mode cannot read or write project folders.
+          </AlertDescription>
+        </Alert>
       ) : mode === "import" ? (
-        <div className="scrollbar-thin max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-          <div className="flex items-center gap-2 rounded border border-border bg-background/40 p-2">
+        <div className="scrollbar-thin max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/30 p-4">
             <Button
               size="sm"
               variant="outline"
-              className="h-6 px-2 text-[10px]"
               disabled={disabled}
               onClick={() => fileInput.current?.click()}
             >
@@ -295,7 +303,7 @@ export function StructureExchange() {
               aria-label="Structure file"
               onChange={(event) => void handleFile(event)}
             />
-            <div className="min-w-0 flex-1 text-[10px] text-muted-foreground">
+            <div className="min-w-0 flex-1 text-sm text-muted-foreground">
               {file ? (
                 <span className="truncate font-mono text-foreground">
                   {file.name} · {formatBytes(file.size)}
@@ -308,7 +316,7 @@ export function StructureExchange() {
           </div>
 
           {importError ? (
-            <div className="flex items-start gap-1.5 rounded border border-status-error/40 bg-status-error/5 p-2 text-[10px] text-status-error">
+            <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
               <AlertTriangle className="mt-0.5 size-3 shrink-0" />
               <span>{importError}</span>
             </div>
@@ -324,7 +332,7 @@ export function StructureExchange() {
                     : "border-status-error/40 bg-status-error/5",
                 )}
               >
-                <div className="flex items-center gap-1.5 text-[10px] font-medium">
+                <div className="flex items-center gap-1.5 text-xs font-medium">
                   {preview.compatible ? (
                     <>
                       <CheckCircle2 className="size-3.5 text-status-ok" /> Compatible structure
@@ -335,11 +343,11 @@ export function StructureExchange() {
                       content cannot be preserved
                     </>
                   )}
-                  <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">
                     {preview.format} · DV {preview.dataVersion}
                   </span>
                 </div>
-                <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] md:grid-cols-3">
+                <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs md:grid-cols-3">
                   <Meta label="Size" value={`${preview.size.join(" × ")}`} />
                   <Meta label="Volume" value={preview.volume.toLocaleString()} />
                   <Meta label="Non-air" value={preview.nonAirBlocks.toLocaleString()} />
@@ -355,14 +363,13 @@ export function StructureExchange() {
               <Palette preview={preview} />
               <Warnings items={preview.warnings} />
 
-              <div className="grid gap-2 rounded border border-border bg-background/40 p-2 md:grid-cols-2">
+              <div className="grid gap-4 rounded-xl border bg-muted/30 p-4 md:grid-cols-2">
                 <div className="space-y-1">
-                  <div className="text-[10px] font-medium text-muted-foreground">Destination</div>
+                  <div className="text-xs font-medium text-muted-foreground">Destination</div>
                   <div className="flex gap-1">
                     <Button
                       size="sm"
                       variant={destination === "new" ? "default" : "outline"}
-                      className="h-6 px-2 text-[10px]"
                       disabled={disabled}
                       onClick={() => setDestination("new")}
                     >
@@ -371,7 +378,6 @@ export function StructureExchange() {
                     <Button
                       size="sm"
                       variant={destination === "insert" ? "default" : "outline"}
-                      className="h-6 px-2 text-[10px]"
                       disabled={disabled || !projectOpen}
                       onClick={() => setDestination("insert")}
                     >
@@ -384,39 +390,39 @@ export function StructureExchange() {
                       maxLength={64}
                       placeholder="Imported structure"
                       aria-label="Imported project name"
-                      className="h-6 text-[11px]"
+                      className="h-6 text-xs"
                       onChange={(event) => setName(event.target.value)}
                     />
                   ) : (
-                    <p className="text-[9px] leading-relaxed text-muted-foreground">
+                    <p className="text-xs leading-relaxed text-muted-foreground">
                       Inserts into “{current?.name}”. The project stays unsaved until you save.
                     </p>
                   )}
                 </div>
 
                 <div className="space-y-1">
-                  <div className="text-[10px] font-medium text-muted-foreground">Placement</div>
+                  <div className="text-xs font-medium text-muted-foreground">Placement</div>
                   <div className="flex items-center gap-1">
-                    <select
+                    <NativeSelect
                       aria-label="Import dimension"
-                      className="h-6 rounded border border-border bg-card px-1.5 text-[10px]"
+                      className="w-fit"
                       value={importDimension}
                       onChange={(event) => changeImportDimension(event.target.value)}
                     >
                       {STRUCTURE_DIMENSIONS.map((dimension) => (
-                        <option key={dimension.id} value={dimension.id}>
+                        <NativeSelectOption key={dimension.id} value={dimension.id}>
                           {dimension.label}
-                        </option>
+                        </NativeSelectOption>
                       ))}
-                    </select>
+                    </NativeSelect>
                     {(["x", "y", "z"] as const).map((axis) => (
-                      <label key={axis} className="flex items-center gap-0.5 font-mono text-[9px]">
+                      <label key={axis} className="flex items-center gap-0.5 font-mono text-xs">
                         <span className="text-muted-foreground">{axis}</span>
                         <Input
                           type="number"
                           aria-label={`Origin ${axis}`}
                           value={origin[axis]}
-                          className="h-6 w-14 px-1 text-[10px]"
+                          className="w-14"
                           onChange={(event) =>
                             setOrigin((value) => ({
                               ...value,
@@ -427,11 +433,10 @@ export function StructureExchange() {
                       </label>
                     ))}
                   </div>
-                  <label className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
-                    <input
-                      type="checkbox"
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Checkbox
                       checked={includeAir}
-                      onChange={(event) => setIncludeAir(event.target.checked)}
+                      onCheckedChange={(checked) => setIncludeAir(checked === true)}
                     />
                     Replace the whole volume (clear air positions). Off: overlay only non-air
                     blocks.
@@ -440,7 +445,7 @@ export function StructureExchange() {
               </div>
 
               {newProjectBlocked ? (
-                <div className="rounded border border-status-warn/40 bg-status-warn/10 p-2 text-[9px] text-status-warn">
+                <div className="rounded border border-status-warn/40 bg-status-warn/10 p-2 text-xs text-status-warn">
                   “{current?.name}” has unsaved changes. Save or close it before creating a new
                   imported project.
                 </div>
@@ -449,7 +454,7 @@ export function StructureExchange() {
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-                  className="h-7 px-2 text-[10px]"
+
                   disabled={
                     disabled ||
                     !preview.compatible ||
@@ -466,32 +471,48 @@ export function StructureExchange() {
                   )}
                   {destination === "new" ? "Create project from structure" : "Insert structure"}
                 </Button>
-                <span className="text-[9px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   The original file is copied into the project&apos;s immutable source layer.
                 </span>
               </div>
             </>
           ) : (
-            <div className="rounded border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">
-              Choose a Java structure file to inspect its size, palette and compatibility before
-              importing.
-            </div>
+            <Empty className="border-0 py-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Package />
+                </EmptyMedia>
+                <EmptyTitle>No structure selected</EmptyTitle>
+                <EmptyDescription>
+                  Choose a Java structure file to inspect its size, palette and compatibility before
+                  importing.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )}
         </div>
       ) : (
-        <div className="scrollbar-thin max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+        <div className="scrollbar-thin max-h-[52vh] space-y-3 overflow-y-auto pr-1">
           {!projectOpen ? (
-            <div className="rounded border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">
-              Open a project to export its world as a Java structure.
-            </div>
+            <Empty className="border-0 py-8">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <HardDrive />
+                </EmptyMedia>
+                <EmptyTitle>No project open</EmptyTitle>
+                <EmptyDescription>
+                  Open a project to export its world as a Java structure.
+                </EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2 rounded border border-border bg-background/40 p-2">
-                <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/30 p-4">
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   Dimension
-                  <select
+                  <NativeSelect
                     aria-label="Export dimension"
-                    className="h-6 rounded border border-border bg-card px-1.5 text-[10px]"
+                    className="w-fit"
                     value={exportDimension}
                     onChange={(event) => {
                       setExportDimension(event.target.value);
@@ -500,19 +521,18 @@ export function StructureExchange() {
                     }}
                   >
                     {STRUCTURE_DIMENSIONS.map((dimension) => (
-                      <option key={dimension.id} value={dimension.id}>
+                      <NativeSelectOption key={dimension.id} value={dimension.id}>
                         {dimension.label}
-                      </option>
+                      </NativeSelectOption>
                     ))}
-                  </select>
+                  </NativeSelect>
                 </label>
-                <label className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                  <input
-                    type="checkbox"
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <Checkbox
                     checked={useSelection && selectionMatchesDimension}
                     disabled={!selection || !selectionMatchesDimension}
-                    onChange={(event) => {
-                      setUseSelection(event.target.checked);
+                    onCheckedChange={(checked) => {
+                      setUseSelection(checked === true);
                       setExportPreview(null);
                       setExportResult(null);
                     }}
@@ -524,7 +544,7 @@ export function StructureExchange() {
                       ? ""
                       : ` (made in ${worldDimension.split(":").pop()})`}
                 </label>
-                <span className="max-w-64 truncate font-mono text-[9px] text-muted-foreground">
+                <span className="max-w-64 truncate font-mono text-xs text-muted-foreground">
                   {exportBounds
                     ? `${exportBounds.min.x},${exportBounds.min.y},${exportBounds.min.z} → ${exportBounds.max.x},${exportBounds.max.y},${exportBounds.max.z}`
                     : "content bounds (all non-air blocks)"}
@@ -532,7 +552,7 @@ export function StructureExchange() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="ml-auto h-6 px-2 text-[10px]"
+                  className="ml-auto"
                   disabled={disabled}
                   onClick={() => void requestExportPreview()}
                 >
@@ -546,7 +566,7 @@ export function StructureExchange() {
               </div>
 
               {exportError ? (
-                <div className="flex items-start gap-1.5 rounded border border-status-error/40 bg-status-error/5 p-2 text-[10px] text-status-error">
+                <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
                   <AlertTriangle className="mt-0.5 size-3 shrink-0" />
                   <span>{exportError}</span>
                 </div>
@@ -554,15 +574,15 @@ export function StructureExchange() {
 
               {exportPreview ? (
                 <>
-                  <div className="rounded border border-status-ok/30 bg-status-ok/5 p-2">
-                    <div className="flex items-center gap-1.5 text-[10px] font-medium">
+                  <div className="rounded-xl border border-status-ok/30 bg-status-ok/5 p-4 text-sm">
+                    <div className="flex items-center gap-1.5 text-xs font-medium">
                       <CheckCircle2 className="size-3.5 text-status-ok" /> Export ready
-                      <span className="ml-auto font-mono text-[9px] text-muted-foreground">
+                      <span className="ml-auto font-mono text-xs text-muted-foreground">
                         {exportPreview.format} · DV {exportPreview.dataVersion} →{" "}
                         {exportPreview.targetDataVersion}
                       </span>
                     </div>
-                    <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] md:grid-cols-3">
+                    <div className="mt-1.5 grid grid-cols-2 gap-x-3 gap-y-0.5 text-xs md:grid-cols-3">
                       <Meta label="Size" value={`${exportPreview.size.join(" × ")}`} />
                       <Meta label="Volume" value={exportPreview.volume.toLocaleString()} />
                       <Meta label="Non-air" value={exportPreview.nonAirBlocks.toLocaleString()} />
@@ -570,7 +590,7 @@ export function StructureExchange() {
                       <Meta label="Bytes" value={formatBytes(exportPreview.bytes)} />
                       <Meta label="Target" value={exportPreview.targetMinecraftVersion} />
                     </div>
-                    <div className="mt-1 grid gap-0.5 font-mono text-[9px] text-muted-foreground">
+                    <div className="mt-1 grid gap-0.5 font-mono text-xs text-muted-foreground">
                       <span className="truncate">path: {exportPreview.relativePath}</span>
                       <span className="truncate">checksum: {exportPreview.checksum}</span>
                     </div>
@@ -581,7 +601,7 @@ export function StructureExchange() {
                   <div className="flex items-center gap-2">
                     <Button
                       size="sm"
-                      className="h-7 px-2 text-[10px]"
+
                       disabled={disabled}
                       onClick={() => void executeExport()}
                     >
@@ -592,25 +612,33 @@ export function StructureExchange() {
                       )}
                       Export .nbt
                     </Button>
-                    <span className="text-[9px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       Written under the project&apos;s exports folder, then re-read and compared
                       before success is reported.
                     </span>
                   </div>
                 </>
               ) : (
-                <div className="rounded border border-dashed border-border px-3 py-6 text-center text-[11px] text-muted-foreground">
-                  Preview the export to see size, block counts, target DataVersion, warnings and the
-                  destination path before writing a file.
-                </div>
+                <Empty className="border-0 py-8">
+                  <EmptyHeader>
+                    <EmptyMedia variant="icon">
+                      <Download />
+                    </EmptyMedia>
+                    <EmptyTitle>Nothing previewed yet</EmptyTitle>
+                    <EmptyDescription>
+                      Preview the export to see size, block counts, target DataVersion, warnings and
+                      the destination path before writing a file.
+                    </EmptyDescription>
+                  </EmptyHeader>
+                </Empty>
               )}
 
               {exportResult ? (
-                <div className="space-y-1 rounded border border-status-ok/40 bg-status-ok/5 p-2 text-[10px]">
+                <div className="space-y-2 rounded-xl border border-status-ok/40 bg-status-ok/5 p-4 text-sm">
                   <div className="flex items-center gap-1.5 font-medium text-status-ok">
                     <CheckCircle2 className="size-3.5" /> Verified export
                   </div>
-                  <div className="grid gap-0.5 font-mono text-[9px] text-muted-foreground">
+                  <div className="grid gap-0.5 font-mono text-xs text-muted-foreground">
                     <span className="truncate">file: {exportResult.outcome.relativePath}</span>
                     <span>
                       bytes: {formatBytes(exportResult.outcome.bytes)} · non-air:{" "}
@@ -626,7 +654,7 @@ export function StructureExchange() {
       )}
 
       <Separator />
-      <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
         <HardDrive className="size-3" />
         <span>
           Block states and properties are preserved verbatim. Entities, block entities and

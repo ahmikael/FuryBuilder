@@ -124,12 +124,12 @@ export function BiomePanel() {
   }
 
   return (
-    <div className="flex flex-wrap items-start gap-3 text-[10px]">
+    <div className="flex flex-wrap items-start gap-4 text-sm">
       <div className="flex w-80 flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <Leaf className="size-3.5 text-primary" />
           <span className="font-medium">Biome painter</span>
-          <span className="rounded bg-muted px-1 py-0.5 text-[8px] uppercase text-muted-foreground">
+          <span className="rounded bg-muted px-1 py-0.5 text-xs uppercase text-muted-foreground">
             Java 1.21.4
           </span>
         </div>
@@ -138,7 +138,7 @@ export function BiomePanel() {
           <Input
             aria-label="Biome id"
             list="fury-common-biomes"
-            className="h-6 px-1 font-mono text-[10px]"
+            className="h-6 px-1 font-mono text-xs"
             value={biome}
             disabled={busy}
             onChange={(event) => {
@@ -152,33 +152,33 @@ export function BiomePanel() {
             ))}
           </datalist>
         </label>
-        <div className="text-[9px] leading-relaxed text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           A namespaced lowercase id such as <span className="font-mono">minecraft:forest</span>.
           Every 4×4×4 cell touched by the selection is painted; cells outside it and all block
           states stay unchanged.
         </div>
       </div>
 
-      <div className="w-56 space-y-1 rounded border border-border bg-background/40 p-2">
+      <div className="w-56 space-y-3 rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Current biome</span>
           <span className="truncate font-mono" data-testid="current-biome">
             {selection ? (currentBiome ?? "no data") : "—"}
           </span>
         </div>
-        <div className="text-[9px] leading-relaxed text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           {currentError
             ? `Current biome unavailable: ${currentError}`
             : "Read from the editable world at the selection minimum corner."}
         </div>
         {!validBiome ? (
-          <div className="text-[9px] text-status-warn">
+          <div className="text-xs text-status-warn">
             Enter a namespaced id like minecraft:plains.
           </div>
         ) : null}
       </div>
 
-      <div className="w-64 space-y-1 rounded border border-border bg-background/40 p-2">
+      <div className="w-64 space-y-3 rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Selection</span>
           <span className="font-mono">
@@ -186,24 +186,23 @@ export function BiomePanel() {
           </span>
         </div>
         {operation ? (
-          <div className="font-mono text-[9px] text-muted-foreground">
+          <div className="font-mono text-xs text-muted-foreground">
             Y {operation.bounds.min.y}..{operation.bounds.max.y} · {volume.toLocaleString()} blocks
           </div>
         ) : (
-          <div className="text-[9px] text-status-warn">
+          <div className="text-xs text-status-warn">
             Use the Box select tool, then choose a biome id.
           </div>
         )}
         {tooLarge ? (
-          <div className="text-[9px] text-status-error">
+          <div className="text-xs text-status-error">
             Selection exceeds the {MAX_EDIT_VOLUME.toLocaleString()} block limit.
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-1 pt-0.5">
+        <div className="flex flex-wrap gap-2 pt-0.5">
           <Button
             size="sm"
             variant="outline"
-            className="h-6 px-2 text-[10px]"
             disabled={!editing || !operation || busy || tooLarge}
             aria-label="Preview biome"
             onClick={() => void previewBiome()}
@@ -217,7 +216,6 @@ export function BiomePanel() {
           </Button>
           <Button
             size="sm"
-            className="h-6 px-2 text-[10px]"
             disabled={!editing || !operation || busy || tooLarge}
             aria-label="Apply biome"
             onClick={() => void applyBiome()}
@@ -228,7 +226,7 @@ export function BiomePanel() {
         </div>
         {preview ? (
           <div
-            className="rounded border border-status-ok/30 bg-status-ok/5 p-1 text-[9px] text-status-ok"
+            className="rounded-lg border border-status-ok/30 bg-status-ok/5 p-3 text-sm text-status-ok"
             data-testid="biome-preview"
           >
             {preview.changedBlocks.toLocaleString()} biome block(s) would change out of{" "}
@@ -241,11 +239,11 @@ export function BiomePanel() {
           </div>
         ) : null}
         {error ? (
-          <div className="rounded border border-status-error/30 bg-status-error/5 p-1 text-[9px] text-status-error">
+          <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
             {error}
           </div>
         ) : null}
-        <div className="text-[9px] text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           Requires source biome data (imported 1.21.4 world or generated base). Export writes
           verified cells into a new world copy; no vanilla worldgen is simulated.
         </div>

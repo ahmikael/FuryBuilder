@@ -26,7 +26,7 @@ export function Toaster() {
             key={toast.id}
             role={toast.kind === "error" ? "alert" : "status"}
             className={cn(
-              "pointer-events-auto flex items-start gap-2 rounded-md border bg-card/95 px-2.5 py-2 text-[11px] shadow-xl backdrop-blur",
+              "pointer-events-auto flex items-start gap-2 rounded-md border bg-card/95 px-2.5 py-2 text-xs shadow-xl backdrop-blur",
               toast.kind === "info" && "border-border",
               toast.kind === "success" && "border-status-ok/40",
               toast.kind === "warning" && "border-status-warn/40",
@@ -45,7 +45,7 @@ export function Toaster() {
             <div className="min-w-0 flex-1">
               <div className="font-medium">{toast.title}</div>
               {toast.description ? (
-                <div className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">
+                <div className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
                   {toast.description}
                 </div>
               ) : null}

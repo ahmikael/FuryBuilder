@@ -1,8 +1,17 @@
 import { useState } from "react";
 import { Building2, Crosshair, Landmark, Loader2, Plus, Route, Shapes, Trash2 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { isTauriRuntime } from "@/lib/ipc";
 import {
   SCENE_OBJECT_KINDS,
@@ -52,7 +61,7 @@ export function ScenePanel() {
 
   if (!editing) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-1.5 text-center text-[11px] text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Shapes className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
           Semantic districts, buildings and roads are stored in the project and inspected by the
@@ -115,19 +124,19 @@ export function ScenePanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 gap-2 text-[11px]" data-testid="scene-panel">
-      <div className="flex min-h-0 w-80 shrink-0 flex-col gap-1.5 rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-1.5">
+    <div className="flex min-h-0 flex-1 gap-4 text-sm" data-testid="scene-panel">
+      <div className="flex min-h-0 w-80 shrink-0 flex-col gap-1.5 rounded-xl border bg-card p-4">
+        <div className="flex items-center gap-2">
           <Shapes className="size-3 text-muted-foreground" />
-          <span className="text-[10px] font-semibold tracking-wide uppercase">Objects</span>
-          <span className="text-[9px] text-muted-foreground">{scene.objects.length} / 1024</span>
+          <span className="text-base font-semibold">Objects</span>
+          <span className="text-xs text-muted-foreground">{scene.objects.length} / 1024</span>
           {loading || inspecting ? (
             <Loader2 className="ml-auto size-3 animate-spin text-muted-foreground" />
           ) : null}
         </div>
         <div className="scrollbar-thin min-h-0 flex-1 space-y-1 overflow-y-auto">
           {scene.objects.length === 0 ? (
-            <p className="p-1 text-[10px] text-muted-foreground">
+            <p className="p-1 text-xs text-muted-foreground">
               No semantic objects yet. Select an area and describe what it is.
             </p>
           ) : (
@@ -139,20 +148,20 @@ export function ScenePanel() {
                   type="button"
                   onClick={() => void selectObject(object.id)}
                   className={cn(
-                    "w-full rounded border px-1.5 py-1 text-left",
+                    "w-full rounded-lg border px-3 py-2.5 text-left",
                     object.id === selectedId
                       ? "border-primary/60 bg-primary/10"
-                      : "border-border/70 hover:bg-accent/30",
+                      : "bg-card hover:bg-accent",
                   )}
                 >
                   <div className="flex items-center gap-1">
                     <Icon className="size-3 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-[10px]">{object.name}</span>
-                    <span className="ml-auto font-mono text-[8px] text-muted-foreground">
+                    <span className="truncate text-sm">{object.name}</span>
+                    <span className="ml-auto font-mono text-xs text-muted-foreground">
                       {sceneObjectKindLabel(object.kind)}
                     </span>
                   </div>
-                  <div className="truncate font-mono text-[8px] text-muted-foreground">
+                  <div className="truncate font-mono text-xs text-muted-foreground">
                     {object.dimension.replace("minecraft:", "")} · ({object.bounds.min.x},
                     {object.bounds.min.y},{object.bounds.min.z})..({object.bounds.max.x},
                     {object.bounds.max.y},{object.bounds.max.z})
@@ -164,43 +173,39 @@ export function ScenePanel() {
         </div>
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-1.5 overflow-y-auto rounded border border-border bg-background/40 p-2">
-        <div className="text-[10px] font-semibold tracking-wide uppercase">
-          Create from selection
-        </div>
+      <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-1.5 overflow-y-auto rounded-xl border bg-card p-4">
+        <div className="text-base font-semibold">Create from selection</div>
         <Input
-          className="h-6"
           value={name}
           onChange={(event) => setName(event.target.value)}
           aria-label="Object name"
         />
-        <select
-          className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+        <NativeSelect
+          className="w-fit"
           value={kind}
           aria-label="Object kind"
           onChange={(event) => setKind(event.target.value as SceneObjectKind)}
         >
           {SCENE_OBJECT_KINDS.map((entry) => (
-            <option key={entry.value} value={entry.value}>
+            <NativeSelectOption key={entry.value} value={entry.value}>
               {entry.label}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
-        <select
-          className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+        </NativeSelect>
+        <NativeSelect
+          className="w-fit"
           value={parentId}
           aria-label="Parent object"
           onChange={(event) => setParentId(event.target.value)}
         >
-          <option value="">No parent</option>
+          <NativeSelectOption value="">No parent</NativeSelectOption>
           {parentOptions.map((object) => (
-            <option key={object.id} value={object.id}>
+            <NativeSelectOption key={object.id} value={object.id}>
               {object.name}
-            </option>
+            </NativeSelectOption>
           ))}
-        </select>
+        </NativeSelect>
         <Input
-          className="h-6"
           value={note}
           onChange={(event) => setNote(event.target.value)}
           placeholder="Optional note"
@@ -215,25 +220,25 @@ export function ScenePanel() {
         >
           <Plus className="size-3" /> Create object
         </Button>
-        <p className="text-[9px] text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Semantic objects are metadata. Creating or deleting one does not place or remove blocks.
         </p>
       </div>
 
-      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded border border-border bg-background/40 p-2">
+      <div className="scrollbar-thin flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-xl border bg-card p-4">
         {inspection && selected ? (
           <>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-2">
               <Landmark className="size-3 text-muted-foreground" />
-              <span className="text-[11px] font-semibold">{inspection.object.name}</span>
-              <span className="rounded border border-border px-1 font-mono text-[8px] text-muted-foreground">
+              <span className="text-base font-semibold">{inspection.object.name}</span>
+              <Badge variant="outline" className="font-mono">
                 {inspection.object.kind}
-              </span>
-              <span className="ml-auto font-mono text-[8px] text-muted-foreground">
+              </Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
                 {inspection.object.id}
               </span>
             </div>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-[9px] text-muted-foreground">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1 font-mono text-xs text-muted-foreground">
               <span>dimension: {inspection.object.dimension.replace("minecraft:", "")}</span>
               <span>volume: {inspection.volume.toLocaleString()}</span>
               <span>non-air: {inspection.nonAirBlocks.toLocaleString()}</span>
@@ -255,7 +260,7 @@ export function ScenePanel() {
                 </span>
               ))}
             </div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={useObjectBounds}>
                 <Crosshair className="size-3" /> Use bounds as selection
               </Button>
@@ -269,10 +274,8 @@ export function ScenePanel() {
               </Button>
             </div>
             <div>
-              <div className="mb-1 text-[10px] font-semibold tracking-wide uppercase">
-                Current palette
-              </div>
-              <div className="space-y-0.5 font-mono text-[9px] text-muted-foreground">
+              <div className="mb-1 text-sm font-semibold">Current palette</div>
+              <div className="space-y-0.5 font-mono text-xs text-muted-foreground">
                 {inspection.palette.length === 0 ? (
                   <p>No blocks in bounds.</p>
                 ) : (
@@ -290,10 +293,8 @@ export function ScenePanel() {
             </div>
             {inspection.children.length > 0 ? (
               <div>
-                <div className="mb-1 text-[10px] font-semibold tracking-wide uppercase">
-                  Children
-                </div>
-                <div className="space-y-0.5 text-[10px]">
+                <div className="mb-1 text-sm font-semibold">Children</div>
+                <div className="space-y-0.5 text-xs">
                   {inspection.children.map((child) => (
                     <button
                       key={child.id}
@@ -309,18 +310,25 @@ export function ScenePanel() {
             ) : null}
           </>
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-1 text-center text-[10px] text-muted-foreground">
-            <Shapes className="size-5 text-muted-foreground/50" />
-            <p>Select an object to inspect its bounds and current block palette.</p>
-          </div>
+          <Empty className="h-full border-0">
+            <EmptyHeader>
+              <EmptyMedia variant="icon">
+                <Shapes />
+              </EmptyMedia>
+              <EmptyTitle>No object selected</EmptyTitle>
+              <EmptyDescription>
+                Select an object to inspect its bounds and current block palette.
+              </EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         )}
         {inspecting ? (
-          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="size-3 animate-spin" /> Inspecting…
           </div>
         ) : null}
         {actionError || storeError ? (
-          <p className="text-[10px] text-status-error">{actionError ?? storeError}</p>
+          <p className="text-xs text-status-error">{actionError ?? storeError}</p>
         ) : null}
       </div>
     </div>

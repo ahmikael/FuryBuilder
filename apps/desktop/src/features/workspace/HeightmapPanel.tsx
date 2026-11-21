@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { Grid3X3, Loader2, ScanLine } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { applyEditorOperation } from "@/editor/commands";
 import { boundsVolume, MAX_EDIT_VOLUME, planHeightmap } from "@/editor/session";
 import type { BlockDefinition } from "@/editor/types";
@@ -129,14 +131,14 @@ export function HeightmapPanel() {
   }
 
   return (
-    <div className="flex flex-wrap items-start gap-3 text-[10px]">
+    <div className="flex flex-wrap items-start gap-4 text-sm">
       <div className="flex w-80 flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <Grid3X3 className="size-3.5 text-primary" />
           <span className="font-medium">Heightmap generator</span>
-          <span className="rounded bg-muted px-1 py-0.5 text-[8px] uppercase text-muted-foreground">
+          <Badge variant="secondary" className="uppercase">
             deterministic
-          </span>
+          </Badge>
         </div>
         <div className="grid grid-cols-3 gap-1.5">
           <label className="flex flex-col gap-0.5">
@@ -145,7 +147,6 @@ export function HeightmapPanel() {
               aria-label="Heightmap seed"
               type="number"
               min={0}
-              className="h-6 px-1 text-[10px]"
               value={seed}
               disabled={busy}
               onChange={(event) => {
@@ -161,7 +162,6 @@ export function HeightmapPanel() {
               type="number"
               min={1}
               max={64}
-              className="h-6 px-1 text-[10px]"
               value={scale}
               disabled={busy}
               onChange={(event) => {
@@ -177,7 +177,6 @@ export function HeightmapPanel() {
               type="number"
               min={1}
               max={6}
-              className="h-6 px-1 text-[10px]"
               value={octaves}
               disabled={busy}
               onChange={(event) => {
@@ -193,7 +192,6 @@ export function HeightmapPanel() {
               type="number"
               min={1}
               max={256}
-              className="h-6 px-1 text-[10px]"
               value={amplitude}
               disabled={busy}
               onChange={(event) => {
@@ -208,7 +206,6 @@ export function HeightmapPanel() {
               aria-label="Heightmap base Y"
               type="number"
               placeholder={selection ? String(selection.min.y) : "auto"}
-              className="h-6 px-1 text-[10px]"
               value={baseY}
               disabled={busy}
               onChange={(event) => {
@@ -224,7 +221,6 @@ export function HeightmapPanel() {
               type="number"
               min={1}
               max={32}
-              className="h-6 px-1 text-[10px]"
               value={surfaceDepth}
               disabled={busy}
               onChange={(event) => {
@@ -234,19 +230,19 @@ export function HeightmapPanel() {
             />
           </label>
         </div>
-        <div className="text-[9px] leading-relaxed text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           World-anchored integer noise. Surface uses the palette material{" "}
           <span className="font-mono text-foreground">{surface.name}</span>; filler is below it.
           Blocks above the generated surface inside the bounds are cleared.
         </div>
       </div>
 
-      <div className="w-44 space-y-1 rounded border border-border bg-background/40 p-2">
+      <div className="w-44 space-y-3 rounded-xl border bg-card p-4">
         <label className="flex flex-col gap-1">
           <span className="text-muted-foreground">Filler material</span>
-          <select
+          <NativeSelect
             aria-label="Heightmap filler"
-            className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+            className="w-fit"
             value={fillerName}
             disabled={busy || !editing}
             onChange={(event) => {
@@ -255,21 +251,21 @@ export function HeightmapPanel() {
             }}
           >
             {catalog?.map((entry) => (
-              <option key={entry.name} value={entry.name}>
+              <NativeSelectOption key={entry.name} value={entry.name}>
                 {entry.name}
-              </option>
-            )) ?? <option value="minecraft:dirt">minecraft:dirt</option>}
-          </select>
+              </NativeSelectOption>
+            )) ?? <NativeSelectOption value="minecraft:dirt">minecraft:dirt</NativeSelectOption>}
+          </NativeSelect>
         </label>
         {catalogError ? (
-          <div className="text-[9px] text-status-warn">Catalog unavailable: {catalogError}</div>
+          <div className="text-xs text-status-warn">Catalog unavailable: {catalogError}</div>
         ) : null}
-        <div className="text-[9px] leading-relaxed text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           Same seed, parameters and world coordinates always produce the same patch.
         </div>
       </div>
 
-      <div className="w-64 space-y-1 rounded border border-border bg-background/40 p-2">
+      <div className="w-64 space-y-3 rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Footprint</span>
           <span className="font-mono">
@@ -277,26 +273,25 @@ export function HeightmapPanel() {
           </span>
         </div>
         {operation ? (
-          <div className="font-mono text-[9px] text-muted-foreground">
+          <div className="font-mono text-xs text-muted-foreground">
             bounds Y {operation.bounds.min.y}..{operation.bounds.max.y} · {volume.toLocaleString()}{" "}
             blocks
           </div>
         ) : (
-          <div className="text-[9px] text-status-warn">
+          <div className="text-xs text-status-warn">
             Use the Box select tool on the terrain, then return here.
           </div>
         )}
         {tooLarge ? (
-          <div className="text-[9px] text-status-error">
+          <div className="text-xs text-status-error">
             Footprint exceeds the {MAX_EDIT_VOLUME.toLocaleString()} block limit; reduce the
             selection or amplitude.
           </div>
         ) : null}
-        <div className="flex flex-wrap gap-1 pt-0.5">
+        <div className="flex flex-wrap gap-2 pt-0.5">
           <Button
             size="sm"
             variant="outline"
-            className="h-6 px-2 text-[10px]"
             disabled={!editing || !operation || busy || tooLarge}
             aria-label="Preview heightmap"
             onClick={() => void previewHeightmap()}
@@ -310,7 +305,6 @@ export function HeightmapPanel() {
           </Button>
           <Button
             size="sm"
-            className="h-6 px-2 text-[10px]"
             disabled={!editing || !operation || busy || tooLarge}
             aria-label="Apply heightmap"
             onClick={() => void applyHeightmap()}
@@ -321,7 +315,7 @@ export function HeightmapPanel() {
         </div>
         {preview ? (
           <div
-            className="rounded border border-status-ok/30 bg-status-ok/5 p-1 text-[9px] text-status-ok"
+            className="rounded-lg border border-status-ok/30 bg-status-ok/5 p-3 text-sm text-status-ok"
             data-testid="heightmap-preview"
           >
             {preview.changedBlocks.toLocaleString()} block(s) would change out of{" "}
@@ -334,11 +328,11 @@ export function HeightmapPanel() {
           </div>
         ) : null}
         {error ? (
-          <div className="rounded border border-status-error/30 bg-status-error/5 p-1 text-[9px] text-status-error">
+          <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
             {error}
           </div>
         ) : null}
-        <div className="text-[9px] text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           Local tool only; no vanilla worldgen parity claim.
         </div>
       </div>

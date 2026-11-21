@@ -6,10 +6,22 @@ import {
   HardDrive,
   Loader2,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Trash2,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Progress } from "@/components/ui/progress";
 import {
   clearJavaRuntime,
   clearManagedJavaRuntimes,
@@ -236,70 +248,74 @@ export function JavaRuntimeSection() {
       : null;
 
   return (
-    <section className="min-w-0 space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="text-[11px] font-semibold tracking-wide uppercase">Java runtime</h3>
-        <span className="text-[10px] text-muted-foreground">
+    <section className="space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold">Java runtime</h3>
+        <Badge variant="secondary" className="font-mono">
           Java {discovery?.targetJavaMajor ?? 21} · MC{" "}
           {discovery?.targetMinecraftVersion ?? "1.21.4"}
-        </span>
+        </Badge>
       </div>
-      <p className="text-[10px] text-muted-foreground">
+
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Empty Project and editing do not require Java. A verified Java 21 runtime is needed only for
         Vanilla World generation. Nothing is installed globally.
       </p>
 
       {saved ? (
-        <div className="space-y-1 rounded border border-border bg-background/40 p-2 text-[11px]">
-          <div className="flex items-center gap-2">
-            <CheckCircle2
-              className={cn(
-                "size-3.5",
-                saved.status === "compatible" ? "text-status-ok" : "text-status-warn",
-              )}
-            />
-            <span className="font-medium">Selected runtime</span>
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 font-mono text-[10px]",
-                saved.status === "compatible"
-                  ? "bg-status-ok/15 text-status-ok"
-                  : "bg-status-warn/15 text-status-warn",
-              )}
-            >
-              {STATUS_LABELS[saved.status]}
-            </span>
-            <span className="ml-auto font-mono text-[10px]">{runtimeLabel(saved)}</span>
-          </div>
-          <div className="truncate font-mono text-[10px] text-muted-foreground">
-            {displayRuntimePath(saved.path)}
-          </div>
-          {saved.error ? <div className="text-[10px] text-status-warn">{saved.error}</div> : null}
-          {saved.warnings.map((warning) => (
-            <div key={warning} className="text-[10px] text-status-warn">
-              {warning}
+        <Card className="gap-0 py-0">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <CheckCircle2
+                className={cn(
+                  "size-4",
+                  saved.status === "compatible" ? "text-status-ok" : "text-status-warn",
+                )}
+              />
+              <span className="text-sm font-medium">Selected runtime</span>
+              <Badge variant={saved.status === "compatible" ? "secondary" : "outline"}>
+                {STATUS_LABELS[saved.status]}
+              </Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                {runtimeLabel(saved)}
+              </span>
             </div>
-          ))}
-          <div className="flex gap-1.5 pt-1">
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {displayRuntimePath(saved.path)}
+            </p>
+            {saved.error ? <p className="text-sm text-status-warn">{saved.error}</p> : null}
+            {saved.warnings.map((warning) => (
+              <p key={warning} className="text-sm text-status-warn">
+                {warning}
+              </p>
+            ))}
             <Button variant="outline" size="sm" onClick={clearSelection} disabled={busy !== null}>
-              <Trash2 /> Clear selection
+              <Trash2 data-icon="inline-start" />
+              Clear selection
             </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="rounded border border-dashed border-border p-2 text-[10px] text-muted-foreground">
-          No Java runtime selected. Detected candidates appear below; incompatible runtimes are
-          shown with a reason and cannot be selected.
-        </div>
+        <Empty className="border p-6">
+          <EmptyHeader>
+            <EmptyMedia variant="icon">
+              <HardDrive />
+            </EmptyMedia>
+            <EmptyTitle>No Java runtime selected</EmptyTitle>
+            <EmptyDescription>
+              Detected candidates appear below; incompatible runtimes are shown with a reason and
+              cannot be selected.
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       )}
 
-      <div className="space-y-1">
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] font-medium">Detected runtimes</span>
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="text-sm font-medium">Detected runtimes</h4>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 px-1.5"
+            size="icon-sm"
             onClick={reload}
             disabled={busy !== null}
             aria-label="Refresh detected Java runtimes"
@@ -317,36 +333,34 @@ export function JavaRuntimeSection() {
             onClick={chooseJava}
             disabled={busy !== null}
           >
-            <FolderOpen /> Choose java.exe
+            <FolderOpen data-icon="inline-start" />
+            Choose java.exe
           </Button>
         </div>
-        <div className="max-h-36 space-y-1 overflow-y-auto">
+        <div className="max-h-44 space-y-2 overflow-y-auto pr-1">
           {(discovery?.candidates ?? []).map((runtime) => {
             const current = saved?.path === runtime.path;
             return (
               <div
                 key={runtime.path}
-                className="flex items-center gap-2 rounded border border-border/70 px-2 py-1 text-[10px]"
+                className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3"
               >
                 <span
                   className={cn(
-                    "size-1.5 shrink-0 rounded-full",
+                    "size-2 shrink-0 rounded-full",
                     runtime.status === "compatible" ? "bg-status-ok" : "bg-status-warn",
                   )}
                 />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono">
-                    {displayRuntimePath(runtime.path)}
-                  </span>
-                  <span className="text-muted-foreground">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-mono text-xs">{displayRuntimePath(runtime.path)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {runtime.version ?? "unknown"} · {runtime.vendor ?? "unknown"} ·{" "}
                     {runtime.source.replace("_", " ")} · {STATUS_LABELS[runtime.status]}
-                  </span>
-                </span>
+                  </p>
+                </div>
                 <Button
                   variant={current ? "secondary" : "outline"}
                   size="sm"
-                  className="h-6 px-2"
                   disabled={busy !== null || runtime.status !== "compatible" || current}
                   onClick={() => void applyCandidate(runtime)}
                   aria-label={`Use ${displayRuntimePath(runtime.path)}`}
@@ -357,133 +371,151 @@ export function JavaRuntimeSection() {
             );
           })}
           {discovery && discovery.candidates.length === 0 ? (
-            <div className="text-[10px] text-muted-foreground">Nothing detected automatically.</div>
+            <p className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
+              Nothing detected automatically.
+            </p>
           ) : null}
         </div>
         {discovery?.problems.map((problem) => (
-          <div key={problem} className="text-[10px] text-status-warn">
+          <p key={problem} className="text-xs text-status-warn">
             {problem}
-          </div>
+          </p>
         ))}
         {discovery ? (
-          <p className="text-[10px] text-muted-foreground">{discovery.manualHint}</p>
+          <p className="text-xs leading-relaxed text-muted-foreground">{discovery.manualHint}</p>
         ) : null}
       </div>
 
-      <div className="space-y-1.5 rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-1.5 text-[10px] font-medium">
-          <ShieldCheck className="size-3.5 text-status-ok" />
-          Managed Eclipse Temurin JRE
-          <span className="ml-auto font-mono text-[10px] text-muted-foreground">
-            {formatBytes(discovery?.managedBytes ?? 0)} cached
-          </span>
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Downloaded only when you press the button, from the official Adoptium API and its GitHub
-          release host. Size and SHA-256 are checked before extraction; the JRE stays inside
-          FuryBuilder data.
-        </p>
-        {release ? (
-          <div className="space-y-1 rounded border border-border p-2 text-[10px]">
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              <span>
-                Version <span className="font-mono">{release.version}</span>
-              </span>
-              <span>
-                Size <span className="font-mono">{formatBytes(release.size)}</span>
-              </span>
-              <span className="font-mono">
-                {release.os}/{release.arch} {release.imageType}
-              </span>
-            </div>
-            <div className="truncate font-mono text-muted-foreground">SHA-256 {release.sha256}</div>
-            <div className="truncate font-mono text-muted-foreground">{release.downloadUrl}</div>
-            <div className="flex gap-1.5 pt-0.5">
-              <Button
-                size="sm"
-                onClick={() => void installTemurin()}
-                disabled={busy !== null}
-                aria-label="Download and install Temurin"
-              >
-                {busy === "install" ? <Loader2 className="animate-spin" /> : <Download />}
-                Download &amp; install
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setRelease(null)}
-                disabled={busy === "install"}
-              >
-                Cancel
-              </Button>
-            </div>
+      <Card className="gap-0 py-0">
+        <CardContent className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="size-4 text-status-ok" />
+            <h4 className="text-sm font-medium">Managed Eclipse Temurin JRE</h4>
+            <span className="ml-auto font-mono text-xs text-muted-foreground">
+              {formatBytes(discovery?.managedBytes ?? 0)} cached
+            </span>
           </div>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void checkAdoptium()}
-            disabled={busy !== null}
-          >
-            {busy === "release" ? <Loader2 className="animate-spin" /> : <Download />}
-            Check official Temurin download
-          </Button>
-        )}
-        {progress ? (
-          <div className="space-y-0.5">
-            <div className="flex justify-between text-[10px]">
-              <span>{progressLabel(progress)}</span>
-              {progressPercent !== null ? (
-                <span className="font-mono">{progressPercent}%</span>
-              ) : null}
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Downloaded only when you press the button, from the official Adoptium API and its GitHub
+            release host. Size and SHA-256 are checked before extraction; the JRE stays inside
+            FuryBuilder data.
+          </p>
+          {release ? (
+            <div className="space-y-2 rounded-lg border bg-background p-3 text-sm">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <span>
+                  Version <span className="font-mono text-xs">{release.version}</span>
+                </span>
+                <span>
+                  Size <span className="font-mono text-xs">{formatBytes(release.size)}</span>
+                </span>
+                <span className="font-mono text-xs">
+                  {release.os}/{release.arch} {release.imageType}
+                </span>
+              </div>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                SHA-256 {release.sha256}
+              </p>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {release.downloadUrl}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={() => void installTemurin()}
+                  disabled={busy !== null}
+                  aria-label="Download and install Temurin"
+                >
+                  {busy === "install" ? (
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <Download data-icon="inline-start" />
+                  )}
+                  Download &amp; install
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRelease(null)}
+                  disabled={busy === "install"}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-            <div className="h-1 overflow-hidden rounded bg-muted">
-              <div
-                className="h-full bg-primary transition-[width]"
-                style={{ width: `${progressPercent ?? 15}%` }}
-              />
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void checkAdoptium()}
+              disabled={busy !== null}
+            >
+              {busy === "release" ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <Download data-icon="inline-start" />
+              )}
+              Check official Temurin download
+            </Button>
+          )}
+          {progress ? (
+            <div className="space-y-2">
+              <div className="flex justify-between gap-3 text-xs">
+                <span>{progressLabel(progress)}</span>
+                {progressPercent !== null ? (
+                  <span className="font-mono text-muted-foreground">{progressPercent}%</span>
+                ) : null}
+              </div>
+              <Progress value={progressPercent ?? 15} />
             </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void clearManaged()}
+              disabled={busy !== null || (discovery?.managed.length ?? 0) === 0}
+            >
+              <Trash2 data-icon="inline-start" />
+              Clear managed Java
+            </Button>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <HardDrive className="size-3.5" />
+              {discovery?.managed.length ?? 0} managed
+            </span>
           </div>
-        ) : null}
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void clearManaged()}
-            disabled={busy !== null || (discovery?.managed.length ?? 0) === 0}
-          >
-            <Trash2 /> Clear managed Java
-          </Button>
-          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <HardDrive className="size-3" />
-            {discovery?.managed.length ?? 0} managed
-          </span>
-        </div>
-        {discovery?.managed.map((runtime) => (
-          <div
-            key={runtime.id}
-            className="truncate rounded border border-border/60 px-2 py-1 font-mono text-[10px]"
-            title={runtime.path}
-          >
-            {runtime.version} · {runtime.os}/{runtime.arch} · {formatBytes(runtime.bytes)} ·{" "}
-            {runtime.sha256.slice(0, 12)}…
-          </div>
-        ))}
-      </div>
+          {discovery?.managed.map((runtime) => (
+            <div
+              key={runtime.id}
+              className="truncate rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+              title={runtime.path}
+            >
+              {runtime.version} · {runtime.os}/{runtime.arch} · {formatBytes(runtime.bytes)} ·{" "}
+              {runtime.sha256.slice(0, 12)}…
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       {error ? (
-        <div className="space-y-0.5 rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">
-          <p>{error}</p>
-          <p className="text-muted-foreground">
-            Empty Project and manual editing keep working without Java. If the network is
-            unavailable, retry later or choose a local java.exe.
-          </p>
-        </div>
+        <Alert variant="destructive" className="p-4">
+          <ShieldAlert />
+          <AlertTitle>Java runtime error</AlertTitle>
+          <AlertDescription>
+            <p>{error}</p>
+            <p>
+              Empty Project and manual editing keep working without Java. If the network is
+              unavailable, retry later or choose a local java.exe.
+            </p>
+          </AlertDescription>
+        </Alert>
       ) : null}
       {notice ? (
-        <p className="rounded border border-status-ok/40 bg-status-ok/10 px-2 py-1 text-[10px] text-status-ok">
-          {notice}
-        </p>
+        <Alert className="p-4">
+          <CheckCircle2 />
+          <AlertTitle>Java runtime updated</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
       ) : null}
     </section>
   );

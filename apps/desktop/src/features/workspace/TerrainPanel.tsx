@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Loader2, Mountain, ScanLine } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { applyEditorOperation } from "@/editor/commands";
 import {
   boundsVolume,
@@ -90,20 +92,20 @@ export function TerrainPanel() {
   }
 
   return (
-    <div className="flex flex-wrap items-start gap-3 text-[10px]">
+    <div className="flex flex-wrap items-start gap-4 text-sm">
       <div className="flex w-72 flex-col gap-1.5">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <Mountain className="size-3.5 text-primary" />
           <span className="font-medium">Terrain brush</span>
-          <span className="rounded bg-muted px-1 py-0.5 text-[8px] uppercase text-muted-foreground">
+          <Badge variant="secondary" className="uppercase">
             deterministic
-          </span>
+          </Badge>
         </div>
         <label className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Brush</span>
-          <select
+          <NativeSelect
             aria-label="Terrain brush kind"
-            className="h-6 rounded border border-border bg-background px-1 text-[10px]"
+            className="w-fit"
             value={kind}
             disabled={busy}
             onChange={(event) => {
@@ -112,13 +114,13 @@ export function TerrainPanel() {
             }}
           >
             {TERRAIN_BRUSH_ORDER.map((entry) => (
-              <option key={entry} value={entry}>
+              <NativeSelectOption key={entry} value={entry}>
                 {TERRAIN_BRUSH_LABELS[entry]}
-              </option>
+              </NativeSelectOption>
             ))}
-          </select>
+          </NativeSelect>
         </label>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {kind !== "flatten" && kind !== "terrace" ? (
             <label className="flex items-center gap-1">
               <span className="text-muted-foreground">Amount</span>
@@ -127,7 +129,7 @@ export function TerrainPanel() {
                 type="number"
                 min={1}
                 max={16}
-                className="h-6 w-14 px-1 text-[10px]"
+                className="w-14"
                 value={amount}
                 disabled={busy}
                 onChange={(event) => {
@@ -144,7 +146,7 @@ export function TerrainPanel() {
                 aria-label="Terrain brush seed"
                 type="number"
                 min={0}
-                className="h-6 w-24 px-1 text-[10px]"
+                className="w-24"
                 value={seed}
                 disabled={busy}
                 onChange={(event) => {
@@ -162,7 +164,7 @@ export function TerrainPanel() {
                 type="number"
                 min={2}
                 max={16}
-                className="h-6 w-14 px-1 text-[10px]"
+                className="w-14"
                 value={step}
                 disabled={busy}
                 onChange={(event) => {
@@ -179,7 +181,7 @@ export function TerrainPanel() {
                 aria-label="Flatten target Y"
                 type="number"
                 placeholder="median"
-                className="h-6 w-20 px-1 text-[10px]"
+                className="w-20"
                 value={targetY}
                 disabled={busy}
                 onChange={(event) => {
@@ -190,14 +192,14 @@ export function TerrainPanel() {
             </label>
           ) : null}
         </div>
-        <div className="text-[9px] leading-relaxed text-muted-foreground">
+        <div className="text-sm leading-relaxed text-muted-foreground">
           Material <span className="font-mono text-foreground">{material.name}</span>. Adjusts the
           topmost non-air block of each selected column; empty columns are skipped. A selection is
           required.
         </div>
       </div>
 
-      <div className="w-64 space-y-1 rounded border border-border bg-background/40 p-2">
+      <div className="w-64 space-y-3 rounded-xl border bg-card p-4">
         <div className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Selection</span>
           <span className="font-mono">
@@ -205,7 +207,7 @@ export function TerrainPanel() {
           </span>
         </div>
         {selection ? (
-          <div className="font-mono text-[9px] text-muted-foreground">
+          <div className="font-mono text-xs text-muted-foreground">
             {selection.min.x},{selection.min.y},{selection.min.z} → {selection.max.x},
             {selection.max.y},{selection.max.z}
             {brushBounds ? (
@@ -216,15 +218,14 @@ export function TerrainPanel() {
             ) : null}
           </div>
         ) : (
-          <div className="text-[9px] text-status-warn">
+          <div className="text-xs text-status-warn">
             Use the Box select tool on the terrain, then return here.
           </div>
         )}
-        <div className="flex flex-wrap gap-1 pt-0.5">
+        <div className="flex flex-wrap gap-2 pt-0.5">
           <Button
             size="sm"
             variant="outline"
-            className="h-6 px-2 text-[10px]"
             disabled={!editing || !operation || busy}
             aria-label="Preview terrain brush"
             onClick={() => void previewBrush()}
@@ -238,7 +239,6 @@ export function TerrainPanel() {
           </Button>
           <Button
             size="sm"
-            className="h-6 px-2 text-[10px]"
             disabled={!editing || !operation || busy}
             aria-label="Apply terrain brush"
             onClick={() => void applyBrush()}
@@ -249,7 +249,7 @@ export function TerrainPanel() {
         </div>
         {preview ? (
           <div
-            className="rounded border border-status-ok/30 bg-status-ok/5 p-1 text-[9px] text-status-ok"
+            className="rounded-lg border border-status-ok/30 bg-status-ok/5 p-3 text-sm text-status-ok"
             data-testid="terrain-preview"
           >
             {preview.changedBlocks.toLocaleString()} block(s) would change out of{" "}
@@ -262,7 +262,7 @@ export function TerrainPanel() {
           </div>
         ) : null}
         {error ? (
-          <div className="rounded border border-status-error/30 bg-status-error/5 p-1 text-[9px] text-status-error">
+          <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
             {error}
           </div>
         ) : null}

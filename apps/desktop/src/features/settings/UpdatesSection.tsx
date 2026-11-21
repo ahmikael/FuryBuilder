@@ -6,7 +6,10 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { canCheckForUpdates } from "@/lib/update-api";
 import { cn } from "@/lib/utils";
 import { useUpdateStore, type UpdateStatus } from "@/state/update-store";
@@ -52,68 +55,64 @@ export function UpdatesSection({ currentVersion }: UpdatesSectionProps) {
   const canInstall = Boolean(available) && (status === "available" || status === "error");
 
   return (
-    <section aria-labelledby="updates-heading" className="min-w-0 space-y-2">
+    <section aria-labelledby="updates-heading" className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3
-          id="updates-heading"
-          className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide uppercase"
-        >
-          <Download className="size-3.5" /> Updates
+        <h3 id="updates-heading" className="flex items-center gap-2 text-base font-semibold">
+          <Download className="size-4" /> Updates
         </h3>
-        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-          <ShieldCheck className="size-3" /> Updater-signed packages
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <ShieldCheck className="size-3.5" /> Updater-signed packages
         </span>
       </div>
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Installed builds check GitHub Releases four seconds after startup. A newer version is
         downloaded only after confirmation and is verified against the updater public key before
         Windows runs the installer. Projects and settings are preserved.
       </p>
 
-      <div className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1 rounded border border-border bg-background/40 p-2 text-[11px]">
-        <span className="text-muted-foreground">Current version</span>
-        <span className="font-mono">{currentVersion ?? "unknown"}</span>
-        <span className="text-muted-foreground">Status</span>
-        <span
-          className={cn(
-            "flex items-center gap-1 font-mono",
-            status === "error" && "text-status-error",
-            (status === "up-to-date" || status === "available") && "text-status-ok",
-          )}
-        >
-          {status === "checking" || status === "downloading" || status === "installing" ? (
-            <Loader2 className="size-3 animate-spin" />
+      <Card className="gap-0 py-0">
+        <CardContent className="grid grid-cols-[140px_1fr] gap-x-4 gap-y-2.5 p-6 text-sm">
+          <span className="text-muted-foreground">Current version</span>
+          <span className="font-mono">{currentVersion ?? "unknown"}</span>
+          <span className="text-muted-foreground">Status</span>
+          <span
+            className={cn(
+              "flex items-center gap-1.5 font-mono",
+              status === "error" && "text-status-error",
+              (status === "up-to-date" || status === "available") && "text-status-ok",
+            )}
+          >
+            {status === "checking" || status === "downloading" || status === "installing" ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : null}
+            {status === "available" && available
+              ? `${STATUS_LABELS[status]} (${available.version})`
+              : STATUS_LABELS[status]}
+          </span>
+          <span className="text-muted-foreground">Last check</span>
+          <span>{formatCheckedAt(lastCheckedAt)}</span>
+          {available ? (
+            <>
+              <span className="text-muted-foreground">New version</span>
+              <span className="font-mono">{available.version}</span>
+            </>
           ) : null}
-          {status === "available" && available
-            ? `${STATUS_LABELS[status]} (${available.version})`
-            : STATUS_LABELS[status]}
-        </span>
-        <span className="text-muted-foreground">Last check</span>
-        <span>{formatCheckedAt(lastCheckedAt)}</span>
-        {available ? (
-          <>
-            <span className="text-muted-foreground">New version</span>
-            <span className="font-mono">{available.version}</span>
-          </>
-        ) : null}
-      </div>
+        </CardContent>
+      </Card>
 
       {available?.notes ? (
-        <details className="rounded border border-border bg-background/40 p-2 text-[10px]">
+        <details className="rounded-xl border bg-card p-4 text-sm">
           <summary className="cursor-pointer text-muted-foreground">Release notes</summary>
-          <div className="mt-1 max-h-32 overflow-auto whitespace-pre-line">{available.notes}</div>
+          <div className="mt-2 max-h-40 overflow-auto whitespace-pre-line leading-relaxed">
+            {available.notes}
+          </div>
         </details>
       ) : null}
 
       {status === "downloading" ? (
-        <div className="space-y-1">
-          <div className="h-1.5 overflow-hidden rounded bg-background/70">
-            <div
-              className="h-full bg-status-ok transition-[width]"
-              style={{ width: `${progress?.percent ?? 5}%` }}
-            />
-          </div>
-          <p className="text-[10px] text-muted-foreground">
+        <div className="space-y-2">
+          <Progress value={progress?.percent ?? 5} />
+          <p className="text-sm text-muted-foreground">
             {progress?.percent === null || progress?.percent === undefined
               ? "Downloading..."
               : `Downloaded ${progress.percent}%`}
@@ -122,31 +121,37 @@ export function UpdatesSection({ currentVersion }: UpdatesSectionProps) {
       ) : null}
 
       {status === "error" ? (
-        <p className="flex items-start gap-1.5 rounded border border-status-error/40 bg-status-error/10 px-2 py-1 text-[10px] text-status-error">
-          <AlertTriangle className="mt-0.5 size-3 shrink-0" />
-          {error ?? "The update could not be completed."}
-        </p>
+        <Alert variant="destructive" className="p-4">
+          <AlertTriangle />
+          <AlertTitle>Update failed</AlertTitle>
+          <AlertDescription>{error ?? "The update could not be completed."}</AlertDescription>
+        </Alert>
       ) : null}
 
       {status === "up-to-date" ? (
-        <p className="flex items-center gap-1 text-[10px] text-status-ok">
-          <CheckCircle2 className="size-3" /> This is the newest published version.
-        </p>
+        <Alert className="p-4">
+          <CheckCircle2 />
+          <AlertTitle>You are up to date</AlertTitle>
+          <AlertDescription>This is the newest published version.</AlertDescription>
+        </Alert>
       ) : null}
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-2">
         <Button
           size="sm"
           variant="outline"
           onClick={() => void check()}
           disabled={!supported || busy}
         >
-          <RefreshCw className={status === "checking" ? "size-3.5 animate-spin" : "size-3.5"} />
+          <RefreshCw
+            data-icon="inline-start"
+            className={cn(status === "checking" && "animate-spin")}
+          />
           {status === "checking" ? "Checking..." : "Check for updates"}
         </Button>
         {canInstall ? (
           <Button size="sm" onClick={() => void install()} disabled={busy}>
-            <Download className="size-3.5" />
+            <Download data-icon="inline-start" />
             {status === "error" ? "Retry update" : "Install and restart"}
           </Button>
         ) : null}
@@ -158,7 +163,7 @@ export function UpdatesSection({ currentVersion }: UpdatesSectionProps) {
       </div>
 
       {!supported ? (
-        <p className="text-[10px] text-muted-foreground">
+        <p className="text-xs leading-relaxed text-muted-foreground">
           Updates are disabled in browser preview and development builds. Install the Windows
           package to enable automatic update checks.
         </p>

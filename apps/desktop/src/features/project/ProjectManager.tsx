@@ -19,7 +19,10 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,9 +30,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
+import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
@@ -75,56 +96,42 @@ function ProjectRow({
     <div
       data-testid={`project-row-${name}`}
       className={cn(
-        "rounded-md border px-2.5 py-2",
-        active ? "border-primary/50 bg-primary/10" : "border-border bg-background/40",
+        "rounded-xl border p-3 transition-colors",
+        active ? "border-primary/50 bg-primary/5" : "bg-card hover:bg-muted/40",
       )}
     >
-      <div className="flex items-start gap-2">
-        <div className="mt-0.5 grid size-7 shrink-0 place-items-center rounded border border-border bg-card">
-          <Archive className="size-3.5 text-muted-foreground" />
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg border bg-background">
+          <Archive className="size-4 text-muted-foreground" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[12px] font-medium">{name}</span>
-            {active ? (
-              <span className="rounded bg-primary/20 px-1 py-0.5 text-[8px] font-semibold tracking-wide text-primary uppercase">
-                open
-              </span>
-            ) : null}
-            {recoverable ? (
-              <span className="rounded bg-status-warn/15 px-1 py-0.5 text-[8px] font-semibold tracking-wide text-status-warn uppercase">
-                recoverable
-              </span>
-            ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="truncate text-sm font-medium">{name}</span>
+            {active ? <Badge>Open</Badge> : null}
+            {recoverable ? <Badge variant="secondary">Recoverable</Badge> : null}
           </div>
-          <div className="mt-0.5 truncate font-mono text-[9px] text-muted-foreground">{meta}</div>
+          <div className="mt-1 truncate font-mono text-xs text-muted-foreground">{meta}</div>
           {warnings.length > 0 ? (
-            <div className="mt-1 text-[9px] leading-relaxed text-status-warn">
+            <div className="mt-1.5 text-sm leading-relaxed text-status-warn">
               {warnings.join(" · ")}
             </div>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Button size="sm" className="h-6 px-2 text-[10px]" onClick={onOpen}>
-            <FolderOpen className="mr-1 size-3" /> Open
+        <div className="flex shrink-0 items-center gap-2">
+          <Button size="sm" onClick={onOpen}>
+            <FolderOpen data-icon="inline-start" />
+            Open
+          </Button>
+          <Button size="icon-sm" variant="ghost" aria-label={`Rename ${name}`} onClick={onRename}>
+            <Pencil />
           </Button>
           <Button
-            size="icon"
+            size="icon-sm"
             variant="ghost"
-            className="size-6"
-            aria-label={`Rename ${name}`}
-            onClick={onRename}
-          >
-            <Pencil className="size-3" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            className="size-6"
             aria-label={`Checkpoints for ${name}`}
             onClick={onCheckpoints}
           >
-            <History className="size-3" />
+            <History />
           </Button>
         </div>
       </div>
@@ -261,7 +268,7 @@ export function ProjectManager() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-4xl">
+      <DialogContent className="max-h-[90vh] max-w-4xl gap-6 overflow-y-auto p-6">
         <DialogHeader>
           <DialogTitle>Projects</DialogTitle>
           <DialogDescription>
@@ -271,160 +278,163 @@ export function ProjectManager() {
         </DialogHeader>
 
         {!desktop ? (
-          <div className="rounded border border-status-warn/40 bg-status-warn/10 p-3 text-[11px] leading-relaxed text-muted-foreground">
-            <div className="mb-1 flex items-center gap-1.5 font-medium text-status-warn">
-              <ShieldAlert className="size-3.5" /> Desktop core required
-            </div>
-            Project storage is implemented in the Tauri backend (atomic snapshots, checksums,
-            autosave and checkpoints). Browser preview mode can inspect the demo scene, but list,
-            create, open and save need the desktop app.
-          </div>
+          <Alert className="p-4">
+            <ShieldAlert />
+            <AlertTitle>Desktop core required</AlertTitle>
+            <AlertDescription>
+              Project storage is implemented in the Tauri backend (atomic snapshots, checksums,
+              autosave and checkpoints). Browser preview mode can inspect the demo scene, but list,
+              create, open and save need the desktop app.
+            </AlertDescription>
+          </Alert>
         ) : (
           <>
             {error ? (
-              <div className="flex items-center gap-2 rounded border border-status-error/40 bg-status-error/5 px-2 py-1.5 text-[10px] text-status-error">
-                <AlertTriangle className="size-3.5" /> {error}
-              </div>
+              <Alert variant="destructive" className="p-4">
+                <AlertTriangle />
+                <AlertTitle>Project error</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
             ) : null}
 
             {recovery ? (
-              <div className="rounded border border-status-warn/40 bg-status-warn/10 p-2.5 text-[10px]">
-                <div className="flex items-center gap-1.5 font-medium text-status-warn">
-                  <ShieldAlert className="size-3.5" /> Recovered unsaved work
-                </div>
-                <p className="mt-1 leading-relaxed text-muted-foreground">
-                  {recovery.reason} Revision {recovery.recoveredRevision} was loaded from a verified
-                  autosave. Save the project to keep it.
-                </p>
-                <div className="mt-1.5 flex gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 px-2 text-[10px]"
-                    onClick={() => useProjectStore.getState().dismissRecovery()}
-                  >
-                    <CheckCircle2 className="mr-1 size-3" /> Keep recovered data
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-[10px]"
-                    onClick={() => void useProjectStore.getState().discardRecovery()}
-                  >
-                    <Trash2 className="mr-1 size-3" /> Discard and reload saved
-                  </Button>
-                </div>
-              </div>
+              <Alert className="p-4">
+                <ShieldAlert />
+                <AlertTitle>Recovered unsaved work</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    {recovery.reason} Revision {recovery.recoveredRevision} was loaded from a
+                    verified autosave. Save the project to keep it.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => useProjectStore.getState().dismissRecovery()}
+                    >
+                      <CheckCircle2 data-icon="inline-start" />
+                      Keep recovered data
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => void useProjectStore.getState().discardRecovery()}
+                    >
+                      <Trash2 data-icon="inline-start" />
+                      Discard and reload saved
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             {pending ? (
-              <div className="rounded border border-primary/40 bg-primary/10 p-2.5 text-[10px]">
-                <div className="font-medium">Unsaved changes in “{current?.name ?? "project"}”</div>
-                <p className="mt-1 text-muted-foreground">
-                  {pending.kind === "open"
-                    ? `Save before opening “${pending.name}”, or discard the current edits.`
-                    : "Save before leaving this project, or discard the current edits."}
-                </p>
-                <div className="mt-1.5 flex gap-1">
-                  <Button
-                    size="sm"
-                    className="h-6 px-2 text-[10px]"
-                    disabled={loading}
-                    onClick={() => void confirmPending("save")}
-                  >
-                    <Save className="mr-1 size-3" /> Save and continue
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-6 px-2 text-[10px]"
-                    disabled={loading}
-                    onClick={() => void confirmPending("discard")}
-                  >
-                    Discard changes
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-6 px-2 text-[10px]"
-                    onClick={() => setPending(null)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </div>
+              <Alert className="p-4">
+                <AlertTriangle />
+                <AlertTitle>Unsaved changes in “{current?.name ?? "project"}”</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    {pending.kind === "open"
+                      ? `Save before opening “${pending.name}”, or discard the current edits.`
+                      : "Save before leaving this project, or discard the current edits."}
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={loading}
+                      onClick={() => void confirmPending("save")}
+                    >
+                      <Save data-icon="inline-start" />
+                      Save and continue
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={loading}
+                      onClick={() => void confirmPending("discard")}
+                    >
+                      Discard changes
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setPending(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </AlertDescription>
+              </Alert>
             ) : null}
 
             <Tabs value={tab} onValueChange={setTab} className="min-h-0">
-              <TabsList>
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="projects">
-                  <FolderOpen className="size-3" /> Projects ({projects.length})
+                  <FolderOpen data-icon="inline-start" />
+                  Projects ({projects.length})
                 </TabsTrigger>
                 <TabsTrigger value="create">
-                  <Plus className="size-3" /> New project
+                  <Plus data-icon="inline-start" />
+                  New project
                 </TabsTrigger>
                 <TabsTrigger value="checkpoints">
-                  <History className="size-3" /> Checkpoints
+                  <History data-icon="inline-start" />
+                  Checkpoints
                 </TabsTrigger>
                 <TabsTrigger value="exchange">
-                  <ArrowLeftRight className="size-3" /> Import / Export
+                  <ArrowLeftRight data-icon="inline-start" />
+                  Import / Export
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="projects" className="m-0 space-y-2 pt-2">
+              <TabsContent value="projects" className="m-0 space-y-4 pt-4">
                 {current ? (
-                  <div className="flex items-center gap-2 rounded border border-border bg-card/60 px-2.5 py-1.5 text-[10px]">
-                    <HardDrive className="size-3.5 text-primary" />
-                    <span className="font-medium">{current.name}</span>
-                    <span className="font-mono text-muted-foreground">
+                  <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+                    <HardDrive className="size-4 text-primary" />
+                    <span className="text-sm font-medium">{current.name}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
                       rev {current.savedRevision}
                       {current.autosavedRevision !== null
                         ? ` · autosave r${current.autosavedRevision}`
                         : ""}
                     </span>
-                    <span
-                      className={cn(
-                        "rounded px-1 py-0.5 text-[8px] font-semibold uppercase",
-                        dirty
-                          ? "bg-status-warn/15 text-status-warn"
-                          : "bg-status-ok/15 text-status-ok",
-                      )}
-                    >
-                      {dirty ? "unsaved" : "saved"}
-                    </span>
-                    <span className="ml-auto flex items-center gap-1">
+                    <Badge variant={dirty ? "secondary" : "default"}>
+                      {dirty ? "Unsaved" : "Saved"}
+                    </Badge>
+                    <span className="ml-auto flex items-center gap-2">
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-6 px-2 text-[10px]"
                         disabled={loading || !dirty}
                         onClick={() => void useProjectStore.getState().save()}
                       >
                         {loading ? (
-                          <Loader2 className="mr-1 size-3 animate-spin" />
+                          <Loader2 data-icon="inline-start" className="animate-spin" />
                         ) : (
-                          <Save className="mr-1 size-3" />
+                          <Save data-icon="inline-start" />
                         )}
                         Save
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
-                        className="h-6 px-2 text-[10px]"
                         onClick={() =>
                           dirty
                             ? setPending({ kind: "close" })
                             : void useProjectStore.getState().close(false)
                         }
                       >
-                        <X className="mr-1 size-3" /> Close
+                        <X data-icon="inline-start" />
+                        Close
                       </Button>
                     </span>
                   </div>
                 ) : (
-                  <div className="rounded border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted-foreground">
-                    No project is open. Pick one below or create a new project.
-                  </div>
+                  <Empty className="border p-6">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <FolderOpen />
+                      </EmptyMedia>
+                      <EmptyTitle>No project is open</EmptyTitle>
+                      <EmptyDescription>Pick one below or create a new project.</EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 )}
 
                 {current?.folder && currentProject?.creationMode === "vanilla" ? (
@@ -432,29 +442,37 @@ export function ProjectManager() {
                 ) : null}
 
                 {lastSave ? (
-                  <div className="rounded border border-status-ok/30 bg-status-ok/5 px-2 py-1 font-mono text-[9px] text-muted-foreground">
-                    saved {lastSave.snapshotFile} · {formatBytes(lastSave.bytesWritten)} · checksum{" "}
-                    {lastSave.checksum.slice(0, 16)}… · {lastSave.project.summary.lastSaveKind}
-                    {lastSave.backupCreated ? " · manifest backup" : ""}
-                    {lastSave.prunedSnapshots > 0
-                      ? ` · pruned ${lastSave.prunedSnapshots} snapshot(s)`
-                      : ""}
-                  </div>
+                  <Alert className="p-4">
+                    <CheckCircle2 />
+                    <AlertTitle>Snapshot saved</AlertTitle>
+                    <AlertDescription className="font-mono text-xs">
+                      {lastSave.snapshotFile} · {formatBytes(lastSave.bytesWritten)} · checksum{" "}
+                      {lastSave.checksum.slice(0, 16)}… · {lastSave.project.summary.lastSaveKind}
+                      {lastSave.backupCreated ? " · manifest backup" : ""}
+                      {lastSave.prunedSnapshots > 0
+                        ? ` · pruned ${lastSave.prunedSnapshots} snapshot(s)`
+                        : ""}
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
 
-                <div className="scrollbar-thin max-h-[46vh] space-y-1.5 overflow-y-auto pr-1">
+                <div className="scrollbar-thin max-h-[42vh] space-y-2 overflow-y-auto pr-1">
                   {projects.length === 0 ? (
-                    <div className="flex flex-col items-center gap-2 py-8 text-[11px] text-muted-foreground">
-                      <Archive className="size-6 text-muted-foreground/50" />
-                      <p>No projects yet.</p>
-                      <Button
-                        size="sm"
-                        className="h-7 px-2 text-[10px]"
-                        onClick={() => setTab("create")}
-                      >
-                        <Plus className="mr-1 size-3" /> Create an Empty Project
+                    <Empty className="border p-8">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <Archive />
+                        </EmptyMedia>
+                        <EmptyTitle>No projects yet</EmptyTitle>
+                        <EmptyDescription>
+                          Create a project to start editing blocks.
+                        </EmptyDescription>
+                      </EmptyHeader>
+                      <Button size="sm" onClick={() => setTab("create")}>
+                        <Plus data-icon="inline-start" />
+                        Create an Empty Project
                       </Button>
-                    </div>
+                    </Empty>
                   ) : (
                     projects.map((project) => (
                       <ProjectRow
@@ -485,50 +503,45 @@ export function ProjectManager() {
                 </div>
 
                 {warnings.length > 0 ? (
-                  <div className="space-y-1 rounded border border-status-warn/30 bg-status-warn/5 p-2 text-[9px] text-status-warn">
-                    {warnings.map((warning) => (
-                      <div key={warning}>{warning}</div>
-                    ))}
-                  </div>
+                  <Alert className="p-4">
+                    <AlertTriangle />
+                    <AlertTitle>Warnings</AlertTitle>
+                    <AlertDescription>
+                      <ul className="list-disc space-y-1 pl-4">
+                        {warnings.map((warning) => (
+                          <li key={warning}>{warning}</li>
+                        ))}
+                      </ul>
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
 
                 {renameFolder ? (
-                  <div className="flex items-center gap-1.5 rounded border border-border bg-background/40 p-2">
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-3">
                     <Input
-                      className="h-6 text-[11px]"
+                      className="min-w-48 flex-1"
                       value={renameValue}
                       aria-label="New project name"
                       onChange={(event) => setRenameValue(event.target.value)}
                     />
                     <Button
                       size="sm"
-                      className="h-6 px-2 text-[10px]"
                       disabled={loading || renameValue.trim().length === 0}
                       onClick={() => void submitRename()}
                     >
                       Rename
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 px-2 text-[10px]"
-                      onClick={() => setRenameFolder(null)}
-                    >
+                    <Button size="sm" variant="ghost" onClick={() => setRenameFolder(null)}>
                       Cancel
                     </Button>
                   </div>
                 ) : null}
               </TabsContent>
 
-              <TabsContent value="create" className="m-0 space-y-2 pt-2">
+              <TabsContent value="create" className="m-0 space-y-4 pt-4">
                 {mode !== "vanilla" ? (
-                  <div className="space-y-1">
-                    <label
-                      className="text-[10px] font-medium text-muted-foreground"
-                      htmlFor="project-name"
-                    >
-                      Project name
-                    </label>
+                  <Field>
+                    <FieldLabel htmlFor="project-name">Project name</FieldLabel>
                     <Input
                       id="project-name"
                       value={name}
@@ -536,41 +549,42 @@ export function ProjectManager() {
                       maxLength={64}
                       onChange={(event) => setName(event.target.value)}
                     />
-                  </div>
+                  </Field>
                 ) : null}
 
-                <div className="grid grid-cols-2 gap-1.5">
+                <ToggleGroup
+                  value={[mode]}
+                  onValueChange={(value) => {
+                    const next = value[0];
+                    if (
+                      next === "empty" ||
+                      next === "flat" ||
+                      next === "import" ||
+                      next === "vanilla"
+                    ) {
+                      setMode(next);
+                    }
+                  }}
+                  spacing={2}
+                  className="grid w-full grid-cols-2"
+                >
                   {CREATION_MODES.map((entry) => (
-                    <button
+                    <ToggleGroupItem
                       key={entry.mode}
-                      type="button"
+                      value={entry.mode}
                       disabled={!entry.available || loading}
-                      aria-pressed={mode === entry.mode}
-                      onClick={() => setMode(entry.mode)}
-                      className={cn(
-                        "rounded border p-2 text-left",
-                        mode === entry.mode && entry.available
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border bg-background/40",
-                        entry.available
-                          ? "hover:border-primary/40"
-                          : "cursor-not-allowed opacity-55",
-                      )}
+                      className="h-auto flex-col items-start gap-1.5 p-4 text-left"
                     >
-                      <div className="flex items-center gap-1.5 text-[11px] font-medium">
+                      <span className="flex items-center gap-2 text-sm font-medium">
                         {entry.label}
-                        {entry.available ? null : (
-                          <span className="rounded bg-muted px-1 py-0.5 text-[8px] font-semibold tracking-wide uppercase">
-                            future
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">
+                        {entry.available ? null : <Badge variant="secondary">Future</Badge>}
+                      </span>
+                      <span className="text-sm leading-relaxed text-muted-foreground">
                         {entry.description}
-                      </p>
-                    </button>
+                      </span>
+                    </ToggleGroupItem>
                   ))}
-                </div>
+                </ToggleGroup>
 
                 {mode === "vanilla" ? (
                   <VanillaWorldWizard
@@ -579,187 +593,203 @@ export function ProjectManager() {
                 ) : null}
 
                 {mode === "import" ? (
-                  <div className="space-y-1.5 rounded border border-border bg-background/40 p-2">
-                    <label
-                      className="text-[10px] font-medium text-muted-foreground"
-                      htmlFor="world-folder"
-                    >
-                      Java world folder
-                    </label>
-                    <div className="flex items-center gap-1.5">
-                      <Input
-                        id="world-folder"
-                        className="h-7 font-mono text-[10px]"
-                        value={worldFolder}
-                        placeholder="…/.minecraft/saves/My World"
-                        onChange={(event) => {
-                          setWorldFolder(event.target.value);
-                          useProjectStore.getState().clearWorldAnalysis();
-                        }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 shrink-0 px-2 text-[10px]"
-                        onClick={() => void browseWorldFolder()}
-                      >
-                        <FolderOpen className="mr-1 size-3" /> Browse
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 shrink-0 px-2 text-[10px]"
-                        disabled={analysisLoading || worldFolder.trim().length === 0}
-                        onClick={() => void useProjectStore.getState().analyzeWorld(worldFolder)}
-                      >
-                        {analysisLoading ? (
-                          <Loader2 className="mr-1 size-3 animate-spin" />
-                        ) : (
-                          <RefreshCw className="mr-1 size-3" />
-                        )}
-                        Analyze
-                      </Button>
-                    </div>
-
-                    {worldAnalysis ? (
-                      <div className="space-y-1.5 rounded border border-border bg-card/60 p-2">
-                        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
-                          <span
-                            className={cn(
-                              "rounded px-1 py-0.5 text-[8px] font-semibold uppercase",
-                              worldAnalysis.supported
-                                ? "bg-status-ok/15 text-status-ok"
-                                : "bg-status-error/15 text-status-error",
-                            )}
+                  <Card className="gap-0 py-0">
+                    <CardContent className="space-y-4 p-4">
+                      <Field>
+                        <FieldLabel htmlFor="world-folder">Java world folder</FieldLabel>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Input
+                            id="world-folder"
+                            className="min-w-56 flex-1 font-mono text-xs"
+                            value={worldFolder}
+                            placeholder="…/.minecraft/saves/My World"
+                            onChange={(event) => {
+                              setWorldFolder(event.target.value);
+                              useProjectStore.getState().clearWorldAnalysis();
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void browseWorldFolder()}
                           >
-                            {worldAnalysis.supported ? "supported" : "blocked"}
-                          </span>
-                          <span className="font-mono">
-                            DataVersion {worldAnalysis.dataVersion ?? "unknown"}
-                            {worldAnalysis.versionName ? ` · ${worldAnalysis.versionName}` : ""}
-                          </span>
-                          <span className="text-muted-foreground">{worldAnalysis.layout}</span>
-                          <span className="text-muted-foreground">
-                            {worldAnalysis.selectionKind}
-                            {worldAnalysis.completeSave ? " · complete save" : " · incomplete"}
-                          </span>
-                          <span className="ml-auto font-mono text-muted-foreground">
-                            {worldAnalysis.regions} region(s) · {worldAnalysis.chunks} chunk(s)
-                          </span>
+                            <FolderOpen data-icon="inline-start" />
+                            Browse
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={analysisLoading || worldFolder.trim().length === 0}
+                            onClick={() =>
+                              void useProjectStore.getState().analyzeWorld(worldFolder)
+                            }
+                          >
+                            {analysisLoading ? (
+                              <Loader2 data-icon="inline-start" className="animate-spin" />
+                            ) : (
+                              <RefreshCw data-icon="inline-start" />
+                            )}
+                            Analyze
+                          </Button>
                         </div>
-                        {worldAnalysis.levelName ? (
-                          <div className="text-[10px] text-muted-foreground">
-                            Level: <span className="font-medium">{worldAnalysis.levelName}</span>
-                          </div>
-                        ) : null}
-                        <div className="space-y-0.5">
-                          {worldAnalysis.dimensions.map((dimension) => (
-                            <div
-                              key={dimension.id}
-                              className="flex items-center gap-2 rounded bg-background/60 px-1.5 py-0.5 font-mono text-[9px]"
+                      </Field>
+
+                      {worldAnalysis ? (
+                        <div className="space-y-4 rounded-xl border bg-background p-4">
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <Badge
+                              variant={worldAnalysis.supported ? "secondary" : "destructive"}
+                              className="uppercase"
                             >
-                              <span className="truncate">{dimension.id}</span>
-                              <span className="text-muted-foreground">
-                                y {dimension.minY}..{dimension.minY + dimension.height - 1}
-                              </span>
-                              <span className="ml-auto text-muted-foreground">
-                                {dimension.regionFiles} region(s) · {dimension.chunks} chunk(s)
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                        {worldAnalysis.blockers.length > 0 ? (
-                          <div className="space-y-0.5 rounded border border-status-error/30 bg-status-error/5 p-1.5 text-[9px] text-status-error">
-                            {worldAnalysis.blockers.map((blocker) => (
-                              <div key={blocker}>{blocker}</div>
-                            ))}
+                              {worldAnalysis.supported ? "supported" : "blocked"}
+                            </Badge>
+                            <span className="font-mono text-xs">
+                              DataVersion {worldAnalysis.dataVersion ?? "unknown"}
+                              {worldAnalysis.versionName ? ` · ${worldAnalysis.versionName}` : ""}
+                            </span>
+                            <span className="text-muted-foreground">{worldAnalysis.layout}</span>
+                            <span className="text-muted-foreground">
+                              {worldAnalysis.selectionKind}
+                              {worldAnalysis.completeSave ? " · complete save" : " · incomplete"}
+                            </span>
+                            <span className="ml-auto font-mono text-xs text-muted-foreground">
+                              {worldAnalysis.regions} region(s) · {worldAnalysis.chunks} chunk(s)
+                            </span>
                           </div>
-                        ) : null}
-                        {worldAnalysis.warnings.length > 0 ? (
-                          <div className="scrollbar-thin max-h-24 space-y-0.5 overflow-y-auto rounded border border-status-warn/30 bg-status-warn/5 p-1.5 text-[9px] text-status-warn">
-                            {worldAnalysis.warnings.map((warning) => (
-                              <div key={warning}>{warning}</div>
-                            ))}
-                          </div>
-                        ) : null}
-                        <details className="rounded border border-border bg-background/40 p-1.5">
-                          <summary className="cursor-pointer text-[9px] font-medium">
-                            Read / edit / write / passthrough support matrix
-                          </summary>
-                          <div className="mt-1.5 space-y-1.5">
-                            <div className="flex flex-wrap gap-1">
-                              {worldAnalysis.supportMatrix.versions.map((version) => (
-                                <span
-                                  key={version.id}
-                                  title={version.note}
-                                  className={cn(
-                                    "rounded px-1 py-0.5 text-[8px]",
-                                    version.status === "supported"
-                                      ? "bg-status-ok/15 text-status-ok"
-                                      : "bg-muted text-muted-foreground",
-                                  )}
-                                >
-                                  {version.minecraftVersions} · {version.status}
+                          {worldAnalysis.levelName ? (
+                            <p className="text-sm text-muted-foreground">
+                              Level:{" "}
+                              <span className="font-medium text-foreground">
+                                {worldAnalysis.levelName}
+                              </span>
+                            </p>
+                          ) : null}
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium">Dimensions</h4>
+                            {worldAnalysis.dimensions.map((dimension) => (
+                              <div
+                                key={dimension.id}
+                                className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2 font-mono text-xs"
+                              >
+                                <span className="truncate">{dimension.id}</span>
+                                <span className="text-muted-foreground">
+                                  y {dimension.minY}..{dimension.minY + dimension.height - 1}
                                 </span>
-                              ))}
-                            </div>
-                            <div className="scrollbar-thin max-h-40 overflow-auto">
-                              <table className="w-full text-left text-[8px]">
-                                <thead className="text-muted-foreground">
-                                  <tr>
-                                    <th className="pr-1 font-medium">Data</th>
-                                    <th className="pr-1 font-medium">Read</th>
-                                    <th className="pr-1 font-medium">Edit</th>
-                                    <th className="pr-1 font-medium">Write</th>
-                                    <th className="font-medium">Pass</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {worldAnalysis.supportMatrix.categories.map((category) => (
-                                    <tr
-                                      key={category.id}
-                                      title={category.note}
-                                      className="border-t border-border/50"
-                                    >
-                                      <td className="pr-1">{category.label}</td>
-                                      <td className="pr-1 font-mono">{category.read}</td>
-                                      <td className="pr-1 font-mono">{category.edit}</td>
-                                      <td className="pr-1 font-mono">{category.write}</td>
-                                      <td className="font-mono">{category.passthrough}</td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                                <span className="ml-auto text-muted-foreground">
+                                  {dimension.regionFiles} region(s) · {dimension.chunks} chunk(s)
+                                </span>
+                              </div>
+                            ))}
                           </div>
-                        </details>
-                      </div>
-                    ) : (
-                      <p className="text-[9px] leading-relaxed text-muted-foreground">
-                        Read-only analysis validates level.dat, the classic 1.21.4 layout, every
-                        region and every chunk before import. The original folder is never written.
-                      </p>
-                    )}
-                  </div>
+                          {worldAnalysis.blockers.length > 0 ? (
+                            <Alert variant="destructive" className="p-4">
+                              <AlertTriangle />
+                              <AlertTitle>Import blocked</AlertTitle>
+                              <AlertDescription>
+                                {worldAnalysis.blockers.map((blocker) => (
+                                  <p key={blocker}>{blocker}</p>
+                                ))}
+                              </AlertDescription>
+                            </Alert>
+                          ) : null}
+                          {worldAnalysis.warnings.length > 0 ? (
+                            <Alert className="p-4">
+                              <AlertTriangle />
+                              <AlertTitle>Warnings</AlertTitle>
+                              <AlertDescription>
+                                <div className="scrollbar-thin max-h-24 space-y-1 overflow-y-auto">
+                                  {worldAnalysis.warnings.map((warning) => (
+                                    <p key={warning}>{warning}</p>
+                                  ))}
+                                </div>
+                              </AlertDescription>
+                            </Alert>
+                          ) : null}
+                          <details className="rounded-xl border bg-card p-4">
+                            <summary className="cursor-pointer text-sm font-medium">
+                              Read / edit / write / passthrough support matrix
+                            </summary>
+                            <div className="mt-3 space-y-3">
+                              <div className="flex flex-wrap gap-2">
+                                {worldAnalysis.supportMatrix.versions.map((version) => (
+                                  <Badge
+                                    key={version.id}
+                                    variant={
+                                      version.status === "supported" ? "secondary" : "outline"
+                                    }
+                                    title={version.note}
+                                  >
+                                    {version.minecraftVersions} · {version.status}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <div className="overflow-hidden rounded-lg border">
+                                <Table>
+                                  <TableHeader>
+                                    <TableRow>
+                                      <TableHead>Data</TableHead>
+                                      <TableHead>Read</TableHead>
+                                      <TableHead>Edit</TableHead>
+                                      <TableHead>Write</TableHead>
+                                      <TableHead>Pass</TableHead>
+                                    </TableRow>
+                                  </TableHeader>
+                                  <TableBody>
+                                    {worldAnalysis.supportMatrix.categories.map((category) => (
+                                      <TableRow key={category.id} title={category.note}>
+                                        <TableCell>{category.label}</TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                          {category.read}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                          {category.edit}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                          {category.write}
+                                        </TableCell>
+                                        <TableCell className="font-mono text-xs">
+                                          {category.passthrough}
+                                        </TableCell>
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      ) : (
+                        <p className="text-sm leading-relaxed text-muted-foreground">
+                          Read-only analysis validates level.dat, the classic 1.21.4 layout, every
+                          region and every chunk before import. The original folder is never
+                          written.
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
                 ) : null}
 
-                <div className="flex items-center gap-2 rounded border border-border bg-background/40 px-2 py-1.5 text-[10px]">
-                  <Sparkles className="size-3.5 text-primary" />
-                  <span className="text-muted-foreground">Target Java</span>
-                  <select
-                    aria-label="Target Java version"
-                    className="rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px]"
-                    value="1.21.4"
-                    disabled
-                  >
-                    <option value="1.21.4">Minecraft Java 1.21.4 · DataVersion 4189</option>
-                  </select>
-                  <span className="ml-auto text-[9px] text-muted-foreground">
-                    Saved as <span className="font-mono">project_schema_version 1</span>
-                  </span>
-                </div>
+                <Card className="gap-0 py-0">
+                  <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm">
+                    <Sparkles className="size-4 text-primary" />
+                    <span className="text-muted-foreground">Target Java</span>
+                    <NativeSelect
+                      aria-label="Target Java version"
+                      className="font-mono"
+                      value="1.21.4"
+                      disabled
+                    >
+                      <NativeSelectOption value="1.21.4">
+                        Minecraft Java 1.21.4 · DataVersion 4189
+                      </NativeSelectOption>
+                    </NativeSelect>
+                    <span className="ml-auto text-xs text-muted-foreground">
+                      Saved as <span className="font-mono">project_schema_version 1</span>
+                    </span>
+                  </CardContent>
+                </Card>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-start gap-3">
                   <Button
                     size="sm"
                     disabled={
@@ -773,80 +803,89 @@ export function ProjectManager() {
                     className={mode === "vanilla" ? "hidden" : undefined}
                   >
                     {loading || analysisLoading ? (
-                      <Loader2 className="mr-1 size-3 animate-spin" />
+                      <Loader2 data-icon="inline-start" className="animate-spin" />
                     ) : (
-                      <Plus className="mr-1 size-3" />
+                      <Plus data-icon="inline-start" />
                     )}
                     {mode === "import" ? "Import world" : "Create project"}
                   </Button>
-                  <span className="text-[9px] text-muted-foreground">
+                  <p className="max-w-xl text-sm leading-relaxed text-muted-foreground">
                     {mode === "vanilla"
                       ? "Generate an isolated official-world result above, then use “Open as project”. The generated folder becomes a read-only source copy with its seed, preset and data packs recorded."
                       : mode === "import"
                         ? "Analyze a supported world first. The source folder is copied byte for byte and stays read-only."
                         : "Folders get a unique suffix when the name already exists. Renaming changes the display name only."}
-                  </span>
+                  </p>
                 </div>
               </TabsContent>
 
-              <TabsContent value="checkpoints" className="m-0 space-y-2 pt-2">
-                <div className="flex items-center gap-2">
+              <TabsContent value="checkpoints" className="m-0 space-y-4 pt-4">
+                <div className="flex flex-wrap items-center gap-2">
                   <Input
-                    className="h-6 text-[11px]"
+                    className="min-w-56 flex-1"
                     value={checkpointReason}
                     aria-label="Checkpoint reason"
+                    placeholder="Checkpoint reason"
                     onChange={(event) => setCheckpointReason(event.target.value)}
                   />
                   <Button
                     size="sm"
-                    className="h-6 px-2 text-[10px]"
                     disabled={loading || !activeFolder}
                     onClick={() =>
                       void useProjectStore.getState().createCheckpoint(checkpointReason || "manual")
                     }
                   >
-                    <Plus className="mr-1 size-3" /> Create checkpoint
+                    <Plus data-icon="inline-start" />
+                    Create checkpoint
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-6 px-2 text-[10px]"
                     onClick={() =>
                       void useProjectStore.getState().loadCheckpoints(activeFolder ?? undefined)
                     }
                   >
-                    <RotateCcw className="mr-1 size-3" /> Refresh
+                    <RotateCcw data-icon="inline-start" />
+                    Refresh
                   </Button>
                 </div>
-                <p className="text-[9px] text-muted-foreground">
+                <p className="text-sm leading-relaxed text-muted-foreground">
                   Checkpoints are full verified snapshots kept for the current project (up to 5).
                   Restoring one replaces the open world and leaves it unsaved until you save.
                 </p>
                 {checkpoints.length === 0 ? (
-                  <div className="flex items-center gap-2 rounded border border-dashed border-border px-2 py-3 text-[10px] text-muted-foreground">
-                    <History className="size-3.5" /> No checkpoints for{" "}
-                    {currentProject?.name ?? activeFolder ?? "this project"}.
-                  </div>
+                  <Empty className="border p-6">
+                    <EmptyHeader>
+                      <EmptyMedia variant="icon">
+                        <History />
+                      </EmptyMedia>
+                      <EmptyTitle>No checkpoints</EmptyTitle>
+                      <EmptyDescription>
+                        No checkpoints for {currentProject?.name ?? activeFolder ?? "this project"}.
+                      </EmptyDescription>
+                    </EmptyHeader>
+                  </Empty>
                 ) : (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     {checkpoints.map((checkpoint) => (
                       <div
                         key={checkpoint.revision}
-                        className="flex items-center gap-2 rounded border border-border bg-background/40 px-2 py-1 font-mono text-[9px]"
+                        className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3 font-mono text-xs"
                       >
-                        <Clock className="size-3 text-muted-foreground" />
-                        <span>rev {checkpoint.revision}</span>
+                        <Clock className="size-4 text-muted-foreground" />
+                        <span className="font-medium">rev {checkpoint.revision}</span>
                         <span className="text-muted-foreground">
                           {formatBytes(checkpoint.bytes)}
                         </span>
-                        <span className="truncate text-muted-foreground">{checkpoint.reason}</span>
-                        <span className="ml-auto text-muted-foreground">
+                        <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                          {checkpoint.reason}
+                        </span>
+                        <span className="text-muted-foreground">
                           {formatRelativeTime(checkpoint.savedAtMs)}
                         </span>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-5 px-1.5 text-[9px]"
                           disabled={loading}
                           onClick={() => {
                             if (
@@ -868,20 +907,22 @@ export function ProjectManager() {
                 )}
               </TabsContent>
 
-              <TabsContent value="exchange" className="m-0 space-y-2 pt-2">
+              <TabsContent value="exchange" className="m-0 space-y-4 pt-4">
                 <StructureExchange />
               </TabsContent>
             </Tabs>
 
             <Separator />
-            <div className="flex items-center gap-2 text-[9px] text-muted-foreground">
-              <HardDrive className="size-3" />
+            <div className="flex items-start gap-2 text-sm leading-relaxed text-muted-foreground">
+              <HardDrive className="mt-0.5 size-3.5 shrink-0" />
               <span>
                 Atomic save: temp file → decode + re-encode verification → checksum → publish →
                 manifest. Autosave runs every 30 seconds while edits are unsaved and on window
                 close.
               </span>
-              {loading ? <Loader2 className="ml-auto size-3 animate-spin text-primary" /> : null}
+              {loading ? (
+                <Loader2 className="ml-auto size-3.5 shrink-0 animate-spin text-primary" />
+              ) : null}
             </div>
           </>
         )}

@@ -28,6 +28,7 @@ import {
   Waypoints,
   X,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,6 +41,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
 import { invokeCommand, isTauriRuntime } from "@/lib/ipc";
 import { listenForRendererRequests } from "@/lib/renderer-bridge";
 import { loadAssetBundle } from "@/lib/assets-api";
@@ -72,6 +81,28 @@ import {
 } from "@/editor/commands";
 import type { EditorTool } from "@/editor/types";
 import { MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS } from "@/editor/session";
+
+const BRUSH_RADIUS_ITEMS = Array.from(
+  { length: MAX_BRUSH_RADIUS - MIN_BRUSH_RADIUS + 1 },
+  (_, index) => {
+    const radius = MIN_BRUSH_RADIUS + index;
+    return {
+      value: String(radius),
+      label: `${radius} (${Math.pow(radius * 2 + 1, 3)} max)`,
+    };
+  },
+);
+
+const VIEW_DISTANCE_ITEMS = Array.from(
+  { length: MAX_LOAD_RADIUS - MIN_LOAD_RADIUS + 1 },
+  (_, index) => {
+    const radius = MIN_LOAD_RADIUS + index;
+    return {
+      value: String(radius),
+      label: `${radius * 2 + 1}×${radius * 2 + 1}`,
+    };
+  },
+);
 import { useHistoryStore } from "@/state/history-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
 import { cn } from "@/lib/utils";
@@ -576,7 +607,7 @@ export function Viewport() {
   const canApplySelection = Boolean(boxSelection);
 
   return (
-    <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-[oklch(0.17_0.014_260)]">
+    <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       <div
         ref={containerRef}
         className="absolute inset-0"
@@ -653,12 +684,12 @@ export function Viewport() {
       />
 
       {!webgl2 ? (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[oklch(0.17_0.014_260)] text-center">
-          <div className="grid size-16 place-items-center rounded-xl border border-white/10 bg-white/[0.03]">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-background text-center">
+          <div className="grid size-16 place-items-center rounded-xl border bg-card">
             <Box className="size-8 text-primary/80" strokeWidth={1.2} />
           </div>
-          <h1 className="text-sm font-semibold text-white/90">3D viewport</h1>
-          <p className="max-w-sm text-[11px] leading-relaxed text-white/50">
+          <h1 className="text-sm font-semibold">3D viewport</h1>
+          <p className="max-w-sm text-sm leading-relaxed text-muted-foreground">
             WebGL2 is unavailable in this WebView. Rendering is disabled, but world data and the
             command API still work.
           </p>
@@ -666,19 +697,19 @@ export function Viewport() {
       ) : null}
 
       {webgl2 && status === "loading" ? (
-        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-black/25">
-          <div className="flex items-center gap-2 rounded-md border border-white/10 bg-black/50 px-3 py-2 text-[11px] text-white/70">
+        <div className="pointer-events-none absolute inset-0 z-10 grid place-items-center bg-background/40">
+          <div className="flex items-center gap-2 rounded-lg border bg-card/95 px-3 py-2 text-xs text-muted-foreground shadow-sm">
             <Loader2 className="size-3.5 animate-spin" /> Loading chunk snapshots…
           </div>
         </div>
       ) : null}
 
       {webgl2 && status === "error" ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-black/55 p-6">
-          <div className="max-w-md space-y-2 rounded-lg border border-status-error/40 bg-card/95 p-4 text-center">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-background/70 p-6">
+          <div className="max-w-md space-y-2 rounded-xl border border-status-error/40 bg-card p-4 text-center shadow-lg">
             <TriangleAlert className="mx-auto size-6 text-status-error" />
             <h2 className="text-sm font-semibold">Viewport unavailable</h2>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
+            <p className="text-sm leading-relaxed text-muted-foreground">
               {error ?? "The renderer could not be started."}
             </p>
             <Button
@@ -697,78 +728,78 @@ export function Viewport() {
       ) : null}
 
       {webgl2 && tauri && !project?.folder && status === "ready" ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-black/35 p-6">
-          <div className="w-full max-w-md space-y-3 rounded-lg border border-white/10 bg-card/95 p-5 text-center shadow-2xl">
-            <div className="mx-auto grid size-12 place-items-center rounded-lg border border-primary/30 bg-primary/10">
+        <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 p-6">
+          <div className="w-full max-w-md space-y-4 rounded-xl border bg-card p-6 text-center shadow-xl">
+            <div className="mx-auto grid size-12 place-items-center rounded-xl border border-primary/30 bg-primary/10">
               <FolderOpen className="size-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-sm font-semibold">No project open</h2>
-              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              <h2 className="text-base font-semibold">No project open</h2>
+              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
                 Create an Empty Project or a flat base, or open an existing{" "}
-                <span className="font-mono">.furybuilder</span> folder. Edits are saved atomically
-                with checksums and autosave.
+                <span className="font-mono text-xs">.furybuilder</span> folder. Edits are saved
+                atomically with checksums and autosave.
               </p>
             </div>
             <div className="flex justify-center gap-2">
               <Button size="sm" onClick={() => setManagerOpen(true)}>
-                <Plus className="mr-1 size-3.5" /> New project
+                <Plus data-icon="inline-start" />
+                New project
               </Button>
               <Button size="sm" variant="outline" onClick={() => setManagerOpen(true)}>
-                <FolderOpen className="mr-1 size-3.5" /> Open project
+                <FolderOpen data-icon="inline-start" />
+                Open project
               </Button>
             </div>
           </div>
         </div>
       ) : null}
 
-      <div className="pointer-events-none absolute top-2 left-2 z-20 flex items-center gap-2">
-        <span className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white/65">
+      <div className="pointer-events-none absolute top-3 left-3 z-20 flex flex-wrap items-center gap-2">
+        <Badge variant="secondary" className="font-mono">
           {dimension === "minecraft:overworld"
             ? "Overworld"
             : dimension.replace("minecraft:", "").replace(/_/g, " ")}
           {" · "}
           {positionLabel}
-        </span>
-        <span className="rounded border border-white/10 bg-black/40 px-2 py-1 font-mono text-[10px] text-white/50">
+        </Badge>
+        <Badge variant="secondary" className="font-mono">
           rev {revision}
-        </span>
-        <span
+        </Badge>
+        <Badge
+          variant="outline"
           className={cn(
-            "rounded border px-2 py-1 font-mono text-[10px]",
+            "font-mono",
             source === "core"
               ? "border-status-ok/30 bg-status-ok/10 text-status-ok"
               : "border-status-warn/30 bg-status-warn/10 text-status-warn",
           )}
         >
           {source === "core" ? "Rust core" : source === "preview" ? "Preview data" : "…"}
-        </span>
+        </Badge>
       </div>
 
-      <div className="absolute top-2 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-1.5">
-        <div className="flex items-center gap-0.5 rounded-lg border border-white/10 bg-black/60 p-1 shadow-lg backdrop-blur-sm">
+      <div className="absolute top-3 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
+        <div className="flex items-center gap-1 rounded-xl border bg-background/85 p-1 shadow-lg backdrop-blur-md">
           {TOOL_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = tool === item.tool;
             return (
               <Tooltip key={item.tool}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={item.label}
-                    aria-pressed={active}
-                    className={cn(
-                      "size-7 rounded",
-                      active
-                        ? "bg-primary/25 text-primary hover:bg-primary/30"
-                        : "text-white/65 hover:bg-white/10 hover:text-white",
-                    )}
-                    disabled={!editingEnabled}
-                    onClick={() => useToolStore.getState().setTool(item.tool)}
-                  >
-                    <Icon />
-                  </Button>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant={active ? "secondary" : "ghost"}
+                      size="icon"
+                      aria-label={item.label}
+                      aria-pressed={active}
+                      className={cn(active && "bg-accent text-accent-foreground")}
+                      disabled={!editingEnabled}
+                      onClick={() => useToolStore.getState().setTool(item.tool)}
+                    />
+                  }
+                >
+                  <Icon />
                 </TooltipTrigger>
                 <TooltipContent>
                   {item.label} · {item.shortcut}
@@ -776,80 +807,81 @@ export function Viewport() {
               </Tooltip>
             );
           })}
-          <Separator orientation="vertical" className="mx-0.5 h-5 bg-white/15" />
+          <Separator orientation="vertical" className="mx-1 !h-6" />
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Undo"
-                className="size-7 rounded text-white/65 hover:bg-white/10 hover:text-white"
-                disabled={!editingEnabled || Boolean(job) || !canUndo}
-                onClick={() => void undoWorld()}
-              >
-                <Undo2 />
-              </Button>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Undo"
+                  disabled={!editingEnabled || Boolean(job) || !canUndo}
+                  onClick={() => void undoWorld()}
+                />
+              }
+            >
+              <Undo2 />
             </TooltipTrigger>
             <TooltipContent>Undo · Ctrl+Z</TooltipContent>
           </Tooltip>
           <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Redo"
-                className="size-7 rounded text-white/65 hover:bg-white/10 hover:text-white"
-                disabled={!editingEnabled || Boolean(job) || !canRedo}
-                onClick={() => void redoWorld()}
-              >
-                <Redo2 />
-              </Button>
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Redo"
+                  disabled={!editingEnabled || Boolean(job) || !canRedo}
+                  onClick={() => void redoWorld()}
+                />
+              }
+            >
+              <Redo2 />
             </TooltipTrigger>
             <TooltipContent>Redo · Ctrl+Shift+Z</TooltipContent>
           </Tooltip>
         </div>
 
         {editingEnabled ? (
-          <div className="flex items-center gap-1.5 rounded-md border border-white/10 bg-black/55 px-2 py-1 font-mono text-[9px] text-white/55">
-            <span className="text-white/80">{toolLabel}</span>
+          <div className="flex items-center gap-2 rounded-lg border bg-background/85 px-3 py-1.5 font-mono text-xs text-muted-foreground shadow-sm backdrop-blur-md">
+            <span className="font-sans font-medium text-foreground">{toolLabel}</span>
             {tool === "brush" ? (
-              <label className="flex items-center gap-1">
+              <label className="flex items-center gap-1.5">
                 radius
-                <select
-                  aria-label="Brush radius"
-                  value={brushRadius}
-                  onChange={(event) =>
-                    useToolStore.getState().setBrushRadius(Number(event.target.value))
-                  }
-                  className="rounded border border-white/15 bg-black/40 px-1 py-0.5"
+                <Select
+                  items={BRUSH_RADIUS_ITEMS}
+                  value={String(brushRadius)}
+                  onValueChange={(value) => {
+                    if (value) useToolStore.getState().setBrushRadius(Number(value));
+                  }}
                 >
-                  {Array.from(
-                    { length: MAX_BRUSH_RADIUS - MIN_BRUSH_RADIUS + 1 },
-                    (_, index) => MIN_BRUSH_RADIUS + index,
-                  ).map((radius) => (
-                    <option key={radius} value={radius}>
-                      {radius} ({Math.pow(radius * 2 + 1, 3)} max)
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger size="sm" aria-label="Brush radius" className="min-w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BRUSH_RADIUS_ITEMS.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
             ) : null}
-            <span className="text-primary/90">{selectedBlock.name.replace("minecraft:", "")}</span>
+            <span className="text-primary">{selectedBlock.name.replace("minecraft:", "")}</span>
             {tool === "replace" ? (
-              <span className="text-white/45">
-                from {replaceFrom?.name.replace("minecraft:", "") ?? "—"}
-              </span>
+              <span>from {replaceFrom?.name.replace("minecraft:", "") ?? "—"}</span>
             ) : null}
             {boxSelection ? (
-              <span className="text-sky-300">
+              <span className="text-primary">
                 sel {boxSelection.min.x},{boxSelection.min.y},{boxSelection.min.z} →{" "}
                 {boxSelection.max.x},{boxSelection.max.y},{boxSelection.max.z}
               </span>
             ) : null}
-            {ghost ? <span className="text-white/40">{ghost.label}</span> : null}
+            {ghost ? <span className="text-muted-foreground/70">{ghost.label}</span> : null}
           </div>
         ) : (
-          <div className="rounded-md border border-status-warn/30 bg-black/60 px-2 py-1 font-mono text-[9px] text-status-warn">
+          <div className="rounded-lg border border-status-warn/30 bg-background/85 px-3 py-1.5 font-mono text-xs text-status-warn backdrop-blur-md">
             {tauri
               ? "No project open — create or open a project to edit blocks"
               : "Preview mode — block editing requires the desktop core"}
@@ -857,182 +889,199 @@ export function Viewport() {
         )}
 
         {job ? (
-          <div className="flex items-center gap-2 rounded-md border border-primary/30 bg-black/70 px-2 py-1 font-mono text-[9px] text-white/75">
-            <Loader2 className="size-3 animate-spin text-primary" />
+          <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-background/85 px-3 py-1.5 font-mono text-xs shadow-sm backdrop-blur-md">
+            <Loader2 className="size-3.5 animate-spin text-primary" />
             {job.label}
             {job.progress !== null ? ` · ${job.progress}%` : null}
             {job.cancelRequested ? " · cancelling…" : null}
             {job.cancellable && !job.cancelRequested ? (
-              <button
-                type="button"
-                className="ml-1 rounded border border-white/20 px-1.5 py-0.5 text-[9px] text-white/70 hover:bg-white/10"
+              <Button
+                size="xs"
+                variant="outline"
+                className="ml-1"
                 onClick={() => useToolStore.getState().requestCancel()}
               >
                 Cancel
-              </button>
+              </Button>
             ) : null}
           </div>
         ) : null}
 
         {editingEnabled && (tool === "fill" || tool === "replace") ? (
-          <div className="flex items-center gap-1 rounded-md border border-white/10 bg-black/55 px-1.5 py-1">
+          <div className="flex items-center gap-1.5 rounded-lg border bg-background/85 p-1 shadow-sm backdrop-blur-md">
             <Button
               size="sm"
-              variant="ghost"
-              className="h-6 px-2 text-[10px] text-white/75 hover:bg-white/10"
+              variant="secondary"
               disabled={!canApplySelection || Boolean(job)}
               onClick={() => void applyActiveTool()}
             >
               {tool === "fill" ? (
-                <PaintBucket className="mr-1 size-3" />
+                <PaintBucket data-icon="inline-start" />
               ) : (
-                <Replace className="mr-1 size-3" />
+                <Replace data-icon="inline-start" />
               )}
               Apply {tool}
             </Button>
             <Button
               size="sm"
-              variant="ghost"
-              className="h-6 px-2 text-[10px] text-white/75 hover:bg-white/10"
+              variant="outline"
               disabled={!canApplySelection || Boolean(job)}
               onClick={() => void deleteSelection()}
             >
-              <Trash2 className="mr-1 size-3" /> Delete
+              <Trash2 data-icon="inline-start" />
+              Delete
             </Button>
           </div>
         ) : null}
       </div>
 
-      <div className="absolute top-2 right-2 z-20 flex items-center gap-1">
+      <div className="absolute top-3 right-3 z-20 flex items-center gap-1 rounded-xl border bg-background/85 p-1 shadow-lg backdrop-blur-md">
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Fly camera"
-              className="text-white/70 hover:bg-white/10"
-              onClick={() => setCameraMode("fly")}
-            >
-              <Plane />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Fly camera"
+                onClick={() => setCameraMode("fly")}
+              />
+            }
+          >
+            <Plane />
           </TooltipTrigger>
           <TooltipContent>Fly camera — WASD, Space/Ctrl, right-drag to look.</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Orbit camera"
-              className="text-white/70 hover:bg-white/10"
-              onClick={() => setCameraMode("orbit")}
-            >
-              <Orbit />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Orbit camera"
+                onClick={() => setCameraMode("orbit")}
+              />
+            }
+          >
+            <Orbit />
           </TooltipTrigger>
           <TooltipContent>Orbit camera — drag to rotate, wheel to zoom.</TooltipContent>
         </Tooltip>
-        <Separator orientation="vertical" className="mx-1 h-5 bg-white/10" />
+        <Separator orientation="vertical" className="mx-1 !h-6" />
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Toggle grid"
-              className={cn("hover:bg-white/10", gridVisible ? "text-primary" : "text-white/40")}
-              onClick={toggleGrid}
-            >
-              <Grid3X3 />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Toggle grid"
+                className={cn(gridVisible && "bg-accent text-accent-foreground")}
+                onClick={toggleGrid}
+              />
+            }
+          >
+            <Grid3X3 />
           </TooltipTrigger>
           <TooltipContent>Toggle the ground grid.</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Toggle chunk borders"
-              className={cn(
-                "hover:bg-white/10",
-                chunkBordersVisible ? "text-primary" : "text-white/40",
-              )}
-              onClick={toggleBorders}
-            >
-              <Waypoints />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Toggle chunk borders"
+                className={cn(chunkBordersVisible && "bg-accent text-accent-foreground")}
+                onClick={toggleBorders}
+              />
+            }
+          >
+            <Waypoints />
           </TooltipTrigger>
           <TooltipContent>Toggle chunk borders.</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Go to coordinates"
-              className="text-white/70 hover:bg-white/10"
-              onClick={openGoto}
-            >
-              <MousePointer2 />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Go to coordinates"
+                onClick={openGoto}
+              />
+            }
+          >
+            <MousePointer2 />
           </TooltipTrigger>
           <TooltipContent>Fly the camera to exact coordinates.</TooltipContent>
         </Tooltip>
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Capture viewport"
-              className="text-white/70 hover:bg-white/10"
-              onClick={doCapture}
-            >
-              <Camera />
-            </Button>
+          <TooltipTrigger
+            render={
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Capture viewport"
+                onClick={doCapture}
+              />
+            }
+          >
+            <Camera />
           </TooltipTrigger>
           <TooltipContent>Capture the viewport with observation metadata.</TooltipContent>
         </Tooltip>
       </div>
 
-      <div className="absolute bottom-2 left-2 z-20 w-60 rounded-md border border-white/10 bg-black/55 text-white/70 backdrop-blur-sm">
+      <div className="absolute bottom-3 left-3 z-20 w-64 overflow-hidden rounded-xl border bg-background/90 text-muted-foreground shadow-lg backdrop-blur-md">
         <button
           type="button"
-          className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[10px] font-semibold tracking-wide uppercase"
+          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium"
           onClick={() => setDetailsOpen((value) => !value)}
         >
-          {detailsOpen ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          {detailsOpen ? (
+            <ChevronDown className="size-3.5" />
+          ) : (
+            <ChevronRight className="size-3.5" />
+          )}
           Performance
-          <span className="ml-auto font-mono text-[10px] normal-case">
+          <span className="ml-auto font-mono text-xs text-foreground">
             {metrics ? `${metrics.fps} fps` : "—"}
           </span>
         </button>
         {detailsOpen ? (
-          <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 border-t border-white/10 px-2 py-1.5 font-mono text-[9px]">
+          <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t px-3 py-2 font-mono text-xs">
             <span>Frame</span>
-            <span className="text-right">{metrics ? `${metrics.frameMs} ms` : "—"}</span>
+            <span className="text-right text-foreground">
+              {metrics ? `${metrics.frameMs} ms` : "—"}
+            </span>
             <span>Draw calls</span>
-            <span className="text-right">{metrics?.drawCalls ?? "—"}</span>
+            <span className="text-right text-foreground">{metrics?.drawCalls ?? "—"}</span>
             <span>Triangles</span>
-            <span className="text-right">{metrics?.triangles.toLocaleString() ?? "—"}</span>
+            <span className="text-right text-foreground">
+              {metrics?.triangles.toLocaleString() ?? "—"}
+            </span>
             <span>Meshes</span>
-            <span className="text-right">{metrics?.meshCount ?? "—"}</span>
+            <span className="text-right text-foreground">{metrics?.meshCount ?? "—"}</span>
             <span>Geometries</span>
-            <span className="text-right">{metrics?.geometries ?? "—"}</span>
+            <span className="text-right text-foreground">{metrics?.geometries ?? "—"}</span>
             <span>Textures</span>
-            <span className="text-right">{metrics?.textures ?? "—"}</span>
+            <span className="text-right text-foreground">{metrics?.textures ?? "—"}</span>
             <span>Chunks</span>
-            <span className="text-right">{metrics?.loadedChunks ?? "—"}</span>
+            <span className="text-right text-foreground">{metrics?.loadedChunks ?? "—"}</span>
             <span>Sections</span>
-            <span className="text-right">{metrics?.renderedSections ?? "-"}</span>
+            <span className="text-right text-foreground">{metrics?.renderedSections ?? "-"}</span>
             <span>Mesh queue</span>
-            <span className="text-right">{metrics?.pendingMeshJobs ?? "-"}</span>
+            <span className="text-right text-foreground">{metrics?.pendingMeshJobs ?? "-"}</span>
             <span>Evicted</span>
-            <span className="text-right">{metrics?.evictedChunks ?? "-"}</span>
+            <span className="text-right text-foreground">{metrics?.evictedChunks ?? "-"}</span>
             <span>Assets</span>
             <span
               className={cn(
                 "text-right",
-                assetError ? "text-status-warn" : assetStats ? "text-status-ok" : "text-white/40",
+                assetError
+                  ? "text-status-warn"
+                  : assetStats
+                    ? "text-status-ok"
+                    : "text-muted-foreground",
               )}
               title={assetError ?? undefined}
             >
@@ -1040,30 +1089,31 @@ export function Viewport() {
                 ? `${assetStats.models} models · ${assetStats.textures} tex`
                 : "placeholder"}
             </span>
-            <span>View distance</span>
-            <span className="text-right">
-              <select
-                aria-label="View distance"
-                className="rounded border border-white/10 bg-black/40 px-1 py-0.5 font-mono text-[9px] text-white/70"
-                value={loadRadius}
-                onChange={(event) => handleRadius(Number(event.target.value))}
-              >
-                {Array.from(
-                  { length: MAX_LOAD_RADIUS - MIN_LOAD_RADIUS + 1 },
-                  (_, index) => MIN_LOAD_RADIUS + index,
-                ).map((radius) => (
-                  <option key={radius} value={radius}>
-                    {radius * 2 + 1}×{radius * 2 + 1}
-                  </option>
+            <span className="self-center">View distance</span>
+            <Select
+              items={VIEW_DISTANCE_ITEMS}
+              value={String(loadRadius)}
+              onValueChange={(value) => {
+                if (value) handleRadius(Number(value));
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="View distance" className="h-7 min-w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {VIEW_DISTANCE_ITEMS.map((item) => (
+                  <SelectItem key={item.value} value={item.value}>
+                    {item.label}
+                  </SelectItem>
                 ))}
-              </select>
-            </span>
+              </SelectContent>
+            </Select>
             <span>Save</span>
             <span
               className={cn(
                 "text-right",
                 !project?.folder
-                  ? "text-white/40"
+                  ? "text-muted-foreground"
                   : projectDirty
                     ? "text-status-warn"
                     : "text-status-ok",
@@ -1080,7 +1130,7 @@ export function Viewport() {
             {lastOperation ? (
               <>
                 <span>Last op</span>
-                <span className="text-right">
+                <span className="text-right text-foreground">
                   {lastOperation.changedBlocks.toLocaleString()} blk · rev {lastOperation.revision}
                 </span>
               </>
@@ -1089,7 +1139,7 @@ export function Viewport() {
         ) : null}
       </div>
 
-      <div className="pointer-events-none absolute right-2 bottom-2 z-20 max-w-[45%] rounded border border-white/10 bg-black/45 px-2.5 py-1 font-mono text-[9px] text-white/45">
+      <div className="pointer-events-none absolute right-3 bottom-3 z-20 max-w-[45%] rounded-lg border bg-background/85 px-3 py-1.5 font-mono text-xs text-muted-foreground backdrop-blur-md">
         {editingEnabled
           ? "WASD fly · RMB look · 1-8 tools · Alt-click pick · Ctrl+Z undo · Ctrl+S save · RMB menu"
           : tauri
@@ -1098,7 +1148,7 @@ export function Viewport() {
       </div>
 
       {boxSelection && editingEnabled ? (
-        <div className="pointer-events-none absolute bottom-2 left-1/2 z-20 rounded border border-sky-400/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-sky-200">
+        <div className="pointer-events-none absolute bottom-3 left-1/2 z-20 rounded-lg border border-primary/40 bg-background/90 px-3 py-1.5 font-mono text-xs text-foreground shadow-sm backdrop-blur-md">
           box {boxSelection.max.x - boxSelection.min.x + 1}×
           {boxSelection.max.y - boxSelection.min.y + 1}×
           {boxSelection.max.z - boxSelection.min.z + 1} ·{" "}
@@ -1112,7 +1162,7 @@ export function Viewport() {
       ) : null}
 
       {selection ? (
-        <div className="pointer-events-none absolute bottom-10 left-1/2 z-20 max-w-[60%] -translate-x-1/2 truncate rounded border border-primary/40 bg-black/60 px-2 py-1 font-mono text-[10px] text-white/75">
+        <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 max-w-[60%] -translate-x-1/2 truncate rounded-lg border border-primary/40 bg-background/90 px-3 py-1.5 font-mono text-xs text-foreground shadow-sm backdrop-blur-md">
           selected {selection.pos.x}, {selection.pos.y}, {selection.pos.z} ·{" "}
           {selection.state.name.replace("minecraft:", "")}
           {selection.state.properties && Object.keys(selection.state.properties).length > 0
@@ -1125,11 +1175,11 @@ export function Viewport() {
 
       {contextMenu ? (
         <div
-          className="absolute z-40 w-56 overflow-hidden rounded-md border border-border bg-card/95 text-[11px] shadow-2xl backdrop-blur"
+          className="absolute z-40 w-64 overflow-hidden rounded-xl border bg-popover text-sm text-popover-foreground shadow-xl"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           role="menu"
         >
-          <div className="border-b border-border px-2.5 py-1.5 font-mono text-[9px] text-muted-foreground">
+          <div className="border-b px-3 py-2 font-mono text-xs text-muted-foreground">
             {contextMenu.hit
               ? `${contextMenu.hit.pos.x}, ${contextMenu.hit.pos.y}, ${contextMenu.hit.pos.z} · ${contextMenu.hit.state.name.replace("minecraft:", "")}`
               : "Empty space"}
@@ -1234,7 +1284,7 @@ export function Viewport() {
           <form onSubmit={submitGoto} className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
               {(["x", "y", "z"] as const).map((axis) => (
-                <label key={axis} className="space-y-1 text-[10px] text-muted-foreground">
+                <label key={axis} className="space-y-1 text-xs text-muted-foreground">
                   <span className="font-mono uppercase">{axis}</span>
                   <Input
                     value={goto[axis]}
@@ -1269,7 +1319,7 @@ export function Viewport() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <div className="overflow-hidden rounded border border-border bg-black/40">
+            <div className="overflow-hidden rounded-lg border bg-muted/40">
               <img
                 src={captureImage ?? ""}
                 alt="Captured viewport"
@@ -1277,7 +1327,7 @@ export function Viewport() {
               />
             </div>
             {lastCapture ? (
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded border border-border bg-background/40 p-2 font-mono text-[10px]">
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 rounded border border-border bg-background/40 p-2 font-mono text-xs">
                 <span className="text-muted-foreground">Dimension</span>
                 <span>{lastCapture.dimension}</span>
                 <span className="text-muted-foreground">World revision</span>
@@ -1302,11 +1352,11 @@ export function Viewport() {
             ) : null}
             {lastCapture ? (
               <details className="rounded border border-border bg-background/40 p-2">
-                <summary className="cursor-pointer text-[10px] font-medium text-muted-foreground">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
                   Legend and full metadata ({lastCapture.legend.length} states
                   {lastCapture.legendTruncated ? ", truncated" : ""})
                 </summary>
-                <div className="mt-2 grid max-h-32 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto font-mono text-[10px]">
+                <div className="mt-2 grid max-h-32 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto font-mono text-xs">
                   {lastCapture.legend.map((entry) => (
                     <div key={entry.state} className="flex items-center gap-1.5">
                       <span
@@ -1318,7 +1368,7 @@ export function Viewport() {
                     </div>
                   ))}
                 </div>
-                <pre className="scrollbar-thin mt-2 max-h-32 overflow-auto rounded bg-background/60 p-2 font-mono text-[9px] leading-relaxed text-muted-foreground">
+                <pre className="scrollbar-thin mt-2 max-h-32 overflow-auto rounded bg-background/60 p-2 font-mono text-xs leading-relaxed text-muted-foreground">
                   {JSON.stringify(lastCapture, null, 2)}
                 </pre>
               </details>
@@ -1361,15 +1411,15 @@ function ContextItem({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex w-full items-center gap-2 px-2.5 py-1.5 text-left",
+        "flex w-full items-center gap-2.5 px-3 py-2 text-left",
         disabled
           ? "cursor-not-allowed text-muted-foreground/50"
           : "hover:bg-accent hover:text-accent-foreground",
       )}
     >
-      <span className="grid size-3.5 place-items-center [&>svg]:size-3.5">{icon}</span>
+      <span className="grid size-4 place-items-center [&>svg]:size-4">{icon}</span>
       <span className="flex-1">{label}</span>
-      {hint ? <span className="font-mono text-[9px] text-muted-foreground">{hint}</span> : null}
+      {hint ? <span className="font-mono text-xs text-muted-foreground">{hint}</span> : null}
     </button>
   );
 }

@@ -10,7 +10,11 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { displayRuntimePath, formatBytes } from "@/lib/runtime-api";
 import { ServerGenerationPanel } from "@/features/settings/ServerGenerationPanel";
 import {
@@ -213,226 +217,245 @@ export function MinecraftServerSection() {
       : null;
 
   return (
-    <section className="min-w-0 space-y-2">
-      <div className="flex items-center justify-between">
-        <h3 className="flex items-center gap-1.5 text-[11px] font-semibold tracking-wide uppercase">
-          <Server className="size-3.5" /> Minecraft server JAR
+    <section className="min-w-0 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-base font-semibold">
+          <Server className="size-4" /> Minecraft server JAR
         </h3>
-        <span className="text-[10px] text-muted-foreground">
+        <Badge variant="secondary" className="font-mono">
           MC {discovery?.targetMinecraftVersion ?? "1.21.4"} · DV{" "}
           {discovery?.targetDataVersion ?? 4189} · Java {discovery?.targetJavaMajor ?? 21}
-        </span>
+        </Badge>
       </div>
-      <p className="text-[10px] text-muted-foreground">
+      <p className="text-sm leading-relaxed text-muted-foreground">
         Used only by the future Vanilla World generator. The official JAR is downloaded from
         Mojang&apos;s version manifest only after you ask for it. It is never bundled, executed here
         or covered by an automatically accepted EULA.
       </p>
 
       {saved ? (
-        <div className="space-y-1 rounded border border-border bg-background/40 p-2 text-[11px]">
-          <div className="flex items-center gap-2">
-            <CheckCircle2
-              className={cn("size-3.5", saved.ready ? "text-status-ok" : "text-status-warn")}
-            />
-            <span className="font-medium">Selected server JAR</span>
-            <span
-              className={cn(
-                "rounded px-1.5 py-0.5 font-mono text-[10px]",
-                saved.ready
-                  ? "bg-status-ok/15 text-status-ok"
-                  : "bg-status-warn/15 text-status-warn",
-              )}
-            >
-              {saved.ready ? "ready" : "needs attention"}
-            </span>
-            <span className="ml-auto font-mono text-[10px]">{sourceLabel(saved)}</span>
-          </div>
-          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
-            <span>
-              Version <span className="font-mono">{saved.version ?? "unknown"}</span>
-            </span>
-            <span>
-              DataVersion <span className="font-mono">{saved.dataVersion ?? "unknown"}</span>
-            </span>
-            <span>
-              Java <span className="font-mono">{saved.javaMajor ?? "unknown"}</span>
-            </span>
-            <span>
-              Size{" "}
-              <span className="font-mono">
-                {saved.size === null ? "unknown" : formatBytes(saved.size)}
+        <Card className="gap-0 py-0">
+          <CardContent className="space-y-3 p-6">
+            <div className="flex flex-wrap items-center gap-2">
+              <CheckCircle2
+                className={cn("size-4", saved.ready ? "text-status-ok" : "text-status-warn")}
+              />
+              <span className="text-sm font-medium">Selected server JAR</span>
+              <Badge variant={saved.ready ? "secondary" : "outline"} className="uppercase">
+                {saved.ready ? "ready" : "needs attention"}
+              </Badge>
+              <span className="ml-auto font-mono text-xs text-muted-foreground">
+                {sourceLabel(saved)}
               </span>
-            </span>
-            {saved.matchesOfficial !== null ? (
-              <span className="font-mono">
-                {saved.matchesOfficial ? "matches Mojang" : "does not match Mojang"}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <span>
+                Version <span className="font-mono text-xs">{saved.version ?? "unknown"}</span>
               </span>
+              <span>
+                DataVersion{" "}
+                <span className="font-mono text-xs">{saved.dataVersion ?? "unknown"}</span>
+              </span>
+              <span>
+                Java <span className="font-mono text-xs">{saved.javaMajor ?? "unknown"}</span>
+              </span>
+              <span>
+                Size{" "}
+                <span className="font-mono text-xs">
+                  {saved.size === null ? "unknown" : formatBytes(saved.size)}
+                </span>
+              </span>
+              {saved.matchesOfficial !== null ? (
+                <span className="font-mono text-xs">
+                  {saved.matchesOfficial ? "matches Mojang" : "does not match Mojang"}
+                </span>
+              ) : null}
+            </div>
+            <p className="truncate font-mono text-xs text-muted-foreground">
+              {displayRuntimePath(saved.path)}
+            </p>
+            {saved.sha1 ? (
+              <p className="truncate font-mono text-xs text-muted-foreground">SHA-1 {saved.sha1}</p>
             ) : null}
-          </div>
-          <div className="truncate font-mono text-[10px] text-muted-foreground">
-            {displayRuntimePath(saved.path)}
-          </div>
-          {saved.sha1 ? (
-            <div className="truncate font-mono text-[10px] text-muted-foreground">
-              SHA-1 {saved.sha1}
+            {saved.error ? <p className="text-sm text-status-warn">{saved.error}</p> : null}
+            {saved.warnings.map((warning) => (
+              <p key={warning} className="text-sm text-status-warn">
+                {warning}
+              </p>
+            ))}
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button variant="outline" size="sm" onClick={chooseJar} disabled={busy !== null}>
+                <FolderOpen data-icon="inline-start" />
+                Replace server.jar
+              </Button>
+              <Button variant="outline" size="sm" onClick={clearSelection} disabled={busy !== null}>
+                <Trash2 data-icon="inline-start" />
+                Clear selection
+              </Button>
             </div>
-          ) : null}
-          {saved.error ? <div className="text-[10px] text-status-warn">{saved.error}</div> : null}
-          {saved.warnings.map((warning) => (
-            <div key={warning} className="text-[10px] text-status-warn">
-              {warning}
-            </div>
-          ))}
-          <div className="flex flex-wrap gap-1.5 pt-1">
-            <Button variant="outline" size="sm" onClick={chooseJar} disabled={busy !== null}>
-              <FolderOpen /> Replace server.jar
-            </Button>
-            <Button variant="outline" size="sm" onClick={clearSelection} disabled={busy !== null}>
-              <Trash2 /> Clear selection
-            </Button>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
       ) : (
-        <div className="space-y-1.5 rounded border border-dashed border-border p-2 text-[10px] text-muted-foreground">
-          <p>No server JAR selected. Empty Project and Import World do not need one.</p>
+        <div className="space-y-3 rounded-xl border border-dashed p-6">
+          <p className="text-sm text-muted-foreground">
+            No server JAR selected. Empty Project and Import World do not need one.
+          </p>
           <Button variant="outline" size="sm" onClick={chooseJar} disabled={busy !== null}>
-            {busy === "select" ? <Loader2 className="animate-spin" /> : <FolderOpen />}
+            {busy === "select" ? (
+              <Loader2 data-icon="inline-start" className="animate-spin" />
+            ) : (
+              <FolderOpen data-icon="inline-start" />
+            )}
             Choose server.jar
           </Button>
         </div>
       )}
 
-      <div className="space-y-1.5 rounded border border-border bg-background/40 p-2">
-        <div className="flex items-center gap-1.5 text-[10px] font-medium">
-          <ShieldCheck className="size-3.5 text-status-ok" />
-          Official Mojang server JAR
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto h-6 px-1.5"
-            onClick={reload}
-            disabled={busy !== null}
-            aria-label="Refresh server JAR status"
-          >
-            {busy === "load" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-          </Button>
-        </div>
-        <p className="text-[10px] text-muted-foreground">
-          Resolved from <span className="font-mono">version_manifest_v2</span> → version JSON →
-          <span className="font-mono"> downloads.server</span>. SHA-1, size, internal{" "}
-          <span className="font-mono">version.json</span> and the server entry point are checked
-          before the JAR enters the cache.
-        </p>
-        {release ? (
-          <div className="space-y-1 rounded border border-border p-2 text-[10px]">
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-              <span>
-                Minecraft <span className="font-mono">{release.minecraftVersion}</span>
-              </span>
-              <span>
-                Size <span className="font-mono">{formatBytes(release.size)}</span>
-              </span>
-              <span>
-                Java <span className="font-mono">{release.javaMajor}</span>
-              </span>
-              <span>
-                DataVersion <span className="font-mono">{release.expectedDataVersion}</span>
-              </span>
-            </div>
-            <div className="truncate font-mono text-muted-foreground">SHA-1 {release.sha1}</div>
-            <div className="truncate font-mono text-muted-foreground">{release.downloadUrl}</div>
-            <div className="flex gap-1.5 pt-0.5">
-              <Button
-                size="sm"
-                onClick={installServer}
-                disabled={busy !== null}
-                aria-label="Download and install server JAR"
-              >
-                {busy === "install" ? <Loader2 className="animate-spin" /> : <Download />}
-                Download &amp; install
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setRelease(null)}
-                disabled={busy === "install"}
-              >
-                Cancel
-              </Button>
-            </div>
+      <Card className="gap-0 py-0">
+        <CardContent className="space-y-4 p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <ShieldCheck className="size-4 text-status-ok" />
+            <h4 className="text-sm font-medium">Official Mojang server JAR</h4>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="ml-auto"
+              onClick={reload}
+              disabled={busy !== null}
+              aria-label="Refresh server JAR status"
+            >
+              {busy === "load" ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+            </Button>
           </div>
-        ) : (
-          <Button variant="outline" size="sm" onClick={checkMojang} disabled={busy !== null}>
-            {busy === "release" ? <Loader2 className="animate-spin" /> : <Download />}
-            Check official server JAR
-          </Button>
-        )}
-        {progress ? (
-          <div className="space-y-0.5">
-            <div className="flex justify-between text-[10px]">
-              <span>{progressLabel(progress)}</span>
-              {progressPercent !== null ? (
-                <span className="font-mono">{progressPercent}%</span>
-              ) : null}
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            Resolved from <span className="font-mono text-xs">version_manifest_v2</span> → version
+            JSON → <span className="font-mono text-xs">downloads.server</span>. SHA-1, size,
+            internal <span className="font-mono text-xs">version.json</span> and the server entry
+            point are checked before the JAR enters the cache.
+          </p>
+          {release ? (
+            <div className="space-y-3 rounded-xl border bg-background p-4 text-sm">
+              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                <span>
+                  Minecraft <span className="font-mono text-xs">{release.minecraftVersion}</span>
+                </span>
+                <span>
+                  Size <span className="font-mono text-xs">{formatBytes(release.size)}</span>
+                </span>
+                <span>
+                  Java <span className="font-mono text-xs">{release.javaMajor}</span>
+                </span>
+                <span>
+                  DataVersion{" "}
+                  <span className="font-mono text-xs">{release.expectedDataVersion}</span>
+                </span>
+              </div>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                SHA-1 {release.sha1}
+              </p>
+              <p className="truncate font-mono text-xs text-muted-foreground">
+                {release.downloadUrl}
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button
+                  size="sm"
+                  onClick={installServer}
+                  disabled={busy !== null}
+                  aria-label="Download and install server JAR"
+                >
+                  {busy === "install" ? (
+                    <Loader2 data-icon="inline-start" className="animate-spin" />
+                  ) : (
+                    <Download data-icon="inline-start" />
+                  )}
+                  Download &amp; install
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setRelease(null)}
+                  disabled={busy === "install"}
+                >
+                  Cancel
+                </Button>
+              </div>
             </div>
-            <div className="h-1 overflow-hidden rounded bg-muted">
-              <div
-                className="h-full bg-primary transition-[width]"
-                style={{ width: `${progressPercent ?? 15}%` }}
-              />
+          ) : (
+            <Button variant="outline" size="sm" onClick={checkMojang} disabled={busy !== null}>
+              {busy === "release" ? (
+                <Loader2 data-icon="inline-start" className="animate-spin" />
+              ) : (
+                <Download data-icon="inline-start" />
+              )}
+              Check official server JAR
+            </Button>
+          )}
+          {progress ? (
+            <div className="space-y-2">
+              <div className="flex justify-between gap-3 text-xs">
+                <span>{progressLabel(progress)}</span>
+                {progressPercent !== null ? (
+                  <span className="font-mono text-muted-foreground">{progressPercent}%</span>
+                ) : null}
+              </div>
+              <Progress value={progressPercent ?? 15} />
             </div>
+          ) : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearManaged}
+              disabled={busy !== null || (discovery?.managed.length ?? 0) === 0}
+            >
+              <Trash2 data-icon="inline-start" />
+              Clear managed server JARs
+            </Button>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <HardDrive className="size-3.5" />
+              {discovery?.managed.length ?? 0} cached · {formatBytes(discovery?.managedBytes ?? 0)}
+            </span>
           </div>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={clearManaged}
-            disabled={busy !== null || (discovery?.managed.length ?? 0) === 0}
-          >
-            <Trash2 /> Clear managed server JARs
-          </Button>
-          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-            <HardDrive className="size-3" />
-            {discovery?.managed.length ?? 0} cached · {formatBytes(discovery?.managedBytes ?? 0)}
-          </span>
-        </div>
-        {(discovery?.managed ?? []).map((server) => (
-          <div
-            key={server.path}
-            className="truncate rounded border border-border/60 px-2 py-1 font-mono text-[10px]"
-            title={server.jarPath}
-          >
-            {server.version} · DV {server.dataVersion} · {formatBytes(server.size)} ·{" "}
-            {server.sha1.slice(0, 12)}…
-          </div>
-        ))}
-        {discovery?.problems.map((problem) => (
-          <div key={problem} className="text-[10px] text-status-warn">
-            {problem}
-          </div>
-        ))}
-        {discovery ? (
-          <p className="text-[10px] text-muted-foreground">{discovery.manualHint}</p>
-        ) : null}
-      </div>
+          {(discovery?.managed ?? []).map((server) => (
+            <div
+              key={server.path}
+              className="truncate rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+              title={server.jarPath}
+            >
+              {server.version} · DV {server.dataVersion} · {formatBytes(server.size)} ·{" "}
+              {server.sha1.slice(0, 12)}…
+            </div>
+          ))}
+          {discovery?.problems.map((problem) => (
+            <p key={problem} className="text-sm text-status-warn">
+              {problem}
+            </p>
+          ))}
+          {discovery ? (
+            <p className="text-xs leading-relaxed text-muted-foreground">{discovery.manualHint}</p>
+          ) : null}
+        </CardContent>
+      </Card>
 
       <ServerGenerationPanel discovery={discovery} onDiscoveryChanged={reload} />
 
       {error ? (
-        <div className="space-y-0.5 rounded border border-status-warn/40 bg-status-warn/10 px-2 py-1 text-[10px] text-status-warn">
-          <p>{error}</p>
-          <p className="text-muted-foreground">
-            Empty Project and Import World do not need this JAR. If the network is unavailable,
-            retry later or choose a verified local server.jar.
-          </p>
-        </div>
+        <Alert className="p-4">
+          <AlertDescription>
+            <p className="font-medium text-status-warn">{error}</p>
+            <p>
+              Empty Project and Import World do not need this JAR. If the network is unavailable,
+              retry later or choose a verified local server.jar.
+            </p>
+          </AlertDescription>
+        </Alert>
       ) : null}
       {notice ? (
-        <p className="rounded border border-status-ok/40 bg-status-ok/10 px-2 py-1 text-[10px] text-status-ok">
-          {notice}
-        </p>
+        <Alert className="p-4">
+          <CheckCircle2 />
+          <AlertTitle>Server JAR updated</AlertTitle>
+          <AlertDescription>{notice}</AlertDescription>
+        </Alert>
       ) : null}
     </section>
   );
