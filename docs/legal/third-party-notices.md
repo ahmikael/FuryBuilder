@@ -31,13 +31,24 @@ trademark disclaimer. This file tracks non-code obligations.
 - `pnpm licenses:update` regenerates the inventory; `pnpm licenses:check` fails CI when a
   dependency introduces a denied license or is missing license metadata.
 - Allowed licenses: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Zlib, Unicode-3.0,
-  CC0-1.0, MIT-0, Unlicense, MPL-2.0 and CDLA-Permissive-2.0. Copyleft (GPL/AGPL/SSPL) and
-  non-commercial licenses are rejected. A dual license passes when at least one branch is
+  CC0-1.0, MIT-0, Unlicense, MPL-2.0, OFL-1.1 and CDLA-Permissive-2.0. Copyleft (GPL/AGPL/SSPL)
+  and non-commercial licenses are rejected. A dual license passes when at least one branch is
   allowed.
 - MPL-2.0 components are used unmodified as dependencies; their source is available from the
   published package archives and upstream projects. FuryBuilder does not relicense them.
   Unicode-3.0 and CDLA-Permissive-2.0 components are data/license texts used under their terms.
 - Placeholder textures are original works created for FuryBuilder and licensed Apache-2.0.
+
+## Bundled fonts
+
+- The interface bundles Geist and Geist Mono through `@fontsource-variable/geist` and
+  `@fontsource-variable/geist-mono`. Both font families are copyright 2024 The Geist Project
+  Authors (https://github.com/vercel/geist-font) and are licensed under the SIL Open Font
+  License, Version 1.1.
+- The complete license texts are kept in
+  [licenses/geist-OFL-1.1.txt](licenses/geist-OFL-1.1.txt) and
+  [licenses/geist-mono-OFL-1.1.txt](licenses/geist-mono-OFL-1.1.txt). The fonts are bundled
+  unmodified; FuryBuilder does not sell them separately or relicense them.
 
 ## Release security
 

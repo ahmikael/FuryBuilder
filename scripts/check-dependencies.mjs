@@ -7,7 +7,7 @@
  * Node package (`apps/desktop`). The MCP sidecar is a Rust crate, so its third-party
  * crates are covered by the Rust inventory.
  *
- * MPL-2.0, Unicode-3.0 and CDLA-Permissive-2.0 are accepted with notices; copyleft
+ * MPL-2.0, OFL-1.1, Unicode-3.0 and CDLA-Permissive-2.0 are accepted with notices; copyleft
  * licenses (GPL/AGPL/SSPL) and non-commercial licenses are rejected.
  */
 
@@ -31,6 +31,7 @@ const ALLOWED = new Set([
   "MIT",
   "MIT-0",
   "MPL-2.0",
+  "OFL-1.1",
   "Unicode-3.0",
   "Unlicense",
   "Zlib",
@@ -44,7 +45,7 @@ const DENIED_MARKERS = [
   "CC-BY-NC",
   "CC-BY-SA",
 ];
-const NOTICE_REQUIRED = ["MPL-2.0", "Unicode-3.0", "CDLA-Permissive-2.0"];
+const NOTICE_REQUIRED = ["MPL-2.0", "OFL-1.1", "Unicode-3.0", "CDLA-Permissive-2.0"];
 
 function splitTopLevel(expression, separator) {
   const parts = [];
@@ -245,6 +246,10 @@ function markdown(inventory) {
       "their published package archives and the upstream projects; FuryBuilder does not",
       "relicense or modify those files. Unicode-3.0 and CDLA-Permissive-2.0 components are",
       "data/license texts used under their respective terms.",
+      "",
+      "OFL-1.1 components are bundled fonts. Their copyright notices and the full SIL Open Font",
+      "License 1.1 text are recorded in `docs/legal/third-party-notices.md` and",
+      "`docs/legal/licenses/`.",
     );
   }
   lines.push(
@@ -257,7 +262,7 @@ function markdown(inventory) {
     "## Policy",
     "",
     "Allowed: MIT, Apache-2.0, BSD-2-Clause, BSD-3-Clause, ISC, 0BSD, Zlib, Unicode-3.0,",
-    "CC0-1.0, MIT-0, Unlicense, MPL-2.0, CDLA-Permissive-2.0, and Apache-2.0 WITH",
+    "CC0-1.0, MIT-0, Unlicense, MPL-2.0, OFL-1.1, CDLA-Permissive-2.0, and Apache-2.0 WITH",
     "LLVM-exception. Copyleft (GPL/AGPL/SSPL) and non-commercial licenses are rejected.",
     "Dual-license expressions pass when at least one branch is allowed.",
     "",
