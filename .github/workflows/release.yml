@@ -150,8 +150,7 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
-          uploadUpdaterSignatures: true
+          includeUpdaterJson: true
           tauriScript: pnpm tauri
           args: --bundles nsis
 
