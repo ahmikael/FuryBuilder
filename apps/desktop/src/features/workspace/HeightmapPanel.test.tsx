@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
 import { HeightmapPanel } from "@/features/workspace/HeightmapPanel";
 import { useToolStore } from "@/state/tool-store";
+import { chooseSelectOption } from "@/test-utils/select";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
 const worldApi = vi.hoisted(() => ({ preview: vi.fn(), catalog: vi.fn() }));
@@ -84,8 +85,7 @@ describe("heightmap panel", () => {
     editor.apply.mockResolvedValue({ revision: 3, changedBlocks: 2 });
     render(<HeightmapPanel />);
 
-    await screen.findByRole("option", { name: "minecraft:gravel" });
-    await user.selectOptions(screen.getByLabelText("Heightmap filler"), "minecraft:gravel");
+    await chooseSelectOption(user, "Heightmap filler", "minecraft:gravel");
     await user.clear(screen.getByLabelText("Heightmap seed"));
     await user.type(screen.getByLabelText("Heightmap seed"), "42");
     await user.clear(screen.getByLabelText("Heightmap amplitude"));

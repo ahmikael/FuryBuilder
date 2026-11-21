@@ -29,7 +29,8 @@ import { formatBytes } from "@/project/types";
 import type { TemplateEntry, TemplateInsertPreview } from "@/project/template-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
-import { pushToast, useToolStore } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
+import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { useWorkspaceStore } from "@/state/workspace-store";
 

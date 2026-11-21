@@ -15,7 +15,7 @@ import {
   type SceneObjectInspection,
   type SemanticObject,
 } from "@/project/scene-types";
-import { pushToast } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
 
 interface SceneUiState {
   scene: Scene;

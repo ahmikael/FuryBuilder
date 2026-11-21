@@ -4,7 +4,13 @@ Notable user-visible changes to FuryBuilder.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Changed
+
+- Notifications now use the shadcn Toast component and its Base UI toast manager, with
+  consistent success, warning and error styling and automatic dismissal.
+- Every select field now uses the shadcn Select component; the remaining native select
+  wrapper was removed.
+- Expandable detail areas now use the shadcn Collapsible component.
 
 ## [0.2.0] - 2026-11-21
 

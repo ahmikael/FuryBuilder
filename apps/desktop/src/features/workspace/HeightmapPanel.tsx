@@ -3,7 +3,13 @@ import { Grid3X3, Loader2, ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { applyEditorOperation } from "@/editor/commands";
 import { boundsVolume, MAX_EDIT_VOLUME, planHeightmap } from "@/editor/session";
 import type { BlockDefinition } from "@/editor/types";
@@ -240,22 +246,30 @@ export function HeightmapPanel() {
       <div className="w-44 space-y-3 rounded-xl border bg-card p-4">
         <label className="flex flex-col gap-1">
           <span className="text-muted-foreground">Filler material</span>
-          <NativeSelect
-            aria-label="Heightmap filler"
-            className="w-fit"
+          <Select
+            items={
+              catalog?.map((entry) => ({ value: entry.name, label: entry.name })) ?? [
+                { value: "minecraft:dirt", label: "minecraft:dirt" },
+              ]
+            }
             value={fillerName}
-            disabled={busy || !editing}
-            onChange={(event) => {
-              setFillerName(event.target.value);
+            onValueChange={(value) => {
+              setFillerName(value ?? "minecraft:dirt");
               resetPreview();
             }}
+            disabled={busy || !editing}
           >
-            {catalog?.map((entry) => (
-              <NativeSelectOption key={entry.name} value={entry.name}>
-                {entry.name}
-              </NativeSelectOption>
-            )) ?? <NativeSelectOption value="minecraft:dirt">minecraft:dirt</NativeSelectOption>}
-          </NativeSelect>
+            <SelectTrigger className="w-fit" aria-label="Heightmap filler">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {catalog?.map((entry) => (
+                <SelectItem key={entry.name} value={entry.name}>
+                  {entry.name}
+                </SelectItem>
+              )) ?? <SelectItem value="minecraft:dirt">minecraft:dirt</SelectItem>}
+            </SelectContent>
+          </Select>
         </label>
         {catalogError ? (
           <div className="text-xs text-status-warn">Catalog unavailable: {catalogError}</div>

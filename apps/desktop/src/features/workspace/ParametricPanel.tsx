@@ -13,7 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isTauriRuntime } from "@/lib/ipc";
 import {
   HOUSE_GENERATOR_VERSION,
@@ -33,6 +39,11 @@ import { useWorldStore } from "@/state/world-store";
 const MIN_SIZE = 3;
 const MAX_SIZE = 32;
 const MIN_HEIGHT = 2;
+
+const CONFLICT_POLICIES: { value: ParametricConflictPolicy; label: string }[] = [
+  { value: "fail", label: "Fail on manual edits" },
+  { value: "override", label: "Override manual edits" },
+];
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -310,37 +321,46 @@ export function ParametricPanel() {
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
             <span>Rotation</span>
-            <NativeSelect
-              className="w-fit"
+            <Select
+              items={PARAMETRIC_ROTATIONS}
               value={spec.rotation}
-              aria-label="Rotation"
-              onChange={(event) =>
+              onValueChange={(value) =>
                 setSpec((current) => ({
                   ...current,
-                  rotation: event.target.value as ParametricRotation,
+                  rotation: value as ParametricRotation,
                 }))
               }
             >
-              {PARAMETRIC_ROTATIONS.map((entry) => (
-                <NativeSelectOption key={entry.value} value={entry.value}>
-                  {entry.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              <SelectTrigger className="w-fit" aria-label="Rotation">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PARAMETRIC_ROTATIONS.map((entry) => (
+                  <SelectItem key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
             <span>Conflict policy</span>
-            <NativeSelect
-              className="w-fit"
+            <Select
+              items={CONFLICT_POLICIES}
               value={conflictPolicy}
-              aria-label="Conflict policy"
-              onChange={(event) =>
-                setConflictPolicy(event.target.value as ParametricConflictPolicy)
-              }
+              onValueChange={(value) => setConflictPolicy(value as ParametricConflictPolicy)}
             >
-              <NativeSelectOption value="fail">Fail on manual edits</NativeSelectOption>
-              <NativeSelectOption value="override">Override manual edits</NativeSelectOption>
-            </NativeSelect>
+              <SelectTrigger className="w-fit" aria-label="Conflict policy">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {CONFLICT_POLICIES.map((entry) => (
+                  <SelectItem key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
         </div>
         <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">

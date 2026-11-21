@@ -6,6 +6,7 @@ import { ScenePanel } from "@/features/workspace/ScenePanel";
 import { useSceneStore } from "@/state/scene-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+import { chooseSelectOption } from "@/test-utils/select";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
 const sceneApi = vi.hoisted(() => ({
@@ -98,7 +99,7 @@ describe("scene panel", () => {
 
     await user.clear(screen.getByLabelText("Object name"));
     await user.type(screen.getByLabelText("Object name"), "New landmark");
-    await user.selectOptions(screen.getByLabelText("Object kind"), "landmark");
+    await chooseSelectOption(user, "Object kind", "Landmark");
     await user.click(screen.getByRole("button", { name: "Create object" }));
 
     await waitFor(() =>

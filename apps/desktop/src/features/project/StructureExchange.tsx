@@ -23,7 +23,13 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import {
   exportStructure,
@@ -32,7 +38,8 @@ import {
   readStructureFile,
 } from "@/lib/structure-api";
 import { currentEditorState, projectIsDirty, useProjectStore } from "@/state/project-store";
-import { pushToast, useToolStore } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
+import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import {
   STRUCTURE_DIMENSIONS,
@@ -403,18 +410,27 @@ export function StructureExchange() {
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">Placement</div>
                   <div className="flex items-center gap-1">
-                    <NativeSelect
-                      aria-label="Import dimension"
-                      className="w-fit"
+                    <Select
+                      items={STRUCTURE_DIMENSIONS.map((dimension) => ({
+                        value: dimension.id,
+                        label: dimension.label,
+                      }))}
                       value={importDimension}
-                      onChange={(event) => changeImportDimension(event.target.value)}
+                      onValueChange={(value) => {
+                        if (value !== null) changeImportDimension(value);
+                      }}
                     >
-                      {STRUCTURE_DIMENSIONS.map((dimension) => (
-                        <NativeSelectOption key={dimension.id} value={dimension.id}>
-                          {dimension.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      <SelectTrigger className="w-fit" aria-label="Import dimension">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {STRUCTURE_DIMENSIONS.map((dimension) => (
+                          <SelectItem key={dimension.id} value={dimension.id}>
+                            {dimension.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     {(["x", "y", "z"] as const).map((axis) => (
                       <label key={axis} className="flex items-center gap-0.5 font-mono text-xs">
                         <span className="text-muted-foreground">{axis}</span>
@@ -510,22 +526,30 @@ export function StructureExchange() {
               <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-muted/30 p-4">
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   Dimension
-                  <NativeSelect
-                    aria-label="Export dimension"
-                    className="w-fit"
+                  <Select
+                    items={STRUCTURE_DIMENSIONS.map((dimension) => ({
+                      value: dimension.id,
+                      label: dimension.label,
+                    }))}
                     value={exportDimension}
-                    onChange={(event) => {
-                      setExportDimension(event.target.value);
+                    onValueChange={(value) => {
+                      if (value === null) return;
+                      setExportDimension(value);
                       setExportPreview(null);
                       setExportResult(null);
                     }}
                   >
-                    {STRUCTURE_DIMENSIONS.map((dimension) => (
-                      <NativeSelectOption key={dimension.id} value={dimension.id}>
-                        {dimension.label}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger className="w-fit" aria-label="Export dimension">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STRUCTURE_DIMENSIONS.map((dimension) => (
+                        <SelectItem key={dimension.id} value={dimension.id}>
+                          {dimension.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </label>
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   <Checkbox

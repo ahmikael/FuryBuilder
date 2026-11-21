@@ -14,7 +14,7 @@ import { ProjectManager, useProjectAutosave } from "@/features/project/ProjectMa
 import { RecoveryBanner } from "@/features/project/RecoveryBanner";
 import { UpdateBanner } from "@/features/updates/UpdateBanner";
 import { useAutoUpdate } from "@/features/updates/use-auto-update";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster } from "@/components/ui/toast";
 import { useBackendInfo } from "@/hooks/use-backend";
 import { useAppliedScale, useAppliedTheme } from "@/app/theme";
 import { useAppHotkeys } from "@/app/use-app-hotkeys";
@@ -50,32 +50,33 @@ export function App() {
       : theme;
 
   return (
-    <TooltipProvider>
-      <div className="app-shell flex h-full flex-col bg-background text-foreground">
-        <Toolbar
-          backendStatus={backend.status}
-          theme={currentResolvedTheme}
-          onToggleTheme={() => setTheme(currentResolvedTheme === "dark" ? "light" : "dark")}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenMcpAccess={() => setMcpAccessOpen(true)}
-        />
-        <RecoveryBanner />
-        <UpdateBanner />
-        <div className="flex min-h-0 flex-1">
-          {leftPanelOpen ? <WorldTree /> : null}
-          <Viewport />
-          {rightPanelOpen ? <Inspector /> : null}
+    <Toaster limit={4}>
+      <TooltipProvider>
+        <div className="app-shell flex h-full flex-col bg-background text-foreground">
+          <Toolbar
+            backendStatus={backend.status}
+            theme={currentResolvedTheme}
+            onToggleTheme={() => setTheme(currentResolvedTheme === "dark" ? "light" : "dark")}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenMcpAccess={() => setMcpAccessOpen(true)}
+          />
+          <RecoveryBanner />
+          <UpdateBanner />
+          <div className="flex min-h-0 flex-1">
+            {leftPanelOpen ? <WorldTree /> : null}
+            <Viewport />
+            {rightPanelOpen ? <Inspector /> : null}
+          </div>
+          {bottomPanelOpen ? <BottomPanel backend={backend} /> : null}
+          <StatusBar backend={backend} />
         </div>
-        {bottomPanelOpen ? <BottomPanel backend={backend} /> : null}
-        <StatusBar backend={backend} />
-      </div>
-      <Toaster />
-      <ProjectManager />
-      <CommandPalette />
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} backend={backend} />
-      <McpAccessDialog open={mcpAccessOpen} onOpenChange={setMcpAccessOpen} />
-      <McpConfirmationHost />
-      <McpWorldChangeHost />
-    </TooltipProvider>
+        <ProjectManager />
+        <CommandPalette />
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} backend={backend} />
+        <McpAccessDialog open={mcpAccessOpen} onOpenChange={setMcpAccessOpen} />
+        <McpConfirmationHost />
+        <McpWorldChangeHost />
+      </TooltipProvider>
+    </Toaster>
   );
 }

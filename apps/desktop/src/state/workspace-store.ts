@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import { fetchWorkspacePolicy, setWorkspacePolicy } from "@/lib/project-api";
 import { defaultWorkspacePolicy, type WorkspacePolicy } from "@/project/types";
-import { pushToast } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
 
 interface WorkspaceUiState {
   policy: WorkspacePolicy;

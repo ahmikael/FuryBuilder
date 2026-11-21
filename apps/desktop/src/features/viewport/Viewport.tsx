@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -252,7 +253,6 @@ export function Viewport() {
   const [webgl2] = useState(() => detectWebGl2());
   const [captureOpen, setCaptureOpen] = useState(false);
   const [gotoOpen, setGotoOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(true);
   const [captureImage, setCaptureImage] = useState<string | null>(null);
   const [goto, setGoto] = useState({ x: "0", y: "70", z: "0" });
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
@@ -1031,23 +1031,18 @@ export function Viewport() {
         </Tooltip>
       </div>
 
-      <div className="absolute bottom-3 left-3 z-20 w-64 overflow-hidden rounded-xl border bg-background/90 text-muted-foreground shadow-lg backdrop-blur-md">
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium"
-          onClick={() => setDetailsOpen((value) => !value)}
-        >
-          {detailsOpen ? (
-            <ChevronDown className="size-3.5" />
-          ) : (
-            <ChevronRight className="size-3.5" />
-          )}
+      <Collapsible
+        className="absolute bottom-3 left-3 z-20 w-64 overflow-hidden rounded-xl border bg-background/90 text-muted-foreground shadow-lg backdrop-blur-md"
+        defaultOpen
+      >
+        <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium [&[data-panel-open]>svg]:rotate-90">
+          <ChevronRight className="size-3.5 transition-transform" />
           Performance
           <span className="ml-auto font-mono text-xs text-foreground">
             {metrics ? `${metrics.fps} fps` : "—"}
           </span>
-        </button>
-        {detailsOpen ? (
+        </CollapsibleTrigger>
+        <CollapsibleContent>
           <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t px-3 py-2 font-mono text-xs">
             <span>Frame</span>
             <span className="text-right text-foreground">
@@ -1136,8 +1131,8 @@ export function Viewport() {
               </>
             ) : null}
           </div>
-        ) : null}
-      </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       <div className="pointer-events-none absolute right-3 bottom-3 z-20 max-w-[45%] rounded-lg border bg-background/85 px-3 py-1.5 font-mono text-xs text-muted-foreground backdrop-blur-md">
         {editingEnabled
@@ -1351,27 +1346,32 @@ export function Viewport() {
               </div>
             ) : null}
             {lastCapture ? (
-              <details className="rounded border border-border bg-background/40 p-2">
-                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                  Legend and full metadata ({lastCapture.legend.length} states
-                  {lastCapture.legendTruncated ? ", truncated" : ""})
-                </summary>
-                <div className="mt-2 grid max-h-32 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto font-mono text-xs">
-                  {lastCapture.legend.map((entry) => (
-                    <div key={entry.state} className="flex items-center gap-1.5">
-                      <span
-                        className="size-2.5 rounded-[2px] border border-black/30"
-                        style={{ backgroundColor: entry.color }}
-                      />
-                      <span className="truncate">{entry.state}</span>
-                      <span className="ml-auto text-muted-foreground">{entry.count}</span>
-                    </div>
-                  ))}
-                </div>
-                <pre className="scrollbar-thin mt-2 max-h-32 overflow-auto rounded bg-background/60 p-2 font-mono text-xs leading-relaxed text-muted-foreground">
-                  {JSON.stringify(lastCapture, null, 2)}
-                </pre>
-              </details>
+              <Collapsible className="rounded border border-border bg-background/40 p-2">
+                <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-left text-xs font-medium text-muted-foreground [&[data-panel-open]>svg]:rotate-180">
+                  <span>
+                    Legend and full metadata ({lastCapture.legend.length} states
+                    {lastCapture.legendTruncated ? ", truncated" : ""})
+                  </span>
+                  <ChevronDown className="size-3.5 shrink-0 transition-transform" />
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="mt-2 grid max-h-32 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto font-mono text-xs">
+                    {lastCapture.legend.map((entry) => (
+                      <div key={entry.state} className="flex items-center gap-1.5">
+                        <span
+                          className="size-2.5 rounded-[2px] border border-black/30"
+                          style={{ backgroundColor: entry.color }}
+                        />
+                        <span className="truncate">{entry.state}</span>
+                        <span className="ml-auto text-muted-foreground">{entry.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <pre className="scrollbar-thin mt-2 max-h-32 overflow-auto rounded bg-background/60 p-2 font-mono text-xs leading-relaxed text-muted-foreground">
+                    {JSON.stringify(lastCapture, null, 2)}
+                  </pre>
+                </CollapsibleContent>
+              </Collapsible>
             ) : null}
           </div>
           <DialogFooter>

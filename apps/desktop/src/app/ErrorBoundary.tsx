@@ -1,6 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { openDiagnosticsFolder, recordUiError } from "@/lib/diagnostics-api";
 
 interface ErrorBoundaryProps {
@@ -49,12 +51,17 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             </p>
           </CardHeader>
           <CardContent className="space-y-4 p-6 pt-0">
-            <details className="rounded-xl border bg-muted/30 p-4 text-sm">
-              <summary className="cursor-pointer text-muted-foreground">Error details</summary>
-              <pre className="mt-2 max-h-40 overflow-auto font-mono text-xs whitespace-pre-wrap break-words">
-                {this.state.error.message}
-              </pre>
-            </details>
+            <Collapsible className="rounded-xl border bg-muted/30 p-4 text-sm">
+              <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-left text-muted-foreground [&[data-panel-open]>svg]:rotate-180">
+                Error details
+                <ChevronDown className="size-4 shrink-0 transition-transform" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <pre className="mt-2 max-h-40 overflow-auto font-mono text-xs whitespace-pre-wrap break-words">
+                  {this.state.error.message}
+                </pre>
+              </CollapsibleContent>
+            </Collapsible>
             <div className="flex flex-wrap gap-2">
               <Button onClick={() => window.location.reload()}>Reload interface</Button>
               <Button variant="outline" onClick={this.openLogs}>

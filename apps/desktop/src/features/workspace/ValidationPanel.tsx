@@ -12,7 +12,13 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { applyEditorOperation } from "@/editor/commands";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import { validateRegion } from "@/lib/validation-api";
@@ -30,6 +36,12 @@ import {
 } from "@/project/validation-types";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+
+const FLOATING_FIXES: { value: FloatingFix; label: string }[] = [
+  { value: "support", label: "Place support" },
+  { value: "remove", label: "Remove blocks" },
+  { value: "none", label: "No suggestion" },
+];
 
 /**
  * Read-only Validation/critic panel. Findings are bound to an exact world revision and
@@ -182,16 +194,22 @@ export function ValidationPanel() {
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
             <span>Floating fix</span>
-            <NativeSelect
-              className="w-fit"
+            <Select
+              items={FLOATING_FIXES}
               value={floatingFix}
-              aria-label="Floating fix"
-              onChange={(event) => setFloatingFix(event.target.value as FloatingFix)}
+              onValueChange={(value) => setFloatingFix(value as FloatingFix)}
             >
-              <NativeSelectOption value="support">Place support</NativeSelectOption>
-              <NativeSelectOption value="remove">Remove blocks</NativeSelectOption>
-              <NativeSelectOption value="none">No suggestion</NativeSelectOption>
-            </NativeSelect>
+              <SelectTrigger className="w-fit" aria-label="Floating fix">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {FLOATING_FIXES.map((entry) => (
+                  <SelectItem key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
             <span>Surface materials</span>

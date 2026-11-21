@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Loader2, ScanLine, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ChevronDown, Loader2, ScanLine, ShieldAlert, ShieldCheck } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { checkVanillaParity } from "@/lib/project-api";
 import type { VanillaParityReport, VanillaParityStatus } from "@/project/types";
 import { cn } from "@/lib/utils";
@@ -161,16 +162,19 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
             </div>
           ) : null}
           {report.limitations.length > 0 ? (
-            <details className="rounded-lg border bg-muted/30 p-4">
-              <summary className="cursor-pointer text-sm font-medium">
+            <Collapsible className="rounded-lg border bg-muted/30 p-4">
+              <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-left text-sm font-medium [&[data-panel-open]>svg]:rotate-180">
                 Parity scope and limitations
-              </summary>
-              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                {report.limitations.map((limitation) => (
-                  <li key={limitation}>{limitation}</li>
-                ))}
-              </ul>
-            </details>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform" />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                  {report.limitations.map((limitation) => (
+                    <li key={limitation}>{limitation}</li>
+                  ))}
+                </ul>
+              </CollapsibleContent>
+            </Collapsible>
           ) : null}
         </div>
       ) : null}

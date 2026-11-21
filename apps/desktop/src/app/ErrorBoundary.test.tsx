@@ -37,7 +37,8 @@ describe("ErrorBoundary", () => {
     );
 
     expect(screen.getByText(/stopped unexpectedly/)).toBeInTheDocument();
-    expect(screen.getByText("boom render")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Error details" }));
+    expect(await screen.findByText("boom render")).toBeInTheDocument();
     expect(api.record).toHaveBeenCalledWith(
       expect.stringContaining("boom render"),
       "react.error_boundary",

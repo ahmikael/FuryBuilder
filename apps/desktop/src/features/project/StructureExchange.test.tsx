@@ -10,7 +10,9 @@ import type {
 } from "@/project/structure-types";
 import type { ProjectSummary, SessionStatus } from "@/project/types";
 import { useProjectStore } from "@/state/project-store";
-import { useToastStore, useToolStore } from "@/state/tool-store";
+import { useToolStore } from "@/state/tool-store";
+import { chooseSelectOption } from "@/test-utils/select";
+import { clearToasts } from "@/test-utils/toast-log";
 import { useWorldStore } from "@/state/world-store";
 
 const api = vi.hoisted(() => ({
@@ -150,7 +152,7 @@ beforeEach(() => {
     sectionCount: 5,
   });
   useToolStore.setState({ selection: null });
-  useToastStore.setState({ toasts: [] });
+  clearToasts();
 });
 
 async function uploadStructure(): Promise<void> {
@@ -200,7 +202,7 @@ describe("structure exchange", () => {
     await user.click(screen.getByRole("button", { name: /Export structure/ }));
     const checkbox = screen.getByRole("checkbox", { name: /Use box selection/ });
     expect(checkbox).toBeEnabled();
-    await user.selectOptions(screen.getByLabelText("Export dimension"), "minecraft:the_nether");
+    await chooseSelectOption(user, "Export dimension", "Nether");
     expect(checkbox).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/made in overworld/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Preview export/ }));

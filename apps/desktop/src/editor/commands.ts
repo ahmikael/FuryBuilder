@@ -31,7 +31,8 @@ import type { BlockState, ChunkPos } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
 import { useHistoryStore } from "@/state/history-store";
 import { useProjectStore } from "@/state/project-store";
-import { isJobCancelled, pushToast, useToolStore } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
+import { isJobCancelled, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { refreshViewportChunks, reloadViewport } from "@/features/viewport/viewport-bus";
 

@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Archive,
   CheckCircle2,
+  ChevronDown,
   Clock,
   FolderOpen,
   HardDrive,
@@ -23,6 +24,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -50,13 +52,19 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
-import { pushToast } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
 import { useWorldStore } from "@/state/world-store";
 import {
   CREATION_MODES,
@@ -705,58 +713,61 @@ export function ProjectManager() {
                               </AlertDescription>
                             </Alert>
                           ) : null}
-                          <details className="rounded-xl border bg-card p-4">
-                            <summary className="cursor-pointer text-sm font-medium">
+                          <Collapsible className="rounded-xl border bg-card p-4">
+                            <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-left text-sm font-medium [&[data-panel-open]>svg]:rotate-180">
                               Read / edit / write / passthrough support matrix
-                            </summary>
-                            <div className="mt-3 space-y-3">
-                              <div className="flex flex-wrap gap-2">
-                                {worldAnalysis.supportMatrix.versions.map((version) => (
-                                  <Badge
-                                    key={version.id}
-                                    variant={
-                                      version.status === "supported" ? "secondary" : "outline"
-                                    }
-                                    title={version.note}
-                                  >
-                                    {version.minecraftVersions} · {version.status}
-                                  </Badge>
-                                ))}
-                              </div>
-                              <div className="overflow-hidden rounded-lg border">
-                                <Table>
-                                  <TableHeader>
-                                    <TableRow>
-                                      <TableHead>Data</TableHead>
-                                      <TableHead>Read</TableHead>
-                                      <TableHead>Edit</TableHead>
-                                      <TableHead>Write</TableHead>
-                                      <TableHead>Pass</TableHead>
-                                    </TableRow>
-                                  </TableHeader>
-                                  <TableBody>
-                                    {worldAnalysis.supportMatrix.categories.map((category) => (
-                                      <TableRow key={category.id} title={category.note}>
-                                        <TableCell>{category.label}</TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                          {category.read}
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                          {category.edit}
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                          {category.write}
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs">
-                                          {category.passthrough}
-                                        </TableCell>
+                              <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform" />
+                            </CollapsibleTrigger>
+                            <CollapsibleContent>
+                              <div className="mt-3 space-y-3">
+                                <div className="flex flex-wrap gap-2">
+                                  {worldAnalysis.supportMatrix.versions.map((version) => (
+                                    <Badge
+                                      key={version.id}
+                                      variant={
+                                        version.status === "supported" ? "secondary" : "outline"
+                                      }
+                                      title={version.note}
+                                    >
+                                      {version.minecraftVersions} · {version.status}
+                                    </Badge>
+                                  ))}
+                                </div>
+                                <div className="overflow-hidden rounded-lg border">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead>Data</TableHead>
+                                        <TableHead>Read</TableHead>
+                                        <TableHead>Edit</TableHead>
+                                        <TableHead>Write</TableHead>
+                                        <TableHead>Pass</TableHead>
                                       </TableRow>
-                                    ))}
-                                  </TableBody>
-                                </Table>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {worldAnalysis.supportMatrix.categories.map((category) => (
+                                        <TableRow key={category.id} title={category.note}>
+                                          <TableCell>{category.label}</TableCell>
+                                          <TableCell className="font-mono text-xs">
+                                            {category.read}
+                                          </TableCell>
+                                          <TableCell className="font-mono text-xs">
+                                            {category.edit}
+                                          </TableCell>
+                                          <TableCell className="font-mono text-xs">
+                                            {category.write}
+                                          </TableCell>
+                                          <TableCell className="font-mono text-xs">
+                                            {category.passthrough}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
                               </div>
-                            </div>
-                          </details>
+                            </CollapsibleContent>
+                          </Collapsible>
                         </div>
                       ) : (
                         <p className="text-sm leading-relaxed text-muted-foreground">
@@ -773,16 +784,25 @@ export function ProjectManager() {
                   <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm">
                     <Sparkles className="size-4 text-primary" />
                     <span className="text-muted-foreground">Target Java</span>
-                    <NativeSelect
-                      aria-label="Target Java version"
-                      className="font-mono"
+                    <Select
+                      items={[
+                        {
+                          value: "1.21.4",
+                          label: "Minecraft Java 1.21.4 · DataVersion 4189",
+                        },
+                      ]}
                       value="1.21.4"
                       disabled
                     >
-                      <NativeSelectOption value="1.21.4">
-                        Minecraft Java 1.21.4 · DataVersion 4189
-                      </NativeSelectOption>
-                    </NativeSelect>
+                      <SelectTrigger className="font-mono" aria-label="Target Java version">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1.21.4">
+                          Minecraft Java 1.21.4 · DataVersion 4189
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                     <span className="ml-auto text-xs text-muted-foreground">
                       Saved as <span className="font-mono">project_schema_version 1</span>
                     </span>

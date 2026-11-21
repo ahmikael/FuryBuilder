@@ -4,7 +4,13 @@ import { AlertTriangle, Crosshair, Loader2, ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { observeRegion } from "@/lib/observation-api";
 import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import {
@@ -18,6 +24,12 @@ import {
 } from "@/project/observation-types";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+
+const SLICE_AXES: { value: ObservationSliceAxis; label: string }[] = [
+  { value: "x", label: "X plane" },
+  { value: "y", label: "Y plane" },
+  { value: "z", label: "Z plane" },
+];
 
 /**
  * Deterministic spatial observations rendered by the Rust Core. The preview is a derived
@@ -95,18 +107,22 @@ export function ObservationPanel() {
 
         <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
           <span>Mode</span>
-          <NativeSelect
-            className="w-fit"
+          <Select
+            items={OBSERVATION_MODES}
             value={mode}
-            aria-label="Observation mode"
-            onChange={(event) => changeMode(event.target.value as ObservationMode)}
+            onValueChange={(value) => changeMode(value as ObservationMode)}
           >
-            {OBSERVATION_MODES.map((entry) => (
-              <NativeSelectOption key={entry.value} value={entry.value}>
-                {entry.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger className="w-fit" aria-label="Observation mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {OBSERVATION_MODES.map((entry) => (
+                <SelectItem key={entry.value} value={entry.value}>
+                  {entry.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <p className="text-xs leading-relaxed text-muted-foreground">
           {OBSERVATION_MODES.find((entry) => entry.value === mode)?.description}
@@ -125,16 +141,22 @@ export function ObservationPanel() {
           <div className="grid grid-cols-2 gap-1">
             <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
               <span>Slice axis</span>
-              <NativeSelect
-                className="w-fit"
+              <Select
+                items={SLICE_AXES}
                 value={sliceAxis}
-                aria-label="Slice axis"
-                onChange={(event) => setSliceAxis(event.target.value as ObservationSliceAxis)}
+                onValueChange={(value) => setSliceAxis(value as ObservationSliceAxis)}
               >
-                <NativeSelectOption value="x">X plane</NativeSelectOption>
-                <NativeSelectOption value="y">Y plane</NativeSelectOption>
-                <NativeSelectOption value="z">Z plane</NativeSelectOption>
-              </NativeSelect>
+                <SelectTrigger className="w-fit" aria-label="Slice axis">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SLICE_AXES.map((entry) => (
+                    <SelectItem key={entry.value} value={entry.value}>
+                      {entry.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </label>
             <label className="flex flex-col gap-1.5 text-sm text-muted-foreground">
               <span>Slice coordinate</span>

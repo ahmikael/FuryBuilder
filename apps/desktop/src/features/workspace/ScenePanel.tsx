@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isTauriRuntime } from "@/lib/ipc";
 import {
   SCENE_OBJECT_KINDS,
@@ -180,31 +186,42 @@ export function ScenePanel() {
           onChange={(event) => setName(event.target.value)}
           aria-label="Object name"
         />
-        <NativeSelect
-          className="w-fit"
+        <Select
+          items={SCENE_OBJECT_KINDS}
           value={kind}
-          aria-label="Object kind"
-          onChange={(event) => setKind(event.target.value as SceneObjectKind)}
+          onValueChange={(value) => setKind(value as SceneObjectKind)}
         >
-          {SCENE_OBJECT_KINDS.map((entry) => (
-            <NativeSelectOption key={entry.value} value={entry.value}>
-              {entry.label}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          className="w-fit"
+          <SelectTrigger className="w-fit" aria-label="Object kind">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SCENE_OBJECT_KINDS.map((entry) => (
+              <SelectItem key={entry.value} value={entry.value}>
+                {entry.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          items={[
+            { value: "", label: "No parent" },
+            ...parentOptions.map((object) => ({ value: object.id, label: object.name })),
+          ]}
           value={parentId}
-          aria-label="Parent object"
-          onChange={(event) => setParentId(event.target.value)}
+          onValueChange={(value) => setParentId(value ?? "")}
         >
-          <NativeSelectOption value="">No parent</NativeSelectOption>
-          {parentOptions.map((object) => (
-            <NativeSelectOption key={object.id} value={object.id}>
-              {object.name}
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger className="w-fit" aria-label="Parent object">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">No parent</SelectItem>
+            {parentOptions.map((object) => (
+              <SelectItem key={object.id} value={object.id}>
+                {object.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Input
           value={note}
           onChange={(event) => setNote(event.target.value)}

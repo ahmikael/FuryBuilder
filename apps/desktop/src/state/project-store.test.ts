@@ -5,7 +5,8 @@ import { defaultScene } from "@/project/scene-types";
 import type { StructureInsertOutcome } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
-import { useToastStore, useToolStore } from "@/state/tool-store";
+import { useToolStore } from "@/state/tool-store";
+import { clearToasts, getToasts } from "@/test-utils/toast-log";
 import { useWorldStore } from "@/state/world-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
 
@@ -174,7 +175,7 @@ function resetStores(): void {
     lastOperation: null,
   });
   useHistoryStore.setState({ canUndo: false, canRedo: false, revision: 0, entries: [] });
-  useToastStore.setState({ toasts: [] });
+  clearToasts();
   useProjectStore.setState({
     projects: [],
     warnings: [],
@@ -256,7 +257,7 @@ describe("project activation", () => {
     const opened = await useProjectStore.getState().open("Other.furybuilder");
     expect(opened).toBe(false);
     expect(api.open).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Unsaved changes");
+    expect(getToasts().at(-1)?.title).toBe("Unsaved changes");
 
     const forced = await useProjectStore
       .getState()
@@ -280,7 +281,7 @@ describe("project activation", () => {
     );
     await useProjectStore.getState().open(summary.folder);
     expect(useProjectStore.getState().recovery?.recoveredRevision).toBe(6);
-    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ kind: "warning" });
+    expect(getToasts().at(-1)).toMatchObject({ kind: "warning" });
   });
 
   it("does not claim a damaged autosave was restored", async () => {
@@ -297,7 +298,7 @@ describe("project activation", () => {
       }),
     );
     await useProjectStore.getState().open(summary.folder);
-    const toast = useToastStore.getState().toasts.at(-1);
+    const toast = getToasts().at(-1);
     expect(toast?.kind).toBe("warning");
     expect(toast?.title).toContain("recovery warning");
     expect(toast?.description).toContain("Opened saved revision 4");
@@ -322,14 +323,14 @@ describe("save and autosave", () => {
     expect(current.autosavedRevision).toBeNull();
     expect(useToolStore.getState().syncState).toBe("pristine");
     expect(useProjectStore.getState().lastSave?.checksum).toHaveLength(64);
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Project saved");
+    expect(getToasts().at(-1)?.title).toBe("Project saved");
   });
 
   it("does not save without an open project", async () => {
     const saved = await useProjectStore.getState().save();
     expect(saved).toBe(false);
     expect(api.save).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts[0]?.title).toBe("No project open");
+    expect(getToasts()[0]?.title).toBe("No project open");
   });
 
   it("autosaves only when the world revision is unsaved", async () => {
@@ -392,7 +393,7 @@ describe("close, checkpoints and rename", () => {
       expect(api.openCheckpoint).toHaveBeenCalledWith(9);
       expect(useToolStore.getState().syncState).toBe("modified");
       expect(reload).toHaveBeenCalledTimes(1);
-      expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Restored checkpoint r9");
+      expect(getToasts().at(-1)?.title).toBe("Restored checkpoint r9");
     } finally {
       viewportBus.removeEventListener("reload-world", reload);
     }
@@ -407,7 +408,7 @@ describe("close, checkpoints and rename", () => {
     expect(created).toBe(true);
     expect(api.checkpoint).toHaveBeenCalledWith("manual");
     expect(useProjectStore.getState().checkpoints).toHaveLength(1);
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Checkpoint created");
+    expect(getToasts().at(-1)?.title).toBe("Checkpoint created");
   });
 
   it("renames the active project in the list and session", async () => {
@@ -456,7 +457,7 @@ describe("structure exchange actions", () => {
       expect(useEditorStore.getState().selectedDimension).toBe("minecraft:the_nether");
       expect(useWorldStore.getState().revision).toBe(4);
       expect(reload).toHaveBeenCalledTimes(1);
-      expect(useToastStore.getState().toasts.at(-1)?.title).toContain("Imported");
+      expect(getToasts().at(-1)?.title).toContain("Imported");
       expect(api.list).toHaveBeenCalled();
     } finally {
       viewportBus.removeEventListener("reload-world", reload);
@@ -489,7 +490,7 @@ describe("structure exchange actions", () => {
       expect(useProjectStore.getState().managerOpen).toBe(false);
       expect(useToolStore.getState().syncState).toBe("modified");
       expect(reload).toHaveBeenCalledTimes(1);
-      expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Structure inserted");
+      expect(getToasts().at(-1)?.title).toBe("Structure inserted");
     } finally {
       viewportBus.removeEventListener("reload-world", reload);
     }

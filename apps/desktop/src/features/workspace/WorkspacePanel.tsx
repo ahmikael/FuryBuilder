@@ -14,7 +14,13 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { isTauriRuntime } from "@/lib/ipc";
 import {
   withActiveLayer,
@@ -191,21 +197,31 @@ export function WorkspacePanel() {
 
       <div className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-2 overflow-y-auto rounded-xl border bg-card p-4">
         <SectionTitle icon={Shield} title="Edit mask" hint="operations must fit inside" />
-        <NativeSelect
-          className="w-fit"
+        <Select
+          items={[
+            { value: "", label: "No mask" },
+            ...policy.masks.map((mask) => ({
+              value: mask.id,
+              label: `${mask.name} (${mask.dimension.replace("minecraft:", "")})`,
+            })),
+          ]}
           value={policy.activeMaskId ?? ""}
-          aria-label="Active mask"
-          onChange={(event) =>
-            void commit(withActiveMask(policy, event.target.value || null), "Active mask changed")
+          onValueChange={(value) =>
+            void commit(withActiveMask(policy, value || null), "Active mask changed")
           }
         >
-          <NativeSelectOption value="">No mask</NativeSelectOption>
-          {policy.masks.map((mask) => (
-            <NativeSelectOption key={mask.id} value={mask.id}>
-              {mask.name} ({mask.dimension.replace("minecraft:", "")})
-            </NativeSelectOption>
-          ))}
-        </NativeSelect>
+          <SelectTrigger className="w-fit" aria-label="Active mask">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="">No mask</SelectItem>
+            {policy.masks.map((mask) => (
+              <SelectItem key={mask.id} value={mask.id}>
+                {mask.name} ({mask.dimension.replace("minecraft:", "")})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <p className="text-sm text-muted-foreground">
           The mask only constrains its own dimension. Empty means unrestricted.
         </p>

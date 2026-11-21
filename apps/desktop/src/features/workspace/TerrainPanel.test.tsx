@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
 import { TerrainPanel } from "@/features/workspace/TerrainPanel";
 import { useToolStore } from "@/state/tool-store";
+import { chooseSelectOption } from "@/test-utils/select";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
 const worldApi = vi.hoisted(() => ({ preview: vi.fn() }));
@@ -77,7 +78,7 @@ describe("terrain brush panel", () => {
     editor.apply.mockResolvedValue({ revision: 3, changedBlocks: 2 });
     render(<TerrainPanel />);
 
-    await user.selectOptions(screen.getByLabelText("Terrain brush kind"), "noise");
+    await chooseSelectOption(user, "Terrain brush kind", "Noise");
     expect(screen.getByLabelText("Terrain brush seed")).toBeInTheDocument();
     await user.clear(screen.getByLabelText("Terrain brush seed"));
     await user.type(screen.getByLabelText("Terrain brush seed"), "42");
@@ -94,7 +95,7 @@ describe("terrain brush panel", () => {
       }),
     );
 
-    await user.selectOptions(screen.getByLabelText("Terrain brush kind"), "terrace");
+    await chooseSelectOption(user, "Terrain brush kind", "Terrace");
     expect(screen.queryByLabelText("Terrain brush amount")).not.toBeInTheDocument();
     await user.clear(screen.getByLabelText("Terrace step"));
     await user.type(screen.getByLabelText("Terrace step"), "8");
@@ -120,7 +121,7 @@ describe("terrain brush panel", () => {
     useToolStore.setState({ selection });
     worldApi.preview.mockRejectedValue(new Error("targetY 90 is outside the selection"));
     render(<TerrainPanel />);
-    await user.selectOptions(screen.getByLabelText("Terrain brush kind"), "flatten");
+    await chooseSelectOption(user, "Terrain brush kind", "Flatten");
     await user.type(screen.getByLabelText("Flatten target Y"), "90");
     await user.click(screen.getByRole("button", { name: "Preview terrain brush" }));
     expect(await screen.findByText("targetY 90 is outside the selection")).toBeInTheDocument();

@@ -6,6 +6,7 @@ import { ObservationPanel } from "@/features/workspace/ObservationPanel";
 import type { Observation } from "@/project/observation-types";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+import { chooseSelectOption } from "@/test-utils/select";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
 const observationApi = vi.hoisted(() => ({ observe: vi.fn() }));
@@ -96,7 +97,7 @@ describe("observation panel", () => {
     const user = userEvent.setup();
     render(<ObservationPanel />);
 
-    await user.selectOptions(screen.getByLabelText("Observation mode"), "cross_section");
+    await chooseSelectOption(user, "Observation mode", "Cross-section");
     const coordinate = screen.getByLabelText("Slice coordinate");
     await user.clear(coordinate);
     await user.type(coordinate, "70");
@@ -112,7 +113,7 @@ describe("observation panel", () => {
     );
 
     observationApi.observe.mockClear();
-    await user.selectOptions(screen.getByLabelText("Observation mode"), "revision_diff");
+    await chooseSelectOption(user, "Observation mode", "Revision diff");
     const from = screen.getByLabelText("From revision");
     await user.clear(from);
     await user.type(from, "2");

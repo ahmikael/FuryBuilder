@@ -16,7 +16,7 @@ import type {
   ParametricObjectSummary,
   ParametricSpec,
 } from "@/project/parametric-types";
-import { pushToast } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
 
 interface ParametricUiState {
   objects: ParametricObjectSummary[];

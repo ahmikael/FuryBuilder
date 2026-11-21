@@ -1,5 +1,5 @@
 import { recordUiError } from "@/lib/diagnostics-client";
-import { pushToast } from "@/state/tool-store";
+import { pushToast } from "@/state/toast-store";
 
 let installed = false;
 let lastToastAt = 0;

@@ -195,13 +195,6 @@ export type EditorTool =
 
 export type SavedState = "clean" | "dirty" | "saving" | "saved";
 
-export interface ToastMessage {
-  id: string;
-  kind: "info" | "success" | "warning" | "error";
-  title: string;
-  description?: string;
-}
-
 export interface ClipboardPayload {
   dimension: string;
   /** Size of the copied bounds; paste preserves this volume. */

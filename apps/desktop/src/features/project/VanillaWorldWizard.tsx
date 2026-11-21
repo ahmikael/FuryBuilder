@@ -20,7 +20,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   discoverJavaRuntimes,
   displayRuntimePath,
@@ -53,6 +59,13 @@ import type {
 } from "@/runtime/server-types";
 
 const EULA_URL = "https://aka.ms/MinecraftEULA";
+
+const WORLD_PRESETS: { value: WorldPreset; label: string }[] = [
+  { value: "normal", label: "normal" },
+  { value: "flat", label: "flat" },
+  { value: "large_biomes", label: "large biomes" },
+  { value: "amplified", label: "amplified" },
+];
 
 type Busy =
   | "load"
@@ -426,24 +439,43 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                 </div>
               ) : (
                 <div className="space-y-1">
-                  <NativeSelect
-                    aria-label="Compatible Java candidate"
-                    className="w-full font-mono"
+                  <Select
+                    items={[
+                      {
+                        value: "",
+                        label:
+                          compatibleCandidates.length === 0
+                            ? "No compatible Java candidate"
+                            : "Choose Java 21 candidate",
+                      },
+                      ...compatibleCandidates.map((candidate) => ({
+                        value: candidate.path,
+                        label: `${candidate.version} · ${displayRuntimePath(candidate.path)}`,
+                      })),
+                    ]}
                     value={javaChoice}
-                    onChange={(event) => setJavaChoice(event.target.value)}
+                    onValueChange={(value) => setJavaChoice(value ?? "")}
                     disabled={busy !== null || compatibleCandidates.length === 0}
                   >
-                    <NativeSelectOption value="">
-                      {compatibleCandidates.length === 0
-                        ? "No compatible Java candidate"
-                        : "Choose Java 21 candidate"}
-                    </NativeSelectOption>
-                    {compatibleCandidates.map((candidate) => (
-                      <NativeSelectOption key={candidate.path} value={candidate.path}>
-                        {candidate.version} · {displayRuntimePath(candidate.path)}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger
+                      className="w-full font-mono"
+                      aria-label="Compatible Java candidate"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">
+                        {compatibleCandidates.length === 0
+                          ? "No compatible Java candidate"
+                          : "Choose Java 21 candidate"}
+                      </SelectItem>
+                      {compatibleCandidates.map((candidate) => (
+                        <SelectItem key={candidate.path} value={candidate.path}>
+                          {candidate.version} · {displayRuntimePath(candidate.path)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       size="sm"
@@ -577,18 +609,23 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
           </label>
           <label className="space-y-1.5 text-sm">
             <span className="text-muted-foreground">Preset</span>
-            <NativeSelect
-              className="w-full"
+            <Select
+              items={WORLD_PRESETS}
               value={preset}
-              onChange={(event) => setPreset(event.target.value as WorldPreset)}
+              onValueChange={(value) => setPreset(value as WorldPreset)}
               disabled={running}
-              aria-label="Vanilla world preset"
             >
-              <NativeSelectOption value="normal">normal</NativeSelectOption>
-              <NativeSelectOption value="flat">flat</NativeSelectOption>
-              <NativeSelectOption value="large_biomes">large biomes</NativeSelectOption>
-              <NativeSelectOption value="amplified">amplified</NativeSelectOption>
-            </NativeSelect>
+              <SelectTrigger className="w-full" aria-label="Vanilla world preset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {WORLD_PRESETS.map((entry) => (
+                  <SelectItem key={entry.value} value={entry.value}>
+                    {entry.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </label>
           <label className="space-y-1.5 text-sm">
             <span className="text-muted-foreground">Radius, chunks</span>

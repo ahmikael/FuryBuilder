@@ -5,7 +5,8 @@ import { LARGE_PASTE_THRESHOLD } from "@/editor/clipboard";
 import type { BoxBounds, EditorOperation } from "@/editor/types";
 import type { BlockState } from "@/renderer/types";
 import { useHistoryStore } from "@/state/history-store";
-import { useToastStore, useToolStore } from "@/state/tool-store";
+import { useToolStore } from "@/state/tool-store";
+import { clearToasts, getToasts } from "@/test-utils/toast-log";
 import { useWorldStore } from "@/state/world-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
 import { boundsVolume } from "@/editor/session";
@@ -171,7 +172,7 @@ beforeEach(async () => {
     entries: [],
     error: null,
   });
-  useToastStore.setState({ toasts: [] });
+  clearToasts();
 });
 
 describe("edit commands", () => {
@@ -195,7 +196,7 @@ describe("edit commands", () => {
       await flush();
       expect(api.info).toHaveBeenCalled();
       expect(api.history).toHaveBeenCalled();
-      expect(useToastStore.getState().toasts.some((toast) => toast.kind === "success")).toBe(true);
+      expect(getToasts().some((toast) => toast.kind === "success")).toBe(true);
     } finally {
       viewportBus.removeEventListener("refresh-chunks", refresh);
     }
@@ -225,9 +226,7 @@ describe("edit commands", () => {
     expect(applied).toBeNull();
     expect(api.apply).not.toHaveBeenCalled();
     expect(useToolStore.getState().job).toBeNull();
-    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
-      "Preview cancelled",
-    );
+    expect(getToasts().map((toast) => toast.title)).toContain("Preview cancelled");
   });
 
   it("reloads the viewport and warns on a revision conflict", async () => {
@@ -240,9 +239,7 @@ describe("edit commands", () => {
       const applied = await applyEditorOperation(operation);
       expect(applied).toBeNull();
       expect(reload).toHaveBeenCalledTimes(1);
-      expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain(
-        "World changed underneath",
-      );
+      expect(getToasts().map((toast) => toast.title)).toContain("World changed underneath");
     } finally {
       viewportBus.removeEventListener("reload-world", reload);
     }
@@ -253,7 +250,7 @@ describe("edit commands", () => {
     const applied = await applyEditorOperation(operation);
     expect(applied).toBeNull();
     expect(api.preview).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts[0]).toMatchObject({
+    expect(getToasts()[0]).toMatchObject({
       kind: "warning",
       title: "Desktop core required",
     });
@@ -262,15 +259,15 @@ describe("edit commands", () => {
   it("refuses fill without a selection and replace without a source", async () => {
     await applyActiveTool("fill");
     expect(api.apply).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts[0]?.title).toBe("Select a box first");
+    expect(getToasts()[0]?.title).toBe("Select a box first");
 
-    useToastStore.setState({ toasts: [] });
+    clearToasts();
     useToolStore.setState({
       selection: { min: { x: 0, y: 64, z: 0 }, max: { x: 1, y: 64, z: 1 } },
     });
     await applyActiveTool("replace");
     expect(api.apply).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts[0]?.title).toBe("No replace source");
+    expect(getToasts()[0]?.title).toBe("No replace source");
   });
 
   it("applies replace through the operation API with the picked source", async () => {
@@ -300,7 +297,7 @@ describe("edit commands", () => {
     });
     await applyActiveTool("replace");
     expect(api.preview).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts[0]?.title).toBe("Source equals target");
+    expect(getToasts()[0]?.title).toBe("Source equals target");
   });
 });
 
@@ -324,7 +321,7 @@ describe("tool click state machine", () => {
       max: { x: -1, y: 70, z: -2 },
     });
     expect(api.apply).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Selected 84 blocks");
+    expect(getToasts().at(-1)?.title).toBe("Selected 84 blocks");
 
     await handleToolClick(hit(0, 65, 0));
     expect(useToolStore.getState().anchor).toEqual({ x: 0, y: 65, z: 0 });
@@ -361,7 +358,7 @@ describe("tool click state machine", () => {
     await handleToolClick(hit(0, 0, 0));
     await handleToolClick(hit(120, 120, 120));
     expect(useToolStore.getState().selection).toBeNull();
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Selection too large");
+    expect(getToasts().at(-1)?.title).toBe("Selection too large");
   });
 });
 
@@ -481,7 +478,7 @@ describe("clipboard commands", () => {
       y: tiles[1]!.min.y - selection.min.y,
       z: tiles[1]!.min.z - selection.min.z,
     });
-    expect(useToastStore.getState().toasts.at(-1)?.description).toContain("bounded tiles");
+    expect(getToasts().at(-1)?.description).toContain("bounded tiles");
   });
 
   it("cancels a tiled copy without storing a partial clipboard", async () => {
@@ -498,7 +495,7 @@ describe("clipboard commands", () => {
     expect(api.readRegion).toHaveBeenCalledTimes(1);
     expect(useToolStore.getState().clipboard).toBeNull();
     expect(useToolStore.getState().job).toBeNull();
-    expect(useToastStore.getState().toasts.map((toast) => toast.title)).toContain("Copy cancelled");
+    expect(getToasts().map((toast) => toast.title)).toContain("Copy cancelled");
   });
 
   it("previews a large paste before starting a cancellable job", async () => {
@@ -526,7 +523,7 @@ describe("clipboard commands", () => {
     expect(api.preview).not.toHaveBeenCalled();
     expect(api.apply).not.toHaveBeenCalled();
     expect(api.startJob).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Large paste preview");
+    expect(getToasts().at(-1)?.title).toBe("Large paste preview");
 
     api.preview.mockResolvedValue({
       affectedBlocks: LARGE_PASTE_THRESHOLD,
@@ -557,7 +554,7 @@ describe("clipboard commands", () => {
       max: { x: 257, y: 64, z: 258 },
     });
     expect(useWorldStore.getState().revision).toBe(3);
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Large paste applied");
+    expect(getToasts().at(-1)?.title).toBe("Large paste applied");
   });
 
   it("cancels a staged large-paste preview without writing", async () => {
@@ -580,13 +577,13 @@ describe("clipboard commands", () => {
     expect(useToolStore.getState().pendingPaste).toBeNull();
     expect(useToolStore.getState().ghost).toBeNull();
     expect(api.startJob).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts.at(-1)?.title).toBe("Paste preview cancelled");
+    expect(getToasts().at(-1)?.title).toBe("Paste preview cancelled");
   });
 
   it("does not read when there is no selection", async () => {
     await copySelection();
     expect(api.readRegion).not.toHaveBeenCalled();
-    expect(useToastStore.getState().toasts[0]?.title).toBe("Select a box to copy.");
+    expect(getToasts()[0]?.title).toBe("Select a box to copy.");
   });
 });
 
@@ -604,7 +601,7 @@ describe("history commands", () => {
       expect(useWorldStore.getState().revision).toBe(5);
       expect(refresh).toHaveBeenCalledTimes(1);
       expect(useToolStore.getState().lastOperation?.changedBlocks).toBe(4);
-      expect(useToastStore.getState().toasts[0]?.title).toBe("Undo applied");
+      expect(getToasts()[0]?.title).toBe("Undo applied");
     } finally {
       viewportBus.removeEventListener("refresh-chunks", refresh);
     }
@@ -613,7 +610,7 @@ describe("history commands", () => {
   it("redo reports errors without claiming success", async () => {
     api.redo.mockRejectedValue(new BackendError("no_history", "nothing to redo"));
     await redoWorld();
-    expect(useToastStore.getState().toasts[0]).toMatchObject({
+    expect(getToasts()[0]).toMatchObject({
       kind: "error",
       title: "Redo failed",
     });

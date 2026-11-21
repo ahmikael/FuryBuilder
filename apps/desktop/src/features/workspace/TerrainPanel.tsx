@@ -3,7 +3,13 @@ import { Loader2, Mountain, ScanLine } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { applyEditorOperation } from "@/editor/commands";
 import {
   boundsVolume,
@@ -18,6 +24,11 @@ import { isTauriRuntime, normalizeError } from "@/lib/ipc";
 import { previewOperation } from "@/lib/world-api";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+
+const TERRAIN_BRUSH_ITEMS = TERRAIN_BRUSH_ORDER.map((value) => ({
+  value,
+  label: TERRAIN_BRUSH_LABELS[value],
+}));
 
 /**
  * M9.9 terrain brushes. Every brush operates on the existing top surface inside the current
@@ -103,22 +114,26 @@ export function TerrainPanel() {
         </div>
         <label className="flex items-center justify-between gap-2">
           <span className="text-muted-foreground">Brush</span>
-          <NativeSelect
-            aria-label="Terrain brush kind"
-            className="w-fit"
+          <Select
+            items={TERRAIN_BRUSH_ITEMS}
             value={kind}
-            disabled={busy}
-            onChange={(event) => {
-              setKind(event.target.value as TerrainBrushKind);
+            onValueChange={(value) => {
+              setKind(value as TerrainBrushKind);
               resetPreview();
             }}
+            disabled={busy}
           >
-            {TERRAIN_BRUSH_ORDER.map((entry) => (
-              <NativeSelectOption key={entry} value={entry}>
-                {TERRAIN_BRUSH_LABELS[entry]}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger className="w-fit" aria-label="Terrain brush kind">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TERRAIN_BRUSH_ITEMS.map((entry) => (
+                <SelectItem key={entry.value} value={entry.value}>
+                  {entry.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </label>
         <div className="flex flex-wrap items-center gap-2">
           {kind !== "flatten" && kind !== "terrace" ? (

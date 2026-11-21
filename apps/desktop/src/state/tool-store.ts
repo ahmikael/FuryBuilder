@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { ClipboardPayload, EditorTool, PendingPaste, ToastMessage } from "@/editor/types";
+import type { ClipboardPayload, EditorTool, PendingPaste } from "@/editor/types";
 import { MAX_BRUSH_RADIUS, MIN_BRUSH_RADIUS, type GhostPreview } from "@/editor/session";
 import type { BlockPosition, BlockState } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
@@ -135,35 +135,6 @@ export const useToolStore = create<ToolState>()((set) => ({
   setLastOperation: (lastOperation) => set({ lastOperation, syncState: "modified" }),
   resetTransient: () => set({ anchor: null, hover: null, ghost: null, pendingPaste: null }),
 }));
-
-interface ToastState {
-  toasts: ToastMessage[];
-  push: (toast: Omit<ToastMessage, "id"> & { id?: string }) => string;
-  dismiss: (id: string) => void;
-  clear: () => void;
-}
-
-let nextToastId = 1;
-const MAX_TOASTS = 4;
-
-export const useToastStore = create<ToastState>()((set) => ({
-  toasts: [],
-  push: (toast) => {
-    const id = toast.id ?? `toast-${nextToastId++}`;
-    set((state) => ({
-      toasts: [...state.toasts.filter((entry) => entry.id !== id), { ...toast, id }].slice(
-        -MAX_TOASTS,
-      ),
-    }));
-    return id;
-  },
-  dismiss: (id) => set((state) => ({ toasts: state.toasts.filter((toast) => toast.id !== id) })),
-  clear: () => set({ toasts: [] }),
-}));
-
-export function pushToast(toast: Omit<ToastMessage, "id">): string {
-  return useToastStore.getState().push(toast);
-}
 
 export function isJobCancelled(id: number): boolean {
   const job = useToolStore.getState().job;

@@ -3,7 +3,13 @@ import { Loader2, MapPin, Route, ScanLine, Trees, Waves } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { applyEditorOperation } from "@/editor/commands";
 import {
   boundsVolume,
@@ -22,6 +28,11 @@ import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 
 type GeneratorMode = "road" | "river" | "vegetation" | "sites";
+
+const ROUTE_AXES: { value: RouteAxis; label: string }[] = [
+  { value: "x", label: "X" },
+  { value: "z", label: "Z" },
+];
 
 const MODES: { value: GeneratorMode; label: string; icon: typeof Route }[] = [
   { value: "road", label: "Road", icon: Route },
@@ -343,19 +354,26 @@ export function GeneratorsPanel() {
             <div className="grid grid-cols-3 gap-1.5">
               <label className="flex flex-col gap-0.5">
                 <span className="text-muted-foreground">Axis</span>
-                <NativeSelect
-                  aria-label="Route axis"
-                  className="w-fit"
+                <Select
+                  items={ROUTE_AXES}
                   value={axis}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setAxis(event.target.value as RouteAxis);
+                  onValueChange={(value) => {
+                    setAxis(value as RouteAxis);
                     resetPreview();
                   }}
+                  disabled={busy}
                 >
-                  <NativeSelectOption value="x">X</NativeSelectOption>
-                  <NativeSelectOption value="z">Z</NativeSelectOption>
-                </NativeSelect>
+                  <SelectTrigger className="w-fit" aria-label="Route axis">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ROUTE_AXES.map((entry) => (
+                      <SelectItem key={entry.value} value={entry.value}>
+                        {entry.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </label>
               <NumberField
                 label="Seed"
@@ -732,19 +750,29 @@ function MaterialSelect({
   return (
     <label className="flex flex-col gap-1">
       <span className="text-muted-foreground">{label}</span>
-      <NativeSelect
-        aria-label={label}
-        className="w-fit"
+      <Select
+        items={
+          catalog?.map((entry) => ({ value: entry.name, label: entry.name })) ?? [
+            { value, label: value },
+          ]
+        }
         value={value}
+        onValueChange={(value) => {
+          if (value !== null) onChange(value);
+        }}
         disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
       >
-        {catalog?.map((entry) => (
-          <NativeSelectOption key={entry.name} value={entry.name}>
-            {entry.name}
-          </NativeSelectOption>
-        )) ?? <NativeSelectOption value={value}>{value}</NativeSelectOption>}
-      </NativeSelect>
+        <SelectTrigger className="w-fit" aria-label={label}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {catalog?.map((entry) => (
+            <SelectItem key={entry.name} value={entry.name}>
+              {entry.name}
+            </SelectItem>
+          )) ?? <SelectItem value={value}>{value}</SelectItem>}
+        </SelectContent>
+      </Select>
     </label>
   );
 }

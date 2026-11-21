@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
   Download,
   Loader2,
   RefreshCw,
@@ -9,6 +10,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { canCheckForUpdates } from "@/lib/update-api";
 import { cn } from "@/lib/utils";
@@ -101,12 +103,17 @@ export function UpdatesSection({ currentVersion }: UpdatesSectionProps) {
       </Card>
 
       {available?.notes ? (
-        <details className="rounded-xl border bg-card p-4 text-sm">
-          <summary className="cursor-pointer text-muted-foreground">Release notes</summary>
-          <div className="mt-2 max-h-40 overflow-auto whitespace-pre-line leading-relaxed">
-            {available.notes}
-          </div>
-        </details>
+        <Collapsible className="rounded-xl border bg-card p-4 text-sm">
+          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-left text-muted-foreground [&[data-panel-open]>svg]:rotate-180">
+            Release notes
+            <ChevronDown className="size-4 shrink-0 transition-transform" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-2 max-h-40 overflow-auto whitespace-pre-line leading-relaxed">
+              {available.notes}
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
 
       {status === "downloading" ? (

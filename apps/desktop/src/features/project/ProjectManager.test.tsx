@@ -7,7 +7,8 @@ import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
 import { defaultWorkspacePolicy } from "@/project/types";
 import { defaultScene } from "@/project/scene-types";
 import { useProjectStore } from "@/state/project-store";
-import { useToastStore, useToolStore } from "@/state/tool-store";
+import { useToolStore } from "@/state/tool-store";
+import { clearToasts } from "@/test-utils/toast-log";
 import { useWorldStore } from "@/state/world-store";
 
 const api = vi.hoisted(() => ({
@@ -215,7 +216,7 @@ function seed(overrides: { revision?: number; recovery?: boolean } = {}): void {
   });
   useWorldStore.setState({ revision: overrides.revision ?? 4 });
   useToolStore.setState({ syncState: "pristine" });
-  useToastStore.setState({ toasts: [] });
+  clearToasts();
 }
 
 beforeEach(() => {
@@ -273,8 +274,10 @@ describe("project manager", () => {
     expect(screen.getByRole("button", { name: /Vanilla World/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Import World/ })).toBeEnabled();
     expect(screen.getByRole("button", { name: /Empty Project/ })).toBeEnabled();
-    expect(screen.getByLabelText("Target Java version")).toBeDisabled();
-    expect(screen.getByLabelText("Target Java version")).toHaveValue("1.21.4");
+    expect(screen.getByRole("combobox", { name: "Target Java version" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Target Java version" })).toHaveTextContent(
+      "Minecraft Java 1.21.4 · DataVersion 4189",
+    );
   });
 
   it("creates a project with the selected mode", async () => {
@@ -384,7 +387,8 @@ describe("project manager", () => {
     expect(
       screen.getByText("Read / edit / write / passthrough support matrix"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Block states and palettes")).toBeInTheDocument();
+    await user.click(screen.getByText("Read / edit / write / passthrough support matrix"));
+    expect(await screen.findByText("Block states and palettes")).toBeInTheDocument();
     expect(screen.getByText("1.21.4 · supported")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Project name"), "Imported World");

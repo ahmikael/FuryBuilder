@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Ban,
   CheckCircle2,
+  ChevronDown,
   FlaskConical,
   Loader2,
   Play,
@@ -14,6 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -576,64 +578,69 @@ export function ServerGenerationPanel({
       ) : null}
 
       {last && !running ? (
-        <details className="rounded-xl border bg-card p-4 text-sm" open>
-          <summary className="cursor-pointer font-medium">Last isolated run</summary>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-            <span>
-              Result{" "}
-              <span
-                className={cn(
-                  "font-mono",
-                  last.worldComplete ? "text-status-ok" : "text-status-warn",
-                )}
-              >
-                {stopReasonLabel(last)}
+        <Collapsible className="rounded-xl border bg-card p-4 text-sm" defaultOpen>
+          <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 text-left font-medium [&[data-panel-open]>svg]:rotate-180">
+            Last isolated run
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform" />
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+              <span>
+                Result{" "}
+                <span
+                  className={cn(
+                    "font-mono",
+                    last.worldComplete ? "text-status-ok" : "text-status-warn",
+                  )}
+                >
+                  {stopReasonLabel(last)}
+                </span>
               </span>
-            </span>
-            <span>
-              chunks <span className="font-mono">{last.snapshot.generatedChunks}</span>/
-              <span className="font-mono">{last.snapshot.expectedChunks}</span>
-            </span>
-            <span>
-              regions <span className="font-mono">{last.snapshot.regionFiles}</span>
-            </span>
-            <span>
-              world <span className="font-mono">{formatBytes(last.snapshot.worldBytes)}</span>
-            </span>
-            <span>
-              exit <span className="font-mono">{last.exitCode ?? "killed"}</span>
-            </span>
-            <span>
-              guard{" "}
-              <span className="font-mono">
-                {last.processTreeGuarded ? "job-object" : "fallback"}
+              <span>
+                chunks <span className="font-mono">{last.snapshot.generatedChunks}</span>/
+                <span className="font-mono">{last.snapshot.expectedChunks}</span>
               </span>
-            </span>
-          </div>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
-            <span>seed {last.seed}</span>
-            <span>preset {last.preset}</span>
-            <span>
-              center {last.centerX},{last.centerZ}
-            </span>
-            <span>bind {last.bindAddress ?? "unknown"}</span>
-            <span>java {last.javaVersion}</span>
-          </div>
-          <div className="mt-2 truncate font-mono text-xs text-muted-foreground">
-            {displayRuntimePath(last.worldDir)}
-          </div>
-          <div className="truncate font-mono text-xs text-muted-foreground">
-            {displayRuntimePath(last.logPath)}
-          </div>
-          {last.snapshot.error ? (
-            <p className="mt-2 text-sm text-status-warn">{last.snapshot.error}</p>
-          ) : null}
-          {last.logTail.length > 0 ? (
-            <pre className="mt-3 max-h-32 overflow-auto rounded-lg bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">
-              {last.logTail.slice(-12).join("\n")}
-            </pre>
-          ) : null}
-        </details>
+              <span>
+                regions <span className="font-mono">{last.snapshot.regionFiles}</span>
+              </span>
+              <span>
+                world <span className="font-mono">{formatBytes(last.snapshot.worldBytes)}</span>
+              </span>
+              <span>
+                exit <span className="font-mono">{last.exitCode ?? "killed"}</span>
+              </span>
+              <span>
+                guard{" "}
+                <span className="font-mono">
+                  {last.processTreeGuarded ? "job-object" : "fallback"}
+                </span>
+              </span>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-xs text-muted-foreground">
+              <span>seed {last.seed}</span>
+              <span>preset {last.preset}</span>
+              <span>
+                center {last.centerX},{last.centerZ}
+              </span>
+              <span>bind {last.bindAddress ?? "unknown"}</span>
+              <span>java {last.javaVersion}</span>
+            </div>
+            <div className="mt-2 truncate font-mono text-xs text-muted-foreground">
+              {displayRuntimePath(last.worldDir)}
+            </div>
+            <div className="truncate font-mono text-xs text-muted-foreground">
+              {displayRuntimePath(last.logPath)}
+            </div>
+            {last.snapshot.error ? (
+              <p className="mt-2 text-sm text-status-warn">{last.snapshot.error}</p>
+            ) : null}
+            {last.logTail.length > 0 ? (
+              <pre className="mt-3 max-h-32 overflow-auto rounded-lg bg-muted/40 p-3 font-mono text-xs whitespace-pre-wrap">
+                {last.logTail.slice(-12).join("\n")}
+              </pre>
+            ) : null}
+          </CollapsibleContent>
+        </Collapsible>
       ) : null}
 
       <div className="flex flex-wrap items-center gap-2">
