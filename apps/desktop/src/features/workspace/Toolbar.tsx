@@ -1,5 +1,4 @@
 import {
-  Flame,
   FolderOpen,
   HardDrive,
   PanelBottom,
@@ -30,6 +29,7 @@ import { useWorldStore } from "@/state/world-store";
 import { formatRelativeTime } from "@/project/types";
 import { cn } from "@/lib/utils";
 import { ViewMenu } from "@/features/workspace/ViewMenu";
+import logoUrl from "@/assets/branding/furybuilder-logo.png";
 
 interface ToolbarProps {
   backendStatus: BackendStatus;
@@ -82,8 +82,14 @@ export function Toolbar({
   return (
     <header className="flex h-10 shrink-0 items-center gap-1 border-b border-border bg-card/70 px-2">
       <div className="flex items-center gap-2 pr-2">
-        <div className="grid size-6 place-items-center rounded-md bg-primary text-primary-foreground shadow-sm">
-          <Flame className="size-3.5" />
+        <div className="grid size-6 place-items-center">
+          <img
+            src={logoUrl}
+            alt=""
+            aria-hidden="true"
+            draggable={false}
+            className="h-[22px] w-auto select-none"
+          />
         </div>
         <div className="flex items-baseline gap-1.5">
           <span className="text-[13px] font-semibold tracking-tight">FuryBuilder</span>
