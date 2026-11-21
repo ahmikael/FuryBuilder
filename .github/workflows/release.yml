@@ -146,7 +146,7 @@ jobs:
         with:
           releaseId: ${{ steps.draft.outputs.id }}
           tagName: ${{ env.RELEASE_TAG }}
-          releaseName: FuryBuilder ${{ env.RELEASE_TAG }}
+          releaseName: ${{ env.RELEASE_TAG }}
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
