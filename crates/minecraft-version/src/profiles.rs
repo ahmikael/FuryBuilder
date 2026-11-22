@@ -127,6 +127,58 @@ mod tests {
     }
 
     #[test]
+    fn every_builtin_profile_is_complete_and_consistent() {
+        for profile in builtin_profiles() {
+            assert!(!profile.id.is_empty(), "profile id");
+            assert_eq!(
+                profile.release_type,
+                profile.minecraft_version.release_type(),
+                "{}",
+                profile.id
+            );
+            assert_eq!(
+                profile.family,
+                profile.minecraft_version.family(),
+                "{}",
+                profile.id
+            );
+            assert!(
+                profile.capabilities.validate().is_ok(),
+                "{} has inconsistent capabilities",
+                profile.id
+            );
+            assert!(
+                !profile.dimension_profiles.is_empty(),
+                "{} has no dimensions",
+                profile.id
+            );
+
+            let mut dimension_ids = std::collections::HashSet::new();
+            for dimension in &profile.dimension_profiles {
+                assert!(dimension.height > 0, "{} height", dimension.id);
+                assert_eq!(
+                    dimension.height % 16,
+                    0,
+                    "{} section alignment",
+                    dimension.id
+                );
+                assert!(
+                    dimension_ids.insert(dimension.id.as_str()),
+                    "{} has duplicate dimension {}",
+                    profile.id,
+                    dimension.id
+                );
+                assert!(!dimension.folder.is_empty(), "{} folder", dimension.id);
+            }
+
+            if profile.capabilities.support_level == SupportLevel::Full {
+                assert!(profile.capabilities.edit, "{} full edit", profile.id);
+                assert!(profile.capabilities.write, "{} full write", profile.id);
+            }
+        }
+    }
+
+    #[test]
     fn baseline_profile_serializes_with_verified_values() {
         let value = serde_json::to_value(java_classic_1_21_4()).expect("profile serializes");
 
