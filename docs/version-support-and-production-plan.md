@@ -64,6 +64,19 @@
 12. **Режимы и контекст вместо хрома.** Пользователь выбирает задачу (World/Build/Paint/Analyze), а интерфейс показывает только её инструменты; один смысл живёт в одном месте.
 13. **shadcn-first, default-first.** Любая UI-работа начинается с проверки готового shadcn-компонента через skill/MCP; компонент используется с дефолтным стилем shadcn, без перекраски и форка. Custom — только если готового нет, и в том же визуальном языке.
 
+### 3.1. Политика чистой перезаписи
+
+FuryBuilder ещё нигде не установлен и не содержит пользовательских проектов. Поэтому совместимость со старыми внутренними форматами не нужна:
+
+- **Миграций нет.** `project.json` сразу v2, `.fwl` сразу v3, checkpoint metadata сразу v2. Старые схемы не читаем и не пишем.
+- **Legacy-кода нет.** Не оставляем двойные reader/writer, deprecated-обёртки, feature flags «старый/новый путь», `_old`-модули, compatibility shims и мёртвый UI.
+- **Удаляем сразу.** Старый код удаляется в том же изменении, где появляется замена; «почистим потом» запрещено.
+- **Демо пересоздаём.** `examples/furybuilder-demo.furybuilder` генерируется под актуальную схему, а не читается через миграцию.
+- **Тесты — только текущий контракт.** Тесты на старые схемы и удалённое поведение не пишем.
+- **Fallback — только продуктовый.** Placeholder-текстуры, manual path, retry и error states остаются. Compatibility-fallback «прочитать старый формат» — нет.
+- **Legacy Minecraft — это фича, а не мусор.** Поддержка и конвертация 1.8–1.12 и pre-1.8 остаются в объёме, но внутри используются только актуальные модели и один актуальный код пути.
+- **Критерий чистоты:** в коде нет migration/deprecated/dual-path веток, старых схем, неиспользуемых экспортов и комментариев «оставлено для совместимости».
+
 ---
 
 ## 4. Область поддержки версий
@@ -225,9 +238,9 @@ WorldCodec
 
 - Абсолютные пути не являются источником истины. Проект хранит logical id + hash, а путь резолвится из глобального кэша; если компонент пропал — «Relink».
 - `catalogId`/`catalogHash` фиксируют каталог блоков и предметов проекта. Если каталог пропал, он пересобирается из того же client JAR; молчаливая подмена на «последний» каталог запрещена.
-- `projectSchemaVersion` 1 мигрирует в 2 автоматически, с backup исходного `project.json`.
-- Snapshot `.fwl` получает v3: `profileId`, `dataVersion`, dimension layout, biome mode.
-- Checkpoint metadata получает v2: `profileId`, `editorState` (слои/сцена/параметрика), label, reason.
+- `projectSchemaVersion` — единственная актуальная схема (v2). v1 не читается, миграция и backup-путь не пишутся (§3.1).
+- Snapshot `.fwl` получает v3: `profileId`, `dataVersion`, dimension layout, biome mode. v2 не читается.
+- Checkpoint metadata получает v2: `profileId`, `editorState` (слои/сцена/параметрика), label, reason. v1 не читается.
 - API `world_info`, project summary, MCP metadata возвращают фактическую версию проекта, а не глобальную 1.21.4.
 
 ### 5.4. Полный каталог блоков и предметов версии
@@ -1079,7 +1092,7 @@ UI:
 **Результат:** проект 1.21.4 создаётся через новый wizard с auto Java/assets; baseline-каталог блоков/предметов 1.21.4 собран из client JAR; ручной путь работает; сцена не создаётся без проекта; настройки не дублируют мастер.
 
 - Новый `minecraft-version` crate + `VersionProfile`/`VersionCatalog`.
-- Project schema v2 + snapshot v3 + checkpoint v2 + миграция.
+- Project schema v2 + snapshot v3 + checkpoint v2; старые схемы не читаются, миграций нет.
 - Единый component manager (Java/assets/server), progress/cancel/verify.
 - Welcome screen + Project Gate.
 - Мастер создания: Basics → Version → Source → Components → Review → Preparing.
@@ -1237,6 +1250,7 @@ UI:
 - Test that full-version palette reads the catalog, not the curated registry; curated — только fallback/quick picks.
 - Test that Settings has no setup duplication (component inventory only).
 - Test that viewport is not mounted without project.
+- Grep-тест: нет `migration`/`deprecated`/`compat`/`_old` кода и чтения старых внутренних схем; demo и фикстуры — на актуальной схеме.
 - Cargo clippy/fmt + pnpm typecheck/lint/format/test.
 
 ### 14.6. Ручной QA
@@ -1270,7 +1284,8 @@ UI:
   - ADR-014 — creation modes;
   - ADR-015 — component provisioning;
   - ADR-016 — UI shell, modes and contextual inspector;
-  - ADR-017 — shadcn-first and custom component policy.
+  - ADR-017 — shadcn-first and custom component policy;
+  - ADR-018 — greenfield schema reset, no migrations or legacy code.
 - `docs/advanced-workflow.md` — Toolbox, scene, version conversion.
 - `CHANGELOG.md` — по этапам.
 - `docs/legal/third-party-notices.md` — если добавляются новые зависимости.
@@ -1292,6 +1307,7 @@ UI:
 | Безопасность архивов/JSON | Недоверенные JAR/zip/version JSON | Allowlist, bounds, traversal/symlink checks, fuzz |
 | Производительность света | Per-vertex light/AO дороже | Этапы A/B, budget, fallback |
 | UI scope creep | Много идей | P0 быстрый результат, затем измеримые этапы |
+| Соблазн тащить старые схемы | Кажется, что миграции «пригодятся» | Пользователей и проектов нет; v1 удаляется сразу, compatibility-код запрещён (§3.1), CI-grep |
 | Потеря данных | Конвертация/экспорт | Source immutable, staged writes, verify, checkpoints, Recycle Bin |
 
 ---
@@ -1321,6 +1337,7 @@ UI:
 - [ ] Снизу 4 вкладки; инструменты — в Toolbox.
 - [ ] 4 режима (World/Build/Paint/Analyze), контекстный Inspector и command palette работают.
 - [ ] UI использует shadcn-компоненты в дефолтном виде; `components/ui/*` не перекрашены и не форкнуты; custom — только для gap-ов, с audit checklist.
+- [ ] Нет миграций, compatibility shims и чтения старых внутренних схем; demo пересоздан под актуальную схему.
 - [ ] Для каждой full-версии палитра содержит все ванильные блоки и предметы, включая technical/creative-only; состояния валидируются.
 - [ ] Проект фиксирует `catalogId`/hash; палитра, валидация и экспорт используют один и тот же каталог.
 - [ ] Unknown/removed block states сохраняются и явно помечаются, без молчаливой подмены.
@@ -1348,7 +1365,7 @@ UI:
 
 ## 20. Решения и договорённости
 
-Пункты 1–7 — рекомендации к подтверждению; 8–9 уже приняты и внесены в §5.4 и §9.8–9.14.
+Пункты 1–7 — рекомендации к подтверждению; 8–9 и 14 уже приняты и внесены в §5.4, §9.8–9.15 и §3.1.
 
 1. **Диапазон первого релиза:** рекомендуем modern 1.18–1.21.x full + 1.13–1.17 convert, остальное поэтапно.
 2. **Pre-1.13:** рекомендуем сначала convert/passthrough, не native edit.
@@ -1359,6 +1376,7 @@ UI:
 7. **Визуальный уровень сцены:** рекомендуем Minecraft-like environment + baked light/AO, без динамических теней и шейдеров.
 8. **Каталог контента (принято):** все ванильные блоки и предметы точной версии, включая technical/creative-only, состояния, категории и предметы; modded/custom — passthrough и предупреждение.
 9. **UI-система (принято):** 3 панели, 4 режима, 4 нижние вкладки, контекстный Inspector, Toolbox, command palette; shadcn-тема по умолчанию (neutral, CSS variables), comfortable density, без собственной палитры.
+14. **Чистая перезапись (принято):** `project.json` v2, `.fwl` v3 и checkpoint v2 — единственные схемы. Миграций, legacy-кода и compatibility-fallback-ов нет; старый код удаляется сразу. Legacy Minecraft-версии остаются продуктовой фичей, а не оправданием для старого кода.
 
 После подтверждения этих пунктов можно начинать с P0: version profile + component manager + wizard + no-scene gate. Это даст самый большой пользовательский эффект и не потребует переписывать всё приложение сразу.
 
@@ -1384,6 +1402,7 @@ UI:
 - Если обнаружен блокер: не обходить молча, а добавить подпункт `(blocked)` с причиной и обновить «Текущий фокус».
 - Перед коммитом блока: `cargo test`, `cargo clippy`, `cargo fmt --check`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` (или их актуальные аналоги из `package.json`).
 - Перед UI-задачей: проверить shadcn через skill/MCP (§9.15); после UI-изменений — прогнать shadcn audit checklist и записать результат.
+- Не писать миграции и compatibility shims: приложение нигде не установлено, старые внутренние схемы не поддерживаются (§3.1). Старый код удаляется в том же изменении.
 - Документацию обновлять в том же блоке, где меняется поведение, а не «потом».
 
 ### 21.1. Сделано до старта
@@ -1415,10 +1434,10 @@ UI:
 #### B. Project data
 
 - [ ] `P0-12` `project.json` schema v2: `target` + `components` (см. §5.3), serde + validation.
-- [ ] `P0-13` Миграция v1→v2 с backup `project.json.v1.bak`, идемпотентная, с тестами.
+- [ ] `P0-13` Удалить schema v1 целиком: reader/writer, миграцию, backup-путь и тесты старой схемы; `project.json` существует только в v2.
 - [ ] `P0-14` Snapshot `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode.
-- [ ] `P0-15` Миграция snapshot v2→v3; чтение старых snapshot-ов; тесты.
-- [ ] `P0-16` Checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; обратная совместимость.
+- [ ] `P0-15` Удалить snapshot v2 reader/writer и тесты v2; пересоздать `examples/furybuilder-demo.furybuilder` под schema v2 / `.fwl` v3 и обновить `demo_project` тест.
+- [ ] `P0-16` Checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; v1 не читается, compatibility-полей нет.
 - [ ] `P0-17` `world_info`, project summary и MCP metadata возвращают версию проекта, а не глобальную константу.
 
 #### C. Component manager
@@ -1477,7 +1496,7 @@ UI:
 
 - [ ] `P0-58` Убрать `Active palette block` и дубли core/save status из toolbar/performance.
 - [ ] `P0-59` Bottom panel: `Palette → Blocks`; убрать Tools/Warnings; Analysis = Observation+Validation; Activity = Console+History.
-- [ ] `P0-60` Обновить `BOTTOM_PANEL_TABS` и миграцию сохранённого layout.
+- [ ] `P0-60` Обновить `BOTTOM_PANEL_TABS`; сохранённый layout старого формата не читаем и сбрасываем к дефолту.
 - [ ] `P0-61` Тесты: Tools/Warnings удалены, Analysis/Activity сгруппированы, toolbar без активного блока; полный переход на 4 вкладки — P4.
 
 #### H. Закрытие P0
@@ -1651,7 +1670,8 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
-| 2026-11-23 | План | shadcn default-first: компоненты не перекрашиваются, тема только через CSS-переменные | — (ожидает commit) | docs only |
+| 2026-11-23 | План | Политика чистой перезаписи: без миграций, legacy-кода и compatibility fallback-ов; demo пересоздаётся | см. `git log` | docs only |
+| 2026-11-23 | План | shadcn default-first: компоненты не перекрашиваются, тема только через CSS-переменные | `5614bb7` | docs only |
 | 2026-11-23 | План | UI-референсы, режимы, контекстный Inspector, полный каталог блоков/предметов | `58d37a9` | docs only |
 | 2026-11-22 | План | План + рабочий чеклист | см. `git log` | docs only |
 
