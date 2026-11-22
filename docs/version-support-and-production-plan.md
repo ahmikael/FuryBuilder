@@ -1388,7 +1388,7 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-02` — `VersionId`, `VersionFamily`, `ReleaseType`. Статус: P0 в работе.
+**Текущий фокус:** `P0-03` — `VersionProfile` со всеми полями. Статус: P0 в работе.
 
 **Следующий шаг после закрытия текущего фокуса:** `P0-02`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
@@ -1420,7 +1420,7 @@ UI:
 #### A. Version foundation
 
 - [x] `P0-01` Создать crate `crates/minecraft-version`, подключить в workspace, без зависимостей на Tauri/UI.
-- [ ] `P0-02` `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, сравнение, serde; тесты на `1.21.4`, `1.21`, `26.1-snapshot-3`.
+- [x] `P0-02` `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, сравнение, serde; тесты на `1.21.4`, `1.21`, `26.1-snapshot-3`.
 - [ ] `P0-03` `VersionProfile` со всеми полями из §5.1 и `serde(rename_all = "camelCase")`.
 - [ ] `P0-04` `SupportLevel` (`full`, `read-write-subset`, `read-only`, `convert`, `out-of-scope`) и `WorldCapabilities`.
 - [ ] `P0-05` Базовый профиль `java-classic-1.21.4`: DataVersion 4189, Java 21, pack 46, datapack 61, dimensions/height, named block/item catalog.
@@ -1670,6 +1670,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Version foundation | `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, numeric/stage ordering, serde | см. `git log` | 8 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | Добавлен crate `minecraft-version` в workspace, без Tauri/UI зависимостей | см. `git log` | cargo check/test, fmt |
 | 2026-11-23 | План | Политика чистой перезаписи: без миграций, legacy-кода и compatibility fallback-ов; demo пересоздаётся | см. `git log` | docs only |
 | 2026-11-23 | План | shadcn default-first: компоненты не перекрашиваются, тема только через CSS-переменные | `5614bb7` | docs only |

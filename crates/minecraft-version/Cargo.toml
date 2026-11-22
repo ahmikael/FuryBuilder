@@ -8,3 +8,10 @@ description = "Minecraft Java version identities, profiles and support capabilit
 
 [lib]
 name = "minecraft_version"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
