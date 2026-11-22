@@ -244,6 +244,223 @@ pub enum VersionFamily {
     Unknown,
 }
 
+/// A complete, verified description of one Minecraft Java version.
+///
+/// Profiles are facts, not guesses: every field is filled from a version
+/// manifest entry, the client/server JAR metadata or a fixture-backed family
+/// adapter. Missing facts stay `None` instead of being approximated.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionProfile {
+    /// Stable profile id, for example `java-classic-1.21.4`.
+    pub id: String,
+    pub minecraft_version: VersionId,
+    pub data_version: i32,
+    pub release_type: ReleaseType,
+    pub family: VersionFamily,
+    pub world_layout: WorldLayout,
+    pub chunk_family: ChunkFamily,
+    pub biome_format: BiomeFormat,
+    pub dimension_profiles: Vec<DimensionProfile>,
+    pub java: JavaRequirement,
+    pub resource_pack_format: Option<u32>,
+    pub datapack_format: Option<u32>,
+    pub content_catalog: ContentCatalogProfile,
+    pub structure_formats: StructureProfile,
+    pub server: ServerProfile,
+    pub capabilities: WorldCapabilities,
+    pub notes: Vec<String>,
+}
+
+/// How a world folder is laid out on disk.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum WorldLayout {
+    /// `region/`, `DIM-1/`, `DIM1/` and a single `level.dat`.
+    ClassicAnvil,
+    /// 26.1+ `dimensions/<namespace>/<id>/region/` and `players/`.
+    SplitAnvil,
+    /// Pre-Anvil `.mcr` region files.
+    McRegion,
+    Unknown,
+}
+
+/// The chunk NBT family a profile must decode.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ChunkFamily {
+    /// 1.18+ paletted sections with block states, biomes and light.
+    ModernPaletted,
+    /// 1.15–1.17 section biomes and 1.13–1.14 column biomes.
+    SectionBiomes,
+    /// 1.8–1.12 numeric block ids plus metadata.
+    NumericIds,
+    /// Pre-1.8 chunk data.
+    Legacy,
+    Unknown,
+}
+
+/// How biome cells are stored inside a chunk.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BiomeFormat {
+    /// 4×4×4 biome cells with a shared palette.
+    #[serde(rename = "palette-4x4x4")]
+    Palette4x4x4,
+    /// One biome per X/Z column, repeated across Y.
+    Column,
+    /// Per-section biome palettes.
+    Section,
+    Unknown,
+}
+
+/// One dimension with its real vertical bounds and on-disk folder.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DimensionProfile {
+    /// Namespaced dimension id, for example `minecraft:overworld`.
+    pub id: String,
+    pub kind: DimensionKind,
+    pub min_y: i32,
+    pub height: i32,
+    /// Region folder relative to the world root.
+    pub folder: String,
+}
+
+/// Dimension kind without depending on the world-domain crate.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DimensionKind {
+    Overworld,
+    Nether,
+    End,
+    Custom,
+}
+
+/// Java runtime requirement for a version.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaRequirement {
+    pub minimum_major: u32,
+    pub recommended_major: u32,
+}
+
+/// What the client JAR contains for the block/item catalog.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContentCatalogProfile {
+    pub registry_format: CatalogRegistryFormat,
+    pub blockstate_format: BlockstateFormat,
+    pub item_model_format: ItemModelFormat,
+    pub creative_categories: bool,
+    pub data_components: bool,
+}
+
+/// Registry identity format used by the version.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CatalogRegistryFormat {
+    /// Named ids such as `minecraft:stone`.
+    Named,
+    /// Numeric ids plus metadata, 1.8–1.12.
+    NumericIds,
+    /// Pre-1.8 registry.
+    Legacy,
+    Unknown,
+}
+
+/// How block states are described in the client JAR.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BlockstateFormat {
+    /// `assets/<namespace>/blockstates/<block>.json`.
+    Json,
+    /// Pre-1.8 metadata-based states.
+    LegacyMetadata,
+    None,
+    Unknown,
+}
+
+/// How item models are described in the client JAR.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ItemModelFormat {
+    /// `assets/<namespace>/items/<item>.json` item definitions.
+    ItemDefinitions,
+    /// Classic `assets/<namespace>/models/item/<item>.json`.
+    ItemModels,
+    /// Pre-1.8 metadata-based items.
+    LegacyMetadata,
+    None,
+    Unknown,
+}
+
+/// Structure formats available to a version.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureProfile {
+    pub java_nbt: StructureSupport,
+    pub sponge_schem: StructureSupport,
+    pub legacy_schematic: StructureSupport,
+    pub litematic: StructureSupport,
+}
+
+/// Import/export availability of one structure format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureSupport {
+    pub import: bool,
+    pub export: bool,
+}
+
+/// Official server availability and generation syntax for a version.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerProfile {
+    pub official_jar: bool,
+    pub level_type_syntax: LevelTypeSyntax,
+    pub generation: GenerationCapabilities,
+}
+
+/// The `level-type` spelling used by a version's server.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LevelTypeSyntax {
+    /// 1.16+ namespaced values such as `minecraft:flat`.
+    ModernNamespaced,
+    /// 1.13–1.15 camel-case values such as `largeBiomes`.
+    LegacyCamelCase,
+    /// 1.8–1.12 upper-case values such as `LARGEBIOMES`.
+    LegacyUpper,
+    Unknown,
+}
+
+/// Generation presets the official server can produce.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationCapabilities {
+    pub normal: bool,
+    pub flat: bool,
+    pub large_biomes: bool,
+    pub amplified: bool,
+}
+
+/// What FuryBuilder can actually do with this version.
+///
+/// The support level is added by the capability policy layer; the booleans
+/// describe individual operations so UI and MCP never infer them from the
+/// version string.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorldCapabilities {
+    pub read: bool,
+    pub edit: bool,
+    pub write: bool,
+    pub export: bool,
+    pub generate: bool,
+    pub assets: bool,
+}
+
 /// An invalid Minecraft version id.
 #[derive(Clone, Debug, Eq, PartialEq, Error)]
 pub enum VersionIdError {
@@ -431,6 +648,147 @@ mod tests {
 
         let restored: VersionId = serde_json::from_str(&json).expect("version deserializes");
         assert_eq!(restored, id);
+    }
+
+    fn sample_profile() -> VersionProfile {
+        VersionProfile {
+            id: "java-classic-1.21.4".to_owned(),
+            minecraft_version: version("1.21.4"),
+            data_version: 4189,
+            release_type: ReleaseType::Release,
+            family: VersionFamily::Modern,
+            world_layout: WorldLayout::ClassicAnvil,
+            chunk_family: ChunkFamily::ModernPaletted,
+            biome_format: BiomeFormat::Palette4x4x4,
+            dimension_profiles: vec![
+                DimensionProfile {
+                    id: "minecraft:overworld".to_owned(),
+                    kind: DimensionKind::Overworld,
+                    min_y: -64,
+                    height: 384,
+                    folder: "region".to_owned(),
+                },
+                DimensionProfile {
+                    id: "minecraft:the_nether".to_owned(),
+                    kind: DimensionKind::Nether,
+                    min_y: 0,
+                    height: 256,
+                    folder: "DIM-1/region".to_owned(),
+                },
+                DimensionProfile {
+                    id: "minecraft:the_end".to_owned(),
+                    kind: DimensionKind::End,
+                    min_y: 0,
+                    height: 256,
+                    folder: "DIM1/region".to_owned(),
+                },
+            ],
+            java: JavaRequirement {
+                minimum_major: 21,
+                recommended_major: 21,
+            },
+            resource_pack_format: Some(46),
+            datapack_format: Some(61),
+            content_catalog: ContentCatalogProfile {
+                registry_format: CatalogRegistryFormat::Named,
+                blockstate_format: BlockstateFormat::Json,
+                item_model_format: ItemModelFormat::ItemDefinitions,
+                creative_categories: true,
+                data_components: true,
+            },
+            structure_formats: StructureProfile {
+                java_nbt: StructureSupport {
+                    import: true,
+                    export: true,
+                },
+                sponge_schem: StructureSupport {
+                    import: true,
+                    export: true,
+                },
+                legacy_schematic: StructureSupport {
+                    import: true,
+                    export: false,
+                },
+                litematic: StructureSupport {
+                    import: true,
+                    export: false,
+                },
+            },
+            server: ServerProfile {
+                official_jar: true,
+                level_type_syntax: LevelTypeSyntax::ModernNamespaced,
+                generation: GenerationCapabilities {
+                    normal: true,
+                    flat: true,
+                    large_biomes: true,
+                    amplified: true,
+                },
+            },
+            capabilities: WorldCapabilities {
+                read: true,
+                edit: true,
+                write: true,
+                export: true,
+                generate: true,
+                assets: true,
+            },
+            notes: vec!["Only 1.21.4 classic Anvil writes are verified.".to_owned()],
+        }
+    }
+
+    #[test]
+    fn profile_serializes_with_camel_case_fields() {
+        let value = serde_json::to_value(sample_profile()).expect("profile serializes");
+
+        assert_eq!(value["minecraftVersion"], "1.21.4");
+        assert_eq!(value["dataVersion"], 4189);
+        assert_eq!(value["releaseType"], "release");
+        assert_eq!(value["family"], "modern");
+        assert_eq!(value["worldLayout"], "classic-anvil");
+        assert_eq!(value["chunkFamily"], "modern-paletted");
+        assert_eq!(value["biomeFormat"], "palette-4x4x4");
+        assert_eq!(value["dimensionProfiles"][0]["minY"], -64);
+        assert_eq!(value["dimensionProfiles"][0]["kind"], "overworld");
+        assert_eq!(value["java"]["minimumMajor"], 21);
+        assert_eq!(value["java"]["recommendedMajor"], 21);
+        assert_eq!(value["resourcePackFormat"], 46);
+        assert_eq!(value["datapackFormat"], 61);
+        assert_eq!(value["contentCatalog"]["registryFormat"], "named");
+        assert_eq!(
+            value["contentCatalog"]["itemModelFormat"],
+            "item-definitions"
+        );
+        assert_eq!(value["contentCatalog"]["dataComponents"], true);
+        assert_eq!(value["structureFormats"]["javaNbt"]["export"], true);
+        assert_eq!(value["structureFormats"]["litematic"]["export"], false);
+        assert_eq!(value["server"]["levelTypeSyntax"], "modern-namespaced");
+        assert_eq!(value["server"]["generation"]["largeBiomes"], true);
+        assert_eq!(value["capabilities"]["assets"], true);
+        assert!(value.get("minecraft_version").is_none());
+    }
+
+    #[test]
+    fn profile_round_trips_through_json() {
+        let profile = sample_profile();
+        let json = serde_json::to_string(&profile).expect("profile serializes");
+        let restored: VersionProfile = serde_json::from_str(&json).expect("profile deserializes");
+        assert_eq!(restored, profile);
+    }
+
+    #[test]
+    fn profile_keeps_dimensions_and_unknown_formats_honest() {
+        let mut profile = sample_profile();
+        profile.resource_pack_format = None;
+        profile.datapack_format = None;
+
+        assert_eq!(profile.dimension_profiles.len(), 3);
+        assert_eq!(profile.dimension_profiles[0].id, "minecraft:overworld");
+        assert_eq!(profile.dimension_profiles[0].min_y, -64);
+        assert_eq!(profile.dimension_profiles[0].height, 384);
+
+        let value = serde_json::to_value(profile).expect("profile serializes");
+        assert!(value["resourcePackFormat"].is_null());
+        assert!(value["datapackFormat"].is_null());
     }
 
     #[test]
