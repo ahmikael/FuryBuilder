@@ -1,0 +1,10 @@
+[package]
+name = "furybuilder-minecraft-version"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Minecraft Java version identities, profiles and support capabilities for FuryBuilder"
+
+[lib]
+name = "minecraft_version"

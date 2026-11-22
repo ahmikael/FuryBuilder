@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/minecraft-version",
     "crates/world-domain",
     "crates/world-operations",
     "crates/world-io",

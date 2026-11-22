@@ -1388,7 +1388,7 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-01` — создать crate `minecraft-version`. Статус: P0 не начат.
+**Текущий фокус:** `P0-02` — `VersionId`, `VersionFamily`, `ReleaseType`. Статус: P0 в работе.
 
 **Следующий шаг после закрытия текущего фокуса:** `P0-02`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
@@ -1419,7 +1419,7 @@ UI:
 
 #### A. Version foundation
 
-- [ ] `P0-01` Создать crate `crates/minecraft-version`, подключить в workspace, без зависимостей на Tauri/UI.
+- [x] `P0-01` Создать crate `crates/minecraft-version`, подключить в workspace, без зависимостей на Tauri/UI.
 - [ ] `P0-02` `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, сравнение, serde; тесты на `1.21.4`, `1.21`, `26.1-snapshot-3`.
 - [ ] `P0-03` `VersionProfile` со всеми полями из §5.1 и `serde(rename_all = "camelCase")`.
 - [ ] `P0-04` `SupportLevel` (`full`, `read-write-subset`, `read-only`, `convert`, `out-of-scope`) и `WorldCapabilities`.
@@ -1670,6 +1670,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Version foundation | Добавлен crate `minecraft-version` в workspace, без Tauri/UI зависимостей | см. `git log` | cargo check/test, fmt |
 | 2026-11-23 | План | Политика чистой перезаписи: без миграций, legacy-кода и compatibility fallback-ов; demo пересоздаётся | см. `git log` | docs only |
 | 2026-11-23 | План | shadcn default-first: компоненты не перекрашиваются, тема только через CSS-переменные | `5614bb7` | docs only |
 | 2026-11-23 | План | UI-референсы, режимы, контекстный Inspector, полный каталог блоков/предметов | `58d37a9` | docs only |

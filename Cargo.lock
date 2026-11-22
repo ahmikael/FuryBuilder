@@ -995,6 +995,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "furybuilder-minecraft-version"
+version = "0.2.0"
+
+[[package]]
 name = "furybuilder-observation"
 version = "0.2.0"
 dependencies = [
