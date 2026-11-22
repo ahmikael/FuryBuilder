@@ -1388,9 +1388,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-04` — `SupportLevel` и `WorldCapabilities`. Статус: P0 в работе.
+**Текущий фокус:** `P0-05` — базовый профиль `java-classic-1.21.4`. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-05`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-06`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1422,7 +1422,7 @@ UI:
 - [x] `P0-01` Создать crate `crates/minecraft-version`, подключить в workspace, без зависимостей на Tauri/UI.
 - [x] `P0-02` `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, сравнение, serde; тесты на `1.21.4`, `1.21`, `26.1-snapshot-3`.
 - [x] `P0-03` `VersionProfile` со всеми полями из §5.1 и `serde(rename_all = "camelCase")`.
-- [ ] `P0-04` `SupportLevel` (`full`, `read-write-subset`, `read-only`, `convert`, `out-of-scope`) и `WorldCapabilities`.
+- [x] `P0-04` `SupportLevel` (`full`, `read-write-subset`, `read-only`, `convert`, `out-of-scope`) и `WorldCapabilities`.
 - [ ] `P0-05` Базовый профиль `java-classic-1.21.4`: DataVersion 4189, Java 21, pack 46, datapack 61, dimensions/height, named block/item catalog.
 - [ ] `P0-06` `VersionCatalog`: загрузка и кэш `version_manifest_v2.json`, TTL, offline fallback, allowlist.
 - [ ] `P0-07` Загрузка version JSON: `javaVersion.majorVersion`, client/server downloads, SHA-1.
@@ -1670,6 +1670,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Version foundation | `SupportLevel` + capability invariants: `full` требует write/export/assets, read-only/convert/out-of-scope не пишут | см. `git log` | 14 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | `VersionProfile`: layout, chunk/biome family, dimensions, Java, catalog, structures, server, capabilities; camelCase serde | см. `git log` | 11 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, numeric/stage ordering, serde | см. `git log` | 8 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | Добавлен crate `minecraft-version` в workspace, без Tauri/UI зависимостей | см. `git log` | cargo check/test, fmt |

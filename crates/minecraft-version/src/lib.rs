@@ -447,18 +447,91 @@ pub struct GenerationCapabilities {
 
 /// What FuryBuilder can actually do with this version.
 ///
-/// The support level is added by the capability policy layer; the booleans
-/// describe individual operations so UI and MCP never infer them from the
-/// version string.
+/// The support level is the contract shown in the UI and MCP; the booleans
+/// describe individual operations so callers never infer them from the
+/// version string. [`WorldCapabilities::validate`] rejects contradictory
+/// combinations such as `full` without write access.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorldCapabilities {
+    pub support_level: SupportLevel,
     pub read: bool,
     pub edit: bool,
     pub write: bool,
     pub export: bool,
     pub generate: bool,
     pub assets: bool,
+}
+
+/// The honest support contract for a version family.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SupportLevel {
+    /// Create, import, edit, save, export and use assets.
+    Full,
+    /// Read and edit a verified subset; untouched data is preserved.
+    ReadWriteSubset,
+    /// Analyze, view and copy without editing.
+    ReadOnly,
+    /// Read and convert to a supported version; the original is preserved.
+    Convert,
+    /// Explicit refusal, for example Bedrock Edition.
+    OutOfScope,
+}
+
+impl WorldCapabilities {
+    /// Rejects capability claims that contradict their support level.
+    pub fn validate(self) -> Result<(), CapabilityError> {
+        match self.support_level {
+            SupportLevel::Full => {
+                if !(self.read && self.edit && self.write && self.export && self.assets) {
+                    return Err(CapabilityError::FullRequiresFullAccess);
+                }
+            }
+            SupportLevel::ReadWriteSubset => {
+                if !(self.read && self.edit && self.write) {
+                    return Err(CapabilityError::ReadWriteSubsetRequiresWrite);
+                }
+            }
+            SupportLevel::ReadOnly => {
+                if !self.read || self.edit || self.write {
+                    return Err(CapabilityError::ReadOnlyMustNotWrite);
+                }
+            }
+            SupportLevel::Convert => {
+                if !self.read || self.write {
+                    return Err(CapabilityError::ConvertMustReadWithoutWriting);
+                }
+            }
+            SupportLevel::OutOfScope => {
+                if self.read
+                    || self.edit
+                    || self.write
+                    || self.export
+                    || self.generate
+                    || self.assets
+                {
+                    return Err(CapabilityError::OutOfScopeMustNotClaimCapabilities);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A capability set that contradicts its support level.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Error)]
+pub enum CapabilityError {
+    #[error("support level `full` requires read, edit, write, export and assets")]
+    FullRequiresFullAccess,
+    #[error("support level `read-write-subset` requires read, edit and write")]
+    ReadWriteSubsetRequiresWrite,
+    #[error("support level `read-only` requires read and must not claim edit or write")]
+    ReadOnlyMustNotWrite,
+    #[error("support level `convert` requires read and must not claim write")]
+    ConvertMustReadWithoutWriting,
+    #[error("support level `out-of-scope` must not claim any capability")]
+    OutOfScopeMustNotClaimCapabilities,
 }
 
 /// An invalid Minecraft version id.
@@ -725,6 +798,7 @@ mod tests {
                 },
             },
             capabilities: WorldCapabilities {
+                support_level: SupportLevel::Full,
                 read: true,
                 edit: true,
                 write: true,
@@ -764,7 +838,119 @@ mod tests {
         assert_eq!(value["server"]["levelTypeSyntax"], "modern-namespaced");
         assert_eq!(value["server"]["generation"]["largeBiomes"], true);
         assert_eq!(value["capabilities"]["assets"], true);
+        assert_eq!(value["capabilities"]["supportLevel"], "full");
         assert!(value.get("minecraft_version").is_none());
+    }
+
+    #[test]
+    fn support_level_serializes_as_kebab_case() {
+        let cases = [
+            (SupportLevel::Full, "full"),
+            (SupportLevel::ReadWriteSubset, "read-write-subset"),
+            (SupportLevel::ReadOnly, "read-only"),
+            (SupportLevel::Convert, "convert"),
+            (SupportLevel::OutOfScope, "out-of-scope"),
+        ];
+
+        for (level, expected) in cases {
+            assert_eq!(
+                serde_json::to_value(level).expect("level serializes"),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn capabilities_accept_their_support_level() {
+        assert!(sample_profile().capabilities.validate().is_ok());
+
+        let subset = WorldCapabilities {
+            support_level: SupportLevel::ReadWriteSubset,
+            read: true,
+            edit: true,
+            write: true,
+            ..empty_capabilities(SupportLevel::ReadWriteSubset)
+        };
+        assert!(subset.validate().is_ok());
+
+        let read_only = WorldCapabilities {
+            support_level: SupportLevel::ReadOnly,
+            read: true,
+            export: true,
+            ..empty_capabilities(SupportLevel::ReadOnly)
+        };
+        assert!(read_only.validate().is_ok());
+
+        let convert = WorldCapabilities {
+            support_level: SupportLevel::Convert,
+            read: true,
+            export: true,
+            ..empty_capabilities(SupportLevel::Convert)
+        };
+        assert!(convert.validate().is_ok());
+
+        let out_of_scope = empty_capabilities(SupportLevel::OutOfScope);
+        assert!(out_of_scope.validate().is_ok());
+    }
+
+    #[test]
+    fn capabilities_reject_contradictions() {
+        let full_without_write = WorldCapabilities {
+            support_level: SupportLevel::Full,
+            read: true,
+            edit: true,
+            export: true,
+            assets: true,
+            ..empty_capabilities(SupportLevel::Full)
+        };
+        assert_eq!(
+            full_without_write.validate(),
+            Err(CapabilityError::FullRequiresFullAccess)
+        );
+
+        let read_only_with_write = WorldCapabilities {
+            support_level: SupportLevel::ReadOnly,
+            read: true,
+            write: true,
+            ..empty_capabilities(SupportLevel::ReadOnly)
+        };
+        assert_eq!(
+            read_only_with_write.validate(),
+            Err(CapabilityError::ReadOnlyMustNotWrite)
+        );
+
+        let convertible_but_writable = WorldCapabilities {
+            support_level: SupportLevel::Convert,
+            read: true,
+            write: true,
+            ..empty_capabilities(SupportLevel::Convert)
+        };
+        assert_eq!(
+            convertible_but_writable.validate(),
+            Err(CapabilityError::ConvertMustReadWithoutWriting)
+        );
+
+        let out_of_scope_with_read = WorldCapabilities {
+            support_level: SupportLevel::OutOfScope,
+            read: true,
+            ..empty_capabilities(SupportLevel::OutOfScope)
+        };
+        assert_eq!(
+            out_of_scope_with_read.validate(),
+            Err(CapabilityError::OutOfScopeMustNotClaimCapabilities)
+        );
+    }
+
+    fn empty_capabilities(level: SupportLevel) -> WorldCapabilities {
+        WorldCapabilities {
+            support_level: level,
+            read: false,
+            edit: false,
+            write: false,
+            export: false,
+            generate: false,
+            assets: false,
+        }
     }
 
     #[test]
