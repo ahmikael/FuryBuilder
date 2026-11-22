@@ -23,7 +23,12 @@ pub const MANIFEST_CACHE_SCHEMA_VERSION: u32 = 1;
 /// How long a cached manifest is considered fresh.
 pub const DEFAULT_MANIFEST_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
-const ALLOWED_HOSTS: &[&str] = &["piston-meta.mojang.com", "launchermeta.mojang.com"];
+const ALLOWED_HOSTS: &[&str] = &[
+    "piston-meta.mojang.com",
+    "launchermeta.mojang.com",
+    "piston-data.mojang.com",
+    "launcher.mojang.com",
+];
 
 /// The official version manifest.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

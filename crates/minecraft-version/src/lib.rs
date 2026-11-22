@@ -9,6 +9,7 @@
 
 pub mod catalog;
 pub mod profiles;
+pub mod version_json;
 
 pub use catalog::{
     fetch_official_manifest, is_allowed_download_url, CatalogError, CatalogSource, LatestVersions,
@@ -16,6 +17,10 @@ pub use catalog::{
     MANIFEST_CACHE_SCHEMA_VERSION, OFFICIAL_MANIFEST_URL,
 };
 pub use profiles::{builtin_profiles, java_classic_1_21_4, JAVA_CLASSIC_1_21_4_ID};
+pub use version_json::{
+    fetch_version_json, AssetIndex, JavaVersion, VersionDownload, VersionDownloads, VersionJson,
+    VersionJsonError,
+};
 
 use std::cmp::Ordering;
 use std::fmt;

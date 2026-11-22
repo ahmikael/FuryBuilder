@@ -1388,9 +1388,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-07` — загрузка version JSON и download metadata. Статус: P0 в работе.
+**Текущий фокус:** `P0-08` — сборка `VersionProfile` из семейства, manifest и `version.json` JAR. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-08`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-09`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1425,7 +1425,7 @@ UI:
 - [x] `P0-04` `SupportLevel` (`full`, `read-write-subset`, `read-only`, `convert`, `out-of-scope`) и `WorldCapabilities`.
 - [x] `P0-05` Базовый профиль `java-classic-1.21.4`: DataVersion 4189, Java 21, pack 46, datapack 61, dimensions/height, named block/item catalog.
 - [x] `P0-06` `VersionCatalog`: загрузка и кэш `version_manifest_v2.json`, TTL, offline fallback, allowlist.
-- [ ] `P0-07` Загрузка version JSON: `javaVersion.majorVersion`, client/server downloads, SHA-1.
+- [x] `P0-07` Загрузка version JSON: `javaVersion.majorVersion`, client/server downloads, SHA-1.
 - [ ] `P0-08` Сборка `VersionProfile` из семейства + manifest + внутреннего `version.json` JAR.
 - [ ] `P0-09` Тесты: каждый профиль имеет capabilities; нет противоречий `full` ↔ отсутствие write.
 - [ ] `P0-10` Убрать глобальные `TARGET_MINECRAFT_VERSION`/`TARGET_DATA_VERSION` из рабочего пути; дефолт остаётся только для тестов/пустого проекта.
@@ -1670,6 +1670,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Version foundation | Version JSON: Java major, client/server/asset downloads, SHA-1, allowlist | см. `git log` | 34 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | `VersionCatalog`: manifest fetch, TTL cache, offline fallback, host allowlist | см. `git log` | 27 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | Базовый профиль `java-classic-1.21.4`: 4189, Java 21, pack 46, datapack 61, modern dimensions, named catalog | см. `git log` | 20 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | `SupportLevel` + capability invariants: `full` требует write/export/assets, read-only/convert/out-of-scope не пишут | см. `git log` | 14 tests, clippy, fmt |
