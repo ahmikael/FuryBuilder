@@ -62,7 +62,7 @@
 10. **Честная матрица поддержки.** Каждая версия и каждый формат имеют статус: full / read-only / convert / passthrough / out of scope.
 11. **Контент версии — единственный источник истины.** Палитра, валидация состояний и экспорт используют один и тот же каталог блоков/предметов проекта; новые блоки версии не требуют ручного обновления списка.
 12. **Режимы и контекст вместо хрома.** Пользователь выбирает задачу (World/Build/Paint/Analyze), а интерфейс показывает только её инструменты; один смысл живёт в одном месте.
-13. **shadcn-first.** Любая UI-работа начинается с проверки готового shadcn-компонента через skill/MCP; custom — только если готового нет, и всегда в дизайн-токенах проекта.
+13. **shadcn-first, default-first.** Любая UI-работа начинается с проверки готового shadcn-компонента через skill/MCP; компонент используется с дефолтным стилем shadcn, без перекраски и форка. Custom — только если готового нет, и в том же визуальном языке.
 
 ---
 
@@ -815,19 +815,25 @@ CLOSED (экран приветствия)
 - быстрый popover в viewport — только shortcut (день/ночь/погода), без второй полноценной панели;
 - изменения view-only, если явно не нажать `Apply to project`.
 
-### 9.12. Визуальный язык
+### 9.12. Визуальный язык: shadcn по умолчанию
 
-- База — тёмный графит слоями, не плоский серый: `#0E1116` app, `#151A21` panel, `#1C232C` raised, `#2A333F` border.
-- Текст: `#E6EAF0` основной, `#98A4B3` вторичный, `#6B7684` disabled.
-- Акцент: тёплый янтарный `#E0A458` — активный режим, primary action, focus. Не заливать им всё.
-- Семантика: `#6FD08C` success, `#E06C75` danger, `#5B8DEF` selection/info.
-- Цвет в интерфейсе сдержанный; основной цвет даёт viewport (небо, свет, блоки).
-- Плотность: comfortable 36 px строки, compact 28 px; переключатель в View, сохраняется.
-- Радиусы 8–12 px, границы 1 px, тени только у плавающих элементов.
-- Иконки 16/20 px; для primary/destructive — иконка + текст; icon-only — с tooltip.
-- Типографика: Inter/Segoe UI, 13 px база, 11 px caps-лейблы секций, 20 px заголовки панелей; координаты — tabular numbers.
-- Состояния: hover — surface-2, selected — accent-tinted + левая полоса, focus — 2 px outline, disabled — opacity + причина.
-- Никакого glassmorphism, градиентов в chrome и «мёртвых» серых кнопок.
+Единственный источник стиля — штатная shadcn-тема проекта, без собственного брендинга поверх неё:
+
+- `components.json`: `style: base-nova`, `baseColor: neutral`, `cssVariables: true`, `iconLibrary: lucide`.
+- CSS-переменные в `apps/desktop/src/styles/globals.css`: `--background`, `--card`, `--popover`, `--muted`, `--border`, `--primary`, `--accent`, `--ring`, `--radius`.
+- Шрифты — Geist / Geist Mono; координаты и ID — `font-mono`, tabular numbers.
+- Light/dark — стандартный `.dark`-класс и те же переменные; тема приложения не хардкодится в компонентах.
+
+Правила:
+
+- Сгенерированные `components/ui/*` не перекрашиваем, не форкаем и не переписываем под «свой» вид.
+- Никакой отдельной палитры «графит + янтарь»: цвет берётся из shadcn-переменных. Если понадобится бренд-акцент, меняется значение CSS-переменной темы, а не каждый компонент.
+- Плотность — штатные размеры и варианты shadcn (`default`, `sm`, `icon`, `ghost`), а не ручные высоты; compact — через size-варианты.
+- `className` — только для layout: ширина, высота, позиция, flex/grid. Не переопределять цвет, границы, радиусы и типографику сгенерированного компонента.
+- Иконки — lucide, размеры как в shadcn (`size-4` и т.п.).
+- Кастомный вид допустим только там, где shadcn не покрывает: 3D-canvas, HUD поверх viewport, tool rail, иконки блоков. Они используют те же переменные, шрифт и радиусы.
+- Никакого glassmorphism, градиентов, нестандартных теней и «мёртвых» серых кнопок.
+- Основной цвет даёт viewport (небо, свет, блоки); chrome остаётся нейтральным.
 
 ### 9.13. Клавиатура и command palette
 
@@ -869,22 +875,25 @@ Command palette умеет: переключить режим, открыть и
 - [ ] Панели resizable/collapsible, layout сохраняется.
 - [ ] Command palette и shortcut-карта работают, не ломая ввод текста.
 - [ ] Empty/error/disabled/read-only состояния объяснены.
-- [ ] Визуальный QA: нет плоской серости, контраст AA, плотность переключается.
+- [ ] Визуальный QA: компоненты выглядят как штатный shadcn, light/dark работают, контраст AA, плотность переключается штатными size-вариантами.
 - [ ] 1280×800 остаётся рабочим.
 
-### 9.15. shadcn-first
+### 9.15. shadcn-first, default-first
 
 Правило для **любой** UI-работы, до написания кода:
 
 1. Открыть `shadcn` skill/MCP и проверить, есть ли готовый компонент под задачу.
 2. Посмотреть `components.json`, установленные компоненты и `apps/desktop/src/components/ui`; не дублировать то, что уже есть.
 3. Поиск по registry: `button`, `dialog`, `dropdown-menu`, `tabs`, `popover`, `tooltip`, `resizable`, `command`, `scroll-area`, `separator`, `sidebar`, `field`, `input`, `select`, `switch`, `checkbox`, `sheet`, `collapsible` и т.д.
-4. Если компонент есть — использовать его, адаптировать через variants/className/токены, а не форкать и не писать заново.
-5. Если точного компонента нет — собрать custom на Radix/shadcn primitives, в дизайн-токенах проекта, с клавиатурой и aria.
-6. После добавления/изменения — прогнать `get_audit_checklist` и зафиксировать результат.
-7. В коммите/описании задачи писать: `shadcn: <component>` или `no shadcn match; custom <name> because <reason>`.
+4. Если компонент есть — использовать его **как есть**, с дефолтным стилем и штатными вариантами. Не форкать и не создавать стилевую обёртку.
+5. Файлы `components/ui/*` считаются vendored: не редактировать вручную. Обновление — только через shadcn CLI/registry.
+6. `className` — только layout (размер, позиция, flex/grid). Цвет, границы, радиусы и типографику компонента не переопределять; для состояний использовать штатные `variant`/`size`.
+7. Если точного компонента нет — собрать custom на тех же primitives (Radix/Base UI), в том же визуальном языке shadcn, с клавиатурой и aria. Не изобретать второй дизайн.
+8. Тема — только через CSS-переменные shadcn (`globals.css`), без локальных палитр в компонентах.
+9. После добавления/изменения — прогнать `get_audit_checklist` и зафиксировать результат.
+10. В коммите/описании задачи писать: `shadcn: <component>` или `no shadcn match; custom <name> because <reason>`.
 
-Запрещено без причины писать свои `Button`, `Dialog`, `Menu`, `Tabs`, `Popover`, `Tooltip`, `Resizable`, `Command`, `ScrollArea`, `Separator`, `Sidebar` — сначала shadcn.
+Запрещено без причины писать свои `Button`, `Dialog`, `Menu`, `Tabs`, `Popover`, `Tooltip`, `Resizable`, `Command`, `ScrollArea`, `Separator`, `Sidebar` — сначала shadcn. Запрещено перекрашивать и стилизовать сгенерированные компоненты под «свой» вид: дефолтный shadcn — это и есть дизайн.
 
 ---
 
@@ -1057,7 +1066,7 @@ UI:
 14. **Ошибки.** Единый error-presenter: причина, что делать, Retry, Open logs.
 15. **Документация.** Обновить README/reference/formats/architecture/changelog, убрать устаревшие «only 1.21.4» после расширения.
 16. **Каталог контента.** Палитра должна показывать все блоки и предметы выбранной версии, включая technical/creative-only, с состояниями, категориями и понятными ограничениями.
-17. **UI-система.** Ввести режимы, токены, command palette и контекстный инспектор вместо латания старого chrome; см. §9.8–9.14.
+17. **UI-система.** Ввести режимы, shadcn-каркас, command palette и контекстный инспектор вместо латания старого chrome; см. §9.8–9.15.
 
 ---
 
@@ -1205,7 +1214,7 @@ UI:
 - Modes World/Build/Paint/Analyze switch tool rail, Toolbox and Inspector defaults without losing selection.
 - Inspector switches Tool/Selection/World; Environment lives in World.
 - Command palette and shortcuts work without hijacking text inputs.
-- shadcn audit checklist проходит; custom-компоненты существуют только для gap-ов и покрыты a11y-тестами.
+- shadcn audit checklist проходит; сгенерированные `components/ui/*` не изменены вручную; custom-компоненты — только для gap-ов, в shadcn-языке и с a11y-тестами.
 - Catalog palette: all blocks/items of version, categories/search/filters, technical/creative-only badges, state picker.
 - Top bar: no active block badge, window controls still work.
 - Project Settings: version upgrade, relink, delete/relocate.
@@ -1251,7 +1260,7 @@ UI:
 - `docs/reference.md` — support matrix, requirements, known limitations.
 - `docs/formats.md` — все форматы и что реально пишется.
 - `docs/catalog.md` — блоки/предметы по версиям, категории, states, technical/creative-only, ограничения.
-- `docs/ui.md` — каркас, режимы, Inspector/Toolbox, shortcuts, визуальные токены.
+- `docs/ui.md` — каркас, режимы, Inspector/Toolbox, shortcuts и shadcn-тема по умолчанию.
 - `docs/architecture.md` — ADR:
   - ADR-001 заменить на version profiles;
   - ADR-001a — content catalog: blocks/items per version;
@@ -1311,7 +1320,7 @@ UI:
 - [ ] Верхняя панель не показывает активный блок; оконные controls работают.
 - [ ] Снизу 4 вкладки; инструменты — в Toolbox.
 - [ ] 4 режима (World/Build/Paint/Analyze), контекстный Inspector и command palette работают.
-- [ ] UI использует shadcn-компоненты, где есть готовые; custom — только для gap-ов, с audit checklist.
+- [ ] UI использует shadcn-компоненты в дефолтном виде; `components/ui/*` не перекрашены и не форкнуты; custom — только для gap-ов, с audit checklist.
 - [ ] Для каждой full-версии палитра содержит все ванильные блоки и предметы, включая technical/creative-only; состояния валидируются.
 - [ ] Проект фиксирует `catalogId`/hash; палитра, валидация и экспорт используют один и тот же каталог.
 - [ ] Unknown/removed block states сохраняются и явно помечаются, без молчаливой подмены.
@@ -1333,7 +1342,7 @@ UI:
 2. **Второй slice:** 1.13–1.17 full, 26.1+ split, структуры `.schem`/`.schematic`.
 3. **Третий slice:** legacy 1.8–1.12, pre-1.8 conversion, полный свет/AO, project delete/relocate, production polish.
 
-Если нужен самый короткий путь к «вау»-эффекту: P0 + часть P4 (режимы, токены, sky/light/grid/camera) + 4 вкладки + baseline-каталог. Это уже убирает «серость» и хаос, не дожидаясь всех версий.
+Если нужен самый короткий путь к «вау»-эффекту: P0 + часть P4 (режимы, shadcn-каркас, sky/light/grid/camera) + 4 вкладки + baseline-каталог. Это уже убирает «серость» и хаос, не дожидаясь всех версий.
 
 ---
 
@@ -1349,7 +1358,7 @@ UI:
 6. **Автоскачивание:** рекомендуем «auto по умолчанию, но по явной кнопке», без фоновых загрузок без согласия.
 7. **Визуальный уровень сцены:** рекомендуем Minecraft-like environment + baked light/AO, без динамических теней и шейдеров.
 8. **Каталог контента (принято):** все ванильные блоки и предметы точной версии, включая technical/creative-only, состояния, категории и предметы; modded/custom — passthrough и предупреждение.
-9. **UI-система (принято):** 3 панели, 4 режима, 4 нижние вкладки, контекстный Inspector, Toolbox, command palette; тёмный графит + янтарный акцент, comfortable density по умолчанию.
+9. **UI-система (принято):** 3 панели, 4 режима, 4 нижние вкладки, контекстный Inspector, Toolbox, command palette; shadcn-тема по умолчанию (neutral, CSS variables), comfortable density, без собственной палитры.
 
 После подтверждения этих пунктов можно начинать с P0: version profile + component manager + wizard + no-scene gate. Это даст самый большой пользовательский эффект и не потребует переписывать всё приложение сразу.
 
@@ -1607,24 +1616,24 @@ UI:
 
 #### D. UI-система по референсам
 
-- [ ] `P4-25` Design tokens: графит слоями, amber accent, semantic colors, density comfortable/compact.
+- [ ] `P4-25` UI-каркас на shadcn default: `components.json`, CSS-переменные темы, density через штатные size-варианты; без собственной палитры.
 - [ ] `P4-26` Mode system `World / Build / Paint / Analyze` + свой tool rail для каждого режима.
 - [ ] `P4-27` Inspector `Tool / Selection / World`; Environment в `World`; убрать отдельный environment-хаб.
 - [ ] `P4-28` Toolbox: категории, поиск, pinned, capabilities, требования; только инструменты текущего режима/версии.
 - [ ] `P4-29` Command palette + полная shortcut-карта; не перехватывать ввод в текстовых полях.
 - [ ] `P4-30` Resize/collapse/persist панелей; минимальное окно 1280×800.
-- [ ] `P4-31` Empty/error/disabled/read-only состояния; визуальный QA на отсутствие плоской серости.
+- [ ] `P4-31` Empty/error/disabled/read-only состояния; визуальный QA на соответствие штатному shadcn.
 - [ ] `P4-32` Motion 120–180 ms + reduced motion; контраст AA, focus-visible, keyboard tabs.
 - [ ] `P4-33` UI acceptance тесты: режимы, Inspector, Toolbox, top bar, нижние вкладки, layout persistence.
-- [ ] `P4-34` Обновить UI-документацию.
+- [ ] `P4-34` Обновить UI-документацию (каркас, режимы, Inspector/Toolbox).
 
 #### E. shadcn-first
 
 - [ ] `P4-35` Аудит shadcn: `components.json`, installed components, registry; карта planned UI → available components.
-- [ ] `P4-36` Использовать shadcn для shell-примитивов (button, dialog, dropdown, tabs, popover, tooltip, resizable, command, scroll-area, separator, sidebar) и зафиксировать gap-ы.
-- [ ] `P4-37` Для gap-ов — custom на Radix/shadcn primitives, в токенах проекта, с a11y; без форка сгенерированных компонентов.
+- [ ] `P4-36` Использовать shadcn shell-примитивы (button, dialog, dropdown, tabs, popover, tooltip, resizable, command, scroll-area, separator, sidebar) в дефолтном виде; не редактировать `components/ui/*` вручную; зафиксировать gap-ы.
+- [ ] `P4-37` Для gap-ов — custom на Radix/shadcn primitives, в том же визуальном языке, с a11y; без второго дизайна и без перекраски готовых компонентов.
 - [ ] `P4-38` Тесты custom-компонентов + shadcn audit checklist в ручном QA/CI.
-- [ ] `P4-39` Обновить UI-документацию и закоммитить P4.
+- [ ] `P4-39` Зафиксировать shadcn default-policy в `docs/ui.md` и закоммитить P4.
 
 ### 21.7. P5 — production hardening
 
@@ -1642,7 +1651,8 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
-| 2026-11-23 | План | UI-референсы, режимы, контекстный Inspector, полный каталог блоков/предметов | — (ожидает commit) | docs only |
+| 2026-11-23 | План | shadcn default-first: компоненты не перекрашиваются, тема только через CSS-переменные | — (ожидает commit) | docs only |
+| 2026-11-23 | План | UI-референсы, режимы, контекстный Inspector, полный каталог блоков/предметов | `58d37a9` | docs only |
 | 2026-11-22 | План | План + рабочий чеклист | см. `git log` | docs only |
 
 > Новые строки добавлять сверху вниз по ходу работы. В колонке «Проверки» писать фактический результат, а не «ok»: например, `290 tests, typecheck/lint/format green`.
