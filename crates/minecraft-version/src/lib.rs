@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod catalog;
+pub mod profile_builder;
 pub mod profiles;
 pub mod version_json;
 
@@ -15,6 +16,10 @@ pub use catalog::{
     fetch_official_manifest, is_allowed_download_url, CatalogError, CatalogSource, LatestVersions,
     ManifestEntry, ManifestVersionType, VersionCatalog, VersionManifest, DEFAULT_MANIFEST_TTL,
     MANIFEST_CACHE_SCHEMA_VERSION, OFFICIAL_MANIFEST_URL,
+};
+pub use profile_builder::{
+    build_profile_from_version_json, build_version_profile, read_client_jar_version_json,
+    JarPackVersion, JarVersionJson, ProfileBuildError, ProfileBuildInput,
 };
 pub use profiles::{builtin_profiles, java_classic_1_21_4, JAVA_CLASSIC_1_21_4_ID};
 pub use version_json::{

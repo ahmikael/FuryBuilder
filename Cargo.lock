@@ -998,11 +998,13 @@ dependencies = [
 name = "furybuilder-minecraft-version"
 version = "0.2.0"
 dependencies = [
+ "flate2",
  "serde",
  "serde_json",
  "sha1",
  "thiserror 2.0.21",
  "ureq",
+ "zip",
 ]
 
 [[package]]

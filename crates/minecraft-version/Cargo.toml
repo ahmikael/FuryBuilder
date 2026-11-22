@@ -12,6 +12,8 @@ name = "minecraft_version"
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+flate2 = { workspace = true }
 sha1 = { workspace = true }
 thiserror = { workspace = true }
 ureq = { version = "2.12", default-features = false, features = ["tls", "proxy-from-env"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }

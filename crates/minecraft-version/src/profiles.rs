@@ -5,10 +5,8 @@
 //! fixtures. The baseline profile is deliberately the only one for now.
 
 use crate::{
-    BiomeFormat, BlockstateFormat, CatalogRegistryFormat, ChunkFamily, ContentCatalogProfile,
-    DimensionKind, DimensionProfile, GenerationCapabilities, ItemModelFormat, JavaRequirement,
-    LevelTypeSyntax, ReleaseType, ServerProfile, StructureProfile, StructureSupport, SupportLevel,
-    VersionFamily, VersionId, VersionProfile, WorldCapabilities, WorldLayout,
+    build_version_profile, ProfileBuildInput, SupportLevel, VersionId, VersionProfile,
+    WorldCapabilities,
 };
 
 /// Stable id of the verified 1.21.4 classic Anvil profile.
@@ -16,79 +14,12 @@ pub const JAVA_CLASSIC_1_21_4_ID: &str = "java-classic-1.21.4";
 
 /// Returns the verified Minecraft Java 1.21.4 classic Anvil profile.
 pub fn java_classic_1_21_4() -> VersionProfile {
-    VersionProfile {
-        id: JAVA_CLASSIC_1_21_4_ID.to_owned(),
-        minecraft_version: version("1.21.4"),
+    build_version_profile(ProfileBuildInput {
+        version: version("1.21.4"),
         data_version: 4189,
-        release_type: ReleaseType::Release,
-        family: VersionFamily::Modern,
-        world_layout: WorldLayout::ClassicAnvil,
-        chunk_family: ChunkFamily::ModernPaletted,
-        biome_format: BiomeFormat::Palette4x4x4,
-        dimension_profiles: vec![
-            DimensionProfile {
-                id: "minecraft:overworld".to_owned(),
-                kind: DimensionKind::Overworld,
-                min_y: -64,
-                height: 384,
-                folder: "region".to_owned(),
-            },
-            DimensionProfile {
-                id: "minecraft:the_nether".to_owned(),
-                kind: DimensionKind::Nether,
-                min_y: 0,
-                height: 256,
-                folder: "DIM-1/region".to_owned(),
-            },
-            DimensionProfile {
-                id: "minecraft:the_end".to_owned(),
-                kind: DimensionKind::End,
-                min_y: 0,
-                height: 256,
-                folder: "DIM1/region".to_owned(),
-            },
-        ],
-        java: JavaRequirement {
-            minimum_major: 21,
-            recommended_major: 21,
-        },
+        java_major: 21,
         resource_pack_format: Some(46),
         datapack_format: Some(61),
-        content_catalog: ContentCatalogProfile {
-            registry_format: CatalogRegistryFormat::Named,
-            blockstate_format: BlockstateFormat::Json,
-            item_model_format: ItemModelFormat::ItemDefinitions,
-            creative_categories: true,
-            data_components: true,
-        },
-        structure_formats: StructureProfile {
-            java_nbt: StructureSupport {
-                import: true,
-                export: true,
-            },
-            sponge_schem: StructureSupport {
-                import: false,
-                export: false,
-            },
-            legacy_schematic: StructureSupport {
-                import: false,
-                export: false,
-            },
-            litematic: StructureSupport {
-                import: false,
-                export: false,
-            },
-        },
-        server: ServerProfile {
-            official_jar: true,
-            level_type_syntax: LevelTypeSyntax::ModernNamespaced,
-            generation: GenerationCapabilities {
-                normal: true,
-                flat: true,
-                large_biomes: true,
-                amplified: true,
-            },
-        },
         capabilities: WorldCapabilities {
             support_level: SupportLevel::Full,
             read: true,
@@ -103,7 +34,8 @@ pub fn java_classic_1_21_4() -> VersionProfile {
             "The client JAR is the source of the full block and item catalog.".to_owned(),
             "Heightmaps and light are preserved or invalidated, never recalculated.".to_owned(),
         ],
-    }
+    })
+    .expect("the baseline profile must be valid")
 }
 
 /// All profiles that this build can currently offer.
@@ -120,6 +52,10 @@ fn version(value: &str) -> VersionId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        BiomeFormat, BlockstateFormat, CatalogRegistryFormat, ChunkFamily, DimensionKind,
+        ItemModelFormat, ReleaseType, VersionFamily, WorldLayout,
+    };
 
     #[test]
     fn baseline_profile_matches_1_21_4_facts() {
