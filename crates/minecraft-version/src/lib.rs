@@ -7,6 +7,10 @@
 
 #![forbid(unsafe_code)]
 
+pub mod profiles;
+
+pub use profiles::{builtin_profiles, java_classic_1_21_4, JAVA_CLASSIC_1_21_4_ID};
+
 use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
