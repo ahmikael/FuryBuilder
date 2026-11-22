@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
 > Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Код ещё не менялся.
-> Дата: 2026-11-22.
+> Дата: 2026-11-22; обновлено 2026-11-23 (UI-референсы, режимы, полный каталог блоков/предметов).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -12,9 +12,10 @@
 2. **Скачивание — основной путь, ручной выбор — запасной.** Java, текстуры/клиентский JAR и сервер скачиваются из официальных источников по кнопке, с проверкой хэша. Ручной путь остаётся для offline, своего `.minecraft`, своего `java.exe` и своего `server.jar`.
 3. **Настройки больше не дублируют создание проекта.** В `Settings` остаются внешний вид, установленные компоненты, обновления, диагностика и backend. Выбор «скачать или указать путь» живёт в мастере создания проекта и в настройках уже открытого проекта.
 4. **Сцена не создаётся, пока нет проекта.** Никакого демо-мира, пустого рендерера и «серого» viewport до выбора/создания проекта. Вместо этого — экран приветствия и список недавних проектов.
-5. **Интерфейс становится иерархичным.** Сверху — только уровень приложения, справа — инспектор и инструменты, снизу — блоки/слои/анализ/активность. Случайные бейджи и 16 перекрывающихся вкладок уходят.
+5. **Интерфейс становится иерархичным.** Сверху — только уровень приложения, слева — World/Project, справа — инспектор и инструменты, снизу — блоки/слои/анализ/активность, плюс четыре режима World/Build/Paint/Analyze. Случайные бейджи и 16 перекрывающихся вкладок уходят.
 6. **Сцена получает нормальное окружение.** Небо, солнце/луна, освещение Minecraft, день/ночь, погода, аккуратная сетка, границы чанков и улучшенная навигация.
 7. **Поддержка версий расширяется поэтапно и честно.** Сначала современные версии с полным редактированием, затем старые семейства, затем legacy через конвертацию. Bedrock и модифицированные миры не выдаются за поддержанные.
+8. **Каталог как в игре.** В каждой версии доступны все её ванильные блоки и предметы — с состояниями, категориями, иконками и честными пометками для technical/creative-only; новые блоки версии появляются автоматически.
 
 ---
 
@@ -41,7 +42,7 @@
 | Рендер | `MeshBasicMaterial`, тёмный фон, нет освещения; `GridHelper` 256×256 на y=64.04 | `renderer/viewport-renderer.ts` |
 | Границы чанков | Жёстко `yBottom = -64`, `yTop = 72` | `renderer/viewport-renderer.ts` |
 | Дерево мира | Три захардкоженных измерения, Overworld всегда “loaded” | `features/workspace/WorldTree.tsx` |
-| Блоки | Курируемый каталог ~60 блоков для 1.21.4 | `crates/world-domain/src/registry.rs` |
+| Блоки и предметы | Курируемый каталог ~60 блоков для 1.21.4; предметов нет; каталог не версионный | `crates/world-domain/src/registry.rs` |
 
 Вывод: проблема не в одном экране. Нужно ввести **версию как сквозную модель**, затем аккуратно провести её через backend, компоненты, проект, UI и рендер.
 
@@ -59,6 +60,9 @@
 8. **Один смысл — одно место.** Статус ядра, состояние сохранения, выбор инструмента, настройка компонентов не дублируются в трёх местах.
 9. **Прогрессивное раскрытие.** Базовый сценарий — 3–5 понятных шагов; продвинутые вещи (snapshots, Build DSL, MCP activity, performance) спрятаны, но доступны.
 10. **Честная матрица поддержки.** Каждая версия и каждый формат имеют статус: full / read-only / convert / passthrough / out of scope.
+11. **Контент версии — единственный источник истины.** Палитра, валидация состояний и экспорт используют один и тот же каталог блоков/предметов проекта; новые блоки версии не требуют ручного обновления списка.
+12. **Режимы и контекст вместо хрома.** Пользователь выбирает задачу (World/Build/Paint/Analyze), а интерфейс показывает только её инструменты; один смысл живёт в одном месте.
+13. **shadcn-first.** Любая UI-работа начинается с проверки готового shadcn-компонента через skill/MCP; custom — только если готового нет, и всегда в дизайн-токенах проекта.
 
 ---
 
@@ -109,7 +113,7 @@
 | KL-13/14: только Java 21 / server 1.21.4 | Java и server подбираются под версию |
 | KL-17–22: ограничения редактора | Часть улучшаем (выделение, кисти), часть остаётся осознанной |
 | KL-28: только Overworld | Добавляем измерения проекта и потоковую загрузку по выбранному измерению |
-| KL-29/30: нет ассетов, мало моделей | Автозагрузка client JAR и расширение model pipeline |
+| KL-29/30: нет ассетов, мало моделей | Автозагрузка client JAR, полный каталог блоков/предметов и расширение model pipeline |
 | KL-33–37: MCP | Версия берётся из проекта; read-only политика сохраняется |
 | KL-42: нет удаления/переноса проекта | Добавляем безопасные операции в Project Settings |
 
@@ -130,6 +134,7 @@ minecraft-version
   JavaRequirement
   WorldCapabilities
   AssetProfile
+  ContentCatalogProfile
   ServerProfile
   StructureProfile
 ```
@@ -143,7 +148,7 @@ minecraft-version
 - `dimensionProfiles`: id, kind, minY, height, folder;
 - `java`: minimum/recommended major;
 - `resourcePackFormat`, `datapackFormat`;
-- `blockCatalogFormat`: named / numeric ID + metadata;
+- `contentCatalog`: block/item registry format, blockstate/item model format, creative categories, components support;
 - `structureFormats`: `.nbt`, `.schem`, `.schematic`, `.litematic`;
 - `server`: доступность official JAR, `level-type` syntax, generation capabilities;
 - `capabilities`: read/edit/write/export/generate/assets;
@@ -155,7 +160,8 @@ minecraft-version
 2. Показывает release-версии (и snapshots в advanced).
 3. Подтягивает version JSON для Java major и download URLs.
 4. После скачивания client/server JAR читает внутренний `version.json` и фиксирует exact `dataVersion`, `resourcePackFormat`, `datapackFormat`.
-5. Собирает `VersionProfile` из семейства + метаданных, а не из разбросанных констант.
+5. Собирает `VersionProfile` из семейства + метаданных, а не из разрозненных констант.
+6. Строит `CatalogSnapshot` блоков и предметов из client JAR и official metadata; кэширует по `version + jarSha1 + catalogSchema`.
 
 ### 5.2. Один внутренний мир + набор codec-ов
 
@@ -206,6 +212,8 @@ WorldCodec
     "assets": {
       "mode": "managed",
       "clientJarSha1": "...",
+      "catalogId": "java-1.21.4-<hash>",
+      "catalogHash": "...",
       "packStack": [{ "path": "...", "sha1": "..." }]
     },
     "server": { "mode": "managed", "version": "1.21.4", "sha1": "..." }
@@ -216,27 +224,64 @@ WorldCodec
 Правила:
 
 - Абсолютные пути не являются источником истины. Проект хранит logical id + hash, а путь резолвится из глобального кэша; если компонент пропал — «Relink».
+- `catalogId`/`catalogHash` фиксируют каталог блоков и предметов проекта. Если каталог пропал, он пересобирается из того же client JAR; молчаливая подмена на «последний» каталог запрещена.
 - `projectSchemaVersion` 1 мигрирует в 2 автоматически, с backup исходного `project.json`.
 - Snapshot `.fwl` получает v3: `profileId`, `dataVersion`, dimension layout, biome mode.
 - Checkpoint metadata получает v2: `profileId`, `editorState` (слои/сцена/параметрика), label, reason.
 - API `world_info`, project summary, MCP metadata возвращают фактическую версию проекта, а не глобальную 1.21.4.
 
-### 5.4. Динамический каталог блоков
+### 5.4. Полный каталог блоков и предметов версии
 
-Сейчас `BlockRegistry` — это курируемый список ~60 блоков. Для всех версий нужен каталог из client JAR:
+Сейчас `BlockRegistry` — курируемый список ~60 блоков для 1.21.4; предметов нет. Цель — палитра «как creative inventory», но для редактирования мира: **все ванильные блоки и предметы точной версии проекта**, включая технические, creative-only и блоки без предметной формы.
 
-- `assets/<namespace>/blockstates/*.json` → имена блоков, property keys, default values, варианты;
-- для 1.13+ — named block states;
-- для 1.8–1.12 — blockstate JSON + numeric ID/metadata mapping;
-- для pre-1.8 — fallback-каталог/конвертация.
+#### Источники
 
-В UI:
+- **client JAR:** `blockstates`, block/item models, item definitions (в новых версиях), textures, `lang`, tags, sounds.
+- **official registry metadata:** registry names, numeric IDs для legacy, data components для 1.20.5+.
+- **server JAR / generated reports:** если доступны — для сверки registry и item groups.
+- **1.13+:** named block states и item IDs.
+- **1.8–1.12:** numeric ID + metadata mapping.
+- **pre-1.8:** fallback-каталог и конвертация.
 
-- палитра загружается под версию проекта;
-- есть поиск, недавние, избранное, категории;
-- свойства валидируются по каталогу версии;
-- неизвестные импортированные состояния сохраняются, но не выдаются за «безопасные для записи»;
-- курируемый список остаётся только как fallback/quick picks.
+#### Модель каталога
+
+`CatalogEntry`:
+
+- `id`, `legacyId`/`metadata`, `displayName`, `category`, `tags`, `icon`/`texture`, `aliases`;
+- `blockStates`: все property keys, допустимые значения, default state, варианты;
+- `item`: item form, stack size, max damage, data components (read/preserve);
+- флаги: `placeable`, `hasItem`, `obtainable`, `creativeOnly`, `technical`, `fluid`, `airlike`, `blockEntity`, `transparent`, `fullCube`, `gravity`, `waterloggable`, `tinted`, `hasVariants`;
+- `introducedIn`/`removedIn`/`versionRange`.
+
+`CatalogSnapshot` = entries + categories + counts + hash. `CatalogDiff` = добавленные/удалённые/переименованные записи, изменения состояний, тегов и категорий.
+
+#### Версионность
+
+- Snapshot кэшируется по `version + clientJarSha1 + packStackHash + catalogSchema`.
+- Для full-версий каталог можно предсобирать в CI; для неизвестных/advanced — строить в runtime.
+- Проект фиксирует `catalogId` + hash. Если каталог отсутствует — пересобрать из того же JAR, а не подменять «последним».
+- Переименования и aliases: старый ID → новый ID; неизвестные импортированные состояния сохраняются и никогда не подменяются молча.
+- Технические и creative-only блоки доступны для размещения, но явно помечены; fluids/airlike обрабатываются правилами редактора.
+- Предметы: все предметы доступны в поиске; placeable-предметы дублируются в блок-палитре; item-only записи используются для контейнеров, item frames, armor stands; неподдерживаемые контексты — read-only.
+- Модифицированные/кастомные registry: полный каталог не обещаем; unknown сохраняется, режим passthrough, явное предупреждение.
+- Новые блоки и предметы версии не требуют ручного списка: каталог строится из client JAR, а `CatalogDiff` показывает, что появилось, исчезло или переименовано между версиями.
+
+#### UI
+
+- Категории как в creative inventory: Building Blocks, Colored, Natural, Functional, Redstone, Tools & Utilities, Combat, Food & Drinks, Ingredients, Spawn Eggs; плюс `All`, `Recent`, `Favorites`.
+- Строительные блоки — первыми; предметы — отдельная вкладка/фильтр.
+- Поиск по имени, ID и тегу; фильтры: placeable, has item, technical, color, shape, version.
+- 3D-иконка/превью, state picker со всеми свойствами и default state.
+- Бейдж `not in this version`, disabled-причина, предупреждение для unknown.
+- Локализованные имена (en/ru + fallback), aliases для старых названий.
+- Виртуализированный список, ленивый atlas, поисковый индекс; каталог на 10k+ записей не должен тормозить.
+
+#### Лицензии и границы
+
+- Ассеты берутся только из client JAR, скачанного пользователем; Mojang-файлы не бандлятся.
+- Кэшировать можно метаданные и сгенерированные иконки, но не распространять их отдельно от приложения.
+- Bedrock-каталог и полное редактирование item components/NBT — вне scope; предметы поддерживаются для выбора, размещения и preserve.
+
 
 ### 5.5. Capabilities вместо if-ов по всему UI
 
@@ -305,10 +350,11 @@ components_verify(kind, id)
 - Внутри JAR читать:
   - `version.json`;
   - `assets/minecraft/blockstates`;
-  - `assets/minecraft/models`;
-  - `assets/minecraft/textures`.
+  - `assets/minecraft/models` и item definitions/models;
+  - `assets/minecraft/textures`;
+  - `assets/minecraft/lang` и tags.
 - Если текстуры отсутствуют в client JAR — добирать из asset index (по необходимости), но не скачивать весь asset index без нужды.
-- Строить atlas и каталог блоков под версию.
+- Строить atlas и полный каталог блоков/предметов под версию (§5.4); каталог кэшировать по `version + jarSha1 + packStackHash + catalogSchema`.
 - Resource packs — per-project ordered stack, с проверкой `pack_format` под версию.
 - Ручной путь: `.minecraft` root, `versions/<id>`, `client.jar`, resource pack `.zip`/folder.
 - Placeholder — **явный** режим с предупреждением, а не молчаливый fallback.
@@ -331,6 +377,7 @@ components_verify(kind, id)
 | --- | --- |
 | Выбрать «скачать Java / указать путь» | Мастер создания проекта, шаг Components |
 | Выбрать «скачать текстуры / указать путь / placeholder» | Мастер создания проекта, шаг Components |
+| Посмотреть/пересобрать каталог блоков и предметов | Project Settings → World (автоматически из client JAR) |
 | Выбрать «скачать сервер / указать путь» | Только Vanilla World в мастере |
 | Посмотреть установленные компоненты, размер, удалить, проверить | Settings → Components |
 | Перепривязать компонент для открытого проекта | Project Settings → Components |
@@ -390,6 +437,7 @@ CLOSED (экран приветствия)
 - latest stable / recommended;
 - snapshot toggle в advanced;
 - карточка версии: Java major, world height, layout, asset format, datapack format (если известен), support badge;
+- содержимое версии: количество блоков и предметов, доступные категории, технические/creative-only блоки;
 - предупреждения: read-only/convert/out of scope;
 - для Import версия определяется автоматически, пользователь только подтверждает.
 
@@ -403,7 +451,7 @@ CLOSED (экран приветствия)
 **Шаг 4. Components**
 
 - Java: `Auto (recommended)` / `Manual` / `Use existing`.
-- Assets: `Auto download client JAR` / `Manual .minecraft/client.jar` / `Placeholder`.
+- Assets: `Auto download client JAR` / `Manual .minecraft/client.jar` / `Placeholder`; после выбора показывать количество блоков/предметов и версию каталога.
 - Server: только для Vanilla: `Auto download` / `Manual` / `Use existing`.
 - Каждая карточка показывает: версия, размер, источник, статус, checksum, кнопку `Download`/`Choose`.
 - Ошибки: нет сети, хост недоступен, checksum mismatch, нет места, Java несовместима.
@@ -427,7 +475,7 @@ CLOSED (экран приветствия)
 - **General**: имя, папка, creation mode (read-only), source, размер.
 - **Version**: текущая версия, DataVersion, profile, support badge; `Upgrade version`.
 - **Components**: Java/assets/server; relink, repair, re-download.
-- **World**: dimensions, height, biome mode, source integrity, derived-data policy.
+- **World**: dimensions, height, biome mode, source integrity, derived-data policy, content catalog (version, hash, counts).
 - **Storage**: snapshots, checkpoints, cache size, open folder.
 - **Danger**: delete project (в корзину), relocate folder, export project archive.
 
@@ -455,6 +503,7 @@ CLOSED (экран приветствия)
 
 - Если компоненты на месте — обычное открытие.
 - Если Java/assets/server отсутствуют — `Needs components`: показать, что именно, и предложить Relink/Download.
+- Если каталог блоков/предметов отсутствует или повреждён — пересобрать из client JAR; не открывать урезанную палитру без явного предупреждения.
 - Если проект новее схемы — отказ с просьбой обновить приложение.
 - Если версия проекта стала read-only после обновления — открыть read-only и предложить конвертацию.
 - Если исходный мир/папка недоступны — предупредить, но не блокировать редактирование snapshot-а; экспорт исходника будет недоступен.
@@ -472,12 +521,14 @@ CLOSED (экран приветствия)
 - Для split 26.1+: чтение `dimensions/` и `players/`; отдельный codec.
 - Для архива `.zip`: безопасная распаковка в temp, проверка traversal/symlink/размеров, затем обычный анализ.
 - Всегда показывать: version, layout, dimensions, chunks, block entities/entities, blockers, limitations.
+- Показывать количество блоков/предметов, unknown states и записи, которых нет в целевой версии.
 
 ### 8.2. Экспорт миров
 
 - One-click `Export world` в Project Manager/Project Settings.
 - Всегда полная папка мира, не отдельный `.mca`.
 - Same-version export через соответствующий codec.
+- Каждый записываемый block state валидируется по каталогу целевой версии; unknown/removed — warning или blocker, без молчаливой подмены.
 - Untouched files/records — byte-for-byte.
 - Dirty regions — rebuild + reopen + verify.
 - Derived data policy:
@@ -578,7 +629,7 @@ CLOSED (экран приветствия)
 
 | Текущая вкладка | Что делает | Решение |
 | --- | --- | --- |
-| **Palette** | Выбор блока, свойства, replace source | Оставить → `Blocks` |
+| **Palette** | Полный каталог блоков/предметов версии: свойства, поиск, категории, replace source | Оставить → `Blocks` |
 | **Tools** | Дублирует toolbar/viewport: tool, brush radius, fill/replace/delete | Удалить вкладку; инструменты — в viewport rail + `Toolbox` |
 | **Terrain** | Terrain brush | Перенести в правый `Toolbox` |
 | **Heightmap** | Heightmap preview/apply | Перенести в `Toolbox` |
@@ -662,14 +713,178 @@ CLOSED (экран приветствия)
 Новая схема:
 
 - top-left: dimension + version + coordinates;
-- top-center: compact tool rail (только инструменты, без undo/redo);
-- top-right: `View` menu (camera, grid, borders, environment, capture, go-to);
+- top-center: mode switcher `World / Build / Paint / Analyze`;
+- top-right: `View` menu + environment quick toggle + help `?`;
+- bottom-center: floating tool rail текущего режима (только инструменты, без undo/redo);
 - bottom-left: performance — только в advanced/debug, сворачиваемая;
-- bottom-center: selection/box info;
+- bottom-center над tool rail: selection/box info;
 - bottom-right: help `?`, показывается при первом запуске или по запросу;
 - контекстное меню — без изменений.
 
 Убрать постоянную подпись «WASD move · RMB look…»; заменить на `?`/F1.
+
+### 9.8. Референсы и общие выводы
+
+Изучены: **Figma UI3, Framer, Spline, Blender, Blockbench, DaVinci Resolve, Amulet, Axiom**.
+
+| Референс | Берём | Не берём |
+| --- | --- | --- |
+| **Figma UI3** | Docked resizable panels, нижний tool rail, группировка свойств, minimize UI, actions/command palette | Collaboration-хром, терминологию дизайн-инструмента, скрытие всего UI по умолчанию |
+| **Framer** | Чистый top bar, переключаемые контексты слева, контекстная правая панель, нижний canvas bar, Cmd/Ctrl+K | Publish-CTA, responsive breakpoints, лишние вкладки |
+| **Spline** | Сцены + outliner, stage tabs, настройки сцены при пустом выборе, Environment/Fog/Sky справа | AI Agent на первом плане, мультисцену как главную модель |
+| **Blender** | Workspace tabs, viewport header, Outliner + Properties, F/Home, keyboard-first | Модальную сложность, мелкие иконки без подписей, серую эстетику |
+| **Blockbench** | Режимы Edit/Paint/Animate, UV/Textures слева, Outliner справа, статус-бар, сворачивание сайдбаров | Пустой чёрный viewport, старомодные контролы |
+| **DaVinci Resolve** | Постоянные page tabs, viewer + timeline + inspector, контекстные toolbar-ы, saved workspace | Плотность «всё на экране», дублирование действий |
+| **Amulet** | World tree, dimensions, chunk operations | Крошечный toolbar, равный вес всех элементов, устаревшую эстетику |
+| **Axiom** | 3D-камера, dockable windows, Tool Options, Active Block, History | Перегруз dock-окнами, мелкие настройки без объяснений |
+
+Источники: Figma Blog (UI3), Framer Academy/editor screenshot, Spline Docs, Blender Manual, Blockbench Wiki, Blackmagic Design, Amulet, Modrinth/Axiom. Изображения — только исследовательские референсы, не для редистрибуции.
+
+Общие выводы:
+
+- **Canvas-first, но с постоянным каркасом.** Центр — мир; панели не плавают и не перекрывают canvas.
+- **Режимы вместо свалки.** Один режим = один набор инструментов и одна логика правой панели.
+- **Контекстный инспектор.** Пусто — мир/окружение; выбран блок — его состояние; активен инструмент — его параметры.
+- **Верхняя панель — только уровень приложения.** Инструменты живут у canvas, а не в шапке.
+- **Прогрессивное раскрытие.** Плотность для профи — в advanced; базовый экран понятен новичку.
+- **Keyboard-first + видимые действия.** Shortcuts и command palette не заменяют кнопки, а ускоряют их.
+- **Честные состояния.** Empty/loading/error/disabled объясняют, что произошло и что делать.
+
+### 9.9. Целевой каркас
+
+```text
+┌────────────────────────────────────────────────────────────────────┐
+│ Top bar: brand | Project Edit View AI | project + version + dirty  │
+│          undo/redo | save | Ctrl+K | settings | window controls     │
+├──────────────┬───────────────────────────────────┬─────────────────┤
+│ World        │ Viewport                          │ Inspector       │
+│ Project      │  mode rail bottom-center          │ Toolbox         │
+│              │  HUD: dim/coords, View, env       │                 │
+├──────────────┴───────────────────────────────────┴─────────────────┤
+│ Blocks | Layers | Analysis | Activity                              │
+├────────────────────────────────────────────────────────────────────┤
+│ Status bar: core | version | dimension | selection | coords | FPS  │
+└────────────────────────────────────────────────────────────────────┘
+```
+
+Правила:
+
+- Слева — `World` (измерения, структуры, регионы) и `Project` (source, компоненты, каталог). Не дублируем `Layers`: редакторские слои живут в нижней вкладке.
+- Справа — `Inspector` и `Toolbox` как две вкладки одной панели.
+- Снизу — ровно 4 вкладки: `Blocks`, `Layers`, `Analysis`, `Activity`.
+- Панели resizable, collapsible; размеры сохраняются per project + глобальный default.
+- Минимальное окно — 1280×800; при меньшем — панели сворачиваются, canvas сохраняется.
+- Top bar не содержит активный блок, дубли core status и лишние разделители.
+- Status bar — единственное место для core/version/coords/FPS.
+
+### 9.10. Режимы
+
+| Режим | Задача | Tool rail | Toolbox | Inspector по умолчанию | Bottom focus |
+| --- | --- | --- | --- | --- | --- |
+| **World** | Навигация, выделение, инспекция | Select, measure, bookmark, camera | World tools | World / Selection | Layers |
+| **Build** | Ставить, заменять, заливать | Place, fill, line, brush, wand | Build tools | Tool / Selection | Blocks |
+| **Paint** | Терраформинг, биомы, heightmap | Terrain, biome, heightmap, smooth | Paint tools | Tool / World | Blocks |
+| **Analyze** | Валидация, карты, observation | Validate, map, screenshot, inspect | Analysis tools | Selection / World | Analysis |
+
+Правила:
+
+- Переключение `1–4`; режим меняет tool rail, Toolbox и дефолт Inspector, но не состояние проекта.
+- Долгие операции не отменяются при смене режима; прогресс остаётся в `Activity`.
+- Недоступные для версии инструменты скрыты или disabled с причиной.
+- Нижние вкладки не дублируют инструменты; режим может сфокусировать вкладку, но не создаёт новую.
+- `Build` и `Paint` не смешивают кисти и выделение в одном rail.
+
+### 9.11. Inspector и Toolbox
+
+`Inspector` — три контекста, авто-переключение по действию, с возможностью закрепить:
+
+- **Tool** — параметры активного инструмента: радиус, режим, маска, shape, replace, preview.
+- **Selection** — блок/состояние, координаты, chunk, bounds, clipboard, несколько объектов.
+- **World** — окружение (sky/sun/time/weather/fog), измерения, проект, каталог, save state.
+
+`Toolbox` — библиотека инструментов:
+
+- категории: Terrain, Heightmap, Biomes, Generators, Templates, Objects, Parametric, Build DSL;
+- поиск, pinned/favorites, описание, требования (selection/assets/version), badges;
+- только инструменты, доступные в текущем режиме и версии;
+- выбор инструмента переключает Inspector на `Tool`, но не крадёт фокус у selection.
+
+Окружение:
+
+- полный контроль — в `Inspector → World → Environment`;
+- быстрый popover в viewport — только shortcut (день/ночь/погода), без второй полноценной панели;
+- изменения view-only, если явно не нажать `Apply to project`.
+
+### 9.12. Визуальный язык
+
+- База — тёмный графит слоями, не плоский серый: `#0E1116` app, `#151A21` panel, `#1C232C` raised, `#2A333F` border.
+- Текст: `#E6EAF0` основной, `#98A4B3` вторичный, `#6B7684` disabled.
+- Акцент: тёплый янтарный `#E0A458` — активный режим, primary action, focus. Не заливать им всё.
+- Семантика: `#6FD08C` success, `#E06C75` danger, `#5B8DEF` selection/info.
+- Цвет в интерфейсе сдержанный; основной цвет даёт viewport (небо, свет, блоки).
+- Плотность: comfortable 36 px строки, compact 28 px; переключатель в View, сохраняется.
+- Радиусы 8–12 px, границы 1 px, тени только у плавающих элементов.
+- Иконки 16/20 px; для primary/destructive — иконка + текст; icon-only — с tooltip.
+- Типографика: Inter/Segoe UI, 13 px база, 11 px caps-лейблы секций, 20 px заголовки панелей; координаты — tabular numbers.
+- Состояния: hover — surface-2, selected — accent-tinted + левая полоса, focus — 2 px outline, disabled — opacity + причина.
+- Никакого glassmorphism, градиентов в chrome и «мёртвых» серых кнопок.
+
+### 9.13. Клавиатура и command palette
+
+| Действие | Shortcut |
+| --- | --- |
+| Command palette | `Ctrl+K` |
+| Режимы World/Build/Paint/Analyze | `1` / `2` / `3` / `4` |
+| Focus selection | `F` |
+| Frame all | `Home` |
+| Go to coordinates | `Ctrl+G` |
+| Pan | `Space` + drag / middle mouse |
+| Orbit / look | `RMB` / `Alt+LMB` |
+| Transform move/rotate/scale | `G` / `R` / `S` |
+| Brush | `B` |
+| Save | `Ctrl+S` |
+| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
+| Cancel / Deselect | `Esc` |
+| Help | `F1` / `?` |
+
+Command palette умеет: переключить режим, открыть инструмент, перейти к координатам, включить grid/borders, открыть Environment, сохранить/экспортировать, открыть Settings, переключить проект. В текстовых полях shortcuts не перехватываются.
+
+### 9.14. Состояния, motion, accessibility, приёмка
+
+- Empty state: объяснение + одно основное действие.
+- Loading: skeleton панели, progress для долгих операций, Cancel.
+- Error: причина + что делать + Retry + Open logs.
+- Disabled: причина в tooltip, не «просто серое».
+- Read-only: явный badge и объяснение, какие действия недоступны.
+- Motion: 120–180 ms, только для появления панелей/попover; `prefers-reduced-motion` отключает.
+- Accessibility: focus-visible, keyboard tabs/menus, aria-labels, контраст AA, масштаб UI 100–150%.
+
+Приёмка UI:
+
+- [ ] Нет `Active palette block` и дублей статусов в top bar.
+- [ ] Слева `World/Project`, справа `Inspector/Toolbox`, снизу 4 вкладки.
+- [ ] 4 режима меняют tool rail, Toolbox и дефолт Inspector.
+- [ ] Inspector переключает Tool/Selection/World и не теряет selection.
+- [ ] Environment полностью в Inspector, быстрый popover — только shortcut.
+- [ ] Панели resizable/collapsible, layout сохраняется.
+- [ ] Command palette и shortcut-карта работают, не ломая ввод текста.
+- [ ] Empty/error/disabled/read-only состояния объяснены.
+- [ ] Визуальный QA: нет плоской серости, контраст AA, плотность переключается.
+- [ ] 1280×800 остаётся рабочим.
+
+### 9.15. shadcn-first
+
+Правило для **любой** UI-работы, до написания кода:
+
+1. Открыть `shadcn` skill/MCP и проверить, есть ли готовый компонент под задачу.
+2. Посмотреть `components.json`, установленные компоненты и `apps/desktop/src/components/ui`; не дублировать то, что уже есть.
+3. Поиск по registry: `button`, `dialog`, `dropdown-menu`, `tabs`, `popover`, `tooltip`, `resizable`, `command`, `scroll-area`, `separator`, `sidebar`, `field`, `input`, `select`, `switch`, `checkbox`, `sheet`, `collapsible` и т.д.
+4. Если компонент есть — использовать его, адаптировать через variants/className/токены, а не форкать и не писать заново.
+5. Если точного компонента нет — собрать custom на Radix/shadcn primitives, в дизайн-токенах проекта, с клавиатурой и aria.
+6. После добавления/изменения — прогнать `get_audit_checklist` и зафиксировать результат.
+7. В коммите/описании задачи писать: `shadcn: <component>` или `no shadcn match; custom <name> because <reason>`.
+
+Запрещено без причины писать свои `Button`, `Dialog`, `Menu`, `Tabs`, `Popover`, `Tooltip`, `Resizable`, `Command`, `ScrollArea`, `Separator`, `Sidebar` — сначала shadcn.
 
 ---
 
@@ -744,12 +959,13 @@ CLOSED (экран приветствия)
 
 UI:
 
-- `Environment` popover в viewport:
+- полный контроль — `Inspector → World → Environment`:
   - время: dawn / day / dusk / night + slider (0–24000);
   - auto cycle on/off;
   - weather: clear / rain / thunder;
   - fog density;
   - `Apply to project` (view-only, не меняет world data).
+- быстрый popover в viewport — только shortcut для day/night/weather/fog; он не дублирует полную панель.
 
 ### 11.3. Освещение
 
@@ -840,6 +1056,8 @@ UI:
 13. **Пустые состояния.** Везде объяснять, что нужно сделать, а не просто «нет данных».
 14. **Ошибки.** Единый error-presenter: причина, что делать, Retry, Open logs.
 15. **Документация.** Обновить README/reference/formats/architecture/changelog, убрать устаревшие «only 1.21.4» после расширения.
+16. **Каталог контента.** Палитра должна показывать все блоки и предметы выбранной версии, включая technical/creative-only, с состояниями, категориями и понятными ограничениями.
+17. **UI-система.** Ввести режимы, токены, command palette и контекстный инспектор вместо латания старого chrome; см. §9.8–9.14.
 
 ---
 
@@ -849,7 +1067,7 @@ UI:
 
 ### P0. Фундамент и первый запуск
 
-**Результат:** проект 1.21.4 создаётся через новый wizard с auto Java/assets; ручной путь работает; сцена не создаётся без проекта; настройки не дублируют мастер.
+**Результат:** проект 1.21.4 создаётся через новый wizard с auto Java/assets; baseline-каталог блоков/предметов 1.21.4 собран из client JAR; ручной путь работает; сцена не создаётся без проекта; настройки не дублируют мастер.
 
 - Новый `minecraft-version` crate + `VersionProfile`/`VersionCatalog`.
 - Project schema v2 + snapshot v3 + checkpoint v2 + миграция.
@@ -871,7 +1089,7 @@ UI:
 
 ### P1. Modern multi-version
 
-**Результат:** full native для 1.18–1.21.x + 26.1–26.3 (по готовности split).
+**Результат:** full native для 1.18–1.21.x + 26.1–26.3 (по готовности split); полный каталог блоков/предметов каждой версии; палитра и ассеты совпадают с версией.
 
 - Modern chunk/biome codec.
 - Dynamic block catalog per version.
@@ -890,7 +1108,7 @@ UI:
 
 ### P2. 1.13–1.17
 
-**Результат:** full native для flattened classic Anvil.
+**Результат:** full native для flattened classic Anvil и полный каталог блоков/предметов 1.13–1.17.
 
 - Chunk/biome adapters.
 - Version-specific model/blockstate differences.
@@ -902,7 +1120,7 @@ UI:
 
 ### P3. Legacy и форматы
 
-**Результат:** 1.8–1.12 native/convert, pre-1.8 convert/passthrough, split 26.1+, структуры.
+**Результат:** 1.8–1.12 native/convert, pre-1.8 convert/passthrough, legacy catalog mapping, split 26.1+, структуры.
 
 - Numeric ID + metadata codec.
 - McRegion read.
@@ -920,9 +1138,10 @@ UI:
 
 ### P4. UI/UX и сцена
 
-**Результат:** production-ready оболочка и нормальная 3D-сцена.
+**Результат:** production-ready оболочка, 4 режима, контекстный Inspector и нормальная 3D-сцена.
 
 - Нижняя панель 4 вкладки; Toolbox справа.
+- Режимы World/Build/Paint/Analyze, контекстный Inspector, command palette, design tokens.
 - Project Settings, delete/relocate/duplicate.
 - Top bar/menus/HUD cleanup.
 - SceneEnvironment: sky/sun/moon/fog/weather/time.
@@ -961,6 +1180,10 @@ UI:
 - Import → edit → export → reopen → compare.
 - Generation → import → verify.
 - Version upgrade → original untouched, converted copy verified.
+- Catalog snapshot tests для каждой full-версии: counts, известные блоки/предметы, валидность состояний, отсутствие дублей.
+- Catalog diff tests: added/removed/renamed между версиями, изменения тегов и категорий.
+- Legacy mapping: numeric ID + metadata → named ID, round-trip и отчёт unknown.
+- Unknown imported states сохраняются и не подменяются.
 
 ### 14.2. Компоненты и загрузки
 
@@ -979,6 +1202,11 @@ UI:
 - Component error/retry.
 - Version support badges and disabled reasons.
 - Bottom tabs: only 4; tool panels present in Toolbox.
+- Modes World/Build/Paint/Analyze switch tool rail, Toolbox and Inspector defaults without losing selection.
+- Inspector switches Tool/Selection/World; Environment lives in World.
+- Command palette and shortcuts work without hijacking text inputs.
+- shadcn audit checklist проходит; custom-компоненты существуют только для gap-ов и покрыты a11y-тестами.
+- Catalog palette: all blocks/items of version, categories/search/filters, technical/creative-only badges, state picker.
 - Top bar: no active block badge, window controls still work.
 - Project Settings: version upgrade, relink, delete/relocate.
 - Accessibility: keyboard tabs/menus, focus, labels.
@@ -996,6 +1224,8 @@ UI:
 
 - Grep-тест: `1.21.4`/`4189` не должны быть захардкожены вне version catalog/tests.
 - Matrix snapshot test: supported claims совпадают с capabilities.
+- Catalog parity test: для каждой full-версии каталог содержит ожидаемые блоки/предметы и валидные состояния.
+- Test that full-version palette reads the catalog, not the curated registry; curated — только fallback/quick picks.
 - Test that Settings has no setup duplication (component inventory only).
 - Test that viewport is not mounted without project.
 - Cargo clippy/fmt + pnpm typecheck/lint/format/test.
@@ -1005,6 +1235,7 @@ UI:
 - Реальный Tauri: window controls, drag, maximize/restore, resize, UIScale 100%.
 - Download real Java/client/server for 2–3 versions.
 - Generate real worlds on 1.16.5, 1.18.2, 1.21.4.
+- Проверить палитру на 1.16.5/1.18.2/1.21.4: все блоки/предметы, состояния, technical/creative-only, unknown.
 - Import/export with official server.
 - Offline/relink scenarios.
 - Long-running generation/cancel/kill.
@@ -1019,13 +1250,18 @@ UI:
 - `docs/getting-started.md` — новый wizard.
 - `docs/reference.md` — support matrix, requirements, known limitations.
 - `docs/formats.md` — все форматы и что реально пишется.
+- `docs/catalog.md` — блоки/предметы по версиям, категории, states, technical/creative-only, ограничения.
+- `docs/ui.md` — каркас, режимы, Inspector/Toolbox, shortcuts, визуальные токены.
 - `docs/architecture.md` — ADR:
   - ADR-001 заменить на version profiles;
+  - ADR-001a — content catalog: blocks/items per version;
   - ADR-004 — asset download/manual/placeholder;
   - ADR-007 — structure formats;
   - ADR-008 — checkpoints vs undo/autosave;
   - ADR-014 — creation modes;
-  - ADR-015 — component provisioning.
+  - ADR-015 — component provisioning;
+  - ADR-016 — UI shell, modes and contextual inspector;
+  - ADR-017 — shadcn-first and custom component policy.
 - `docs/advanced-workflow.md` — Toolbox, scene, version conversion.
 - `CHANGELOG.md` — по этапам.
 - `docs/legal/third-party-notices.md` — если добавляются новые зависимости.
@@ -1040,6 +1276,9 @@ UI:
 | Старые версии и Java | Java 8/16/17/21, разные server flags | Профили Java/server; manual fallback; отключение generation, если нет JAR |
 | Конвертация миров | DataFixerUpper медленный/неполный, downgrade невозможен | Только upgrade, копия, checkpoint, отчёт, без downgrade |
 | Ассеты старых версий | Нет blockstate/models до 1.8; другие пути | Fallback texture resolver; pre-1.8 read/convert, не full visual |
+| Размер каталога | 10k+ блоков/предметов, иконки и состояния | Виртуализация, ленивый atlas, поисковый индекс, бюджет памяти |
+| Дрейф каталога между версиями | Блоки/предметы добавляются, удаляются и переименовываются | CatalogDiff, aliases, fixtures, явные unknown |
+| Технические и creative-only блоки | Их легко принять за обычные | Флаги, бейджи, правила размещения, предупреждения |
 | Скачивание и лицензии | Mojang assets нельзя бандлить | Только official URLs, checksum, user consent, no redistribution |
 | Безопасность архивов/JSON | Недоверенные JAR/zip/version JSON | Allowlist, bounds, traversal/symlink checks, fuzz |
 | Производительность света | Per-vertex light/AO дороже | Этапы A/B, budget, fallback |
@@ -1052,8 +1291,9 @@ UI:
 
 - Bedrock Edition.
 - Полное семантическое редактирование block entities/entities (сундуки, таблички, мобы).
+- Полное редактирование item components/NBT; каталог и выбор предметов поддерживаются, данные сохраняются.
 - Пересчёт heightmaps/light/POI на стороне Rust.
-- Гарантированная поддержка модифицированных миров/кастомных измерений.
+- Гарантированная поддержка модифицированных миров/кастомных измерений и registry блоков/предметов.
 - Полная симуляция Minecraft (физика, редстоун, игровой цикл).
 - Динамические тени, шейдеры уровня Optifine.
 - Облачная синхронизация/совместная работа.
@@ -1070,6 +1310,11 @@ UI:
 - [ ] Нет дублирующих setup-блоков в Settings.
 - [ ] Верхняя панель не показывает активный блок; оконные controls работают.
 - [ ] Снизу 4 вкладки; инструменты — в Toolbox.
+- [ ] 4 режима (World/Build/Paint/Analyze), контекстный Inspector и command palette работают.
+- [ ] UI использует shadcn-компоненты, где есть готовые; custom — только для gap-ов, с audit checklist.
+- [ ] Для каждой full-версии палитра содержит все ванильные блоки и предметы, включая technical/creative-only; состояния валидируются.
+- [ ] Проект фиксирует `catalogId`/hash; палитра, валидация и экспорт используют один и тот же каталог.
+- [ ] Unknown/removed block states сохраняются и явно помечаются, без молчаливой подмены.
 - [ ] Для каждой full-версии: create → edit → save → reopen → export → verify.
 - [ ] Для read-only/convert версий статус честно показан и проверен.
 - [ ] Checkpoints понятны в UI, сохраняют editor state и создаются перед риском.
@@ -1084,15 +1329,17 @@ UI:
 
 Чтобы не растянуть «всё сразу» на месяцы:
 
-1. **Первый shippable slice:** 1.21.4 + 1.20.6 + 1.18.2 full, 1.13–1.17 read/convert, новый wizard, auto Java/assets, no-scene gate, 4 вкладки, базовое окружение сцены.
+1. **Первый shippable slice:** 1.21.4 + 1.20.6 + 1.18.2 full с полным каталогом блоков/предметов, 1.13–1.17 read/convert, новый wizard, auto Java/assets, no-scene gate, 4 режима/4 вкладки, базовое окружение сцены.
 2. **Второй slice:** 1.13–1.17 full, 26.1+ split, структуры `.schem`/`.schematic`.
 3. **Третий slice:** legacy 1.8–1.12, pre-1.8 conversion, полный свет/AO, project delete/relocate, production polish.
 
-Если нужен самый короткий путь к «вау»-эффекту: P0 + часть P4 (sky/light/grid/camera) + 4 вкладки. Это уже убирает «серость» и хаос, не дожидаясь всех версий.
+Если нужен самый короткий путь к «вау»-эффекту: P0 + часть P4 (режимы, токены, sky/light/grid/camera) + 4 вкладки + baseline-каталог. Это уже убирает «серость» и хаос, не дожидаясь всех версий.
 
 ---
 
-## 20. Решения, которые нужно подтвердить
+## 20. Решения и договорённости
+
+Пункты 1–7 — рекомендации к подтверждению; 8–9 уже приняты и внесены в §5.4 и §9.8–9.14.
 
 1. **Диапазон первого релиза:** рекомендуем modern 1.18–1.21.x full + 1.13–1.17 convert, остальное поэтапно.
 2. **Pre-1.13:** рекомендуем сначала convert/passthrough, не native edit.
@@ -1101,6 +1348,8 @@ UI:
 5. **Смена версии:** рекомендуем только upgrade и только через копию с checkpoint; downgrade запрещён.
 6. **Автоскачивание:** рекомендуем «auto по умолчанию, но по явной кнопке», без фоновых загрузок без согласия.
 7. **Визуальный уровень сцены:** рекомендуем Minecraft-like environment + baked light/AO, без динамических теней и шейдеров.
+8. **Каталог контента (принято):** все ванильные блоки и предметы точной версии, включая technical/creative-only, состояния, категории и предметы; modded/custom — passthrough и предупреждение.
+9. **UI-система (принято):** 3 панели, 4 режима, 4 нижние вкладки, контекстный Inspector, Toolbox, command palette; тёмный графит + янтарный акцент, comfortable density по умолчанию.
 
 После подтверждения этих пунктов можно начинать с P0: version profile + component manager + wizard + no-scene gate. Это даст самый большой пользовательский эффект и не потребует переписывать всё приложение сразу.
 
@@ -1125,6 +1374,7 @@ UI:
 - Push — только после отдельного явного разрешения. Локальные коммиты не пушить.
 - Если обнаружен блокер: не обходить молча, а добавить подпункт `(blocked)` с причиной и обновить «Текущий фокус».
 - Перед коммитом блока: `cargo test`, `cargo clippy`, `cargo fmt --check`, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm test` (или их актуальные аналоги из `package.json`).
+- Перед UI-задачей: проверить shadcn через skill/MCP (§9.15); после UI-изменений — прогнать shadcn audit checklist и записать результат.
 - Документацию обновлять в том же блоке, где меняется поведение, а не «потом».
 
 ### 21.1. Сделано до старта
@@ -1133,6 +1383,7 @@ UI:
 - [x] `DONE-02` Почистить хрупкие TypeScript-тесты, перевести проверки на наблюдаемое поведение и semantic roles. Коммит `d7ae9a5`.
 - [x] `DONE-03` Провести аудит версий, компонентов, нижней панели, viewport, чекпоинтов и загрузок.
 - [x] `DONE-04` Написать план и этот чеклист.
+- [x] `DONE-05` Изучить UI-референсы (Figma, Framer, Spline, Blender, Blockbench, DaVinci, Amulet, Axiom) и зафиксировать решения в §9.8–9.14.
 
 ### 21.2. P0 — фундамент и первый запуск
 
@@ -1144,7 +1395,7 @@ UI:
 - [ ] `P0-02` `VersionId`, `VersionFamily`, `ReleaseType`: парсинг, сравнение, serde; тесты на `1.21.4`, `1.21`, `26.1-snapshot-3`.
 - [ ] `P0-03` `VersionProfile` со всеми полями из §5.1 и `serde(rename_all = "camelCase")`.
 - [ ] `P0-04` `SupportLevel` (`full`, `read-write-subset`, `read-only`, `convert`, `out-of-scope`) и `WorldCapabilities`.
-- [ ] `P0-05` Базовый профиль `java-classic-1.21.4`: DataVersion 4189, Java 21, pack 46, datapack 61, dimensions/height.
+- [ ] `P0-05` Базовый профиль `java-classic-1.21.4`: DataVersion 4189, Java 21, pack 46, datapack 61, dimensions/height, named block/item catalog.
 - [ ] `P0-06` `VersionCatalog`: загрузка и кэш `version_manifest_v2.json`, TTL, offline fallback, allowlist.
 - [ ] `P0-07` Загрузка version JSON: `javaVersion.majorVersion`, client/server downloads, SHA-1.
 - [ ] `P0-08` Сборка `VersionProfile` из семейства + manifest + внутреннего `version.json` JAR.
@@ -1169,7 +1420,7 @@ UI:
 - [ ] `P0-21` Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов.
 - [ ] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
 - [ ] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
-- [ ] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, models, textures, atlas).
+- [ ] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4.
 - [ ] `P0-25` Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar.
 - [ ] `P0-26` Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры.
 - [ ] `P0-27` Server: download по точной версии, SHA-1, кэш, проверка внутреннего `version.json`.
@@ -1216,9 +1467,9 @@ UI:
 #### G. Быстрая чистка UI
 
 - [ ] `P0-58` Убрать `Active palette block` и дубли core/save status из toolbar/performance.
-- [ ] `P0-59` Bottom panel: убрать Tools/Warnings; Analysis = Observation+Validation; Activity = Console+History.
+- [ ] `P0-59` Bottom panel: `Palette → Blocks`; убрать Tools/Warnings; Analysis = Observation+Validation; Activity = Console+History.
 - [ ] `P0-60` Обновить `BOTTOM_PANEL_TABS` и миграцию сохранённого layout.
-- [ ] `P0-61` Тесты: 4 вкладки, нет активного блока в toolbar, window controls не затронуты.
+- [ ] `P0-61` Тесты: Tools/Warnings удалены, Analysis/Activity сгруппированы, toolbar без активного блока; полный переход на 4 вкладки — P4.
 
 #### H. Закрытие P0
 
@@ -1229,7 +1480,7 @@ UI:
 
 ### 21.3. P1 — modern multi-version
 
-**Цель:** full native для 1.18–1.21.x + 26.1–26.3 (по готовности split); палитра и ассеты совпадают с версией.
+**Цель:** full native для 1.18–1.21.x + 26.1–26.3 (по готовности split); палитра содержит все блоки и предметы версии, ассеты совпадают с версией.
 
 #### A. Codec и профили
 
@@ -1244,10 +1495,10 @@ UI:
 
 #### B. Ассеты и каталог
 
-- [ ] `P1-09` Динамический каталог блоков из client JAR; curated список — quick picks/fallback.
-- [ ] `P1-10` Property keys/defaults/validation по blockstates.
-- [ ] `P1-11` Atlas + кэш `version + jarSha1 + packStackHash + rendererSchema`.
-- [ ] `P1-12` Version-aware палитра: поиск, недавние, избранное, категории.
+- [ ] `P1-09` Извлекать из client JAR blockstates, block/item models, item definitions, textures, lang и tags для каталога; curated список — quick picks/fallback.
+- [ ] `P1-10` Property keys/defaults/validation по blockstates; item definitions/models.
+- [ ] `P1-11` Atlas + кэш `version + jarSha1 + packStackHash + catalogSchema`.
+- [ ] `P1-12` Version-aware палитра: поиск, недавние, избранное, базовые категории.
 - [ ] `P1-13` Unknown imported states: preserve + warning, не считать writable.
 - [ ] `P1-14` Resource pack stack per project + `pack_format` validation.
 
@@ -1260,14 +1511,27 @@ UI:
 - [ ] `P1-19` Upgrade same-family через копию + checkpoint + отчёт.
 - [ ] `P1-20` Support badges/capabilities и disabled-reasons в UI.
 
-#### D. Закрытие P1
+#### D. Полный каталог блоков и предметов
 
-- [ ] `P1-21` Фикстуры на каждое семейство + E2E create→edit→save→reopen→export→verify.
-- [ ] `P1-22` Обновить матрицу/docs/changelog и закоммитить P1.
+- [ ] `P1-21` `CatalogEntry`/`CatalogSnapshot`: id, legacyId, имя, категория, теги, иконка, aliases, states, item form, flags.
+- [ ] `P1-22` `CatalogBuilder` из client JAR + official metadata; кэш по `version + jarSha1 + catalogSchema`; `catalogId` в проекте.
+- [ ] `P1-23` Block states: все property keys, допустимые значения, default state, варианты и item form.
+- [ ] `P1-24` Item catalog: все предметы, иконки, имена, категории, item-only/placeable; components read/preserve.
+- [ ] `P1-25` Флаги `technical`, `creativeOnly`, `fluid`, `airlike`, `blockEntity`, `obtainable`, `hasItem`; правила размещения и предупреждения.
+- [ ] `P1-26` Категории как creative inventory + `All`/`Recent`/`Favorites`; поиск по имени/ID/тегу; фильтры.
+- [ ] `P1-27` `CatalogDiff` между версиями: added/removed/renamed, изменения states/tags; aliases и unknown.
+- [ ] `P1-28` Catalog UI: виртуализированный список, 3D-иконка, state picker, бейджи `not in this version` и disabled-причины.
+- [ ] `P1-29` Производительность каталога: ленивый atlas, поисковый индекс, бюджет памяти на 10k+ записей.
+- [ ] `P1-30` Тесты каталога: counts, известные блоки/предметы, валидность состояний, отсутствие дублей, diff-snapshots.
+
+#### E. Фикстуры, E2E и закрытие P1
+
+- [ ] `P1-31` Фикстуры на каждое семейство + E2E create→edit→save→reopen→export→verify с проверкой каталога.
+- [ ] `P1-32` Обновить матрицу/docs/changelog и закоммитить P1.
 
 ### 21.4. P2 — 1.13–1.17
 
-**Цель:** full native для flattened classic Anvil.
+**Цель:** full native для flattened classic Anvil; полный каталог блоков/предметов 1.13–1.17.
 
 - [ ] `P2-01` Профили 1.13–1.17: DataVersion, Java, pack/datapack, dimensions, height.
 - [ ] `P2-02` Chunk layout adapters 1.13–1.17.
@@ -1277,7 +1541,7 @@ UI:
 - [ ] `P2-06` Generation: server flags/level-type/Java.
 - [ ] `P2-07` Structures + version-aware `defaultOriginY`.
 - [ ] `P2-08` Asset pipeline для старых pack format.
-- [ ] `P2-09` Фикстуры + E2E.
+- [ ] `P2-09` Фикстуры + E2E + проверка каталога блоков/предметов для 1.13–1.17.
 - [ ] `P2-10` Обновить матрицу/docs.
 - [ ] `P2-11` Коммит P2.
 
@@ -1286,7 +1550,7 @@ UI:
 **Цель:** 1.8–1.12 native/convert, pre-1.8 convert/passthrough, snapshots read-only, структуры и архивы.
 
 - [ ] `P3-01` Профили 1.8–1.12 и pre-1.8.
-- [ ] `P3-02` Numeric ID + metadata модель и mapping.
+- [ ] `P3-02` Numeric ID + metadata модель, item IDs и mapping в общий каталог.
 - [ ] `P3-03` Codec 1.8–1.12 import/export.
 - [ ] `P3-04` McRegion reader.
 - [ ] `P3-05` Legacy import + passthrough.
@@ -1301,7 +1565,7 @@ UI:
 - [ ] `P3-14` World `.zip` import/export + traversal/symlink/bomb protection.
 - [ ] `P3-15` Project archive export/import.
 - [ ] `P3-16` Snapshots: read-only/convert + advanced toggle.
-- [ ] `P3-17` Фикстуры legacy + тесты.
+- [ ] `P3-17` Фикстуры legacy + проверка numeric ID/metadata mapping в каталог + тесты.
 - [ ] `P3-18` Обновить матрицу/docs + коммит P3.
 
 ### 21.6. P4 — UI/UX и сцена
@@ -1311,7 +1575,7 @@ UI:
 #### A. Рабочее пространство
 
 - [ ] `P4-01` Workspace: resizable panels + persisted layout.
-- [ ] `P4-02` Правый `Toolbox`: категории, поиск, pinned, capabilities.
+- [ ] `P4-02` Правый `Toolbox` shell: вкладка рядом с Inspector, пустое состояние и навигация к инструментам.
 - [ ] `P4-03` Перенести Terrain/Heightmap/Biomes/Generators/Templates/Objects/Parametric/DSL в Toolbox.
 - [ ] `P4-04` Финальные 4 вкладки: Blocks / Layers / Analysis / Activity.
 - [ ] `P4-05` Project Settings: General/Version/Components/World/Storage/Danger.
@@ -1339,11 +1603,32 @@ UI:
 - [ ] `P4-21` Accessibility: focus-visible, keyboard tabs/menus, aria, reduced motion.
 - [ ] `P4-22` Empty states + error presenter (причина/действие/Retry/logs).
 - [ ] `P4-23` UI/scene тесты.
-- [ ] `P4-24` Обновить docs + коммит P4.
+- [ ] `P4-24` Обновить docs по сцене.
+
+#### D. UI-система по референсам
+
+- [ ] `P4-25` Design tokens: графит слоями, amber accent, semantic colors, density comfortable/compact.
+- [ ] `P4-26` Mode system `World / Build / Paint / Analyze` + свой tool rail для каждого режима.
+- [ ] `P4-27` Inspector `Tool / Selection / World`; Environment в `World`; убрать отдельный environment-хаб.
+- [ ] `P4-28` Toolbox: категории, поиск, pinned, capabilities, требования; только инструменты текущего режима/версии.
+- [ ] `P4-29` Command palette + полная shortcut-карта; не перехватывать ввод в текстовых полях.
+- [ ] `P4-30` Resize/collapse/persist панелей; минимальное окно 1280×800.
+- [ ] `P4-31` Empty/error/disabled/read-only состояния; визуальный QA на отсутствие плоской серости.
+- [ ] `P4-32` Motion 120–180 ms + reduced motion; контраст AA, focus-visible, keyboard tabs.
+- [ ] `P4-33` UI acceptance тесты: режимы, Inspector, Toolbox, top bar, нижние вкладки, layout persistence.
+- [ ] `P4-34` Обновить UI-документацию.
+
+#### E. shadcn-first
+
+- [ ] `P4-35` Аудит shadcn: `components.json`, installed components, registry; карта planned UI → available components.
+- [ ] `P4-36` Использовать shadcn для shell-примитивов (button, dialog, dropdown, tabs, popover, tooltip, resizable, command, scroll-area, separator, sidebar) и зафиксировать gap-ы.
+- [ ] `P4-37` Для gap-ов — custom на Radix/shadcn primitives, в токенах проекта, с a11y; без форка сгенерированных компонентов.
+- [ ] `P4-38` Тесты custom-компонентов + shadcn audit checklist в ручном QA/CI.
+- [ ] `P4-39` Обновить UI-документацию и закоммитить P4.
 
 ### 21.7. P5 — production hardening
 
-- [ ] `P5-01` Полная матрица фикстур и round-trip по всем поддерживаемым версиям.
+- [ ] `P5-01` Полная матрица фикстур, каталогов блоков/предметов и round-trip по всем поддерживаемым версиям.
 - [ ] `P5-02` Security review: загрузки, архивы, конвертация, allowlist, fuzz.
 - [ ] `P5-03` Performance budget + benchmark на reference machine.
 - [ ] `P5-04` Docs/ADRs/changelog/legal notices.
@@ -1357,6 +1642,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | План | UI-референсы, режимы, контекстный Inspector, полный каталог блоков/предметов | — (ожидает commit) | docs only |
 | 2026-11-22 | План | План + рабочий чеклист | см. `git log` | docs only |
 
 > Новые строки добавлять сверху вниз по ходу работы. В колонке «Проверки» писать фактический результат, а не «ok»: например, `290 tests, typecheck/lint/format green`.
