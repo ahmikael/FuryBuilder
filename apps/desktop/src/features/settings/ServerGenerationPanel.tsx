@@ -299,7 +299,7 @@ export function ServerGenerationPanel({
       </div>
 
       {!selected ? (
-        <Alert className="p-4">
+        <Alert>
           <TriangleAlert />
           <AlertTitle>Server JAR required</AlertTitle>
           <AlertDescription>
@@ -308,7 +308,7 @@ export function ServerGenerationPanel({
           </AlertDescription>
         </Alert>
       ) : !eulaAccepted ? (
-        <Alert className="p-4">
+        <Alert>
           <TriangleAlert />
           <AlertTitle>Minecraft EULA confirmation required</AlertTitle>
           <AlertDescription>
@@ -357,7 +357,7 @@ export function ServerGenerationPanel({
           </AlertDescription>
         </Alert>
       ) : (
-        <Alert className="p-4">
+        <Alert>
           <CheckCircle2 className="text-status-ok" />
           <AlertTitle className="text-status-ok">EULA accepted</AlertTitle>
           <AlertDescription>
@@ -675,14 +675,14 @@ export function ServerGenerationPanel({
       ))}
 
       {error ? (
-        <Alert variant="destructive" className="p-4">
+        <Alert variant="destructive">
           <TriangleAlert />
           <AlertTitle>Generation error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
       {notice ? (
-        <Alert className="p-4">
+        <Alert>
           <CheckCircle2 />
           <AlertTitle>Generation update</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>

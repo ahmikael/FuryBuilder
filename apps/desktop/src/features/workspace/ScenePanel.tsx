@@ -70,8 +70,7 @@ export function ScenePanel() {
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Shapes className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
-          Semantic districts, buildings and roads are stored in the project and inspected by the
-          Rust Core. Open the desktop app to manage them.
+          Manage semantic buildings and roads in the desktop app.
         </p>
       </div>
     );

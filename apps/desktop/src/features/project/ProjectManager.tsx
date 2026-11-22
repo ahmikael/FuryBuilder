@@ -276,29 +276,27 @@ export function ProjectManager() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-h-[90vh] max-w-4xl gap-6 overflow-y-auto p-6">
+      <DialogContent className="max-h-[90vh] max-w-5xl gap-6 overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Projects</DialogTitle>
           <DialogDescription>
-            Project folders live outside the repository in the app data directory. Snapshots are
-            verified against a SHA-256 checksum before the manifest references them.
+            Projects are stored locally. Snapshots are verified before use.
           </DialogDescription>
         </DialogHeader>
 
         {!desktop ? (
-          <Alert className="p-4">
+          <Alert>
             <ShieldAlert />
             <AlertTitle>Desktop core required</AlertTitle>
             <AlertDescription>
-              Project storage is implemented in the Tauri backend (atomic snapshots, checksums,
-              autosave and checkpoints). Browser preview mode can inspect the demo scene, but list,
-              create, open and save need the desktop app.
+              Browser preview can show the demo scene. Create, open and save projects in the desktop
+              app.
             </AlertDescription>
           </Alert>
         ) : (
           <>
             {error ? (
-              <Alert variant="destructive" className="p-4">
+              <Alert variant="destructive">
                 <AlertTriangle />
                 <AlertTitle>Project error</AlertTitle>
                 <AlertDescription>{error}</AlertDescription>
@@ -306,7 +304,7 @@ export function ProjectManager() {
             ) : null}
 
             {recovery ? (
-              <Alert className="p-4">
+              <Alert>
                 <ShieldAlert />
                 <AlertTitle>Recovered unsaved work</AlertTitle>
                 <AlertDescription>
@@ -337,7 +335,7 @@ export function ProjectManager() {
             ) : null}
 
             {pending ? (
-              <Alert className="p-4">
+              <Alert>
                 <AlertTriangle />
                 <AlertTitle>Unsaved changes in “{current?.name ?? "project"}”</AlertTitle>
                 <AlertDescription>
@@ -450,7 +448,7 @@ export function ProjectManager() {
                 ) : null}
 
                 {lastSave ? (
-                  <Alert className="p-4">
+                  <Alert>
                     <CheckCircle2 />
                     <AlertTitle>Snapshot saved</AlertTitle>
                     <AlertDescription className="font-mono text-xs">
@@ -511,7 +509,7 @@ export function ProjectManager() {
                 </div>
 
                 {warnings.length > 0 ? (
-                  <Alert className="p-4">
+                  <Alert>
                     <AlertTriangle />
                     <AlertTitle>Warnings</AlertTitle>
                     <AlertDescription>
@@ -690,7 +688,7 @@ export function ProjectManager() {
                             ))}
                           </div>
                           {worldAnalysis.blockers.length > 0 ? (
-                            <Alert variant="destructive" className="p-4">
+                            <Alert variant="destructive">
                               <AlertTriangle />
                               <AlertTitle>Import blocked</AlertTitle>
                               <AlertDescription>
@@ -701,7 +699,7 @@ export function ProjectManager() {
                             </Alert>
                           ) : null}
                           {worldAnalysis.warnings.length > 0 ? (
-                            <Alert className="p-4">
+                            <Alert>
                               <AlertTriangle />
                               <AlertTitle>Warnings</AlertTitle>
                               <AlertDescription>

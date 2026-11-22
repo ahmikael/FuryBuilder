@@ -108,8 +108,7 @@ export function TemplateLibraryPanel() {
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Boxes className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
-          The template library is stored inside the open project and verified by the Rust Core. Open
-          the desktop app to save, import or place templates.
+          Save, import and place templates in the desktop app.
         </p>
       </div>
     );

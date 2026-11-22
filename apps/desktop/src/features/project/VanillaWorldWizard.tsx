@@ -954,14 +954,14 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
         ) : null}
 
         {error ? (
-          <Alert variant="destructive" className="p-4">
+          <Alert variant="destructive">
             <TriangleAlert />
             <AlertTitle>Vanilla world setup error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : null}
         {notice ? (
-          <Alert className="p-4">
+          <Alert>
             <CheckCircle2 />
             <AlertTitle>Vanilla world setup</AlertTitle>
             <AlertDescription>{notice}</AlertDescription>

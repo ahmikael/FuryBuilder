@@ -103,7 +103,7 @@ describe("block palette", () => {
     runtime.tauri = false;
     render(<BottomPanel backend={{ ...backend, status: "offline", info: null }} />);
     expect(screen.queryByLabelText("Search blocks")).not.toBeInTheDocument();
-    expect(screen.getByText(/block catalog is served by the Rust core/i)).toBeInTheDocument();
+    expect(screen.getByText("The block palette requires the desktop app.")).toBeInTheDocument();
     expect(catalogApi.fetch).not.toHaveBeenCalled();
   });
 });

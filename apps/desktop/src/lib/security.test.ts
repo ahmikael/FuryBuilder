@@ -20,6 +20,10 @@ describe("tauri capability policy", () => {
     // The exact allowlist is the point: any new permission needs a security review.
     expect(capability.permissions).toEqual([
       "core:default",
+      "core:window:allow-close",
+      "core:window:allow-minimize",
+      "core:window:allow-start-dragging",
+      "core:window:allow-toggle-maximize",
       "dialog:allow-open",
       "process:allow-restart",
       "updater:default",

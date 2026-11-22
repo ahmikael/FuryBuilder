@@ -119,7 +119,7 @@ export function DiagnosticsSection() {
       </p>
 
       {error ? (
-        <Alert className="p-4">
+        <Alert>
           <AlertTriangle />
           <AlertTitle>Diagnostics unavailable</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
@@ -166,7 +166,7 @@ export function DiagnosticsSection() {
       ) : null}
 
       {notice ? (
-        <Alert className="p-4">
+        <Alert>
           <ShieldCheck />
           <AlertTitle>Logs cleared</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>

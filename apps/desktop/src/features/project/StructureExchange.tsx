@@ -283,7 +283,7 @@ export function StructureExchange() {
       <Separator />
 
       {!desktop ? (
-        <Alert className="p-4">
+        <Alert>
           <ShieldAlert />
           <AlertTitle>Desktop core required</AlertTitle>
           <AlertDescription>

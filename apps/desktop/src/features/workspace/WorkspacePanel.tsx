@@ -85,8 +85,7 @@ export function WorkspacePanel() {
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Layers className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
-          Layers, masks and protected regions are enforced by the Rust Core. Open the desktop app to
-          configure them.
+          Edit layers, masks and protected regions in the desktop app.
         </p>
       </div>
     );

@@ -203,7 +203,7 @@ describe("Viewport", () => {
     expect(state.blockCount).toBeGreaterThan(0);
     expect(ipc.invoke).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Place block" })).toBeDisabled();
-    expect(screen.getByText(/editing requires the desktop core/i)).toBeInTheDocument();
+    expect(screen.getByText(/open the desktop app to edit/i)).toBeInTheDocument();
   });
 
   it("maps a viewport click to the Rust operation API and refreshes dirty chunks", async () => {

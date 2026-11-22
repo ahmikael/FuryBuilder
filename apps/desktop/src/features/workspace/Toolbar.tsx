@@ -1,6 +1,6 @@
 import {
+  Bot,
   FolderOpen,
-  HardDrive,
   Moon,
   PanelBottom,
   PanelLeft,
@@ -12,6 +12,8 @@ import {
   Sun,
   Undo2,
 } from "lucide-react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useMemo, type MouseEvent } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -30,6 +32,7 @@ import { useWorldStore } from "@/state/world-store";
 import { formatRelativeTime } from "@/project/types";
 import { cn } from "@/lib/utils";
 import { ViewMenu } from "@/features/workspace/ViewMenu";
+import { WindowControls } from "@/features/workspace/WindowControls";
 import logoUrl from "@/assets/branding/furybuilder-logo.png";
 
 interface ToolbarProps {
@@ -62,11 +65,18 @@ export function Toolbar({
   const setCommandPaletteOpen = useUiStore((state) => state.setCommandPaletteOpen);
   const worldRevision = useWorldStore((state) => state.revision);
   const tauri = isTauriRuntime();
+  const desktopWindow = useMemo(() => (tauri ? getCurrentWindow() : null), [tauri]);
   const projectOpen = Boolean(current?.folder);
   const editing = backendStatus === "online" && tauri && projectOpen;
   const busy = Boolean(job) || loading;
   const dirty = projectIsDirty(current, worldRevision);
   const autosaved = dirty && current?.autosavedRevision === worldRevision;
+
+  const startDragging = (event: MouseEvent<HTMLElement>): void => {
+    if (!desktopWindow || event.button !== 0) return;
+    if ((event.target as HTMLElement).closest("button")) return;
+    void desktopWindow.startDragging().catch(() => undefined);
+  };
 
   const saveState = !tauri
     ? "Preview scene"
@@ -81,25 +91,20 @@ export function Toolbar({
           : "Saved";
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-1 border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="flex items-center gap-2.5 pr-1">
-        <img
-          src={logoUrl}
-          alt=""
-          aria-hidden="true"
-          draggable={false}
-          className="h-7 w-auto select-none"
-        />
-        <span className="text-sm font-semibold tracking-tight">FuryBuilder</span>
-        <Badge
-          variant="secondary"
-          className="font-medium tracking-wider text-muted-foreground uppercase"
-        >
-          alpha
-        </Badge>
+    <header
+      className="flex h-14 shrink-0 select-none items-center gap-1 border-b bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:bg-background/80"
+      data-testid="window-drag-region"
+      onMouseDown={startDragging}
+      onDoubleClick={(event) => {
+        if (!desktopWindow || (event.target as HTMLElement).closest("button")) return;
+        event.preventDefault();
+        void desktopWindow.toggleMaximize().catch(() => undefined);
+      }}
+    >
+      <div className="flex shrink-0 items-center gap-2 px-1.5">
+        <img src={logoUrl} alt="" aria-hidden="true" draggable={false} className="size-5" />
+        <span className="hidden text-sm font-semibold tracking-tight sm:inline">FuryBuilder</span>
       </div>
-
-      <Separator orientation="vertical" className="mx-1 !h-6" />
 
       <nav className="flex items-center gap-0.5" aria-label="Main menu">
         <Tooltip>
@@ -122,36 +127,20 @@ export function Toolbar({
         <ViewMenu />
         <Tooltip>
           <TooltipTrigger
-            render={<Button variant="ghost" className="text-muted-foreground" disabled />}
-          >
-            Tools
-          </TooltipTrigger>
-          <TooltipContent>
-            Tools menus arrive with later milestones. Editing actions live in the viewport toolbar
-            and bottom panel.
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
             render={
-              <Button variant="ghost" className="text-muted-foreground" onClick={onOpenMcpAccess} />
+              <Button
+                variant="ghost"
+                className="text-muted-foreground"
+                aria-label="AI / MCP"
+                onClick={onOpenMcpAccess}
+              />
             }
           >
-            AI / MCP
+            <Bot data-icon="inline-start" />
+            <span className="hidden xl:inline">AI / MCP</span>
           </TooltipTrigger>
           <TooltipContent>
             MCP access mode, write limits and confirmation. Read-only by default.
-          </TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={<Button variant="ghost" className="text-muted-foreground" disabled />}
-          >
-            Export
-          </TooltipTrigger>
-          <TooltipContent>
-            Export controls live in the project manager. Supported formats and honest version limits
-            are listed there.
           </TooltipContent>
         </Tooltip>
       </nav>
@@ -248,80 +237,36 @@ export function Toolbar({
 
         <Separator orientation="vertical" className="mx-1 !h-6" />
 
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="outline"
-                size="sm"
-                className="max-w-64 gap-2 px-2.5 font-normal"
-                onClick={() => setManagerOpen(true)}
-              />
-            }
-          >
-            <span
-              className={cn(
-                "size-2 shrink-0 rounded-full",
-                !projectOpen ? "bg-muted-foreground/50" : dirty ? "bg-status-warn" : "bg-status-ok",
-              )}
-            />
-            <span className="truncate">{current?.name ?? saveState}</span>
-            {projectOpen ? (
-              <span className="truncate text-muted-foreground">{saveState}</span>
-            ) : null}
-          </TooltipTrigger>
-          <TooltipContent>
-            {projectOpen
-              ? `Revision ${worldRevision} · saved revision ${current?.savedRevision ?? 0}. Autosave runs every 30 s while edits are unsaved.`
-              : "Create or open a project to start editing."}
-          </TooltipContent>
-        </Tooltip>
-
         <Badge
           variant="outline"
-          className="gap-2 px-2.5 py-1 font-normal text-muted-foreground"
+          className="max-w-40 gap-2 px-2.5 py-1 font-normal text-muted-foreground xl:max-w-64"
           title={
-            backendStatus === "online"
-              ? "Rust backend connected"
-              : backendStatus === "connecting"
-                ? "Connecting to Rust backend"
-                : "Rust backend unavailable (browser preview)"
+            projectOpen
+              ? `Revision ${worldRevision} · saved revision ${current?.savedRevision ?? 0}.`
+              : "Create or open a project to start editing."
           }
         >
           <span
             className={cn(
-              "size-2 rounded-full",
-              backendStatus === "online" && "bg-status-ok",
-              backendStatus === "connecting" && "bg-status-warn",
-              backendStatus === "offline" && "bg-status-error",
+              "size-2 shrink-0 rounded-full",
+              !projectOpen ? "bg-muted-foreground/50" : dirty ? "bg-status-warn" : "bg-status-ok",
             )}
           />
-          {backendStatus === "online"
-            ? "Core online"
-            : backendStatus === "connecting"
-              ? "Connecting"
-              : "Preview mode"}
+          <span className="truncate">{current?.name ?? saveState}</span>
+          {projectOpen ? <span className="truncate text-muted-foreground">{saveState}</span> : null}
         </Badge>
 
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="outline"
-                size="sm"
-                className="hidden gap-2 font-mono font-normal text-muted-foreground md:inline-flex"
-                disabled
-              />
-            }
-          >
-            <span
-              className="size-2.5 rounded-sm border border-black/30"
-              style={{ backgroundColor: blockColor(selectedBlock.name) }}
-            />
-            {selectedBlock.name.replace("minecraft:", "")}
-          </TooltipTrigger>
-          <TooltipContent>Active palette block (choose it in the Palette panel).</TooltipContent>
-        </Tooltip>
+        <Badge
+          variant="outline"
+          className="hidden max-w-48 gap-2 px-2.5 py-1 font-mono font-normal text-muted-foreground xl:inline-flex"
+          title="Active palette block"
+        >
+          <span
+            className="size-2.5 rounded-sm border border-black/30"
+            style={{ backgroundColor: blockColor(selectedBlock.name) }}
+          />
+          {selectedBlock.name.replace("minecraft:", "")}
+        </Badge>
 
         <Tooltip>
           <TooltipTrigger
@@ -342,22 +287,6 @@ export function Toolbar({
               ? `Save project · Ctrl+S${dirty ? " · unsaved changes" : ""}`
               : "Open a project before saving."}
           </TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Project storage"
-                onClick={() => setManagerOpen(true)}
-              />
-            }
-          >
-            <HardDrive />
-          </TooltipTrigger>
-          <TooltipContent>Project storage, checkpoints and recovery.</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -402,6 +331,7 @@ export function Toolbar({
           </TooltipTrigger>
           <TooltipContent>Settings.</TooltipContent>
         </Tooltip>
+        <WindowControls />
       </div>
     </header>
   );

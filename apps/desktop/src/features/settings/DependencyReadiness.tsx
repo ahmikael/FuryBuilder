@@ -130,7 +130,7 @@ export function DependencyReadiness() {
           <Loader2 className="size-4 animate-spin" /> Checking local dependencies…
         </p>
       ) : error ? (
-        <Alert className="p-4">
+        <Alert>
           <TriangleAlert />
           <AlertTitle>Readiness check unavailable</AlertTitle>
           <AlertDescription>

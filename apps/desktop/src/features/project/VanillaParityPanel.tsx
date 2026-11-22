@@ -83,7 +83,7 @@ export function VanillaParityPanel({ folder }: VanillaParityPanelProps) {
       </p>
 
       {error ? (
-        <Alert variant="destructive" className="p-4">
+        <Alert variant="destructive">
           <ShieldAlert />
           <AlertTitle>Parity check failed</AlertTitle>
           <AlertDescription>{error}</AlertDescription>

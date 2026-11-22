@@ -268,7 +268,6 @@ export function Viewport() {
 
   const status = useWorldStore((state) => state.status);
   const error = useWorldStore((state) => state.error);
-  const source = useWorldStore((state) => state.source);
   const dimension = useWorldStore((state) => state.dimension);
   const revision = useWorldStore((state) => state.revision);
   const loadRadius = useWorldStore((state) => state.loadRadius);
@@ -763,20 +762,6 @@ export function Viewport() {
           {" · "}
           {positionLabel}
         </Badge>
-        <Badge variant="secondary" className="font-mono">
-          rev {revision}
-        </Badge>
-        <Badge
-          variant="outline"
-          className={cn(
-            "font-mono",
-            source === "core"
-              ? "border-status-ok/30 bg-status-ok/10 text-status-ok"
-              : "border-status-warn/30 bg-status-warn/10 text-status-warn",
-          )}
-        >
-          {source === "core" ? "Rust core" : source === "preview" ? "Preview data" : "…"}
-        </Badge>
       </div>
 
       <div className="absolute top-3 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">
@@ -884,7 +869,7 @@ export function Viewport() {
           <div className="rounded-lg border border-status-warn/30 bg-background/85 px-3 py-1.5 font-mono text-xs text-status-warn backdrop-blur-md">
             {tauri
               ? "No project open — create or open a project to edit blocks"
-              : "Preview mode — block editing requires the desktop core"}
+              : "Preview only · open the desktop app to edit"}
           </div>
         )}
 
@@ -1031,10 +1016,7 @@ export function Viewport() {
         </Tooltip>
       </div>
 
-      <Collapsible
-        className="absolute bottom-3 left-3 z-20 w-64 overflow-hidden rounded-xl border bg-background/90 text-muted-foreground shadow-lg backdrop-blur-md"
-        defaultOpen
-      >
+      <Collapsible className="absolute bottom-3 left-3 z-20 w-64 overflow-hidden rounded-xl border bg-background/90 text-muted-foreground shadow-lg backdrop-blur-md">
         <CollapsibleTrigger className="flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-xs font-medium [&[data-panel-open]>svg]:rotate-90">
           <ChevronRight className="size-3.5 transition-transform" />
           Performance
@@ -1136,10 +1118,10 @@ export function Viewport() {
 
       <div className="pointer-events-none absolute right-3 bottom-3 z-20 max-w-[45%] rounded-lg border bg-background/85 px-3 py-1.5 font-mono text-xs text-muted-foreground backdrop-blur-md">
         {editingEnabled
-          ? "WASD fly · RMB look · 1-8 tools · Alt-click pick · Ctrl+Z undo · Ctrl+S save · RMB menu"
+          ? "WASD move · RMB look · 1–8 tools · Alt-click pick"
           : tauri
-            ? "WASD fly · RMB look · open a project to edit · Ctrl+S save"
-            : "WASD fly · RMB look · LMB pick · 1-8 select tool · Ctrl+Z undo"}
+            ? "Open a project to edit"
+            : "Preview · WASD move · RMB look"}
       </div>
 
       {boxSelection && editingEnabled ? (
@@ -1269,12 +1251,10 @@ export function Viewport() {
       ) : null}
 
       <Dialog open={gotoOpen} onOpenChange={setGotoOpen}>
-        <DialogContent className="max-w-sm">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Go to coordinates</DialogTitle>
-            <DialogDescription>
-              Moves the camera to a position near the given block coordinates.
-            </DialogDescription>
+            <DialogDescription>Fly the camera near these block coordinates.</DialogDescription>
           </DialogHeader>
           <form onSubmit={submitGoto} className="space-y-3">
             <div className="grid grid-cols-3 gap-2">
@@ -1305,7 +1285,7 @@ export function Viewport() {
       </Dialog>
 
       <Dialog open={captureOpen} onOpenChange={setCaptureOpen}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-h-[90vh] max-w-4xl gap-6 overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Viewport capture</DialogTitle>
             <DialogDescription>

@@ -128,7 +128,7 @@ export function UpdatesSection({ currentVersion }: UpdatesSectionProps) {
       ) : null}
 
       {status === "error" ? (
-        <Alert variant="destructive" className="p-4">
+        <Alert variant="destructive">
           <AlertTriangle />
           <AlertTitle>Update failed</AlertTitle>
           <AlertDescription>{error ?? "The update could not be completed."}</AlertDescription>
@@ -136,7 +136,7 @@ export function UpdatesSection({ currentVersion }: UpdatesSectionProps) {
       ) : null}
 
       {status === "up-to-date" ? (
-        <Alert className="p-4">
+        <Alert>
           <CheckCircle2 />
           <AlertTitle>You are up to date</AlertTitle>
           <AlertDescription>This is the newest published version.</AlertDescription>

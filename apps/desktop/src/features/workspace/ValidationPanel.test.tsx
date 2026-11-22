@@ -155,7 +155,7 @@ describe("validation panel", () => {
     runtime.tauri = false;
     render(<ValidationPanel />);
     expect(
-      screen.getByText(/Validation runs bounded rules inside the Rust Core/),
+      screen.getByText("Run validation and preview suggested fixes in the desktop app."),
     ).toBeInTheDocument();
     expect(validationApi.validate).not.toHaveBeenCalled();
   });

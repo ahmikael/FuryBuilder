@@ -126,11 +126,7 @@ function PalettePanel() {
             <Blocks />
           </EmptyMedia>
           <EmptyTitle>Desktop core required</EmptyTitle>
-          <EmptyDescription>
-            The block catalog is served by the Rust core (curated 1.21.4 states). Browser preview
-            mode can inspect the demo scene, but palette selection and world edits need the desktop
-            app.
-          </EmptyDescription>
+          <EmptyDescription>The block palette requires the desktop app.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -606,7 +602,6 @@ function ConsolePanel({ backend }: { backend: BackendState }) {
   return (
     <Card className="scrollbar-thin h-full gap-0 overflow-y-auto py-0 font-mono text-xs leading-relaxed">
       <CardContent className="p-4">
-        <div className="text-muted-foreground">FuryBuilder desktop · alpha</div>
         <div>
           <span className="text-status-ok">core</span>{" "}
           {backend.status === "online"
@@ -667,11 +662,6 @@ function WarningsPanel() {
           {warning}
         </div>
       ))}
-      <ul className="list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
-        <li>Textures are original placeholders, not Minecraft assets.</li>
-        <li>Slabs, stairs, snow and torches use approximate shapes.</li>
-        <li>Project persistence arrives in M5; edits live in the Rust session.</li>
-      </ul>
     </div>
   );
 }
@@ -696,8 +686,6 @@ const TAB_ICONS: Record<BottomPanelTabId, ReactNode> = {
 };
 
 export function BottomPanel({ backend }: { backend: BackendState }) {
-  const job = useToolStore((state) => state.job);
-  const tool = useToolStore((state) => state.tool);
   const bottomPanelTab = useEditorStore((state) => state.bottomPanelTab);
   const setBottomPanelTab = useEditorStore((state) => state.setBottomPanelTab);
   const setPanelOpen = useEditorStore((state) => state.setPanelOpen);
@@ -720,9 +708,6 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
               ))}
             </TabsList>
           </div>
-          <span className="ml-auto hidden shrink-0 font-mono text-xs text-muted-foreground lg:inline">
-            active tool · {TOOL_LABELS[tool]}
-          </span>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -799,34 +784,6 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
           <WarningsPanel />
         </TabsContent>
       </Tabs>
-      <div className="flex h-6 shrink-0 items-center gap-2 border-t border-border px-2 text-xs text-muted-foreground">
-        {job ? (
-          <>
-            <Loader2 className="size-3 animate-spin text-primary" />
-            <span>{job.label}</span>
-            {job.progress !== null ? <span className="font-mono">{job.progress}%</span> : null}
-            {job.cancellable && !job.cancelRequested ? (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-5 px-1.5 text-xs"
-                onClick={() => useToolStore.getState().requestCancel()}
-              >
-                Cancel
-              </Button>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <Terminal className="size-3 text-primary" />
-            <span>Jobs queue idle</span>
-          </>
-        )}
-        <span className="ml-auto font-mono">
-          {job ? "1 job" : "0 jobs"} · {TOOL_LABELS[tool]} ·{" "}
-          {backend.status === "online" ? "core" : "preview"}
-        </span>
-      </div>
     </section>
   );
 }

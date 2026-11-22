@@ -47,7 +47,7 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-4xl gap-8 overflow-x-hidden overflow-y-auto p-8">
+      <DialogContent className="max-h-[90vh] max-w-5xl gap-6 overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl">Settings</DialogTitle>
           <DialogDescription>

@@ -1,13 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  Box,
-  Copy,
-  Layers,
-  Paintbrush,
-  PanelRightClose,
-  SlidersHorizontal,
-  Sparkles,
-} from "lucide-react";
+import { Box, Copy, Layers, Paintbrush, PanelRightClose, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,7 +10,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { copySelection, pasteClipboard } from "@/editor/commands";
 import { adjacentPosition, boundsVolume } from "@/editor/session";
 import { isTauriRuntime } from "@/lib/ipc";
@@ -291,21 +282,8 @@ export function Inspector() {
             <Field label="Chunks" value={String(chunkCount)} />
             <Field label="Blocks" value={blockCount.toLocaleString()} />
           </section>
-
-          <section className="p-4">
-            <SectionHeader icon={<Sparkles className="size-4" />}>AI actions</SectionHeader>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              The same Operation API will be exposed to MCP tools after the bridge milestone. Every
-              edit is revisioned, audited and undoable.
-            </p>
-          </section>
         </div>
       </ScrollArea>
-
-      <Separator />
-      <div className="px-4 py-3 text-xs text-muted-foreground">
-        Values shown here are read from the Rust world core and the versioned project manifest.
-      </div>
     </aside>
   );
 }

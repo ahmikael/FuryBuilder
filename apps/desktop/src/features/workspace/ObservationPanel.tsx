@@ -54,8 +54,7 @@ export function ObservationPanel() {
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <ScanLine className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
-          Observation maps are rendered and bounded by the Rust Core. Open the desktop app to
-          inspect top-down, height, material, biome, cross-section and revision-diff maps.
+          Render top-down, height, material and biome maps in the desktop app.
         </p>
       </div>
     );

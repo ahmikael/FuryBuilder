@@ -9,14 +9,20 @@ describe("App", () => {
     useEditorStore.setState({ theme: "dark", uiScale: 1 });
   });
 
-  it("renders the editor shell and reports preview mode without Tauri", async () => {
+  it("renders the editor shell and reports the offline core without Tauri", async () => {
     render(<App />);
 
     expect(screen.getByText("FuryBuilder")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "3D viewport" })).toBeInTheDocument();
-    expect(await screen.findByText("Preview mode")).toBeInTheDocument();
+    expect(await screen.findByText("Core offline")).toBeInTheDocument();
+    expect(screen.getAllByText("Core offline")).toHaveLength(1);
+    expect(screen.queryByText("Core online")).not.toBeInTheDocument();
+    expect(screen.queryByText("Rust core")).not.toBeInTheDocument();
+    expect(screen.queryByText("M9")).not.toBeInTheDocument();
+    expect(screen.queryByText("M8")).not.toBeInTheDocument();
     expect(screen.getByText("Overworld")).toBeInTheDocument();
-    expect(screen.getByText(/1\.21\.4 · DV 4189/)).toBeInTheDocument();
+    expect(screen.queryByText("Minecraft 1.21.4")).not.toBeInTheDocument();
+    expect(screen.queryByText("DV 4189")).not.toBeInTheDocument();
   });
 
   it("opens settings and persists a theme change", async () => {

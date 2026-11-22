@@ -226,7 +226,7 @@ function McpAccessContent({ onClose }: { onClose: () => void }) {
   const editing = form.mode !== "read_only";
 
   return (
-    <DialogContent className="max-h-[90vh] max-w-3xl gap-6 overflow-y-auto p-6">
+    <DialogContent className="max-h-[90vh] max-w-4xl gap-6 overflow-y-auto">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2 text-xl">
           {editing ? (
@@ -378,7 +378,7 @@ function McpAccessContent({ onClose }: { onClose: () => void }) {
           </Card>
 
           {editing ? (
-            <Alert className="p-4">
+            <Alert>
               <ShieldAlert />
               <AlertTitle>External clients can modify this project</AlertTitle>
               <AlertDescription>
@@ -388,14 +388,14 @@ function McpAccessContent({ onClose }: { onClose: () => void }) {
           ) : null}
 
           {error ? (
-            <Alert variant="destructive" className="p-4">
+            <Alert variant="destructive">
               <ShieldAlert />
               <AlertTitle>Could not save the policy</AlertTitle>
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           ) : null}
           {saved ? (
-            <Alert className="p-4">
+            <Alert>
               <ShieldCheck />
               <AlertTitle>Policy saved</AlertTitle>
               <AlertDescription>New requests use it immediately.</AlertDescription>
@@ -405,7 +405,7 @@ function McpAccessContent({ onClose }: { onClose: () => void }) {
       )}
 
       <Separator />
-      <DialogFooter className="items-center justify-between gap-2 sm:justify-between">
+      <DialogFooter className="w-full items-center justify-between sm:justify-between">
         <span className="text-xs text-muted-foreground">
           Changes apply to the running desktop only.
         </span>

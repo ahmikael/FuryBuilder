@@ -37,8 +37,7 @@ export function BuildDslPanel() {
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <Braces className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
-          Build DSL recipes are validated and compiled by the Rust Core. Open the desktop app to
-          preview and apply them.
+          Compile, preview and apply recipes in the desktop app.
         </p>
       </div>
     );

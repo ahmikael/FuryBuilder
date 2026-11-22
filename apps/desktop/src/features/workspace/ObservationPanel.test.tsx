@@ -133,7 +133,7 @@ describe("observation panel", () => {
     runtime.tauri = false;
     render(<ObservationPanel />);
     expect(
-      screen.getByText(/Observation maps are rendered and bounded by the Rust Core/),
+      screen.getByText("Render top-down, height, material and biome maps in the desktop app."),
     ).toBeInTheDocument();
     expect(observationApi.observe).not.toHaveBeenCalled();
   });

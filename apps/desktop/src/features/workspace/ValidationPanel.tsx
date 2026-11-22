@@ -80,8 +80,7 @@ export function ValidationPanel() {
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
         <ShieldCheck className="size-5 text-muted-foreground/60" />
         <p className="max-w-md leading-relaxed">
-          Validation runs bounded rules inside the Rust Core. Open the desktop app to inspect
-          structured findings and preview suggested fixes.
+          Run validation and preview suggested fixes in the desktop app.
         </p>
       </div>
     );

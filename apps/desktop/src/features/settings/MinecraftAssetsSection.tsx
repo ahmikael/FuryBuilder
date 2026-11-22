@@ -428,7 +428,7 @@ export function MinecraftAssetsSection() {
         <div className="space-y-3">
           <h4 className="text-sm font-medium">Detected installations</h4>
           {discovery.installations.length === 0 ? (
-            <Alert className="p-4">
+            <Alert>
               <ShieldAlert />
               <AlertTitle>Automatic detection found no Java Edition.</AlertTitle>
               <AlertDescription>
@@ -453,14 +453,14 @@ export function MinecraftAssetsSection() {
       {inspection ? <InspectionCard report={inspection} /> : null}
 
       {error ? (
-        <Alert variant="destructive" className="p-4">
+        <Alert variant="destructive">
           <ShieldAlert />
           <AlertTitle>Asset source error</AlertTitle>
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : null}
       {notice ? (
-        <Alert className="p-4">
+        <Alert>
           <CheckCircle2 />
           <AlertTitle>Minecraft assets updated</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>

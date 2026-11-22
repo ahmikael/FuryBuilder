@@ -144,7 +144,7 @@ export function McpConfirmationHost() {
   return (
     <Dialog open={Boolean(current)} onOpenChange={() => undefined}>
       <DialogContent
-        className="max-h-[90vh] max-w-2xl gap-6 overflow-y-auto p-6"
+        className="max-h-[90vh] max-w-3xl gap-6 overflow-y-auto"
         showCloseButton={false}
       >
         <DialogHeader>
@@ -205,7 +205,7 @@ export function McpConfirmationHost() {
           The request expires after 90 seconds.
         </p>
         {error ? (
-          <Alert variant="destructive" className="p-4">
+          <Alert variant="destructive">
             <ShieldAlert />
             <AlertTitle>{error}</AlertTitle>
           </Alert>

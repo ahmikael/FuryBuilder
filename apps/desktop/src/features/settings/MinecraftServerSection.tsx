@@ -228,9 +228,8 @@ export function MinecraftServerSection() {
         </Badge>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Used only by the future Vanilla World generator. The official JAR is downloaded from
-        Mojang&apos;s version manifest only after you ask for it. It is never bundled, executed here
-        or covered by an automatically accepted EULA.
+        Used for Vanilla World generation. The official JAR downloads from Mojang only when
+        requested; it is never bundled, executed here or covered by an automatically accepted EULA.
       </p>
 
       {saved ? (
@@ -440,7 +439,7 @@ export function MinecraftServerSection() {
       <ServerGenerationPanel discovery={discovery} onDiscoveryChanged={reload} />
 
       {error ? (
-        <Alert className="p-4">
+        <Alert>
           <AlertDescription>
             <p className="font-medium text-status-warn">{error}</p>
             <p>
@@ -451,7 +450,7 @@ export function MinecraftServerSection() {
         </Alert>
       ) : null}
       {notice ? (
-        <Alert className="p-4">
+        <Alert>
           <CheckCircle2 />
           <AlertTitle>Server JAR updated</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>

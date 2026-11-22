@@ -498,7 +498,7 @@ export function JavaRuntimeSection() {
       </Card>
 
       {error ? (
-        <Alert variant="destructive" className="p-4">
+        <Alert variant="destructive">
           <ShieldAlert />
           <AlertTitle>Java runtime error</AlertTitle>
           <AlertDescription>
@@ -511,7 +511,7 @@ export function JavaRuntimeSection() {
         </Alert>
       ) : null}
       {notice ? (
-        <Alert className="p-4">
+        <Alert>
           <CheckCircle2 />
           <AlertTitle>Java runtime updated</AlertTitle>
           <AlertDescription>{notice}</AlertDescription>
