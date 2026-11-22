@@ -7,8 +7,14 @@
 
 #![forbid(unsafe_code)]
 
+pub mod catalog;
 pub mod profiles;
 
+pub use catalog::{
+    fetch_official_manifest, is_allowed_download_url, CatalogError, CatalogSource, LatestVersions,
+    ManifestEntry, ManifestVersionType, VersionCatalog, VersionManifest, DEFAULT_MANIFEST_TTL,
+    MANIFEST_CACHE_SCHEMA_VERSION, OFFICIAL_MANIFEST_URL,
+};
 pub use profiles::{builtin_profiles, java_classic_1_21_4, JAVA_CLASSIC_1_21_4_ID};
 
 use std::cmp::Ordering;
