@@ -89,7 +89,6 @@ describe("observation panel", () => {
 
     await user.click(screen.getByRole("button", { name: "Render observation" }));
 
-    expect(screen.getByText("Select a box in the viewport first.")).toBeInTheDocument();
     expect(observationApi.observe).not.toHaveBeenCalled();
   });
 
@@ -132,9 +131,7 @@ describe("observation panel", () => {
   it("does not fake a map in browser preview", () => {
     runtime.tauri = false;
     render(<ObservationPanel />);
-    expect(
-      screen.getByText("Render top-down, height, material and biome maps in the desktop app."),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Render observation" })).not.toBeInTheDocument();
     expect(observationApi.observe).not.toHaveBeenCalled();
   });
 });

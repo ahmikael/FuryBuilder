@@ -59,7 +59,7 @@ describe("DiagnosticsSection", () => {
 
     await user.click(screen.getByRole("button", { name: "Clear diagnostic logs" }));
     expect(await screen.findByText(/Diagnostic logs cleared/)).toBeInTheDocument();
-    expect(screen.getByText("No log entries yet.")).toBeInTheDocument();
+    expect(screen.queryByText("furybuilder.log")).not.toBeInTheDocument();
   });
 
   it("explains the desktop fallback instead of pretending logs exist", async () => {

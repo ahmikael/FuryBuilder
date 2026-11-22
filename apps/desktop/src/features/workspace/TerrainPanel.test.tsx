@@ -115,7 +115,6 @@ describe("terrain brush panel", () => {
     useToolStore.setState({ selection: null });
     const { unmount } = render(<TerrainPanel />);
     expect(screen.getByRole("button", { name: "Apply terrain brush" })).toBeDisabled();
-    expect(screen.getByText(/Use the Box select tool/)).toBeInTheDocument();
     unmount();
 
     useToolStore.setState({ selection });

@@ -51,8 +51,8 @@ describe("editor UX scenarios", () => {
     const user = userEvent.setup();
     render(<App />);
 
-    expect(screen.getByText("Inspector")).toBeInTheDocument();
-    expect(screen.getByText("World")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide inspector" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide world panel" })).toBeInTheDocument();
 
     await user.keyboard("{Control>}k{/Control}");
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
@@ -61,11 +61,11 @@ describe("editor UX scenarios", () => {
     await user.keyboard("{Enter}");
 
     expect(useEditorStore.getState().rightPanelOpen).toBe(false);
-    expect(screen.queryByText("Inspector")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hide inspector" })).not.toBeInTheDocument();
 
     await user.keyboard("{Control>}b{/Control}");
     expect(useEditorStore.getState().leftPanelOpen).toBe(false);
-    expect(screen.queryByText("World")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hide world panel" })).not.toBeInTheDocument();
 
     const persisted = JSON.parse(localStorage.getItem("furybuilder.editor-ui") ?? "{}") as {
       state?: { leftPanelOpen?: boolean; rightPanelOpen?: boolean };
@@ -80,7 +80,7 @@ describe("editor UX scenarios", () => {
 
     await user.click(screen.getByRole("button", { name: "Toggle world panel" }));
     expect(useEditorStore.getState().leftPanelOpen).toBe(false);
-    expect(screen.queryByText("World")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hide world panel" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "View" }));
     const menu = await screen.findByRole("menu", { name: "View menu" });
@@ -91,7 +91,7 @@ describe("editor UX scenarios", () => {
     await user.click(within(menu).getByRole("menuitemcheckbox", { name: /World panel/ }));
 
     expect(useEditorStore.getState().leftPanelOpen).toBe(true);
-    expect(screen.getByText("World")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide world panel" })).toBeInTheDocument();
   });
 
   it("opens a bottom panel tab by search and keeps the layout in one store", async () => {
@@ -118,11 +118,12 @@ describe("editor UX scenarios", () => {
     render(<App />);
 
     await user.type(screen.getByRole("textbox", { name: "Filter world tree" }), "nether");
-    expect(screen.getByText("The Nether")).toBeInTheDocument();
-    expect(screen.queryByText("Overworld")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /The Nether/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Overworld/ })).not.toBeInTheDocument();
 
     await user.clear(screen.getByRole("textbox", { name: "Filter world tree" }));
     await user.type(screen.getByRole("textbox", { name: "Filter world tree" }), "no such entry");
+    expect(screen.queryByRole("button", { name: /The Nether/ })).not.toBeInTheDocument();
     expect(screen.getByText(/Nothing in the world tree matches/)).toBeInTheDocument();
   });
 

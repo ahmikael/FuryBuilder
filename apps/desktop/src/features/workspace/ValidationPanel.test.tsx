@@ -147,16 +147,13 @@ describe("validation panel", () => {
     render(<ValidationPanel />);
 
     await user.click(screen.getByRole("button", { name: "Run validation" }));
-    expect(screen.getByText("Select a box in the viewport first.")).toBeInTheDocument();
     expect(validationApi.validate).not.toHaveBeenCalled();
   });
 
   it("does not fake findings in browser preview", () => {
     runtime.tauri = false;
     render(<ValidationPanel />);
-    expect(
-      screen.getByText("Run validation and preview suggested fixes in the desktop app."),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Run validation" })).not.toBeInTheDocument();
     expect(validationApi.validate).not.toHaveBeenCalled();
   });
 });

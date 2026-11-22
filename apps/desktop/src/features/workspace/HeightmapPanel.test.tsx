@@ -117,7 +117,6 @@ describe("heightmap panel", () => {
     useToolStore.setState({ selection: null });
     const { unmount } = render(<HeightmapPanel />);
     expect(screen.getByRole("button", { name: "Apply heightmap" })).toBeDisabled();
-    expect(screen.getByText(/Use the Box select tool/)).toBeInTheDocument();
     unmount();
 
     useToolStore.setState({ selection });

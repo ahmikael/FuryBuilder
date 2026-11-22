@@ -18,7 +18,7 @@ export function StatusBar({ backend }: { backend: BackendState }) {
   const selection = useToolStore((state) => state.selection);
   return (
     <footer className="flex h-8 shrink-0 items-center gap-2 border-t bg-background px-4 text-xs text-muted-foreground">
-      <span className="inline-flex items-center gap-1.5">
+      <span role="status" aria-label="Core status" className="inline-flex items-center gap-1.5">
         <Circle
           className={cn(
             "size-2 fill-current",

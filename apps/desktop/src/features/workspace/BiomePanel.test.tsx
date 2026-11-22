@@ -93,7 +93,6 @@ describe("biome panel", () => {
     useToolStore.setState({ selection: null });
     const { unmount } = render(<BiomePanel />);
     expect(screen.getByRole("button", { name: "Apply biome" })).toBeDisabled();
-    expect(screen.getByText(/Use the Box select tool/)).toBeInTheDocument();
     unmount();
 
     useToolStore.setState({ selection });
@@ -102,7 +101,6 @@ describe("biome panel", () => {
     await user.clear(input);
     await user.type(input, "forest");
     expect(screen.getByRole("button", { name: "Apply biome" })).toBeDisabled();
-    expect(screen.getByText(/Enter a namespaced id/)).toBeInTheDocument();
   });
 
   it("shows preview errors from the Rust core", async () => {

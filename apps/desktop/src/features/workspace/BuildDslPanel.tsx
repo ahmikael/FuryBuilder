@@ -191,7 +191,10 @@ export function BuildDslPanel() {
           </Empty>
         )}
         {error ? (
-          <div className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error">
+          <div
+            role="alert"
+            className="rounded-lg border border-status-error/30 bg-status-error/5 p-3 text-sm text-status-error"
+          >
             {error}
           </div>
         ) : null}

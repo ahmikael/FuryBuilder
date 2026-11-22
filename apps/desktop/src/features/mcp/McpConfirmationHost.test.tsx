@@ -86,10 +86,10 @@ describe("MCP confirmation host", () => {
     render(<McpConfirmationHost />);
     await waitFor(() => expect(listen).toHaveBeenCalled());
 
-    expect(screen.queryByText("Approve an AI edit?")).not.toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     act(() => handler?.(request));
 
-    expect(await screen.findByText("Approve an AI edit?")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /Approve an AI edit/ })).toBeInTheDocument();
     expect(screen.getByText("minecraft:stone")).toBeInTheDocument();
     expect(screen.getByText("1, 64, 1")).toBeInTheDocument();
     expect(submit).not.toHaveBeenCalled();
@@ -124,7 +124,7 @@ describe("MCP confirmation host", () => {
 
     render(<McpConfirmationHost />);
 
-    expect(await screen.findByText("Approve an AI edit?")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: /Approve an AI edit/ })).toBeInTheDocument();
     expect(screen.getByText("request-1", { exact: false })).toBeInTheDocument();
   });
 });

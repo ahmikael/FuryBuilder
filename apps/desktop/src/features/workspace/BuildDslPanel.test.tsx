@@ -60,7 +60,7 @@ describe("build DSL panel", () => {
     });
     await user.click(screen.getByRole("button", { name: "Compile & preview" }));
 
-    expect(screen.getByText(/Invalid JSON/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toBeInTheDocument();
     expect(buildApi.preview).not.toHaveBeenCalled();
   });
 

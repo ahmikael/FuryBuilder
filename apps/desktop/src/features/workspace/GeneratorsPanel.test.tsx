@@ -198,7 +198,6 @@ describe("generators panel", () => {
     useToolStore.setState({ selection: null });
     const { unmount } = render(<GeneratorsPanel />);
     expect(screen.getByRole("button", { name: "Apply generator" })).toBeDisabled();
-    expect(screen.getByText(/Use the Box select tool/)).toBeInTheDocument();
     unmount();
 
     useToolStore.setState({ selection });

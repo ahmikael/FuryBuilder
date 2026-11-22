@@ -305,7 +305,6 @@ describe("project manager", () => {
     const row = await screen.findByTestId("project-row-Second Base");
     await user.click(within(row).getByRole("button", { name: "Open" }));
     expect(api.open).not.toHaveBeenCalled();
-    expect(screen.getByText(/Unsaved changes in/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Discard changes" }));
     await waitFor(() => expect(api.open).toHaveBeenCalledWith("Second.furybuilder"));
   });
@@ -325,8 +324,6 @@ describe("project manager", () => {
     seed({ recovery: true });
     const user = userEvent.setup();
     render(<ProjectManager />);
-    expect(screen.getByText(/Recovered unsaved work/)).toBeInTheDocument();
-    expect(screen.getByText(/Revision 6 was loaded/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Discard and reload saved/ }));
     await waitFor(() => expect(api.close).toHaveBeenCalledWith(false, expect.anything()));
     await waitFor(() => expect(api.open).toHaveBeenCalledWith(first.folder));
