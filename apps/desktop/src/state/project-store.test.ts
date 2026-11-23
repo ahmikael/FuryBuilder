@@ -5,7 +5,8 @@ import { defaultScene } from "@/project/scene-types";
 import type { StructureInsertOutcome } from "@/project/structure-types";
 import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
-import { useToolStore } from "@/state/tool-store";
+import { useWorkspaceStore } from "@/state/workspace-store";
+import { isJobCancelled, useToolStore } from "@/state/tool-store";
 import { clearToasts, getToasts } from "@/test-utils/toast-log";
 import { useWorldStore } from "@/state/world-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
@@ -458,6 +459,20 @@ describe("project lifecycle", () => {
         },
       ],
     });
+    useWorkspaceStore.setState({
+      policy: {
+        ...workspace,
+        layers: [
+          ...workspace.layers,
+          { id: "detail", name: "Detail", visible: false, locked: true },
+        ],
+        activeLayerId: "detail",
+      },
+      loading: true,
+      saving: true,
+      error: "stale error",
+    });
+    useHistoryStore.setState({ canUndo: true, canRedo: true, revision: 7 });
 
     let resolveAutosave!: (value: number) => void;
     api.autosave.mockReturnValue(
@@ -494,9 +509,23 @@ describe("project lifecycle", () => {
     expect(useToolStore.getState().job).toBeNull();
     expect(useToolStore.getState().selection).toBeNull();
     expect(useToolStore.getState().clipboard).toBeNull();
+    expect(useToolStore.getState().lastOperation).toBeNull();
+    expect(useWorkspaceStore.getState()).toMatchObject({
+      policy: defaultWorkspacePolicy(),
+      loading: false,
+      saving: false,
+      error: null,
+    });
+    expect(useHistoryStore.getState()).toMatchObject({
+      canUndo: false,
+      canRedo: false,
+      revision: 0,
+      entries: [],
+    });
     expect(useProjectStore.getState().phase).toBe("closed");
     expect(useProjectStore.getState().current).toBeNull();
     expect(job).toBeGreaterThan(0);
+    expect(isJobCancelled(job)).toBe(true);
   });
 
   it("never autosaves after the project is closed", async () => {

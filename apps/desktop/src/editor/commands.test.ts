@@ -49,6 +49,7 @@ vi.mock("@/lib/ipc", async (importOriginal) => {
 const {
   applyEditorOperation,
   applyActiveTool,
+  applyExternalWorldChange,
   cancelInteraction,
   copySelection,
   handleToolClick,
@@ -206,6 +207,26 @@ describe("edit commands", () => {
     expect(api.apply).not.toHaveBeenCalled();
     expect(api.undo).not.toHaveBeenCalled();
     expect(getToasts().filter((toast) => toast.title === "No project ready")).not.toHaveLength(0);
+  });
+
+  it("ignores external world changes while no project is ready", () => {
+    useProjectStore.setState({ phase: "closed", current: null });
+    const reload = vi.fn();
+    const refresh = vi.fn();
+    viewportBus.addEventListener("reload-world", reload);
+    viewportBus.addEventListener("refresh-chunks", refresh);
+    try {
+      applyExternalWorldChange({ reload: true });
+      applyExternalWorldChange({ dirtyChunks: [{ x: 0, z: 0 }] });
+
+      expect(reload).not.toHaveBeenCalled();
+      expect(refresh).not.toHaveBeenCalled();
+      expect(api.info).not.toHaveBeenCalled();
+      expect(api.history).not.toHaveBeenCalled();
+    } finally {
+      viewportBus.removeEventListener("reload-world", reload);
+      viewportBus.removeEventListener("refresh-chunks", refresh);
+    }
   });
 
   it("validates, applies, refreshes dirty chunks and records revision", async () => {

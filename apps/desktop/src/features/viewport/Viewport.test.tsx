@@ -6,6 +6,7 @@ import { snapshotFromBlocks } from "@/renderer/builders";
 import { useToolStore } from "@/state/tool-store";
 import { useProjectStore } from "@/state/project-store";
 import { useWorldStore } from "@/state/world-store";
+import { viewportBus } from "@/features/viewport/viewport-bus";
 
 interface FakeRenderer {
   setSnapshot: Mock;
@@ -214,6 +215,16 @@ describe("Viewport", () => {
     await waitFor(() => expect(renderer.dispose).toHaveBeenCalledTimes(1));
     expect(useWorldStore.getState().status).toBe("idle");
     expect(useWorldStore.getState().cameraPose).toBeNull();
+
+    const renders = renderer.setSnapshot.mock.calls.length;
+    act(() => {
+      viewportBus.dispatchEvent(new CustomEvent("reload-world"));
+      viewportBus.dispatchEvent(
+        new CustomEvent("focus-position", { detail: { x: 0, y: 64, z: 0 } }),
+      );
+    });
+    expect(renderer.setSnapshot).toHaveBeenCalledTimes(renders);
+    expect(renderer.focusOn).not.toHaveBeenCalled();
   });
 
   it("uses an explicitly labelled preview scene in a plain browser", async () => {
