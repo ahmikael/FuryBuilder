@@ -486,11 +486,11 @@ impl ServerManager {
             detail: error.to_string(),
         })?;
         let (status, warnings) = probe.classify();
-        if status != RuntimeStatus::Compatible {
+        if !matches!(status, RuntimeStatus::Compatible | RuntimeStatus::Newer) {
             return Err(ServerError::UnsupportedJava {
                 target: target_minecraft_version(),
                 detail: format!(
-                    "Java {} is not the required compatible Java {}: {}",
+                    "Java {} is not usable for the required Java {}: {}",
                     probe
                         .version
                         .clone()

@@ -78,11 +78,13 @@ pub fn discover(cache: &ManagedRuntimeCache, saved: Option<&Path>) -> RuntimeDis
         .collect();
     reports.sort_by(|left, right| {
         let left_rank = (
+            !left.is_usable(),
             !left.is_compatible(),
             !left.managed,
             left.path.to_ascii_lowercase(),
         );
         let right_rank = (
+            !right.is_usable(),
             !right.is_compatible(),
             !right.managed,
             right.path.to_ascii_lowercase(),
@@ -97,21 +99,16 @@ pub fn discover(cache: &ManagedRuntimeCache, saved: Option<&Path>) -> RuntimeDis
                 .map(|candidate| candidate == canonical)
                 .unwrap_or(false)
         }) {
-            let mut found = found.clone();
-            found.source = RuntimeSource::Manual;
-            return found;
+            return found.clone();
         }
         let managed = canonical.starts_with(cache.root());
         report_for(&canonical, RuntimeSource::Manual, managed)
     });
 
-    let compatible_count = reports
-        .iter()
-        .filter(|report| report.is_compatible())
-        .count();
-    if compatible_count == 0 {
+    let usable_count = reports.iter().filter(|report| report.is_usable()).count();
+    if usable_count == 0 {
         problems.push(format!(
-            "no Java {} runtime was found; choose java.exe manually or install managed Temurin",
+            "no usable Java {} runtime was found; choose java.exe manually or install managed Temurin",
             target_java_major()
         ));
     }

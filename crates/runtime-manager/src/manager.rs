@@ -71,7 +71,11 @@ impl RuntimeManager {
         let managed = self.inner.cache.contains(&path);
         Some(report_for_major(
             &path,
-            RuntimeSource::Manual,
+            if managed {
+                RuntimeSource::Managed
+            } else {
+                RuntimeSource::Manual
+            },
             managed,
             major,
         ))

@@ -63,6 +63,15 @@ const outdated: JavaRuntimeReport = {
   warnings: ["Java 17 is older than the required Java 21"],
 };
 
+const newer: JavaRuntimeReport = {
+  ...compatible,
+  path: "\\\\?\\C:\\Java\\jdk-25\\bin\\java.exe",
+  status: "newer",
+  version: "25.0.1",
+  major: 25,
+  warnings: ["Java 25 is newer than the verified Java 21"],
+};
+
 const release: RuntimeReleaseInfo = {
   major: 21,
   version: "21.0.13+9.0.LTS",
@@ -81,7 +90,7 @@ const release: RuntimeReleaseInfo = {
 const discovery: RuntimeDiscoveryReport = {
   targetJavaMajor: 21,
   targetMinecraftVersion: "1.21.4",
-  candidates: [compatible, outdated],
+  candidates: [compatible, newer, outdated],
   saved: compatible,
   managedRoot: "C:\\app\\runtimes",
   managed: [],
@@ -125,6 +134,9 @@ describe("JavaRuntimeSection", () => {
     expect(screen.getByText(/Java 21 · MC 1.21.4/)).toBeInTheDocument();
     expect(screen.getAllByText("C:\\Java\\jdk-21\\bin\\java.exe").length).toBeGreaterThan(0);
     expect(screen.getByText("17.0.12 · Eclipse Adoptium · common · outdated")).toBeInTheDocument();
+    expect(
+      screen.getByText("25.0.1 · Eclipse Adoptium · common · newer than target"),
+    ).toBeInTheDocument();
     const outdatedButton = screen.getByRole("button", {
       name: "Use C:\\Java\\jdk-17\\bin\\java.exe",
     });
@@ -133,6 +145,22 @@ describe("JavaRuntimeSection", () => {
       name: "Use C:\\Java\\jdk-21\\bin\\java.exe",
     });
     expect(compatibleButton).toBeInTheDocument();
+  });
+
+  it("allows newer Java with a warning but keeps older Java disabled", async () => {
+    const user = userEvent.setup();
+    render(<JavaRuntimeSection />);
+    const newerButton = await screen.findByRole("button", {
+      name: "Use C:\\Java\\jdk-25\\bin\\java.exe",
+    });
+    expect(newerButton).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Use C:\\Java\\jdk-17\\bin\\java.exe" }),
+    ).toBeDisabled();
+
+    await user.click(newerButton);
+    await waitFor(() => expect(api.select).toHaveBeenCalledWith(newer.path));
+    expect(await screen.findByText("Java selected and verified.")).toBeInTheDocument();
   });
 
   it("selects a compatible candidate through the real API contract", async () => {

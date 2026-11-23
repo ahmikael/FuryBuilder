@@ -69,8 +69,18 @@ pub struct JavaRuntimeReport {
 }
 
 impl JavaRuntimeReport {
+    /// Strictly the recommended Java major. Used where an exact match is a product fact.
     pub fn is_compatible(&self) -> bool {
         self.status == RuntimeStatus::Compatible
+    }
+
+    /// A manually selected Java may be newer than the project requirement; it is still
+    /// selectable with its warning. Older, 32-bit and unreadable runtimes are never usable.
+    pub fn is_usable(&self) -> bool {
+        matches!(
+            self.status,
+            RuntimeStatus::Compatible | RuntimeStatus::Newer
+        )
     }
 }
 

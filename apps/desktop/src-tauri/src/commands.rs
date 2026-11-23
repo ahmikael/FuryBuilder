@@ -2995,14 +2995,17 @@ pub async fn server_start_generation(
     let Some(java) = java else {
         return Err(AppError::new(
             ErrorCode::InvalidArgument,
-            "Select a compatible Java 21 runtime before starting generation.",
+            format!(
+                "Select a usable Java {} runtime before starting generation.",
+                runtime_manager::target_java_major()
+            ),
         ));
     };
-    if !java.is_compatible() {
+    if !java.is_usable() {
         return Err(AppError::new(
             ErrorCode::InvalidArgument,
             format!(
-                "The saved Java runtime is no longer compatible with Minecraft {}.",
+                "The saved Java runtime is no longer usable with Minecraft {}.",
                 runtime_manager::target_minecraft_version()
             ),
         ));

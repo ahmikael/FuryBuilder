@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major и Java download pipeline закрыты; идёт Java manual.
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual закрыты; идут клиентские ассеты.
 > Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1390,9 +1390,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-22` — Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block. Статус: P0 в работе.
+**Текущий фокус:** `P0-23` — Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-23`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-24`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1448,7 +1448,7 @@ UI:
 - [x] `P0-19` Facade `components_*` (§6.1): status/resolve/install/cancel/relink/remove/verify.
 - [x] `P0-20` Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`.
 - [x] `P0-21` Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов.
-- [ ] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
+- [x] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
 - [ ] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
 - [ ] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4.
 - [ ] `P0-25` Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar.
@@ -1672,6 +1672,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Java manual | Ручной `java.exe` проверяется запуском `-XshowSettings:properties -version`; major/arch/vendor сохраняются в отчёте, 32-bit/unreadable/старее target блокируются, новее target разрешается с warning; тот же policy применяется к facade relink и server generation, discovery считает и сортирует usable runtimes и больше не переписывает managed source на manual; Settings UI разрешает выбрать newer и показывает предупреждение; старый и новый Java покрыты тестами | см. `git log` | 578 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java download pipeline | Скачивание Temurin уже проверяет announced size и потоковый SHA-256, пишет один temp-архив, распаковывает с traversal/symlink/лимитами, пробует Java и публикует atomic rename; добавлены self-cleaning `StagedRuntime` (staging удаляется на любом error/panic пути), очистка stale `.staging-*`/`.download-*` старше 24 часов перед install и при явном Clear, тесты на failed commit и безопасную очистку partial-файлов; mock HTTP остаётся в P0-31 | см. `git log` | 577 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java by major | Adoptium выбирается по требуемому Java major профиля (8/16/17/21/25), а не 21; managed cache переехал на `components/java/<major>/<release-id>`, manifest schema 2 хранит major, удаление и проверка идут по logical id; probe/select/saved/facade target-aware, Java 17 не блокируется глобальным baseline; Tauri/TS/UI передают major | см. `git log` | 574 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Component facade | Новый crate `component-manager` (модель вынесена в `component-model`): единый status/resolve/relink/remove/verify/install/cancel, target-aware проверки, explicit placeholder и запрет неизвестного hash/version; Java/server install получили cooperative cancel с очисткой partial-файлов; per-id remove managed runtime/server; assets download остаётся явно недоступен до P0-23 | см. `git log` | 572 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |

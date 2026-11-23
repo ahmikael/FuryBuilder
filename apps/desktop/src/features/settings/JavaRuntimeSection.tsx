@@ -59,6 +59,11 @@ function runtimeLabel(runtime: JavaRuntimeReport): string {
   return `${version} · ${vendor}`;
 }
 
+/** Newer Java is allowed with a warning; older, 32-bit and unreadable runtimes are blocked. */
+function canSelect(runtime: JavaRuntimeReport): boolean {
+  return runtime.status === "compatible" || runtime.status === "newer";
+}
+
 function progressLabel(progress: RuntimeProgress): string {
   switch (progress.phase) {
     case "metadata":
@@ -352,7 +357,7 @@ export function JavaRuntimeSection() {
                 <span
                   className={cn(
                     "size-2 shrink-0 rounded-full",
-                    runtime.status === "compatible" ? "bg-status-ok" : "bg-status-warn",
+                    canSelect(runtime) ? "bg-status-ok" : "bg-status-warn",
                   )}
                 />
                 <div className="min-w-0 flex-1">
@@ -365,7 +370,7 @@ export function JavaRuntimeSection() {
                 <Button
                   variant={current ? "secondary" : "outline"}
                   size="sm"
-                  disabled={busy !== null || runtime.status !== "compatible" || current}
+                  disabled={busy !== null || !canSelect(runtime) || current}
                   onClick={() => void applyCandidate(runtime)}
                   aria-label={`Use ${displayRuntimePath(runtime.path)}`}
                 >

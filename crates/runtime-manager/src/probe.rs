@@ -250,7 +250,7 @@ pub fn probe_compatible_for_major(
     expected_major: u32,
 ) -> Result<JavaRuntimeReport, RuntimeError> {
     let report = report_for_major(path, source, managed, expected_major);
-    if report.status == RuntimeStatus::Compatible {
+    if report.is_usable() {
         Ok(report)
     } else {
         Err(unsupported(
@@ -290,6 +290,43 @@ OpenJDK Runtime Environment Temurin-21.0.13+9 (build 21.0.13+9-LTS)
         let (status, warnings) = probe.classify();
         assert_eq!(status, RuntimeStatus::Compatible);
         assert!(warnings.is_empty(), "{warnings:?}");
+    }
+
+    #[test]
+    fn newer_java_is_usable_with_a_warning_but_older_is_not() {
+        let newer = parse_java_probe("java.version = 25\nos.arch = amd64");
+        let (status, warnings) = newer.classify_for(21);
+        assert_eq!(status, RuntimeStatus::Newer);
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.contains("newer than")));
+
+        let report = JavaRuntimeReport {
+            path: "java.exe".to_owned(),
+            source: RuntimeSource::Manual,
+            status,
+            version: Some("25".to_owned()),
+            major: Some(25),
+            vendor: Some("Eclipse Adoptium".to_owned()),
+            arch: Some("amd64".to_owned()),
+            vm: None,
+            managed: false,
+            warnings,
+            error: None,
+        };
+        assert!(report.is_usable());
+        assert!(!report.is_compatible());
+
+        let older = parse_java_probe("java.version = 17\nos.arch = amd64");
+        let (status, warnings) = older.classify_for(21);
+        assert_eq!(status, RuntimeStatus::Outdated);
+        let report = JavaRuntimeReport {
+            status,
+            major: Some(17),
+            warnings,
+            ..report
+        };
+        assert!(!report.is_usable());
     }
 
     #[test]

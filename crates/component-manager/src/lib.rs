@@ -728,12 +728,9 @@ impl ComponentManager {
             status.state = ComponentState::Error;
             status.error = Some(error);
         } else {
-            let (state, error, newer_note) = java_compatibility(&report, target);
+            let (state, error) = java_compatibility(&report, target);
             status.state = state;
             status.error = error;
-            if let Some(note) = newer_note {
-                status.notes.push(note);
-            }
         }
 
         if status.state.is_ready() {
@@ -1107,12 +1104,14 @@ fn first_reason(report: &AssetPathReport) -> String {
 
 /// Classifies a probed runtime against the project's Java requirement. The underlying
 /// manager reports against the baseline profile; the project target is authoritative here.
+/// Classifies a probed runtime against the project Java major. Version warnings come from
+/// the probe itself, so this only decides whether the runtime may be used.
 fn java_compatibility(
     report: &JavaRuntimeReport,
     target: &ComponentTarget,
-) -> (ComponentState, Option<String>, Option<String>) {
+) -> (ComponentState, Option<String>) {
     if let Some(error) = &report.error {
-        return (ComponentState::Error, Some(error.clone()), None);
+        return (ComponentState::Error, Some(error.clone()));
     }
     if let Some(arch) = report.arch.as_deref() {
         let arch = arch.to_ascii_lowercase();
@@ -1120,7 +1119,6 @@ fn java_compatibility(
             return (
                 ComponentState::Incompatible,
                 Some("32-bit Java cannot run Minecraft".to_owned()),
-                None,
             );
         }
     }
@@ -1128,7 +1126,6 @@ fn java_compatibility(
         None => (
             ComponentState::Incompatible,
             Some("Java did not report a major version".to_owned()),
-            None,
         ),
         Some(major) if major < target.java_major => (
             ComponentState::Incompatible,
@@ -1136,17 +1133,8 @@ fn java_compatibility(
                 "Java {major} is older than the required Java {}",
                 target.java_major
             )),
-            None,
         ),
-        Some(major) if major > target.java_major => (
-            ComponentState::Ready,
-            None,
-            Some(format!(
-                "Java {major} is newer than the recommended Java {}; it is allowed with a warning",
-                target.java_major
-            )),
-        ),
-        Some(_) => (ComponentState::Ready, None, None),
+        Some(_) => (ComponentState::Ready, None),
     }
 }
 
@@ -1492,19 +1480,18 @@ mod tests {
         };
         assert_eq!(
             java_compatibility(&report, &target),
-            (ComponentState::Ready, None, None)
+            (ComponentState::Ready, None)
         );
 
         let baseline = ComponentTarget::from_profile(&profile);
-        let (state, error, _) = java_compatibility(&report, &baseline);
+        let (state, error) = java_compatibility(&report, &baseline);
         assert_eq!(state, ComponentState::Incompatible);
         assert!(error.expect("older Java error").contains("older than"));
 
         report.major = Some(baseline.java_major + 4);
-        let (state, error, note) = java_compatibility(&report, &baseline);
+        let (state, error) = java_compatibility(&report, &baseline);
         assert_eq!(state, ComponentState::Ready);
         assert!(error.is_none());
-        assert!(note.expect("newer Java note").contains("newer than"));
 
         report.arch = Some("x86".to_owned());
         assert_eq!(
