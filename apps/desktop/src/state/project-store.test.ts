@@ -422,6 +422,88 @@ describe("project lifecycle", () => {
     await useProjectStore.getState().refreshSession();
     expect(useProjectStore.getState().phase).toBe("closed");
   });
+  it("tears down session state and waits for an in-flight autosave before closing", async () => {
+    useProjectStore.setState({ current: session(), phase: "ready" });
+    useWorldStore.setState({
+      revision: 7,
+      blockCount: 128,
+      status: "ready",
+      source: "core",
+      selection: {
+        dimension: "minecraft:overworld",
+        pos: { x: 1, y: 64, z: 1 },
+        state: { name: "minecraft:stone", properties: {} },
+        face: [0, 1, 0],
+      },
+      metrics: {
+        fps: 60,
+        frameMs: 16,
+        drawCalls: 4,
+        triangles: 100,
+        geometries: 2,
+        textures: 3,
+        loadedChunks: 9,
+        renderedSections: 27,
+        meshCount: 9,
+      },
+    });
+    const job = useToolStore.getState().beginJob("Large paste", true);
+    useToolStore.getState().setClipboard({
+      dimension: "minecraft:overworld",
+      size: [1, 1, 1],
+      blocks: [
+        {
+          pos: { x: 0, y: 0, z: 0 },
+          state: { name: "minecraft:stone", properties: {} },
+        },
+      ],
+    });
+
+    let resolveAutosave!: (value: number) => void;
+    api.autosave.mockReturnValue(
+      new Promise<number>((resolve) => {
+        resolveAutosave = resolve;
+      }),
+    );
+    const autosaving = useProjectStore.getState().autosave();
+    expect(api.autosave).toHaveBeenCalledTimes(1);
+
+    const closing = useProjectStore.getState().close(false);
+    expect(useProjectStore.getState().phase).toBe("preparing");
+    expect(api.close).not.toHaveBeenCalled();
+
+    resolveAutosave(7);
+    expect(await autosaving).toBe(false);
+    expect(await closing).toBe(true);
+    expect(api.close).toHaveBeenCalledWith(false, expect.anything());
+
+    const world = useWorldStore.getState();
+    expect(world).toMatchObject({
+      status: "idle",
+      source: null,
+      revision: 0,
+      blockCount: 0,
+      sectionCount: 0,
+      chunkCount: 0,
+      loadRadius: 1,
+      selection: null,
+      metrics: null,
+      cameraPose: null,
+      lastCapture: null,
+    });
+    expect(useToolStore.getState().job).toBeNull();
+    expect(useToolStore.getState().selection).toBeNull();
+    expect(useToolStore.getState().clipboard).toBeNull();
+    expect(useProjectStore.getState().phase).toBe("closed");
+    expect(useProjectStore.getState().current).toBeNull();
+    expect(job).toBeGreaterThan(0);
+  });
+
+  it("never autosaves after the project is closed", async () => {
+    useProjectStore.setState({ current: session(), phase: "closed" });
+    expect(await useProjectStore.getState().autosave()).toBe(false);
+    expect(api.autosave).not.toHaveBeenCalled();
+  });
 });
 
 describe("project manager entry points and startup", () => {
@@ -491,7 +573,7 @@ describe("save and autosave", () => {
   });
 
   it("autosaves only when the world revision is unsaved", async () => {
-    useProjectStore.setState({ current: session(), projects: [summary] });
+    useProjectStore.setState({ current: session(), projects: [summary], phase: "ready" });
     useWorldStore.setState({ revision: 4 });
     expect(await useProjectStore.getState().autosave()).toBe(false);
     expect(api.autosave).not.toHaveBeenCalled();
@@ -521,23 +603,23 @@ describe("save and autosave", () => {
 describe("close, checkpoints and rename", () => {
   it("closes without saving and resets the UI session", async () => {
     useProjectStore.setState({ current: session(), projects: [summary] });
-    const reload = vi.fn();
-    viewportBus.addEventListener("reload-world", reload);
-    try {
-      const closed = await useProjectStore.getState().close(false);
-      expect(closed).toBe(true);
-      expect(api.close).toHaveBeenCalledWith(false, {
-        selectedDimension: "minecraft:overworld",
-        loadRadius: 1,
-        workspace,
-        scene,
-      });
-      expect(useProjectStore.getState().current).toBeNull();
-      expect(useWorldStore.getState().revision).toBe(0);
-      expect(reload).toHaveBeenCalledTimes(1);
-    } finally {
-      viewportBus.removeEventListener("reload-world", reload);
-    }
+    const closed = await useProjectStore.getState().close(false);
+    expect(closed).toBe(true);
+    expect(api.close).toHaveBeenCalledWith(false, {
+      selectedDimension: "minecraft:overworld",
+      loadRadius: 1,
+      workspace,
+      scene,
+    });
+    expect(useProjectStore.getState().current).toBeNull();
+    expect(useWorldStore.getState()).toMatchObject({
+      revision: 0,
+      blockCount: 0,
+      chunkCount: 0,
+      status: "idle",
+      source: null,
+      selection: null,
+    });
   });
 
   it("restores a checkpoint as unsaved work", async () => {

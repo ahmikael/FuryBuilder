@@ -963,7 +963,7 @@ export function useProjectAutosave(intervalMs = 30_000): void {
   useEffect(() => {
     const tick = (): void => {
       const state = useProjectStore.getState();
-      if (state.loading || !state.current?.folder) return;
+      if (state.phase !== "ready" || !state.current?.folder) return;
       const revision = useWorldStore.getState().revision;
       if (revision === state.current.savedRevision) return;
       if (state.current.autosavedRevision === revision) return;

@@ -34,6 +34,7 @@ interface WorldUiState extends WorldSummary {
   setLastCapture: (capture: CaptureMetadata | null) => void;
   setGridVisible: (visible: boolean) => void;
   setChunkBordersVisible: (visible: boolean) => void;
+  reset: () => void;
 }
 
 export const MIN_LOAD_RADIUS = 1;
@@ -69,6 +70,24 @@ export const useWorldStore = create<WorldUiState>()((set) => ({
   setLastCapture: (lastCapture) => set({ lastCapture }),
   setGridVisible: (gridVisible) => set({ gridVisible }),
   setChunkBordersVisible: (chunkBordersVisible) => set({ chunkBordersVisible }),
+  reset: () =>
+    set({
+      status: "idle",
+      source: null,
+      error: null,
+      dimension: "minecraft:overworld",
+      revision: 0,
+      blockCount: 0,
+      sectionCount: 0,
+      chunkCount: 0,
+      loadRadius: 1,
+      selection: null,
+      metrics: null,
+      cameraPose: null,
+      lastCapture: null,
+      gridVisible: true,
+      chunkBordersVisible: true,
+    }),
 }));
 
 export function chunkPosFromBlock(pos: { x: number; z: number }): ChunkPos {

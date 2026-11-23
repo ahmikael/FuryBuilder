@@ -122,6 +122,14 @@ issued. Editor commands re-check the predicate as well, so a global shortcut can
 while the welcome screen is visible. `resume` runs from startup and from an explicit
 retry, never from the viewport.
 
+Closing a project first invalidates autosave and waits for an autosave that is already
+writing, then closes the backend session (which cancels world jobs). Afterwards the store
+clears the job, selection, clipboard, world summary, camera, metrics, layers, scene,
+parametric state and undo history. A late autosave result is discarded by generation, so
+it cannot touch the closed project. The editor shell unmounts and the viewport cleanup
+disposes the renderer, removes its bus and asset listeners, and returns the world store to
+idle.
+
 ## Welcome screen
 
 The top bar and status bar are always present; the content area switches between the

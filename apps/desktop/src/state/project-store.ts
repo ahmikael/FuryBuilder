@@ -46,6 +46,42 @@ import { useSceneStore } from "@/state/scene-store";
 import { useParametricStore } from "@/state/parametric-store";
 import { reloadViewport } from "@/features/viewport/viewport-bus";
 
+/** Invalidates any autosave that was started for the previous session. */
+let autosaveGeneration = 0;
+let autosaveInFlight: Promise<boolean> | null = null;
+
+/**
+ * Stops the next autosave and waits for one already running. Closing, switching or
+ * replacing a project must never race an autosave that still writes the old folder.
+ */
+async function settlePendingAutosave(): Promise<void> {
+  autosaveGeneration += 1;
+  const pending = autosaveInFlight;
+  if (pending) await pending.catch(() => false);
+}
+
+/**
+ * Clears every in-memory trace of the session: renderer-independent world state,
+ * editor tools, jobs, selection, clipboard, layers, scene and undo history. The
+ * viewport renderer disposes itself when the editor shell unmounts.
+ */
+function teardownSessionState(): void {
+  const tools = useToolStore.getState();
+  if (tools.job) {
+    tools.requestCancel();
+    tools.finishJob(tools.job.id);
+  }
+  tools.resetTransient();
+  tools.setSelection(null);
+  tools.setClipboard(null);
+  tools.markSaved();
+  useWorldStore.getState().reset();
+  useWorkspaceStore.getState().reset();
+  useSceneStore.getState().reset();
+  useParametricStore.getState().reset();
+  useHistoryStore.getState().reset();
+}
+
 /** The single app-level state of the open project. */
 export type ProjectPhase = "closed" | "preparing" | "ready" | "saving" | "error";
 
@@ -587,25 +623,36 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   autosave: async (reason = "") => {
     const state = get();
-    if (!state.current?.folder) return false;
+    if (state.phase !== "ready" || !state.current?.folder) return false;
+    if (autosaveInFlight) return false;
     const revision = useWorldStore.getState().revision;
     if (!state.current.dirty && revision === state.current.savedRevision) return false;
     if (state.current.autosavedRevision === revision) return false;
+    const generation = autosaveGeneration;
+    const task = (async () => {
+      try {
+        const savedRevision = await autosaveProject(currentEditorState(), reason);
+        if (generation !== autosaveGeneration) return false;
+        set((current) => ({
+          current: current.current
+            ? {
+                ...current.current,
+                autosavedRevision: savedRevision,
+                revision,
+              }
+            : current.current,
+        }));
+        return true;
+      } catch (error) {
+        if (generation === autosaveGeneration) reportError(error, "Autosave failed");
+        return false;
+      }
+    })();
+    autosaveInFlight = task;
     try {
-      const savedRevision = await autosaveProject(currentEditorState(), reason);
-      set((current) => ({
-        current: current.current
-          ? {
-              ...current.current,
-              autosavedRevision: savedRevision,
-              revision,
-            }
-          : current.current,
-      }));
-      return true;
-    } catch (error) {
-      reportError(error, "Autosave failed");
-      return false;
+      return await task;
+    } finally {
+      if (autosaveInFlight === task) autosaveInFlight = null;
     }
   },
 
@@ -666,6 +713,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       return true;
     }
     set(saveBeforeClose ? savingState() : preparingState("Closing the project…"));
+    await settlePendingAutosave();
     try {
       await closeProject(saveBeforeClose, currentEditorState());
       set({
@@ -676,18 +724,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
         lastSavedAtMs: null,
         ...closedState(),
       });
-      useToolStore.getState().markSaved();
-      useToolStore.getState().resetTransient();
-      useWorkspaceStore.getState().reset();
-      useSceneStore.getState().reset();
-      useParametricStore.getState().reset();
-      useToolStore.getState().setSelection(null);
-      useHistoryStore.getState().reset();
-      useWorldStore
-        .getState()
-        .applySummary({ revision: 0, blockCount: 0, sectionCount: 0, chunkCount: 0 });
-      useWorldStore.getState().setSelection(null);
-      reloadViewport();
+      teardownSessionState();
       pushToast({
         kind: saveBeforeClose ? "success" : "info",
         title: saveBeforeClose ? "Project saved and closed" : "Project closed",
@@ -731,10 +768,11 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     const folder = state.current?.folder;
     if (!folder) return false;
     set(preparingState("Discarding the recovered autosave…"));
+    await settlePendingAutosave();
     try {
       await closeProject(false, currentEditorState());
       set({ current: null, recovery: null, ...closedState() });
-      useToolStore.getState().markSaved();
+      teardownSessionState();
       const opened = await get().open(folder, { discardCurrent: true });
       return opened;
     } catch (error) {

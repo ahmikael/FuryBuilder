@@ -133,7 +133,8 @@ export const useToolStore = create<ToolState>()((set) => ({
   markModified: () => set({ syncState: "modified" }),
   markSaved: () => set({ syncState: "pristine" }),
   setLastOperation: (lastOperation) => set({ lastOperation, syncState: "modified" }),
-  resetTransient: () => set({ anchor: null, hover: null, ghost: null, pendingPaste: null }),
+  resetTransient: () =>
+    set({ anchor: null, hover: null, ghost: null, pendingPaste: null, lastOperation: null }),
 }));
 
 export function isJobCancelled(id: number): boolean {

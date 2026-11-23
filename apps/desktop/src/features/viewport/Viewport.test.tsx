@@ -202,6 +202,20 @@ describe("Viewport", () => {
     expect(useWorldStore.getState().status).toBe("idle");
   });
 
+  it("disposes the renderer when the session leaves the editor", async () => {
+    render(<Viewport />);
+    await waitFor(() => expect(useWorldStore.getState().status).toBe("ready"));
+    const renderer = mocks.instances[0]!;
+
+    act(() => {
+      useProjectStore.setState({ phase: "closed" });
+    });
+
+    await waitFor(() => expect(renderer.dispose).toHaveBeenCalledTimes(1));
+    expect(useWorldStore.getState().status).toBe("idle");
+    expect(useWorldStore.getState().cameraPose).toBeNull();
+  });
+
   it("uses an explicitly labelled preview scene in a plain browser", async () => {
     ipc.tauri = false;
     render(<Viewport />);
