@@ -408,7 +408,6 @@ export function Viewport() {
       // finish loading after it was disposed, so only the current renderer may signal
       // that a snapshot is ready for asset resolution.
       setSceneEpoch((value) => value + 1);
-      if (tauri) void useProjectStore.getState().resume();
     });
 
     const onRefresh = (event: Event): void => {

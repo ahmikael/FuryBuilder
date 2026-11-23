@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BottomPanel } from "@/features/workspace/BottomPanel";
 import { Inspector } from "@/features/workspace/Inspector";
 import { StatusBar } from "@/features/workspace/StatusBar";
 import { Toolbar } from "@/features/workspace/Toolbar";
 import { Viewport } from "@/features/viewport/Viewport";
+import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import { WorldTree } from "@/features/workspace/WorldTree";
 import { CommandPalette } from "@/features/workspace/CommandPalette";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
@@ -16,10 +18,12 @@ import { UpdateBanner } from "@/features/updates/UpdateBanner";
 import { useAutoUpdate } from "@/features/updates/use-auto-update";
 import { Toaster } from "@/components/ui/toast";
 import { useBackendInfo } from "@/hooks/use-backend";
+import { isTauriRuntime } from "@/lib/ipc";
 import { useAppliedScale, useAppliedTheme } from "@/app/theme";
 import { useAppHotkeys } from "@/app/use-app-hotkeys";
 import { useEditorHotkeys } from "@/editor/use-editor-hotkeys";
 import { useEditorStore } from "@/state/editor-store";
+import { useProjectStore } from "@/state/project-store";
 import { useUiStore } from "@/state/ui-store";
 
 export function App() {
@@ -34,6 +38,9 @@ export function App() {
   const setSettingsOpen = useUiStore((state) => state.setSettingsOpen);
   const mcpAccessOpen = useUiStore((state) => state.mcpAccessOpen);
   const setMcpAccessOpen = useUiStore((state) => state.setMcpAccessOpen);
+  const phase = useProjectStore((state) => state.phase);
+  const current = useProjectStore((state) => state.current);
+  const bootstrap = useProjectStore((state) => state.bootstrap);
 
   useAppliedTheme(theme);
   useAppliedScale(uiScale);
@@ -42,12 +49,20 @@ export function App() {
   useProjectAutosave();
   useAutoUpdate();
 
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    void (async () => {
+      await bootstrap();
+    })();
+  }, [bootstrap]);
+
   const currentResolvedTheme =
     theme === "system"
       ? window.matchMedia?.("(prefers-color-scheme: dark)").matches
         ? "dark"
         : "light"
       : theme;
+  const editorVisible = Boolean(current?.folder) && phase !== "closed" && phase !== "preparing";
 
   return (
     <Toaster limit={4}>
@@ -60,14 +75,20 @@ export function App() {
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenMcpAccess={() => setMcpAccessOpen(true)}
           />
-          <RecoveryBanner />
           <UpdateBanner />
-          <div className="flex min-h-0 flex-1">
-            {leftPanelOpen ? <WorldTree /> : null}
-            <Viewport />
-            {rightPanelOpen ? <Inspector /> : null}
-          </div>
-          {bottomPanelOpen ? <BottomPanel backend={backend} /> : null}
+          {editorVisible ? (
+            <>
+              <RecoveryBanner />
+              <div className="flex min-h-0 flex-1">
+                {leftPanelOpen ? <WorldTree /> : null}
+                <Viewport />
+                {rightPanelOpen ? <Inspector /> : null}
+              </div>
+              {bottomPanelOpen ? <BottomPanel backend={backend} /> : null}
+            </>
+          ) : (
+            <WelcomeScreen backend={backend} />
+          )}
           <StatusBar backend={backend} />
         </div>
         <ProjectManager />

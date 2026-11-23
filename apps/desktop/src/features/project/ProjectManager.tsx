@@ -63,7 +63,7 @@ import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
-import { projectIsDirty, useProjectStore } from "@/state/project-store";
+import { isManagerTab, projectIsDirty, useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 import { useWorldStore } from "@/state/world-store";
 import {
@@ -71,7 +71,7 @@ import {
   creationModeLabel,
   formatBytes,
   formatRelativeTime,
-  type CreationMode,
+  projectSummaryWarnings,
 } from "@/project/types";
 import { cn } from "@/lib/utils";
 
@@ -162,9 +162,11 @@ export function ProjectManager() {
   const importGeneratedWorld = useProjectStore((state) => state.importGeneratedWorld);
   const analysisLoading = useProjectStore((state) => state.analysisLoading);
   const worldRevision = useWorldStore((state) => state.revision);
-  const [tab, setTab] = useState("projects");
+  const tab = useProjectStore((state) => state.managerTab);
+  const setTab = useProjectStore((state) => state.setManagerTab);
+  const mode = useProjectStore((state) => state.managerCreateMode);
+  const setMode = useProjectStore((state) => state.setManagerCreateMode);
   const [name, setName] = useState("");
-  const [mode, setMode] = useState<CreationMode>("empty");
   const [worldFolder, setWorldFolder] = useState("");
   const [renameFolder, setRenameFolder] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -371,7 +373,13 @@ export function ProjectManager() {
               </Alert>
             ) : null}
 
-            <Tabs value={tab} onValueChange={setTab} className="min-h-0">
+            <Tabs
+              value={tab}
+              onValueChange={(value) => {
+                if (isManagerTab(value)) setTab(value);
+              }}
+              className="min-h-0"
+            >
               <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="projects">
                   <FolderOpen data-icon="inline-start" />
@@ -488,13 +496,7 @@ export function ProjectManager() {
                         name={project.name}
                         active={project.folder === activeFolder}
                         recoverable={project.recoverable}
-                        warnings={
-                          project.schemaVersion > 1
-                            ? ["Newer schema; update FuryBuilder"]
-                            : project.bytes === 0
-                              ? ["Manifest has no snapshot size"]
-                              : []
-                        }
+                        warnings={projectSummaryWarnings(project)}
                         meta={`${creationModeLabel(project.creationMode)} · ${project.targetMinecraftVersion} · DV ${project.targetDataVersion} · rev ${project.worldRevision} · ${formatBytes(project.bytes)} · saved ${formatRelativeTime(project.lastSavedAtMs)}`}
                         onOpen={() => requestOpen(project.folder, project.name)}
                         onRename={() => {

@@ -76,7 +76,7 @@ const summary: ProjectSummary = {
   lastSavedAtMs: 1_700_000_000_000,
   lastSaveKind: "manual",
   bytes: 8192,
-  schemaVersion: 1,
+  schemaVersion: 2,
   recoverable: false,
 };
 
@@ -201,6 +201,9 @@ function resetStores(): void {
     loading: false,
     error: null,
     managerOpen: false,
+    managerTab: "projects",
+    managerCreateMode: "empty",
+    bootstrapped: false,
   });
 }
 
@@ -408,6 +411,45 @@ describe("project lifecycle", () => {
     api.status.mockResolvedValue(session({ folder: null, name: null }));
     await useProjectStore.getState().refreshSession();
     expect(useProjectStore.getState().phase).toBe("closed");
+  });
+});
+
+describe("project manager entry points and startup", () => {
+  it("opens the manager on a requested tab and creation mode", () => {
+    useProjectStore.getState().openManager("create", "import");
+    expect(useProjectStore.getState()).toMatchObject({
+      managerOpen: true,
+      managerTab: "create",
+      managerCreateMode: "import",
+    });
+
+    useProjectStore.getState().openManager("projects");
+    expect(useProjectStore.getState()).toMatchObject({
+      managerOpen: true,
+      managerTab: "projects",
+      managerCreateMode: "empty",
+    });
+  });
+
+  it("probes the last session once and stays closed without a project", async () => {
+    api.status.mockResolvedValue(session({ folder: null, name: null }));
+
+    await useProjectStore.getState().bootstrap();
+    await useProjectStore.getState().bootstrap();
+
+    expect(api.status).toHaveBeenCalledTimes(1);
+    expect(worldApi.info).not.toHaveBeenCalled();
+    expect(useProjectStore.getState().phase).toBe("closed");
+    expect(useProjectStore.getState().bootstrapped).toBe(true);
+  });
+
+  it("restores an existing session before the editor mounts", async () => {
+    await useProjectStore.getState().bootstrap();
+
+    expect(api.status).toHaveBeenCalledTimes(1);
+    expect(worldApi.info).toHaveBeenCalledTimes(1);
+    expect(useProjectStore.getState().phase).toBe("ready");
+    expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
   });
 });
 

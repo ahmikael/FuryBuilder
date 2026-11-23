@@ -49,6 +49,20 @@ import { reloadViewport } from "@/features/viewport/viewport-bus";
 /** The single app-level state of the open project. */
 export type ProjectPhase = "closed" | "preparing" | "ready" | "saving" | "error";
 
+/** Tabs of the project manager dialog. */
+export type ManagerTab = "projects" | "create" | "checkpoints" | "exchange";
+
+export const MANAGER_TABS: readonly ManagerTab[] = [
+  "projects",
+  "create",
+  "checkpoints",
+  "exchange",
+];
+
+export function isManagerTab(value: string): value is ManagerTab {
+  return (MANAGER_TABS as readonly string[]).includes(value);
+}
+
 /** Actionable lifecycle failure shown by the welcome/editor error state. */
 export interface ProjectFailure {
   code: string;
@@ -72,7 +86,14 @@ interface ProjectUiState {
   loading: boolean;
   error: string | null;
   managerOpen: boolean;
+  managerTab: ManagerTab;
+  managerCreateMode: CreationMode;
+  bootstrapped: boolean;
   setManagerOpen: (open: boolean) => void;
+  setManagerTab: (tab: ManagerTab) => void;
+  setManagerCreateMode: (mode: CreationMode) => void;
+  openManager: (tab?: ManagerTab, mode?: CreationMode) => void;
+  bootstrap: () => Promise<void>;
   beginPreparing: (message: string) => void;
   markReady: () => void;
   beginSaving: () => void;
@@ -117,6 +138,9 @@ const initial = {
   loading: false,
   error: null as string | null,
   managerOpen: false,
+  managerTab: "projects" as ManagerTab,
+  managerCreateMode: "empty" as CreationMode,
+  bootstrapped: false,
 };
 
 function preparingState(message: string) {
@@ -228,6 +252,19 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
   ...initial,
 
   setManagerOpen: (managerOpen) => set({ managerOpen }),
+
+  setManagerTab: (managerTab) => set({ managerTab }),
+
+  setManagerCreateMode: (managerCreateMode) => set({ managerCreateMode }),
+
+  openManager: (managerTab = "projects", managerCreateMode = "empty") =>
+    set({ managerOpen: true, managerTab, managerCreateMode }),
+
+  bootstrap: async () => {
+    if (get().bootstrapped) return;
+    set({ bootstrapped: true });
+    await get().resume();
+  },
 
   beginPreparing: (prepareMessage) => set(preparingState(prepareMessage)),
 

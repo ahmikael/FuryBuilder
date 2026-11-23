@@ -6,6 +6,9 @@ export type CreationMode = "empty" | "flat" | "vanilla" | "import";
 export type SaveKind = "manual" | "autosave" | "checkpoint";
 export type SourceKind = "generated" | "imported";
 
+/** The only project schema this build reads or writes. */
+export const PROJECT_SCHEMA_VERSION = 2;
+
 export interface WorkspaceLayer {
   id: string;
   name: string;
@@ -311,6 +314,20 @@ export const CREATION_MODES: Array<{
 
 export function creationModeLabel(mode: CreationMode): string {
   return CREATION_MODES.find((entry) => entry.mode === mode)?.label ?? mode;
+}
+
+/** Honest, user-facing problems with a project summary from the backend. */
+export function projectSummaryWarnings(project: ProjectSummary): string[] {
+  const warnings: string[] = [];
+  if (project.schemaVersion > PROJECT_SCHEMA_VERSION) {
+    warnings.push("Newer project schema; update FuryBuilder");
+  } else if (project.schemaVersion !== PROJECT_SCHEMA_VERSION) {
+    warnings.push("Unsupported project schema; this build cannot open it");
+  }
+  if (project.bytes === 0) {
+    warnings.push("Manifest has no snapshot size");
+  }
+  return warnings;
 }
 
 export function formatBytes(bytes: number): string {

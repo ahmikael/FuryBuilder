@@ -115,6 +115,27 @@ The desktop project store is the single source of project state. It exposes
 Only the store transitions these phases; components read them instead of inferring state
 from ad-hoc booleans. Autosave stays a background operation and does not leave `ready`.
 
+## Welcome screen
+
+The top bar and status bar are always present; the content area switches between the
+welcome screen and the editor. The editor mounts only when a session exists and the phase
+is `ready`, `saving`, or `error` with an already-open project. While `closed` or
+`preparing`, no viewport or renderer exists.
+
+The welcome screen shows the brand, up to six recent projects sorted by last save, and the
+three entry points: `New project`, `Open project`, and `Import world`. Recent rows show the
+creation mode, project version/DataVersion, size, relative save time, recoverability, and
+honest schema warnings. `New project` and `Import world` open the project manager on the
+matching creation mode; `Open project` uses the desktop folder picker and falls back to the
+project list in a browser preview. A desktop-offline alert explains why project actions
+cannot work, and an unreadable library shows the backend error with a retry action.
+
+Startup probes the stored session once before any project UI mounts. A failure during
+preparation stays on the welcome screen with the stable code, message, hint, Retry, and
+Dismiss; the viewport is never opened halfway. The screen is built from the stock shadcn
+`Button`, `Card`, `Alert`, `Badge`, `Empty`, `ScrollArea`, and `Separator` components with
+semantic theme variables only.
+
 ## Security boundaries
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.

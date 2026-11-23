@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "@/app/App";
 import { viewportBus } from "@/features/viewport/viewport-bus";
 import { useEditorStore } from "@/state/editor-store";
+import { useProjectStore } from "@/state/project-store";
 import { useUiStore } from "@/state/ui-store";
 import type { BlockPosition } from "@/renderer/types";
 
@@ -24,6 +25,20 @@ function resetUi() {
     settingsOpen: false,
     mcpAccessOpen: false,
     commandPaletteOpen: false,
+  });
+  useProjectStore.getState().reset();
+  useProjectStore.setState({
+    phase: "ready",
+    current: {
+      folder: "Scenarios.furybuilder",
+      name: "Scenarios",
+      savedRevision: 1,
+      autosavedRevision: null,
+      revision: 1,
+      dirty: false,
+      editorState: { selectedDimension: "minecraft:overworld", loadRadius: 1 },
+      availableCheckpoints: 0,
+    },
   });
 }
 

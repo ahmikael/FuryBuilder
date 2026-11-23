@@ -2,6 +2,7 @@ import { Circle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import type { BackendState } from "@/hooks/use-backend";
+import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
@@ -11,6 +12,7 @@ function BarSeparator() {
 }
 
 export function StatusBar({ backend }: { backend: BackendState }) {
+  const projectOpen = useProjectStore((state) => Boolean(state.current?.folder));
   const revision = useWorldStore((state) => state.revision);
   const chunkCount = useWorldStore((state) => state.chunkCount);
   const blockCount = useWorldStore((state) => state.blockCount);
@@ -30,22 +32,38 @@ export function StatusBar({ backend }: { backend: BackendState }) {
         {backend.status === "online" ? "Core connected" : "Core offline"}
       </span>
       <BarSeparator />
-      <span>{dimension.replace("minecraft:", "")}</span>
-      <BarSeparator />
-      {selection ? (
+      {projectOpen ? (
         <>
+          <span>{dimension.replace("minecraft:", "")}</span>
           <BarSeparator />
-          <Badge variant="secondary">box selected</Badge>
+          {selection ? (
+            <>
+              <BarSeparator />
+              <Badge variant="secondary">box selected</Badge>
+            </>
+          ) : null}
+          <div className="ml-auto flex items-center gap-2">
+            <span className="font-mono">rev {revision}</span>
+            <BarSeparator />
+            <span className="hidden font-mono md:inline">{chunkCount} chunks</span>
+            <BarSeparator />
+            <span className="font-mono">{blockCount.toLocaleString()} blocks</span>
+          </div>
         </>
-      ) : null}
-
-      <div className="ml-auto flex items-center gap-2">
-        <span className="font-mono">rev {revision}</span>
-        <BarSeparator />
-        <span className="hidden font-mono md:inline">{chunkCount} chunks</span>
-        <BarSeparator />
-        <span className="font-mono">{blockCount.toLocaleString()} blocks</span>
-      </div>
+      ) : (
+        <>
+          <span>No project open</span>
+          <div className="ml-auto flex items-center gap-2">
+            <span className="hidden sm:inline">Welcome to FuryBuilder</span>
+            {backend.info ? (
+              <>
+                <BarSeparator />
+                <span className="font-mono">v{backend.info.version}</span>
+              </>
+            ) : null}
+          </div>
+        </>
+      )}
     </footer>
   );
 }

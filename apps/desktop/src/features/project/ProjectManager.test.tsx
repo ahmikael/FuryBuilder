@@ -70,7 +70,7 @@ const first: ProjectSummary = {
   lastSavedAtMs: 1_700_000_000_000,
   lastSaveKind: "manual",
   bytes: 2048,
-  schemaVersion: 1,
+  schemaVersion: 2,
   recoverable: false,
 };
 
@@ -86,7 +86,7 @@ const second: ProjectSummary = {
   lastSavedAtMs: 1_700_000_100_000,
   lastSaveKind: "manual",
   bytes: 512,
-  schemaVersion: 1,
+  schemaVersion: 2,
   recoverable: true,
 };
 
@@ -213,6 +213,9 @@ function seed(overrides: { revision?: number; recovery?: boolean } = {}): void {
     analysisLoading: false,
     loading: false,
     error: null,
+    phase: "ready",
+    managerTab: "projects",
+    managerCreateMode: "empty",
   });
   useWorldStore.setState({ revision: overrides.revision ?? 4 });
   useToolStore.setState({ syncState: "pristine" });
