@@ -34,7 +34,7 @@ application API over an authenticated local endpoint and never opens world files
 | ADR-012 | Build DSL is a typed JSON/AST schema, not an interpreter. Observation and validation outputs are revisioned and completeness-aware.       |
 | ADR-013 | MCP targets the stateless `2026-07-28` core and keeps the legacy initialization lifecycle; state is never bound to a transport session.   |
 | ADR-014 | Three creation modes only: `Empty Project`, `Import World` and `Vanilla World` (official local server, explicit EULA).                    |
-| ADR-015 | Java, client assets and the official server JAR are discovered first and provisioned only after explicit consent through one component facade, with checksum verification. |
+| ADR-015 | Java, client assets and the official server JAR are discovered first and provisioned only after explicit consent through one component facade; the desktop shell exposes one `components_*` command set with progress, change and error events, and verifies checksums before publishing. |
 | ADR-016 | Rust core crates stay independent of UI/desktop dependencies; UI and MCP produce identical operations for the same command.                |
 | ADR-017 | The MCP bridge is a Rust `rmcp` sidecar bundled next to the desktop executable; no Node.js runtime is required.                           |
 
@@ -80,6 +80,22 @@ Assets come from the user's installed 1.21.4 client JAR/assets or a selected res
 A missing asset falls back to a clearly marked placeholder and never changes block data.
 Mojang JARs, textures and assets are not redistributed. Atlas caches are keyed by version,
 asset fingerprint, pack-stack hash and renderer schema.
+
+## Components
+
+The desktop manages Java, client assets and the official server JAR through one
+`component-manager` facade. The Tauri shell owns exactly one instance and exposes:
+
+- `components_status`, `components_resolve`, `components_inventory`;
+- `components_java_release`, `components_assets_release`, `components_server_release`;
+- `components_install`, `components_cancel`, `components_relink`, `components_remove`,
+  `components_verify`.
+
+Every mutation validates the project target and the reviewed version/hash before touching
+the network. Installs stream `furybuilder-component-progress`; successful mutations emit
+`furybuilder-component-changed`; failures emit `furybuilder-component-error` with the same
+stable code the command rejects with. The kind-specific legacy events are emitted alongside
+the unified change event while the remaining panels migrate.
 
 ## Security boundaries
 

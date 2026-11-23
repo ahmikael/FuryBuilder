@@ -23,6 +23,8 @@ pub enum ErrorCode {
     UnsupportedVersion,
     UnsupportedFormat,
     BackendUnavailable,
+    Offline,
+    DiskSpace,
     NoHistory,
     Cancelled,
     Internal,
@@ -202,5 +204,14 @@ mod tests {
         let json = serde_json::to_value(&error).expect("serializable");
         assert_eq!(json["code"], "invalid_argument");
         assert_eq!(json["message"], "bad bounds");
+
+        assert_eq!(
+            serde_json::to_value(ErrorCode::Offline).expect("offline"),
+            "offline"
+        );
+        assert_eq!(
+            serde_json::to_value(ErrorCode::DiskSpace).expect("disk space"),
+            "disk_space"
+        );
     }
 }

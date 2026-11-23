@@ -36,13 +36,14 @@ use asset_source::{
     AssetPathReport, AssetSelectionKind, AssetSettingsError, AssetSettingsStore,
     AssetSourceSetting, VersionReport, VersionStatus,
 };
-use component_model::{
-    ComponentError as StatusError, ComponentHash, ComponentKind, ComponentMode, ComponentState,
-    ComponentStatus, HashAlgorithm,
+use component_model::ComponentError as StatusError;
+pub use component_model::{
+    ComponentHash, ComponentKind, ComponentMode, ComponentState, ComponentStatus, HashAlgorithm,
 };
 use minecraft_version::{VersionId, VersionProfile};
 use runtime_manager::{
-    JavaRuntimeReport, RuntimeError, RuntimeManager, ServerError, ServerManager, ServerProgress,
+    JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport, RuntimeError, RuntimeManager,
+    RuntimeReleaseInfo, ServerError, ServerManager, ServerProgress, ServerReleaseInfo,
     ServerTarget,
 };
 use serde::{Deserialize, Serialize};
@@ -155,6 +156,16 @@ impl ComponentReport {
     pub fn status(&self, kind: ComponentKind) -> Option<&ComponentStatus> {
         self.components.iter().find(|status| status.kind == kind)
     }
+}
+
+/// Every FuryBuilder-owned artifact on disk, grouped by kind. This is the Settings
+/// inventory: it reports what can be verified or removed, not what a project selected.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentInventory {
+    pub java: ManagedCacheReport,
+    pub assets: client_jar::ManagedClientJarReport,
+    pub servers: ManagedServerCacheReport,
 }
 
 /// Verified component identity. The path is resolved for use; the project should persist
@@ -370,6 +381,29 @@ impl ComponentManager {
         )
     }
 
+    /// Underlying managers, exposed so the desktop shell keeps exactly one instance of each
+    /// component source. Mutations still go through this facade.
+    pub fn java(&self) -> &RuntimeManager {
+        &self.inner.java
+    }
+
+    pub fn assets(&self) -> &AssetSettingsStore {
+        &self.inner.assets
+    }
+
+    pub fn server(&self) -> &ServerManager {
+        &self.inner.server
+    }
+
+    /// Lists every FuryBuilder-owned artifact. Nothing is downloaded, inspected or changed.
+    pub fn inventory(&self) -> Result<ComponentInventory, ComponentError> {
+        Ok(ComponentInventory {
+            java: self.inner.java.managed_list()?,
+            assets: self.inner.client_jars.managed_list()?,
+            servers: self.inner.server.managed_list()?,
+        })
+    }
+
     /// Returns the official client JAR metadata for the target version. No bytes are
     /// downloaded until [`Self::install`] is called.
     pub fn assets_release(
@@ -379,6 +413,28 @@ impl ComponentManager {
         target.validate()?;
         self.ensure_managed_target(target)?;
         Ok(self.inner.client_jars.release(&target.minecraft_version)?)
+    }
+
+    /// Returns the Adoptium release the target Java major would install. No bytes are
+    /// downloaded until [`Self::install`] is called.
+    pub fn java_release(
+        &self,
+        target: &ComponentTarget,
+    ) -> Result<RuntimeReleaseInfo, ComponentError> {
+        target.validate()?;
+        self.ensure_java_major(target)?;
+        Ok(self.inner.java.latest_temurin(target.java_major)?)
+    }
+
+    /// Returns the official server JAR metadata for the exact target version. No bytes are
+    /// downloaded until [`Self::install`] is called.
+    pub fn server_release(
+        &self,
+        target: &ComponentTarget,
+    ) -> Result<ServerReleaseInfo, ComponentError> {
+        target.validate()?;
+        let server_target = server_target(target)?;
+        Ok(self.inner.server.release(&server_target)?)
     }
 
     /// Lists FuryBuilder-owned client JARs for the Settings inventory.
@@ -2077,5 +2133,41 @@ mod tests {
             java_compatibility(&report, &baseline).0,
             ComponentState::Incompatible
         );
+    }
+
+    #[test]
+    fn inventory_lists_every_managed_cache_without_downloading() {
+        let root = TempDir::new("inventory");
+        let manager = manager(&root);
+        let inventory = manager.inventory().expect("inventory");
+        assert!(inventory.java.runtimes.is_empty());
+        assert!(inventory.assets.clients.is_empty());
+        assert!(inventory.servers.servers.is_empty());
+        assert_eq!(inventory.java.total_bytes, 0);
+        assert_eq!(inventory.assets.total_bytes, 0);
+        assert_eq!(inventory.servers.total_bytes, 0);
+    }
+
+    #[test]
+    fn release_previews_fail_offline_before_any_request() {
+        let root = TempDir::new("offline-release");
+        let manager = ComponentManager::from_paths_with_client(
+            root.path.join("runtime.json"),
+            root.path.join("runtimes"),
+            root.path.join("assets.json"),
+            root.path.join("components").join("assets"),
+            root.path.join("cache").join("version_manifest_v2.json"),
+            root.path.join("server.json"),
+            root.path.join("servers"),
+            DownloadClient::new(NetworkConfig::offline()),
+        );
+        let target = target();
+        for error in [
+            manager.java_release(&target).expect_err("java release"),
+            manager.assets_release(&target).expect_err("assets release"),
+            manager.server_release(&target).expect_err("server release"),
+        ] {
+            assert_eq!(error.code(), "offline", "{error:?}");
+        }
     }
 }

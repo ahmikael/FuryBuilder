@@ -991,6 +991,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "furybuilder-asset-source",
+ "furybuilder-component-manager",
  "furybuilder-project-store",
  "furybuilder-runtime-manager",
  "furybuilder-structure-library",

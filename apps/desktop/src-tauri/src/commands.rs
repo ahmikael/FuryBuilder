@@ -8,12 +8,18 @@ use asset_source::{
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
+use component_manager::{
+    CancelOutcome, ClientJarReleaseInfo, ComponentError, ComponentInstallRequest,
+    ComponentInventory, ComponentKind, ComponentManager, ComponentProgress, ComponentRemoval,
+    ComponentReport, ComponentRequirements, ComponentStatus, ComponentTarget,
+    ComponentVerification, ResolvedComponent,
+};
 use runtime_manager::{
     DatapackInspection, GeneratedWorld, GenerationRequest, GenerationRunsReport,
     GenerationSnapshot, GenerationStatusReport, InstalledRuntime, InstalledServerJar,
     JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport, RuntimeDiscoveryReport,
-    RuntimeManager, RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport,
-    ServerJarReport, ServerManager, ServerProgress, ServerReleaseInfo,
+    RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport, ServerJarReport,
+    ServerProgress, ServerReleaseInfo,
 };
 use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
 use tauri::{AppHandle, Emitter, State};
@@ -942,12 +948,15 @@ pub fn project_import_world(
 #[tauri::command]
 pub fn project_import_generated_world(
     state: State<'_, AppState>,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     name: String,
     run_id: String,
     editor_state: project_store::EditorState,
 ) -> Result<OpenedProjectPayload, AppError> {
-    let generated = manager.generated_world(&run_id).map_err(server_error)?;
+    let generated = components
+        .server()
+        .generated_world(&run_id)
+        .map_err(server_error)?;
     let generated_version = world_io::analyze_java_world(&generated.world_dir);
     let minecraft_version = generated_version
         .version_name
@@ -1266,7 +1275,7 @@ fn parity_refused(mut report: VanillaParityReport, reasons: Vec<String>) -> Vani
 #[tauri::command]
 pub fn project_verify_vanilla_parity(
     state: State<'_, AppState>,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     folder: String,
     run_id: Option<String>,
 ) -> Result<VanillaParityReport, AppError> {
@@ -1347,7 +1356,7 @@ pub fn project_verify_vanilla_parity(
     let preferred_run = explicit_run
         .clone()
         .unwrap_or_else(|| provenance.run_id.clone());
-    let reference_root = match manager.generated_world(&preferred_run) {
+    let reference_root = match components.server().generated_world(&preferred_run) {
         Ok(generated) => {
             report.reference_root = generated.world_dir.clone();
             let mismatches = reference_settings_mismatches(&provenance, &generated);
@@ -2613,14 +2622,14 @@ pub fn assets_inspect_path(path: String) -> AssetPathReport {
 }
 
 #[tauri::command]
-pub fn assets_saved_source(store: State<'_, AssetSettingsStore>) -> SavedAssetSource {
-    store.saved_source()
+pub fn assets_saved_source(components: State<'_, ComponentManager>) -> SavedAssetSource {
+    components.assets().saved_source()
 }
 
 #[tauri::command]
 pub fn assets_save_source(
     app: AppHandle,
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
     kind: String,
     path: String,
 ) -> Result<SavedAssetSource, AppError> {
@@ -2659,7 +2668,8 @@ pub fn assets_save_source(
         ))
         .with_details(details()));
     }
-    store
+    components
+        .assets()
         .save(AssetSourceSetting { kind, path })
         .map_err(asset_settings_error)
         .inspect(|_| {
@@ -2670,9 +2680,10 @@ pub fn assets_save_source(
 #[tauri::command]
 pub fn assets_use_placeholder(
     app: AppHandle,
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
 ) -> Result<SavedAssetSource, AppError> {
-    store
+    components
+        .assets()
         .use_placeholder()
         .map_err(asset_settings_error)
         .inspect(|_| {
@@ -2683,20 +2694,25 @@ pub fn assets_use_placeholder(
 #[tauri::command]
 pub fn assets_clear_source(
     app: AppHandle,
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
 ) -> Result<SavedAssetSource, AppError> {
-    store.clear().map_err(asset_settings_error).inspect(|_| {
-        let _ = app.emit("furybuilder-assets-changed", ());
-    })
+    components
+        .assets()
+        .clear()
+        .map_err(asset_settings_error)
+        .inspect(|_| {
+            let _ = app.emit("furybuilder-assets-changed", ());
+        })
 }
 
 #[tauri::command]
 pub fn assets_save_pack_stack(
     app: AppHandle,
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
     paths: Vec<String>,
 ) -> Result<SavedAssetSource, AppError> {
-    store
+    components
+        .assets()
         .save_pack_stack(paths)
         .map_err(asset_settings_error)
         .inspect(|_| {
@@ -2707,9 +2723,10 @@ pub fn assets_save_pack_stack(
 #[tauri::command]
 pub fn assets_clear_pack_stack(
     app: AppHandle,
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
 ) -> Result<SavedAssetSource, AppError> {
-    store
+    components
+        .assets()
         .clear_pack_stack()
         .map_err(asset_settings_error)
         .inspect(|_| {
@@ -2719,19 +2736,25 @@ pub fn assets_clear_pack_stack(
 
 #[tauri::command]
 pub fn assets_render_bundle(
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
     service: State<'_, AssetBundleService>,
     block_states: Vec<BlockStateRequest>,
     source_kind: Option<String>,
     source_path: Option<String>,
 ) -> Result<AssetBundle, AppError> {
-    let source = resolve_asset_source(&store, source_kind, source_path)?.ok_or_else(|| {
-        AppError::invalid_argument(
-            "select Minecraft client assets before rendering Minecraft models; placeholder textures are used meanwhile",
-        )
-    })?;
+    let source = resolve_asset_source(components.assets(), source_kind, source_path)?.ok_or_else(
+        || {
+            AppError::invalid_argument(
+                "select Minecraft client assets before rendering Minecraft models; placeholder textures are used meanwhile",
+            )
+        },
+    )?;
     service
-        .bundle(Some(&source), &store.pack_stack(), &block_states)
+        .bundle(
+            Some(&source),
+            &components.assets().pack_stack(),
+            &block_states,
+        )
         .map_err(asset_bundle_error)
 }
 
@@ -2739,23 +2762,25 @@ pub fn assets_render_bundle(
 /// written; callers must have an explicit asset source.
 #[tauri::command]
 pub fn assets_catalog(
-    store: State<'_, AssetSettingsStore>,
+    components: State<'_, ComponentManager>,
     service: State<'_, AssetCatalogService>,
     source_kind: Option<String>,
     source_path: Option<String>,
 ) -> Result<CatalogSnapshot, AppError> {
-    let saved = store.saved_source();
-    let source = resolve_asset_source(&store, source_kind, source_path)?.ok_or_else(|| {
-        if saved.placeholder {
-            AppError::invalid_argument(
-                "placeholder textures have no block/item catalog; select or download a Minecraft client JAR",
-            )
-        } else {
-            AppError::invalid_argument(
-                "select Minecraft client assets before building a block/item catalog",
-            )
-        }
-    })?;
+    let saved = components.assets().saved_source();
+    let source = resolve_asset_source(components.assets(), source_kind, source_path)?.ok_or_else(
+        || {
+            if saved.placeholder {
+                AppError::invalid_argument(
+                    "placeholder textures have no block/item catalog; select or download a Minecraft client JAR",
+                )
+            } else {
+                AppError::invalid_argument(
+                    "select Minecraft client assets before building a block/item catalog",
+                )
+            }
+        },
+    )?;
     service.catalog(&source).map_err(asset_catalog_error)
 }
 
@@ -2782,28 +2807,255 @@ fn resolve_asset_source(
     }
 }
 
+/// Event payload for a completed mutation. The legacy kind-specific events are emitted too
+/// until every panel reads the unified component state.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentChangedEvent {
+    pub kind: ComponentKind,
+}
+
+/// Event payload for a failed component mutation. `code` matches the rejected command error.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentErrorEvent {
+    pub kind: ComponentKind,
+    pub code: String,
+    pub message: String,
+}
+
+fn emit_component_changed(app: &AppHandle, kind: ComponentKind) {
+    let _ = app.emit(
+        "furybuilder-component-changed",
+        ComponentChangedEvent { kind },
+    );
+    let legacy = match kind {
+        ComponentKind::Java => "furybuilder-runtime-changed",
+        ComponentKind::Assets => "furybuilder-assets-changed",
+        ComponentKind::Server => "furybuilder-server-changed",
+    };
+    let _ = app.emit(legacy, ());
+}
+
+fn component_app_error(app: &AppHandle, kind: ComponentKind, error: ComponentError) -> AppError {
+    let _ = app.emit(
+        "furybuilder-component-error",
+        ComponentErrorEvent {
+            kind,
+            code: error.code().to_owned(),
+            message: error.to_string(),
+        },
+    );
+    component_error(error)
+}
+
+/// Reports what the target needs and what is installed. Read-only.
+#[tauri::command]
+pub async fn components_status(
+    components: State<'_, ComponentManager>,
+    target: ComponentTarget,
+    requirements: ComponentRequirements,
+) -> Result<ComponentReport, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.status(&target, &requirements))
+        .await
+        .map_err(|error| AppError::internal(format!("component status task failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Returns the verified path, id and hash of one ready component.
+#[tauri::command]
+pub async fn components_resolve(
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+    target: ComponentTarget,
+    requirements: ComponentRequirements,
+) -> Result<ResolvedComponent, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.resolve(kind, &target, &requirements))
+        .await
+        .map_err(|error| AppError::internal(format!("component resolve task failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Lists every FuryBuilder-owned component artifact. Read-only.
+#[tauri::command]
+pub async fn components_inventory(
+    components: State<'_, ComponentManager>,
+) -> Result<ComponentInventory, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.inventory())
+        .await
+        .map_err(|error| AppError::internal(format!("component inventory task failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Adoptium release preview for the target Java major. No bytes are downloaded.
+#[tauri::command]
+pub async fn components_java_release(
+    components: State<'_, ComponentManager>,
+    target: ComponentTarget,
+) -> Result<RuntimeReleaseInfo, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.java_release(&target))
+        .await
+        .map_err(|error| AppError::internal(format!("Java release task failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Official client JAR preview for the target version. No bytes are downloaded.
+#[tauri::command]
+pub async fn components_assets_release(
+    components: State<'_, ComponentManager>,
+    target: ComponentTarget,
+) -> Result<ClientJarReleaseInfo, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.assets_release(&target))
+        .await
+        .map_err(|error| AppError::internal(format!("client JAR release task failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Official server JAR preview for the exact target version. No bytes are downloaded.
+#[tauri::command]
+pub async fn components_server_release(
+    components: State<'_, ComponentManager>,
+    target: ComponentTarget,
+) -> Result<ServerReleaseInfo, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.server_release(&target))
+        .await
+        .map_err(|error| AppError::internal(format!("server release task failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Explicit install of one component. Progress is streamed as
+/// `furybuilder-component-progress`; a failure emits `furybuilder-component-error` before
+/// the command rejects with the same code.
+#[tauri::command]
+pub async fn components_install(
+    app: AppHandle,
+    components: State<'_, ComponentManager>,
+    request: ComponentInstallRequest,
+) -> Result<ResolvedComponent, AppError> {
+    let components = components.inner().clone();
+    let kind = request.kind;
+    let progress_app = app.clone();
+    let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
+    let installed = tauri::async_runtime::spawn_blocking(move || {
+        components.install(&request, &|progress: ComponentProgress| {
+            let should_emit = match last.lock() {
+                Ok(previous) => match previous.as_ref() {
+                    None => true,
+                    Some((phase, at)) => {
+                        *phase != progress.phase
+                            || at.elapsed() >= std::time::Duration::from_millis(250)
+                    }
+                },
+                Err(_) => true,
+            };
+            if should_emit {
+                if let Ok(mut previous) = last.lock() {
+                    *previous = Some((progress.phase.clone(), std::time::Instant::now()));
+                }
+                let _ = progress_app.emit("furybuilder-component-progress", &progress);
+            }
+        })
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("component install task failed: {error}")))?;
+    let installed = installed.map_err(|error| component_app_error(&app, kind, error))?;
+    emit_component_changed(&app, kind);
+    Ok(installed)
+}
+
+/// Requests cancellation of the active install for this kind. The install command reports
+/// the cancellation and removes its partial files.
+#[tauri::command]
+pub fn components_cancel(
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+) -> CancelOutcome {
+    components.cancel(kind)
+}
+
+/// Validates and records a manual component source. The user's file is never copied or
+/// edited, and only a verified source becomes ready.
+#[tauri::command]
+pub async fn components_relink(
+    app: AppHandle,
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+    path: String,
+    target: ComponentTarget,
+) -> Result<ComponentStatus, AppError> {
+    let components = components.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        components.relink(kind, std::path::Path::new(&path), &target)
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("component relink task failed: {error}")))?;
+    let status = result.map_err(|error| component_app_error(&app, kind, error))?;
+    emit_component_changed(&app, kind);
+    Ok(status)
+}
+
+/// Removes FuryBuilder-owned data or clears a manual pointer. A user file outside the
+/// managed cache is never deleted.
+#[tauri::command]
+pub async fn components_remove(
+    app: AppHandle,
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+    id: String,
+) -> Result<ComponentRemoval, AppError> {
+    let components = components.inner().clone();
+    let result = tauri::async_runtime::spawn_blocking(move || components.remove(kind, &id))
+        .await
+        .map_err(|error| AppError::internal(format!("component remove task failed: {error}")))?;
+    let removal = result.map_err(|error| component_app_error(&app, kind, error))?;
+    emit_component_changed(&app, kind);
+    Ok(removal)
+}
+
+/// Re-inspects the selected component and returns fresh facts. A stale or unknown id is
+/// refused instead of verifying another file.
+#[tauri::command]
+pub async fn components_verify(
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+    id: String,
+    target: ComponentTarget,
+) -> Result<ComponentVerification, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.verify(kind, &id, &target))
+        .await
+        .map_err(|error| AppError::internal(format!("component verify task failed: {error}")))?
+        .map_err(component_error)
+}
+
 #[tauri::command]
 pub async fn runtime_discover(
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<RuntimeDiscoveryReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.java().clone();
     tauri::async_runtime::spawn_blocking(move || manager.discover())
         .await
         .map_err(|error| AppError::internal(format!("runtime discovery task failed: {error}")))
 }
 
 #[tauri::command]
-pub fn runtime_saved(manager: State<'_, RuntimeManager>) -> Option<JavaRuntimeReport> {
-    manager.saved()
+pub fn runtime_saved(components: State<'_, ComponentManager>) -> Option<JavaRuntimeReport> {
+    components.java().saved()
 }
 
 #[tauri::command]
 pub async fn runtime_select_java(
     app: AppHandle,
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
     path: String,
 ) -> Result<JavaRuntimeReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.java().clone();
     let report =
         tauri::async_runtime::spawn_blocking(move || manager.select(std::path::Path::new(&path)))
             .await
@@ -2816,19 +3068,19 @@ pub async fn runtime_select_java(
 #[tauri::command]
 pub fn runtime_clear_selection(
     app: AppHandle,
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<(), AppError> {
-    manager.clear_selection().map_err(runtime_error)?;
+    components.java().clear_selection().map_err(runtime_error)?;
     let _ = app.emit("furybuilder-runtime-changed", ());
     Ok(())
 }
 
 #[tauri::command]
 pub async fn runtime_temurin_latest(
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
     major: u32,
 ) -> Result<RuntimeReleaseInfo, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.java().clone();
     tauri::async_runtime::spawn_blocking(move || manager.latest_temurin(major))
         .await
         .map_err(|error| AppError::internal(format!("Adoptium request task failed: {error}")))?
@@ -2838,11 +3090,11 @@ pub async fn runtime_temurin_latest(
 #[tauri::command]
 pub async fn runtime_install_temurin(
     app: AppHandle,
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
     major: u32,
     version: String,
 ) -> Result<InstalledRuntime, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.java().clone();
     let progress_app = app.clone();
     let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
     let installed = tauri::async_runtime::spawn_blocking(move || {
@@ -2875,9 +3127,9 @@ pub async fn runtime_install_temurin(
 
 #[tauri::command]
 pub async fn runtime_managed_list(
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<ManagedCacheReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.java().clone();
     tauri::async_runtime::spawn_blocking(move || manager.managed_list())
         .await
         .map_err(|error| AppError::internal(format!("runtime cache task failed: {error}")))?
@@ -2887,9 +3139,9 @@ pub async fn runtime_managed_list(
 #[tauri::command]
 pub async fn runtime_clear_managed(
     app: AppHandle,
-    manager: State<'_, RuntimeManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<ManagedCacheReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.java().clone();
     let report = tauri::async_runtime::spawn_blocking(move || manager.clear_managed())
         .await
         .map_err(|error| AppError::internal(format!("runtime cache task failed: {error}")))?
@@ -2900,26 +3152,28 @@ pub async fn runtime_clear_managed(
 
 #[tauri::command]
 pub async fn server_discover(
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<ServerDiscoveryReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     tauri::async_runtime::spawn_blocking(move || manager.discover())
         .await
         .map_err(|error| AppError::internal(format!("server discovery task failed: {error}")))
 }
 
 #[tauri::command]
-pub fn server_saved(manager: State<'_, ServerManager>) -> Option<ServerJarReport> {
-    manager.selected(&runtime_manager::ServerTarget::baseline())
+pub fn server_saved(components: State<'_, ComponentManager>) -> Option<ServerJarReport> {
+    components
+        .server()
+        .selected(&runtime_manager::ServerTarget::baseline())
 }
 
 #[tauri::command]
 pub async fn server_select_jar(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     path: String,
 ) -> Result<ServerJarReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     let report = tauri::async_runtime::spawn_blocking(move || {
         manager.select_manual(
             std::path::Path::new(&path),
@@ -2936,10 +3190,11 @@ pub async fn server_select_jar(
 #[tauri::command]
 pub fn server_clear_selection(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<(), AppError> {
     let target = runtime_manager::ServerTarget::baseline();
-    manager
+    components
+        .server()
         .clear_selection(&target.minecraft_version)
         .map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
@@ -2948,9 +3203,9 @@ pub fn server_clear_selection(
 
 #[tauri::command]
 pub async fn server_release(
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<ServerReleaseInfo, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     tauri::async_runtime::spawn_blocking(move || {
         manager.release(&runtime_manager::ServerTarget::baseline())
     })
@@ -2962,7 +3217,7 @@ pub async fn server_release(
 #[tauri::command]
 pub async fn server_install(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     version: String,
 ) -> Result<InstalledServerJar, AppError> {
     let target = runtime_manager::ServerTarget::baseline();
@@ -2972,7 +3227,7 @@ pub async fn server_install(
             target.minecraft_version
         )));
     }
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     let progress_app = app.clone();
     let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
     let installed = tauri::async_runtime::spawn_blocking(move || {
@@ -3005,9 +3260,9 @@ pub async fn server_install(
 
 #[tauri::command]
 pub async fn server_managed_list(
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<ManagedServerCacheReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     tauri::async_runtime::spawn_blocking(move || manager.managed_list())
         .await
         .map_err(|error| AppError::internal(format!("server cache task failed: {error}")))?
@@ -3017,9 +3272,9 @@ pub async fn server_managed_list(
 #[tauri::command]
 pub async fn server_clear_managed(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<ManagedServerCacheReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     let report = tauri::async_runtime::spawn_blocking(move || manager.clear_managed())
         .await
         .map_err(|error| AppError::internal(format!("server cache task failed: {error}")))?
@@ -3031,10 +3286,11 @@ pub async fn server_clear_managed(
 #[tauri::command]
 pub fn server_accept_eula(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     accepted: bool,
 ) -> Result<SavedEula, AppError> {
-    let eula = manager
+    let eula = components
+        .server()
         .accept_eula(accepted, &runtime_manager::ServerTarget::baseline())
         .map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
@@ -3044,9 +3300,9 @@ pub fn server_accept_eula(
 #[tauri::command]
 pub fn server_clear_eula(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<(), AppError> {
-    manager.clear_eula().map_err(server_error)?;
+    components.server().clear_eula().map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
     Ok(())
 }
@@ -3054,11 +3310,10 @@ pub fn server_clear_eula(
 #[tauri::command]
 pub async fn server_start_generation(
     app: AppHandle,
-    runtime: State<'_, RuntimeManager>,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     request: GenerationRequest,
 ) -> Result<GenerationSnapshot, AppError> {
-    let runtime = runtime.inner().clone();
+    let runtime = components.java().clone();
     let java = tauri::async_runtime::spawn_blocking(move || runtime.saved())
         .await
         .map_err(|error| AppError::internal(format!("Java runtime task failed: {error}")))?;
@@ -3080,7 +3335,7 @@ pub async fn server_start_generation(
             ),
         ));
     }
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     let snapshot = tauri::async_runtime::spawn_blocking(move || {
         manager.start_generation(std::path::Path::new(&java.path), request)
     })
@@ -3092,20 +3347,20 @@ pub async fn server_start_generation(
 }
 
 #[tauri::command]
-pub fn server_generation_status(manager: State<'_, ServerManager>) -> GenerationStatusReport {
-    manager.generation_status()
+pub fn server_generation_status(components: State<'_, ComponentManager>) -> GenerationStatusReport {
+    components.server().generation_status()
 }
 
 #[tauri::command]
-pub fn server_cancel_generation(manager: State<'_, ServerManager>) -> bool {
-    manager.cancel_generation()
+pub fn server_cancel_generation(components: State<'_, ComponentManager>) -> bool {
+    components.server().cancel_generation()
 }
 
 #[tauri::command]
 pub async fn server_generation_runs(
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<GenerationRunsReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     tauri::async_runtime::spawn_blocking(move || manager.generation_runs())
         .await
         .map_err(|error| AppError::internal(format!("generation runs task failed: {error}")))
@@ -3114,9 +3369,9 @@ pub async fn server_generation_runs(
 #[tauri::command]
 pub async fn server_clear_generation_runs(
     app: AppHandle,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<GenerationRunsReport, AppError> {
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     let report = tauri::async_runtime::spawn_blocking(move || manager.clear_generation_runs())
         .await
         .map_err(|error| AppError::internal(format!("generation runs task failed: {error}")))?;
@@ -3127,7 +3382,7 @@ pub async fn server_clear_generation_runs(
 
 #[tauri::command]
 pub async fn server_inspect_datapacks(
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
     paths: Vec<String>,
 ) -> Result<Vec<DatapackInspection>, AppError> {
     if paths.len() > 16 {
@@ -3136,7 +3391,7 @@ pub async fn server_inspect_datapacks(
             "At most 16 data packs can be inspected at once.",
         ));
     }
-    let manager = manager.inner().clone();
+    let manager = components.server().clone();
     tauri::async_runtime::spawn_blocking(move || manager.inspect_datapacks(&paths))
         .await
         .map_err(|error| AppError::internal(format!("data pack inspection task failed: {error}")))
@@ -3146,10 +3401,9 @@ pub async fn server_inspect_datapacks(
 /// and server selections; it never probes, downloads, accepts the EULA or starts anything.
 #[tauri::command]
 pub async fn vanilla_setup_check(
-    runtime: State<'_, RuntimeManager>,
-    manager: State<'_, ServerManager>,
+    components: State<'_, ComponentManager>,
 ) -> Result<VanillaSetupReport, AppError> {
-    let runtime = runtime.inner().clone();
+    let runtime = components.java().clone();
     let java = tauri::async_runtime::spawn_blocking(move || runtime.saved())
         .await
         .map_err(|error| AppError::internal(format!("Java runtime task failed: {error}")))?;
@@ -3157,7 +3411,7 @@ pub async fn vanilla_setup_check(
         .as_ref()
         .map(JavaRuntimeReport::is_compatible)
         .unwrap_or(false);
-    let discovery = manager.discover();
+    let discovery = components.server().discover();
     let server_ready = discovery
         .selected
         .as_ref()
@@ -3232,6 +3486,25 @@ pub struct VanillaSetupReport {
     pub ready: bool,
 }
 
+fn component_error(error: ComponentError) -> AppError {
+    let code = match error.code() {
+        "invalid_argument" => ErrorCode::InvalidArgument,
+        "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "not_ready" => ErrorCode::Conflict,
+        "not_found" => ErrorCode::NotFound,
+        "busy" => ErrorCode::Conflict,
+        "cancelled" => ErrorCode::Cancelled,
+        "checksum_mismatch" => ErrorCode::Conflict,
+        "network_error" => ErrorCode::BackendUnavailable,
+        "offline" => ErrorCode::Offline,
+        "disk_space" => ErrorCode::DiskSpace,
+        "unsupported_format" => ErrorCode::UnsupportedFormat,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
 fn server_error(error: runtime_manager::ServerError) -> AppError {
     let code = match error.code() {
         "invalid_argument" => ErrorCode::InvalidArgument,
@@ -3240,7 +3513,9 @@ fn server_error(error: runtime_manager::ServerError) -> AppError {
         "eula_required" => ErrorCode::PermissionDenied,
         "consent_required" => ErrorCode::PermissionDenied,
         "network_error" => ErrorCode::BackendUnavailable,
+        "offline" => ErrorCode::Offline,
         "checksum_mismatch" => ErrorCode::Conflict,
+        "disk_space" => ErrorCode::DiskSpace,
         "archive_error" | "unsupported_format" => ErrorCode::UnsupportedFormat,
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "busy" => ErrorCode::Conflict,
@@ -3254,7 +3529,9 @@ fn runtime_error(error: runtime_manager::RuntimeError) -> AppError {
         "invalid_argument" => ErrorCode::InvalidArgument,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
         "network_error" => ErrorCode::BackendUnavailable,
+        "offline" => ErrorCode::Offline,
         "checksum_mismatch" => ErrorCode::Conflict,
+        "disk_space" => ErrorCode::DiskSpace,
         "archive_error" | "unsupported_format" => ErrorCode::UnsupportedFormat,
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "busy" => ErrorCode::Conflict,
@@ -3830,5 +4107,61 @@ mod workspace_tests {
             "minecraft:oak_planks",
             "bake keeps the voxel result"
         );
+    }
+}
+
+#[cfg(test)]
+mod component_command_tests {
+    use super::*;
+
+    #[test]
+    fn component_errors_map_to_stable_app_codes() {
+        assert_eq!(
+            component_error(ComponentError::InvalidRequest("bad".to_owned())).code,
+            ErrorCode::InvalidArgument
+        );
+        assert_eq!(
+            component_error(ComponentError::Runtime(
+                runtime_manager::RuntimeError::Offline
+            ))
+            .code,
+            ErrorCode::Offline
+        );
+        assert_eq!(
+            component_error(ComponentError::Runtime(
+                runtime_manager::RuntimeError::DiskSpace("full".to_owned())
+            ))
+            .code,
+            ErrorCode::DiskSpace
+        );
+        assert_eq!(
+            component_error(ComponentError::ClientJar(
+                component_manager::ClientJarError::Offline
+            ))
+            .code,
+            ErrorCode::Offline
+        );
+        assert_eq!(
+            component_error(ComponentError::Busy { kind: "assets" }).code,
+            ErrorCode::Conflict
+        );
+    }
+
+    #[test]
+    fn component_events_serialize_with_camel_case_and_stable_kinds() {
+        let changed = serde_json::to_value(ComponentChangedEvent {
+            kind: ComponentKind::Java,
+        })
+        .expect("changed");
+        assert_eq!(changed["kind"], "java");
+
+        let failure = serde_json::to_value(ComponentErrorEvent {
+            kind: ComponentKind::Assets,
+            code: "offline".to_owned(),
+            message: "network access is disabled".to_owned(),
+        })
+        .expect("failure");
+        assert_eq!(failure["kind"], "assets");
+        assert_eq!(failure["code"], "offline");
     }
 }

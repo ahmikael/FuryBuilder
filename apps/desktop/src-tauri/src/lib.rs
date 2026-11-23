@@ -41,20 +41,20 @@ pub fn run() {
                 projects_root,
                 diagnostics.clone(),
             ));
-            app.manage(asset_source::AssetSettingsStore::new(
+            // One component composition root: the facade owns the Java, asset and server
+            // managers, and every Tauri command reads them through it.
+            app.manage(component_manager::ComponentManager::from_paths_with_client(
+                data_dir.join("runtime.json"),
+                data_dir.join("components").join("java"),
                 data_dir.join("assets.json"),
+                data_dir.join("components").join("assets"),
+                data_dir.join("version-manifest.json"),
+                data_dir.join("server.json"),
+                data_dir.join("components").join("servers"),
+                component_manager::DownloadClient::new(component_manager::NetworkConfig::default()),
             ));
             app.manage(asset_source::AssetBundleService::new());
             app.manage(asset_source::AssetCatalogService::new());
-            app.manage(runtime_manager::RuntimeManager::new(
-                data_dir.join("runtime.json"),
-                data_dir.join("components").join("java"),
-            ));
-            app.manage(runtime_manager::ServerManager::new(
-                data_dir.join("server.json"),
-                data_dir.join("components").join("servers"),
-                data_dir.join("version-manifest.json"),
-            ));
             match local_bridge::start(app.handle().clone(), data_dir.clone()) {
                 Ok(runtime) => {
                     app.manage(runtime);
@@ -155,6 +155,17 @@ pub fn run() {
             commands::assets_render_bundle,
             commands::assets_catalog,
             commands::assets_clear_cache,
+            commands::components_status,
+            commands::components_resolve,
+            commands::components_inventory,
+            commands::components_java_release,
+            commands::components_assets_release,
+            commands::components_server_release,
+            commands::components_install,
+            commands::components_cancel,
+            commands::components_relink,
+            commands::components_remove,
+            commands::components_verify,
             commands::runtime_discover,
             commands::runtime_saved,
             commands::runtime_select_java,

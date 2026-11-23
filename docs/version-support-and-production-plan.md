@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent и общий download pipeline закрыты; идёт работа над Tauri commands + TS-клиентом.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline и Tauri components API + TS-клиент закрыты; идут mock HTTP-тесты.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -335,6 +335,8 @@ components_verify(kind, id)
 ```
 
 Facade реализован в `crates/component-manager`; чистые типы статусов — в `crates/component-model`. `status` сверяет компоненты с target проекта, `resolve` возвращает проверенный id/path/hash, `relink` не копирует и не редактирует пользовательский файл, `remove` удаляет только FuryBuilder-owned данные, а `install` отказывается от неизвестной версии/хэша. Java и server download умеют cooperative cancel с очисткой partial-файлов; client JAR download добавлен в P0-23.
+
+Tauri shell держит один экземпляр facade и отдаёт его через `components_status`, `components_resolve`, `components_inventory`, `components_java_release`, `components_assets_release`, `components_server_release`, `components_install`, `components_cancel`, `components_relink`, `components_remove`, `components_verify`. Установка стримит `furybuilder-component-progress`, успешная мутация — `furybuilder-component-changed`, ошибка — `furybuilder-component-error` с тем же стабильным кодом, что и rejected command. TS-клиент `apps/desktop/src/lib/components-api.ts` — единственная точка входа для UI.
 
 Типы:
 
@@ -1405,9 +1407,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-30` — Tauri commands + TS-клиент + события progress/error. Статус: P0 в работе.
+**Текущий фокус:** `P0-31` — Mock HTTP-тесты: success/404/timeout/redirect/hash mismatch/wrong size/cancel/disconnect. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-31`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-32`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1471,7 +1473,7 @@ UI:
 - [x] `P0-27` Server: download по точной версии, SHA-1, кэш, проверка внутреннего `version.json`.
 - [x] `P0-28` EULA: consent привязан к SHA-1 JAR + версии; без consent запуск запрещён.
 - [x] `P0-29` Общий pipeline: allowlist хостов, disk preflight, atomic rename, proxy, retry, offline.
-- [ ] `P0-30` Tauri commands + TS-клиент + события progress/error.
+- [x] `P0-30` Tauri commands + TS-клиент + события progress/error.
 - [ ] `P0-31` Mock HTTP-тесты: success/404/timeout/redirect/hash mismatch/wrong size/cancel/disconnect.
 - [ ] `P0-32` Тесты manual/placeholder/relink, включая symlink, неверную архитектуру и версию.
 
@@ -1687,6 +1689,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Components API | Tauri shell владеет одним `ComponentManager`: runtime/assets/server commands читают его через accessors, добавлены `components_status/resolve/inventory/*_release/install/cancel/relink/remove/verify`; install стримит `furybuilder-component-progress` (throttled 250 ms), мутации — `furybuilder-component-changed` + старые kind-events, ошибки — `furybuilder-component-error`; `ErrorCode` получил `offline`/`disk_space`; facade отдаёт previews и inventory; TS `components-api.ts` + типы + contract-тесты | см. `git log` | 641 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Download pipeline | Новый crate `download-pipeline` заменил три копии сетевых helper-ов: точный host allowlist на каждом redirect hop, HTTPS-only и default port, явный `FURYBUILDER_PROXY`/`FURYBUILDER_HTTPS_PROXY` или стандартные proxy env, offline (`FURYBUILDER_OFFLINE`, `VersionCatalog::load_offline`), bounded retry для transport/408/425/429/5xx, disk preflight с запасом, потоковая проверка размера и SHA-1/SHA-256, same-directory temp + atomic replace через `MoveFileExW`/`rename`; manifest cache, Temurin, client JAR и server JAR переведены на общий клиент, `settings` persist тоже atomic; новые коды `offline`/`disk_space` и UI hints; тесты allowlist/redirect/offline/proxy/retry/disk/atomic/verification | см. `git log` | 637 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | EULA consent | `server.json` schema 3 хранит явные EULA-согласия отдельно для каждой пары «точная версия + SHA-1 JAR»; загрузка проверяет официальный URL, timestamp, SHA-1 и отсутствие дублей; `SavedEula::matches` требует одновременно версию, JAR и официальный URL, а `discover` больше не считает согласие действующим для изменившегося или невалидного JAR; запуск дополнительно проверяет per-run consent и matching EULA до создания run-каталога; `.furybuilder-run.json` schema 2 фиксирует версию, SHA-1, время EULA и consent, импорт завершённого мира сверяет их с отчётом; UI явно называет версию и JAR; тесты на чужую версию/JAR/URL, изменённый файл, несколько согласий, отсутствие consent и невалидный manifest | см. `git log` | 613 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Server exact version | `ServerTarget` (version/DataVersion/Java major) протянут через release/install/select/EULA/status; Mojang resolution идёт через общий `VersionCatalog` и exact version JSON, снапшоты и версии без server download отклоняются; `inspect_server_jar` отделяет структурные факты от проверки target, а SHA-1/размер проверяются при потоковой загрузке; кэш переехал на `components/servers/<version>/server.jar` с manifest schema 2, `server.json` schema 2 помнит отдельный выбор на версию; facade больше не блокирует non-baseline server target, desktop Settings и isolated generation остаются baseline; тесты на вторую версию, неверные version/DataVersion/Java, snapshot, отсутствующий server download, размер и независимые выборы | см. `git log` | 609 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
