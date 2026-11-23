@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder и exact-version server provisioning закрыты; идёт EULA.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning и EULA consent закрыты; идёт общий download pipeline.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -397,7 +397,7 @@ Facade реализован в `crates/component-manager`; чистые типы
 - Запуск — только после явного consent, в изолированной temp-папке, с bounded memory/time и kill-on-close.
 - Для версий без официального server JAR — генерация недоступна, но empty/flat/import работают; UI объясняет почему.
 
-Реализовано: `ServerTarget` несёт точные version/DataVersion/Java major, Mojang resolution идёт через общий `VersionCatalog`, манифест кэша хранит версию/URL/SHA-1/размер/дату, а `server.json` schema 2 помнит отдельный выбор для каждой версии. Изолированная генерация остаётся baseline-возможностью до отдельного расширения.
+Реализовано: `ServerTarget` несёт точные version/DataVersion/Java major, Mojang resolution идёт через общий `VersionCatalog`, манифест кэша хранит версию/URL/SHA-1/размер/дату, а `server.json` schema 3 помнит отдельный выбор и отдельное явное EULA-согласие для каждой пары «точная версия + SHA-1 JAR». Запуск требует одновременно записи EULA для конкретного JAR/версии и отдельного per-run consent; `.furybuilder-run.json` schema 2 фиксирует версию, SHA-1 JAR, время EULA и consent до создания процесса, а импорт завершённого мира сверяет эти факты с отчётом. Изолированная генерация остаётся baseline-возможностью до отдельного расширения.
 
 ### 6.5. Где что живёт
 
@@ -586,7 +586,7 @@ CLOSED (экран приветствия)
 
 - Только official server, точная версия проекта.
 - Java подбирается по версии; server JAR скачивается/выбирается в wizard.
-- EULA — per JAR/version, explicit.
+- EULA — per JAR/version, explicit; consent record binds the exact SHA-1 and Minecraft version.
 - Пресеты и `level-type` — version-specific mapping:
   - modern: `minecraft:normal` / `minecraft:flat` / `minecraft:large_biomes` / `minecraft:amplified`;
   - 1.13–1.15: `default` / `flat` / `largeBiomes` / `amplified`;
@@ -1403,9 +1403,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-28` — EULA: consent привязан к SHA-1 JAR + версии; без consent запуск запрещён. Статус: P0 в работе.
+**Текущий фокус:** `P0-29` — Общий pipeline: allowlist хостов, disk preflight, atomic rename, proxy, retry, offline. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-29`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-30`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1467,7 +1467,7 @@ UI:
 - [x] `P0-25` Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar.
 - [x] `P0-26` Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры.
 - [x] `P0-27` Server: download по точной версии, SHA-1, кэш, проверка внутреннего `version.json`.
-- [ ] `P0-28` EULA: consent привязан к SHA-1 JAR + версии; без consent запуск запрещён.
+- [x] `P0-28` EULA: consent привязан к SHA-1 JAR + версии; без consent запуск запрещён.
 - [ ] `P0-29` Общий pipeline: allowlist хостов, disk preflight, atomic rename, proxy, retry, offline.
 - [ ] `P0-30` Tauri commands + TS-клиент + события progress/error.
 - [ ] `P0-31` Mock HTTP-тесты: success/404/timeout/redirect/hash mismatch/wrong size/cancel/disconnect.
@@ -1685,6 +1685,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | EULA consent | `server.json` schema 3 хранит явные EULA-согласия отдельно для каждой пары «точная версия + SHA-1 JAR»; загрузка проверяет официальный URL, timestamp, SHA-1 и отсутствие дублей; `SavedEula::matches` требует одновременно версию, JAR и официальный URL, а `discover` больше не считает согласие действующим для изменившегося или невалидного JAR; запуск дополнительно проверяет per-run consent и matching EULA до создания run-каталога; `.furybuilder-run.json` schema 2 фиксирует версию, SHA-1, время EULA и consent, импорт завершённого мира сверяет их с отчётом; UI явно называет версию и JAR; тесты на чужую версию/JAR/URL, изменённый файл, несколько согласий, отсутствие consent и невалидный manifest | см. `git log` | 613 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Server exact version | `ServerTarget` (version/DataVersion/Java major) протянут через release/install/select/EULA/status; Mojang resolution идёт через общий `VersionCatalog` и exact version JSON, снапшоты и версии без server download отклоняются; `inspect_server_jar` отделяет структурные факты от проверки target, а SHA-1/размер проверяются при потоковой загрузке; кэш переехал на `components/servers/<version>/server.jar` с manifest schema 2, `server.json` schema 2 помнит отдельный выбор на версию; facade больше не блокирует non-baseline server target, desktop Settings и isolated generation остаются baseline; тесты на вторую версию, неверные version/DataVersion/Java, snapshot, отсутствующий server download, размер и независимые выборы | см. `git log` | 609 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Assets placeholder | Placeholder стал явным выбором: asset settings schema 3 хранит `placeholder` отдельно от `source`, выбор placeholder очищает и блокирует pack stack, facade сообщает `placeholder`/`unverified` без id/hash/path и никогда не `ready`, ручной источник заменяет placeholder; Tauri `assets_use_placeholder`, Settings UI с предупреждением, viewport badge «Placeholder textures» и отказ от синтетического bundle без client JAR; catalog и render bundle требуют реальный источник | см. `git log` | 603 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Assets manual | Ручной источник принимается в трёх формах: `.minecraft` root, `versions/<id>` и выбранный `client.jar`; facade relink сохраняет canonical path, статус резолвит точный JAR, версию, DataVersion, SHA-1 и размер; рендер-стек принимает `version_directory`; Tauri `assets_save_source` и Settings UI получили выбор version folder; корректный JAR без launcher metadata используется с предупреждением, объявленный checksum mismatch отклоняется; из asset settings удалён schema 0/1 migration | см. `git log` | 599 Rust tests, 292 TS tests, clippy, fmt, typecheck/lint/format |

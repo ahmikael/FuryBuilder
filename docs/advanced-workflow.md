@@ -266,15 +266,20 @@ Settings page and isolated generation still operate on the write-verified baseli
 project-aware component UI lands.
 
 Nothing is installed globally, no `PATH` is changed, and no EULA is accepted automatically.
+Each acceptance is stored for the exact server JAR SHA-1 and Minecraft version; another JAR
+or version needs its own explicit acceptance. The run marker records the accepted version,
+JAR SHA-1 and both approval timestamps, and a completed run is refused if its report does not
+match those recorded facts.
 
 ### Vanilla generation lifecycle
 
-After the explicit EULA acceptance for the exact JAR, the server runs in an isolated
-temporary directory without a game window. It listens on loopback only, has memory/time
-limits, is contained in a kill-on-close Windows Job Object and reports real region-header
-progress. Cancel or crash terminates the whole Java tree. The completed run is imported as a
-`Vanilla World` project: the generated folder is copied byte for byte, decoded into the Rust
-core, and seed/preset/data packs/Java/server identity are recorded in `project.json`.
+After the explicit EULA acceptance for the exact JAR and version, plus a separate per-run
+consent, the server runs in an isolated temporary directory without a game window. It listens
+on loopback only, has memory/time limits, is contained in a kill-on-close Windows Job Object
+and reports real region-header progress. Cancel or crash terminates the whole Java tree. The
+completed run is imported as a `Vanilla World` project: the generated folder is copied byte
+for byte, decoded into the Rust core, and seed/preset/data packs/Java/server identity are
+recorded in `project.json`.
 
 The parity panel compares a saved, untouched revision-1 generated base with the original
 generator's reference chunks. It refuses unsupported or incomplete references and reports

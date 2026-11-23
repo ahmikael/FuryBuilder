@@ -217,8 +217,8 @@ prerequisites.
 2. If needed, use the explicit buttons to download the managed Java 21 runtime and the
    official 1.21.4 server JAR. Both downloads show source, size and verification; nothing is
    installed globally.
-3. Read and accept the Minecraft EULA for that exact server JAR. FuryBuilder never accepts
-   it for you.
+3. Read and accept the Minecraft EULA for that exact server JAR and Minecraft version.
+   FuryBuilder never accepts it for you, and another JAR or version needs its own acceptance.
 4. Open `Project → Create → Vanilla World`, choose a seed, preset, supported settings and
    optional local data packs, then explicitly confirm the run.
 5. Wait for the isolated server to generate the requested area. It runs without a game

@@ -27,12 +27,12 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use super::datapack;
-use super::jar::ServerJarInfo;
+use super::jar::{is_sha1, ServerJarInfo};
 use super::process_tree::ProcessTree;
 use super::types::{
     GeneratedWorld, GenerationDatapack, GenerationPhase, GenerationReport, GenerationRequest,
     GenerationRunInfo, GenerationRunsReport, GenerationSnapshot, GenerationStopReason, RunManifest,
-    WorldPreset, RUN_MANIFEST_SCHEMA_VERSION,
+    SavedEula, WorldPreset, RUN_MANIFEST_SCHEMA_VERSION,
 };
 use crate::error::ServerError;
 
@@ -65,8 +65,8 @@ pub(crate) struct GenerationRuntime<'a> {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) struct RunApproval {
-    pub eula_accepted_at: u64,
+pub(crate) struct RunApproval<'a> {
+    pub eula: &'a SavedEula,
     pub consent_at: u64,
 }
 
@@ -343,6 +343,35 @@ pub(crate) fn validate_request(request: &GenerationRequest) -> Result<(), Server
     Ok(())
 }
 
+/// Checks the two independent approvals before any run directory or process exists:
+/// a per-run consent and an EULA acceptance for exactly this JAR and Minecraft version.
+pub(crate) fn validate_approval(
+    request: &GenerationRequest,
+    approval: &RunApproval<'_>,
+    server: &ServerJarInfo,
+) -> Result<(), ServerError> {
+    if !request.consent || approval.consent_at == 0 {
+        return Err(ServerError::ConsentRequired(
+            "confirm that the official server will be started locally for this run".to_owned(),
+        ));
+    }
+    if !approval.eula.matches(&server.version, &server.sha1) {
+        return Err(ServerError::EulaRequired(format!(
+            "the EULA acceptance does not cover the Minecraft {} server JAR with SHA-1 {}; accept it again for this exact file",
+            server.version, server.sha1
+        )));
+    }
+    Ok(())
+}
+
+fn manifest_is_valid(manifest: &RunManifest) -> bool {
+    manifest.schema_version == RUN_MANIFEST_SCHEMA_VERSION
+        && !manifest.minecraft_version.is_empty()
+        && is_sha1(&manifest.server_jar_sha1)
+        && manifest.eula_accepted_at > 0
+        && manifest.consent_at > 0
+}
+
 pub(crate) fn prepare(
     runs_root: &Path,
     runtime: GenerationRuntime<'_>,
@@ -351,6 +380,7 @@ pub(crate) fn prepare(
     datapacks: &[GenerationDatapack],
 ) -> Result<GenerationPlan, ServerError> {
     validate_request(request)?;
+    validate_approval(request, &approval, runtime.server)?;
     fs::create_dir_all(runs_root).map_err(|error| {
         ServerError::Io(format!(
             "cannot create the generation runs directory {}: {error}",
@@ -399,7 +429,7 @@ pub(crate) fn prepare(
         view_distance: request.view_distance,
         cpu_threads: request.cpu_threads,
         generate_structures: request.generate_structures,
-        eula_accepted_at: approval.eula_accepted_at,
+        eula_accepted_at: approval.eula.accepted_at,
         consent_at: approval.consent_at,
         datapacks: datapacks.to_vec(),
         port,
@@ -419,6 +449,10 @@ pub(crate) fn prepare(
         radius_chunks: plan.radius_chunks,
         generate_structures: plan.generate_structures,
         datapacks: plan.datapacks.clone(),
+        minecraft_version: runtime.server.version.clone(),
+        server_jar_sha1: runtime.server.sha1.clone(),
+        eula_accepted_at: approval.eula.accepted_at,
+        consent_at: approval.consent_at,
     };
     let result = (|| -> Result<(), ServerError> {
         write_json(&run_dir.join(RUN_MANIFEST_NAME), &manifest)?;
@@ -1375,7 +1409,7 @@ pub(crate) fn load_completed_world(
         )));
     }
     let manifest: RunManifest = read_report_json(&run_dir.join(RUN_MANIFEST_NAME))?;
-    if manifest.schema_version != RUN_MANIFEST_SCHEMA_VERSION || manifest.run_id != run_id {
+    if !manifest_is_valid(&manifest) || manifest.run_id != run_id {
         return Err(ServerError::Invalid(format!(
             "the generation manifest for {run_id} does not match this run"
         )));
@@ -1408,6 +1442,9 @@ pub(crate) fn load_completed_world(
         || report.radius_chunks != manifest.radius_chunks
         || report.generate_structures != manifest.generate_structures
         || report.datapacks != manifest.datapacks
+        || report.server_sha1 != manifest.server_jar_sha1
+        || report.eula_accepted_at != manifest.eula_accepted_at
+        || report.consent_at != manifest.consent_at
     {
         return Err(ServerError::Invalid(format!(
             "the generation report for {run_id} does not match its manifest"
@@ -1495,7 +1532,7 @@ pub(crate) fn scan_runs(runs_root: &Path) -> GenerationRunsReport {
             .ok()
             .and_then(|bytes| serde_json::from_slice::<RunManifest>(&bytes).ok())
         {
-            Some(manifest) if manifest.schema_version == RUN_MANIFEST_SCHEMA_VERSION => manifest,
+            Some(manifest) if manifest_is_valid(&manifest) => manifest,
             _ => {
                 problems.push(format!("{} has an unreadable run manifest", path.display()));
                 continue;
@@ -1687,6 +1724,141 @@ mod tests {
         let mut bad_view = request("seed");
         bad_view.view_distance = 32;
         assert!(validate_request(&bad_view).is_err());
+    }
+
+    #[test]
+    fn approval_requires_the_exact_jar_version_and_run_consent() {
+        let server = ServerJarInfo {
+            version: "1.21.4".to_owned(),
+            data_version: 4189,
+            java_major: Some(21),
+            protocol_version: Some(769),
+            resource_pack_format: Some(46),
+            sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            size: 56_880_250,
+        };
+        let eula = SavedEula {
+            accepted_at: 1_763_500_000,
+            minecraft_version: "1.21.4".to_owned(),
+            jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            eula_url: EULA_URL.to_owned(),
+        };
+        let approval = RunApproval {
+            eula: &eula,
+            consent_at: 2,
+        };
+        assert!(validate_approval(&request("seed"), &approval, &server).is_ok());
+
+        let mut wrong_version = eula.clone();
+        wrong_version.minecraft_version = "1.20.6".to_owned();
+        assert!(matches!(
+            validate_approval(
+                &request("seed"),
+                &RunApproval {
+                    eula: &wrong_version,
+                    consent_at: 2,
+                },
+                &server
+            ),
+            Err(ServerError::EulaRequired(_))
+        ));
+
+        let mut wrong_jar = eula.clone();
+        wrong_jar.jar_sha1 = "0000000000000000000000000000000000000000".to_owned();
+        assert!(matches!(
+            validate_approval(
+                &request("seed"),
+                &RunApproval {
+                    eula: &wrong_jar,
+                    consent_at: 2,
+                },
+                &server
+            ),
+            Err(ServerError::EulaRequired(_))
+        ));
+
+        let mut wrong_url = eula.clone();
+        wrong_url.eula_url = "https://example.com/not-the-eula".to_owned();
+        assert!(matches!(
+            validate_approval(
+                &request("seed"),
+                &RunApproval {
+                    eula: &wrong_url,
+                    consent_at: 2,
+                },
+                &server
+            ),
+            Err(ServerError::EulaRequired(_))
+        ));
+
+        let mut missing_timestamp = eula.clone();
+        missing_timestamp.accepted_at = 0;
+        assert!(matches!(
+            validate_approval(
+                &request("seed"),
+                &RunApproval {
+                    eula: &missing_timestamp,
+                    consent_at: 2,
+                },
+                &server
+            ),
+            Err(ServerError::EulaRequired(_))
+        ));
+
+        let mut no_consent = request("seed");
+        no_consent.consent = false;
+        assert!(matches!(
+            validate_approval(&no_consent, &approval, &server),
+            Err(ServerError::ConsentRequired(_))
+        ));
+        assert!(matches!(
+            validate_approval(
+                &request("seed"),
+                &RunApproval {
+                    eula: &eula,
+                    consent_at: 0,
+                },
+                &server
+            ),
+            Err(ServerError::ConsentRequired(_))
+        ));
+    }
+
+    #[test]
+    fn run_manifest_requires_the_recorded_jar_and_approvals() {
+        let manifest = RunManifest {
+            schema_version: RUN_MANIFEST_SCHEMA_VERSION,
+            run_id: "run-1".to_owned(),
+            created_at: 1,
+            seed: "seed".to_owned(),
+            preset: WorldPreset::Normal,
+            center_x: 0,
+            center_z: 0,
+            radius_chunks: 1,
+            generate_structures: true,
+            datapacks: Vec::new(),
+            minecraft_version: "1.21.4".to_owned(),
+            server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            eula_accepted_at: 1,
+            consent_at: 2,
+        };
+        assert!(manifest_is_valid(&manifest));
+
+        let mut no_eula = manifest.clone();
+        no_eula.eula_accepted_at = 0;
+        assert!(!manifest_is_valid(&no_eula));
+
+        let mut no_consent = manifest.clone();
+        no_consent.consent_at = 0;
+        assert!(!manifest_is_valid(&no_consent));
+
+        let mut no_jar = manifest.clone();
+        no_jar.server_jar_sha1.clear();
+        assert!(!manifest_is_valid(&no_jar));
+
+        let mut old_schema = manifest;
+        old_schema.schema_version = RUN_MANIFEST_SCHEMA_VERSION - 1;
+        assert!(!manifest_is_valid(&old_schema));
     }
 
     #[test]
@@ -1986,6 +2158,10 @@ public class FakeCrash {
                 radius_chunks: 1,
                 generate_structures: true,
                 datapacks: Vec::new(),
+                minecraft_version: "1.21.4".to_owned(),
+                server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+                eula_accepted_at: 1,
+                consent_at: 2,
             },
         )
         .expect("manifest");
@@ -2028,6 +2204,10 @@ public class FakeCrash {
             radius_chunks: 1,
             generate_structures: true,
             datapacks: Vec::new(),
+            minecraft_version: "1.21.4".to_owned(),
+            server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
+            eula_accepted_at: 1,
+            consent_at: 2,
         };
         let report = GenerationReport {
             snapshot: GenerationSnapshot {

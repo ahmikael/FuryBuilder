@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::ServerError;
 use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
-/// Version of `<app-data>/server.json`. Schema 2 keeps one selection per exact Minecraft
-/// version; older schemas are not read.
-pub const SERVER_SETTINGS_SCHEMA_VERSION: u32 = 2;
+/// Version of `<app-data>/server.json`. Schema 3 keeps one selection per exact Minecraft
+/// version and one explicit EULA acceptance per exact JAR/version; older schemas are not read.
+pub const SERVER_SETTINGS_SCHEMA_VERSION: u32 = 3;
 /// Version of the manifest stored next to a managed server JAR.
 pub const SERVER_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
@@ -196,7 +196,7 @@ impl ServerDiscoveryReport {
 /// Official Minecraft EULA text. FuryBuilder never accepts it on the user's behalf.
 pub const EULA_URL: &str = "https://aka.ms/MinecraftEULA";
 /// Version of the `.furybuilder-run.json` manifest in a generation run directory.
-pub const RUN_MANIFEST_SCHEMA_VERSION: u32 = 1;
+pub const RUN_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
 /// An explicit EULA acceptance tied to the exact server JAR that will be executed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -206,6 +206,17 @@ pub struct SavedEula {
     pub minecraft_version: String,
     pub jar_sha1: String,
     pub eula_url: String,
+}
+
+impl SavedEula {
+    /// Whether this acceptance covers exactly this Minecraft version and JAR. The official
+    /// URL is part of the check so a tampered record cannot authorize a launch.
+    pub fn matches(&self, minecraft_version: &str, jar_sha1: &str) -> bool {
+        self.accepted_at > 0
+            && self.eula_url == EULA_URL
+            && self.minecraft_version == minecraft_version
+            && self.jar_sha1.eq_ignore_ascii_case(jar_sha1)
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -454,4 +465,9 @@ pub struct RunManifest {
     pub generate_structures: bool,
     #[serde(default)]
     pub datapacks: Vec<GenerationDatapack>,
+    /// Exact server facts and approval timestamps recorded before any process starts.
+    pub minecraft_version: String,
+    pub server_jar_sha1: String,
+    pub eula_accepted_at: u64,
+    pub consent_at: u64,
 }

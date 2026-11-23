@@ -34,7 +34,8 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 | MCP bridge (external AI client) | No                | No      | No                    | No (local named pipe)                            |
 | Installing a newer beta         | No                | No      | No                    | Yes (manual installer download)                  |
 
-`Vanilla World` also requires the user to accept the Minecraft EULA. FuryBuilder never
+`Vanilla World` also requires the user to accept the Minecraft EULA for the exact server
+JAR SHA-1 and Minecraft version, then confirm each local run separately. FuryBuilder never
 accepts it automatically and never bundles Java or the server JAR.
 
 ### Tested reference machine

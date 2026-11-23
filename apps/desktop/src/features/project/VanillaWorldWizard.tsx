@@ -551,7 +551,9 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                 <ShieldCheck className="size-4" /> Minecraft EULA
               </div>
               {setup?.eulaMatchesSelected ? (
-                <div className="text-xs text-status-ok">Accepted for this exact server JAR.</div>
+                <div className="text-xs text-status-ok">
+                  Accepted for this exact server JAR and Minecraft version.
+                </div>
               ) : (
                 <div className="space-y-1">
                   <a
@@ -569,7 +571,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                       onCheckedChange={(checked) => setEulaChecked(checked === true)}
                       aria-label="I have read and accept the Minecraft EULA"
                     />
-                    <span>I accept the Minecraft EULA for this JAR.</span>
+                    <span>I accept the Minecraft EULA for this JAR and version.</span>
                   </label>
                   <Button
                     size="sm"

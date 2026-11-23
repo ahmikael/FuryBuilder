@@ -138,16 +138,15 @@ impl ServerManager {
             problems.push(warning.to_owned());
         }
         let selected = self.selected(&target);
-        let eula = self.inner.settings.eula();
-        let eula_matches_selected = match (
-            eula.as_ref(),
-            selected
-                .as_ref()
-                .and_then(|selected| selected.sha1.as_deref()),
-        ) {
-            (Some(eula), Some(sha1)) => eula.jar_sha1.eq_ignore_ascii_case(sha1),
-            _ => false,
-        };
+        let eula = selected
+            .as_ref()
+            .filter(|report| report.ready)
+            .and_then(|report| {
+                let version = report.version.as_deref()?;
+                let sha1 = report.sha1.as_deref()?;
+                self.inner.settings.eula_for(version, sha1)
+            });
+        let eula_matches_selected = eula.is_some();
         ServerDiscoveryReport {
             target_minecraft_version: target_minecraft_version().to_owned(),
             target_data_version: target_data_version(),
@@ -482,11 +481,22 @@ impl ServerManager {
     }
 
     pub fn clear_eula(&self) -> Result<(), ServerError> {
-        self.inner.settings.clear_eula()
+        let target = ServerTarget::baseline();
+        match self.inner.settings.selected(&target.minecraft_version) {
+            Some(saved) => self
+                .inner
+                .settings
+                .clear_eula(&saved.minecraft_version, &saved.sha1),
+            None => self.inner.settings.clear_eulas(),
+        }
     }
 
-    pub fn eula(&self) -> Option<SavedEula> {
-        self.inner.settings.eula()
+    /// Returns the explicit acceptance for exactly this target's selected JAR, if any.
+    pub fn eula_for(&self, target: &ServerTarget) -> Option<SavedEula> {
+        let saved = self.inner.settings.selected(&target.minecraft_version)?;
+        self.inner
+            .settings
+            .eula_for(&saved.minecraft_version, &saved.sha1)
     }
 
     /// Starts exactly one isolated generation run. The caller supplies a Java executable
@@ -540,17 +550,16 @@ impl ServerManager {
                 "the selected server JAR changed on disk; choose it again to re-verify".to_owned(),
             ));
         }
-        let eula = self.inner.settings.eula().ok_or_else(|| {
-            ServerError::EulaRequired(
-                "read and accept https://aka.ms/MinecraftEULA before generation".to_owned(),
-            )
-        })?;
-        if !eula.jar_sha1.eq_ignore_ascii_case(&info.sha1) {
-            return Err(ServerError::EulaRequired(
-                "the EULA was accepted for a different server JAR; confirm it for this file"
-                    .to_owned(),
-            ));
-        }
+        let eula = self
+            .inner
+            .settings
+            .eula_for(&info.version, &info.sha1)
+            .ok_or_else(|| {
+                ServerError::EulaRequired(format!(
+                    "read and accept {EULA_URL} for the Minecraft {} server JAR with SHA-1 {} before generation",
+                    info.version, info.sha1
+                ))
+            })?;
         let probe = probe_java(java).map_err(|error| ServerError::UnsupportedJava {
             target: target_minecraft_version(),
             detail: error.to_string(),
@@ -581,7 +590,7 @@ impl ServerManager {
             },
             &request,
             generation::RunApproval {
-                eula_accepted_at: eula.accepted_at,
+                eula: &eula,
                 consent_at,
             },
             &datapacks,

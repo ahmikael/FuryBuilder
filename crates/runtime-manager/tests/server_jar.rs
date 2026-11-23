@@ -237,15 +237,18 @@ fn selections_are_kept_per_exact_version() {
 }
 
 #[test]
-fn eula_acceptance_is_explicit_and_tied_to_the_selected_jar() {
+fn eula_acceptance_is_explicit_and_tied_to_the_exact_jar_and_version() {
     let dir = TempDir::new("eula");
     let manager = dir.manager();
     let exact = target("1.21.4", 4189, 21);
+    let second = target("1.20.6", 3839, 21);
     let jar = dir.path().join("server.jar");
+    let second_jar = dir.path().join("server-second.jar");
     write_jar(&jar, &version_json("1.21.4", 4189, 21), true);
+    write_jar(&second_jar, &version_json("1.20.6", 3839, 21), true);
 
     assert!(manager.accept_eula(false, &exact).is_err());
-    assert!(manager.eula().is_none());
+    assert!(manager.eula_for(&exact).is_none());
     assert!(
         manager.accept_eula(true, &exact).is_err(),
         "no selected JAR yet"
@@ -264,24 +267,92 @@ fn eula_acceptance_is_explicit_and_tied_to_the_selected_jar() {
     assert_eq!(eula.minecraft_version, "1.21.4");
     assert_eq!(eula.jar_sha1, sha1);
     assert_eq!(eula.eula_url, "https://aka.ms/MinecraftEULA");
+    assert!(eula.matches("1.21.4", &sha1));
+    assert!(!eula.matches("1.20.6", &sha1));
+    assert!(!eula.matches("1.21.4", "0000000000000000000000000000000000000000"));
     let discovery = manager.discover();
     assert!(discovery.eula_matches_selected);
+    assert_eq!(
+        discovery
+            .eula
+            .as_ref()
+            .expect("matching eula")
+            .minecraft_version,
+        "1.21.4"
+    );
+
+    // A second version gets its own selection and acceptance; the first is not reused.
+    manager
+        .select_manual(&second_jar, &second)
+        .expect("select second version");
+    assert!(manager.eula_for(&second).is_none());
+    assert!(manager.discover().eula_matches_selected);
+    let second_eula = manager
+        .accept_eula(true, &second)
+        .expect("second explicit acceptance");
+    assert_eq!(second_eula.minecraft_version, "1.20.6");
+    assert_ne!(second_eula.jar_sha1, eula.jar_sha1);
+    assert!(manager.eula_for(&exact).is_some());
+    assert!(manager.eula_for(&second).is_some());
 
     manager
         .clear_selection(&exact.minecraft_version)
-        .expect("clear selection");
+        .expect("clear first selection");
     let discovery = manager.discover();
     assert!(discovery.selected.is_none());
-    assert!(discovery.eula.is_some(), "acceptance is a separate record");
+    assert!(
+        discovery.eula.is_none(),
+        "no JAR means no matching acceptance"
+    );
     assert!(!discovery.eula_matches_selected);
+    assert!(manager.eula_for(&second).is_some());
 
     manager
         .select_manual(&jar, &exact)
         .expect("reselect server jar");
-    assert!(manager.discover().eula_matches_selected);
+    assert!(
+        manager.discover().eula_matches_selected,
+        "the acceptance survives reselecting the same JAR"
+    );
     manager.clear_eula().expect("withdraw eula");
-    assert!(manager.eula().is_none());
+    assert!(manager.eula_for(&exact).is_none());
     assert!(!manager.discover().eula_matches_selected);
+    assert!(
+        manager.eula_for(&second).is_some(),
+        "withdrawing the baseline acceptance keeps another JAR's record"
+    );
+}
+
+#[test]
+fn a_changed_jar_is_not_covered_by_its_old_eula_acceptance() {
+    let dir = TempDir::new("eula-stale");
+    let manager = dir.manager();
+    let exact = target("1.21.4", 4189, 21);
+    let jar = dir.path().join("server.jar");
+    write_jar(&jar, &version_json("1.21.4", 4189, 21), true);
+    manager
+        .select_manual(&jar, &exact)
+        .expect("select server jar");
+    manager
+        .accept_eula(true, &exact)
+        .expect("explicit acceptance");
+    assert!(manager.discover().eula_matches_selected);
+
+    fs::OpenOptions::new()
+        .append(true)
+        .open(&jar)
+        .expect("open jar")
+        .write_all(b"tampered")
+        .expect("append");
+    let discovery = manager.discover();
+    assert!(!discovery.selected.as_ref().expect("selection").ready);
+    assert!(!discovery.eula_matches_selected);
+    assert!(discovery.eula.is_none());
+    assert!(
+        manager.eula_for(&exact).is_some(),
+        "the record still exists, but it no longer authorizes the changed file"
+    );
+    assert!(manager.accept_eula(true, &exact).is_err());
 }
 
 #[test]
@@ -294,7 +365,7 @@ fn missing_manual_jar_is_reported_not_hidden() {
     fs::write(
         manager.settings_path(),
         serde_json::to_vec(&serde_json::json!({
-            "schemaVersion": 2,
+            "schemaVersion": 3,
             "selected": [{
                 "minecraftVersion": "1.21.4",
                 "path": missing.display().to_string(),

@@ -322,8 +322,7 @@ export function ServerGenerationPanel({
               >
                 {EULA_URL}
               </a>{" "}
-              and confirm it for this exact JAR
-              {discovery?.eula ? " (the previous acceptance was for a different file)" : ""}.
+              and confirm it for this exact JAR and Minecraft version.
             </p>
             <div className="mt-3 flex items-start gap-2">
               <Checkbox
@@ -334,7 +333,8 @@ export function ServerGenerationPanel({
                 aria-label="I have read and accept the Minecraft EULA"
               />
               <span className="text-sm leading-relaxed">
-                I have read and accept the Minecraft EULA for this server JAR
+                I have read and accept the Minecraft EULA for Minecraft {selected.version} and this
+                server JAR
                 <span className="ml-1 font-mono text-xs text-muted-foreground">
                   {selected.sha1?.slice(0, 12)}…
                 </span>
@@ -362,7 +362,10 @@ export function ServerGenerationPanel({
           <AlertTitle className="text-status-ok">EULA accepted</AlertTitle>
           <AlertDescription>
             <p>
-              Accepted {discovery?.eula ? acceptedAt(discovery.eula.acceptedAt) : ""}. Read the{" "}
+              Accepted {discovery?.eula ? acceptedAt(discovery.eula.acceptedAt) : ""} for Minecraft{" "}
+              {discovery?.eula?.minecraftVersion ?? "?"} and JAR{" "}
+              <span className="font-mono text-xs">{discovery?.eula?.jarSha1.slice(0, 12)}…</span>.
+              Read the{" "}
               <a
                 className="underline underline-offset-2"
                 href={EULA_URL}
