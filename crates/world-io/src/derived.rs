@@ -1,4 +1,4 @@
-//! Read-only inventory of Java 1.21.4 chunk-derived data (M8.8).
+//! Read-only inventory of modern Java chunk-derived data (M8.8).
 //!
 //! A block edit does not live in isolation. A classic Java chunk also carries
 //! heightmaps, light arrays, scheduled ticks, post-processing positions and block
@@ -52,7 +52,7 @@ pub struct ChunkFingerprints {
     pub structures: Option<String>,
 }
 
-/// Bounded, read-only view of one 1.21.4 chunk's derived fields.
+/// Bounded, read-only view of one modern chunk's derived fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChunkDerivedData {
@@ -246,7 +246,7 @@ fn invalid(message: impl Into<String>) -> DerivedDataError {
 ///
 /// The function is strict about known fields: a known key with an unexpected type is an
 /// error, not a silent zero. Unknown fields only appear in `root_fields` and are left
-/// exactly where they are. `DataVersion` must be the pinned 1.21.4 value.
+/// exactly where they are. `DataVersion` must belong to a verified profile.
 pub fn inspect_chunk_derived(
     nbt: &NbtFile,
     x: i32,

@@ -1,4 +1,4 @@
-//! Versioned Java structure (`.nbt`) adapter for DataVersion 4189.
+//! Versioned Java structure (`.nbt`) adapter for the verified classic profile.
 //!
 //! Schema (Minecraft Java structure file):
 //! ```text

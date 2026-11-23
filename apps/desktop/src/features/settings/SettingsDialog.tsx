@@ -124,8 +124,8 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
               <span className="font-mono">{backend.info?.version ?? "0.1.0"}</span>
               <span className="text-muted-foreground">Minecraft target</span>
               <span className="font-mono">
-                {backend.info?.targetMinecraftVersion ?? "1.21.4"} · DV{" "}
-                {backend.info?.targetDataVersion ?? 4189}
+                {backend.info?.targetMinecraftVersion ?? "unknown"} · DV{" "}
+                {backend.info?.targetDataVersion ?? "?"}
               </span>
             </CardContent>
           </Card>

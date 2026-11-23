@@ -95,7 +95,7 @@ export function DependencyReadiness() {
 
   const target = report
     ? `Minecraft ${report.targetMinecraftVersion} · DV ${report.targetDataVersion} · Java ${report.targetJavaMajor} · datapack ${report.serverDatapackFormat}`
-    : "Minecraft 1.21.4 · DV 4189 · Java 21";
+    : "Target version unavailable";
 
   return (
     <section className="min-w-0 space-y-4" aria-labelledby="vanilla-readiness-heading">

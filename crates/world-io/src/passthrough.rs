@@ -5,7 +5,7 @@
 //! containers rather than being rebuilt from decoded chunks. This is the safe baseline for
 //! an overlay: unchanged data never passes through a lossy parser.
 //!
-//! The copy is validated before publication: the source must be a supported classic 1.21.4
+//! The copy is validated before publication: the source must be a supported classic
 //! world, every allocated chunk is decoded, and the copied tree is opened and validated
 //! again. Files are written into a temporary sibling directory, hashed, re-read, and only
 //! then renamed to the requested destination. The destination must not already exist.

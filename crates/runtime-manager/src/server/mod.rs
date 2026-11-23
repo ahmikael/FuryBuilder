@@ -1,8 +1,8 @@
 //! Official Minecraft server JAR provisioning and isolated Vanilla World generation.
 //!
 //! The JAR is resolved from Mojang's official `version_manifest_v2` → version JSON →
-//! `downloads.server`, verified by the announced SHA-1 and size, inspected for the exact
-//! 1.21.4 `world_version` 4189 and published into an offline, deletable cache. A user can
+//! `downloads.server`, verified by the announced SHA-1 and size, inspected for the target
+//! profile's `world_version` and published into an offline, deletable cache. A user can
 //! also select an existing local JAR, which must pass the same internal-version and server
 //! entry-point checks.
 //!
@@ -354,7 +354,7 @@ impl ServerManager {
         self.managed_list()
     }
 
-    /// Records an explicit EULA acceptance for the exact selected 1.21.4 server JAR.
+    /// Records an explicit EULA acceptance for the exact selected server JAR.
     /// Passing `false` is rejected; this method never accepts the EULA implicitly.
     pub fn accept_eula(&self, accepted: bool) -> Result<SavedEula, ServerError> {
         if !accepted {

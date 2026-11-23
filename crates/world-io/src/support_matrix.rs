@@ -11,6 +11,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::version_support;
+
 pub const SUPPORT_MATRIX_SCHEMA_VERSION: u32 = 1;
 
 /// One supported, detected or out-of-scope Java world family.
@@ -29,7 +31,7 @@ pub struct VersionSupport {
     pub note: String,
 }
 
-/// One data category inside the supported classic 1.21.4 world.
+/// One data category inside the supported classic world.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CategorySupport {
@@ -55,21 +57,7 @@ pub struct SupportMatrix {
 pub fn support_matrix() -> SupportMatrix {
     SupportMatrix {
         schema_version: SUPPORT_MATRIX_SCHEMA_VERSION,
-        versions: versions()
-            .iter()
-            .map(|row| VersionSupport {
-                id: row.id.to_owned(),
-                minecraft_versions: row.minecraft_versions.to_owned(),
-                data_versions: row.data_versions.to_owned(),
-                layout: row.layout.to_owned(),
-                status: row.status.to_owned(),
-                read: row.read.to_owned(),
-                edit: row.edit.to_owned(),
-                write: row.write.to_owned(),
-                passthrough: row.passthrough.to_owned(),
-                note: row.note.to_owned(),
-            })
-            .collect(),
+        versions: versions(),
         categories: categories()
             .iter()
             .map(|row| CategorySupport {
@@ -85,19 +73,6 @@ pub fn support_matrix() -> SupportMatrix {
     }
 }
 
-struct VersionRow {
-    id: &'static str,
-    minecraft_versions: &'static str,
-    data_versions: &'static str,
-    layout: &'static str,
-    status: &'static str,
-    read: &'static str,
-    edit: &'static str,
-    write: &'static str,
-    passthrough: &'static str,
-    note: &'static str,
-}
-
 struct CategoryRow {
     id: &'static str,
     label: &'static str,
@@ -108,79 +83,86 @@ struct CategoryRow {
     note: &'static str,
 }
 
-fn versions() -> &'static [VersionRow] {
-    &[
-        VersionRow {
-            id: "java-1.21.4-classic",
-            minecraft_versions: "1.21.4",
-            data_versions: "4189",
-            layout: "classic_anvil",
-            status: "supported",
-            read: "supported_subset",
-            edit: "block_states_and_biomes",
-            write: "verified_block_states_and_biomes",
-            passthrough: "byte_for_byte",
-            note: "The only target with verified decoding, block/biome editing, region writing and a complete-folder export plus official-server fixture.",
+fn versions() -> Vec<VersionSupport> {
+    let target = version_support::default_version_profile();
+    vec![
+        VersionSupport {
+            id: format!("{}-classic", target.id),
+            minecraft_versions: target.minecraft_version.to_string(),
+            data_versions: target.data_version.to_string(),
+            layout: "classic_anvil".to_owned(),
+            status: "supported".to_owned(),
+            read: "supported_subset".to_owned(),
+            edit: "block_states_and_biomes".to_owned(),
+            write: "verified_block_states_and_biomes".to_owned(),
+            passthrough: "byte_for_byte".to_owned(),
+            note: format!(
+                "The only profile with verified decoding, block/biome editing, region writing and a complete-folder export plus official-server fixture: Minecraft {} (DataVersion {}).",
+                target.minecraft_version, target.data_version
+            ),
         },
-        VersionRow {
-            id: "java-1.21.5-1.21.11-classic",
-            minecraft_versions: "1.21.5-1.21.11",
-            data_versions: "4325-4671",
-            layout: "classic_anvil",
-            status: "detected_unsupported",
-            read: "version_refused",
-            edit: "none",
-            write: "none",
-            passthrough: "none",
-            note: "Classic folder markers can be recognised, but the fixed-version reader refuses every DataVersion except 4189.",
+        VersionSupport {
+            id: "java-1.21.5-1.21.11-classic".to_owned(),
+            minecraft_versions: "1.21.5-1.21.11".to_owned(),
+            data_versions: "4325-4671".to_owned(),
+            layout: "classic_anvil".to_owned(),
+            status: "detected_unsupported".to_owned(),
+            read: "version_refused".to_owned(),
+            edit: "none".to_owned(),
+            write: "none".to_owned(),
+            passthrough: "none".to_owned(),
+            note: format!(
+                "Classic folder markers can be recognised, but the fixed-version reader refuses every DataVersion except {}.",
+                target.data_version
+            ),
         },
-        VersionRow {
-            id: "java-26.1-26.3-split",
-            minecraft_versions: "26.1-26.3",
-            data_versions: "4786-5023",
-            layout: "split_26_1_plus",
-            status: "detected_unsupported",
-            read: "layout_and_region_headers",
-            edit: "none",
-            write: "none",
-            passthrough: "none",
-            note: "M8.11 classifies the layout and inventories split region headers read-only; no split chunk decoding or writing is implemented.",
+        VersionSupport {
+            id: "java-26.1-26.3-split".to_owned(),
+            minecraft_versions: "26.1-26.3".to_owned(),
+            data_versions: "4786-5023".to_owned(),
+            layout: "split_26_1_plus".to_owned(),
+            status: "detected_unsupported".to_owned(),
+            read: "layout_and_region_headers".to_owned(),
+            edit: "none".to_owned(),
+            write: "none".to_owned(),
+            passthrough: "none".to_owned(),
+            note: "M8.11 classifies the layout and inventories split region headers read-only; no split chunk decoding or writing is implemented.".to_owned(),
         },
-        VersionRow {
-            id: "java-26.4-snapshots",
-            minecraft_versions: "26.4 snapshots",
-            data_versions: "5119-5130+",
-            layout: "split_26_1_plus",
-            status: "out_of_scope",
-            read: "none",
-            edit: "none",
-            write: "none",
-            passthrough: "none",
-            note: "Moving snapshot target; not supported.",
+        VersionSupport {
+            id: "java-26.4-snapshots".to_owned(),
+            minecraft_versions: "26.4 snapshots".to_owned(),
+            data_versions: "5119-5130+".to_owned(),
+            layout: "split_26_1_plus".to_owned(),
+            status: "out_of_scope".to_owned(),
+            read: "none".to_owned(),
+            edit: "none".to_owned(),
+            write: "none".to_owned(),
+            passthrough: "none".to_owned(),
+            note: "Moving snapshot target; not supported.".to_owned(),
         },
-        VersionRow {
-            id: "pre-1.13-legacy",
-            minecraft_versions: "pre-1.13",
-            data_versions: "varies",
-            layout: "legacy_mcr",
-            status: "detected_unsupported",
-            read: "legacy_marker",
-            edit: "none",
-            write: "none",
-            passthrough: "none",
-            note: "Legacy .mcr markers are detected and refused; no McRegion chunk parser or writer exists.",
+        VersionSupport {
+            id: "pre-1.13-legacy".to_owned(),
+            minecraft_versions: "pre-1.13".to_owned(),
+            data_versions: "varies".to_owned(),
+            layout: "legacy_mcr".to_owned(),
+            status: "detected_unsupported".to_owned(),
+            read: "legacy_marker".to_owned(),
+            edit: "none".to_owned(),
+            write: "none".to_owned(),
+            passthrough: "none".to_owned(),
+            note: "Legacy .mcr markers are detected and refused; no McRegion chunk parser or writer exists.".to_owned(),
         },
-        VersionRow {
-            id: "bedrock",
-            minecraft_versions: "Bedrock Edition",
-            data_versions: "n/a",
-            layout: "bedrock",
-            status: "out_of_scope",
-            read: "none",
-            edit: "none",
-            write: "none",
-            passthrough: "none",
-            note: "Bedrock is a different format family and is out of scope for the Java Anvil adapter.",
+        VersionSupport {
+            id: "bedrock".to_owned(),
+            minecraft_versions: "Bedrock Edition".to_owned(),
+            data_versions: "n/a".to_owned(),
+            layout: "bedrock".to_owned(),
+            status: "out_of_scope".to_owned(),
+            read: "none".to_owned(),
+            edit: "none".to_owned(),
+            write: "none".to_owned(),
+            passthrough: "none".to_owned(),
+            note: "Bedrock is a different format family and is out of scope for the Java Anvil adapter.".to_owned(),
         },
     ]
 }
@@ -357,16 +339,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_one_version_is_supported_and_it_is_the_pinned_target() {
+    fn only_one_version_is_supported_and_it_matches_the_catalog() {
         let matrix = support_matrix();
         let supported = matrix
             .versions
             .iter()
             .filter(|version| version.status == "supported")
             .collect::<Vec<_>>();
+        let target = version_support::default_version_profile();
         assert_eq!(supported.len(), 1);
-        assert_eq!(supported[0].minecraft_versions, "1.21.4");
-        assert_eq!(supported[0].data_versions, "4189");
+        assert_eq!(
+            supported[0].minecraft_versions,
+            target.minecraft_version.as_str()
+        );
+        assert_eq!(supported[0].data_versions, target.data_version.to_string());
         assert_eq!(supported[0].layout, "classic_anvil");
     }
 

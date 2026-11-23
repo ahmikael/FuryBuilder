@@ -142,8 +142,7 @@ export function MinecraftAssetsSection() {
       setInspection(report);
       if (!report.valid) {
         setError(
-          report.errors[0] ??
-            "The selected path is not a compatible Minecraft 1.21.4 asset source.",
+          report.errors[0] ?? "The selected path is not a compatible Minecraft asset source.",
         );
         return;
       }
@@ -204,9 +203,7 @@ export function MinecraftAssetsSection() {
     try {
       const report = await inspectAssetPath(selected);
       if (!report.valid || report.kind !== "resource_pack") {
-        setError(
-          report.errors[0] ?? "The selection is not a compatible Minecraft 1.21.4 resource pack.",
-        );
+        setError(report.errors[0] ?? "The selection is not a compatible Minecraft resource pack.");
         return;
       }
       const current = saved?.packs.map((pack) => pack.path) ?? [];
@@ -244,7 +241,7 @@ export function MinecraftAssetsSection() {
 
   const targetVersion = discovery
     ? `Minecraft ${discovery.targetMinecraftVersion} · DV ${discovery.targetDataVersion} · pack format ${discovery.targetResourcePackFormat}`
-    : "Minecraft 1.21.4 · DV 4189 · pack format 46";
+    : "Target version unavailable";
 
   return (
     <section className="space-y-5">

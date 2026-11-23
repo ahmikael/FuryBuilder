@@ -300,7 +300,7 @@ export const CREATION_MODES: Array<{
     mode: "import",
     label: "Import World",
     description:
-      "Open a supported Java 1.21.4 world read-only, keep a byte-for-byte source copy and edit its blocks through the project overlay.",
+      "Open a supported Java world read-only, keep a byte-for-byte source copy and edit its blocks through the project overlay.",
     available: true,
   },
 ];

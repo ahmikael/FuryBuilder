@@ -258,6 +258,10 @@ export function StructureExchange() {
 
   const newProjectBlocked = destination === "new" && dirty;
 
+  const headerTargetVersion =
+    exportPreview?.targetMinecraftVersion ?? preview?.targetMinecraftVersion;
+  const headerTargetDataVersion = exportPreview?.targetDataVersion ?? preview?.targetDataVersion;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -276,7 +280,9 @@ export function StructureExchange() {
           <Download className="mr-1 size-3" /> Export structure
         </Button>
         <span className="ml-auto font-mono text-xs text-muted-foreground">
-          Java structure · Minecraft 1.21.4 · DataVersion 4189
+          Java structure
+          {headerTargetVersion ? ` · Minecraft ${headerTargetVersion}` : ""}
+          {headerTargetDataVersion ? ` · DataVersion ${headerTargetDataVersion}` : ""}
         </span>
       </div>
 

@@ -46,7 +46,7 @@ pub const MAX_STRUCTURE_SLOPE: u32 = 32;
 pub const MAX_STRUCTURE_SITES: usize = 64;
 /// Hard bound for the structure-site block checks in one query.
 pub const MAX_STRUCTURE_SITE_CHECKS: u64 = 2_000_000;
-/// Biome cells cover 4x4x4 blocks in Minecraft Java 1.21.4.
+/// Biome cells cover 4x4x4 blocks in modern Java worlds.
 const BIOME_CELL_SIZE: i32 = 4;
 const PLANT_SALT: u64 = 0x51A7_7E12;
 const TREE_SALT: u64 = 0x7AEE_5EED;

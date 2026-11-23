@@ -5,8 +5,8 @@
 //! cannot bypass validation. The native FuryBuilder project format stays in
 //! `project_store`; interchange formats are never a storage backend for editor metadata.
 //!
-//! First adapter (ADR-007): Java structure `.nbt` for Minecraft Java 1.21.4
-//! (`DataVersion` 4189). Sponge `.schem` v3 is the planned second adapter.
+//! First adapter (ADR-007): Java structure `.nbt` for the verified classic profile.
+//! Sponge `.schem` v3 is the planned second adapter.
 
 pub mod anvil;
 pub mod derived;

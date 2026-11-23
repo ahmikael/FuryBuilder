@@ -1,6 +1,6 @@
 //! Reference-chunk parity between the original generator output and the editable world.
 //!
-//! The original 1.21.4 server writes a Java world. FuryBuilder imports that world into the
+//! The original verified server writes a Java world. FuryBuilder imports that world into the
 //! editable `world_domain::World`, so an untouched import can be checked against the
 //! generated region files without re-running the generator. This module compares block
 //! states in a bounded, deterministic sample and reports every disagreement with absolute

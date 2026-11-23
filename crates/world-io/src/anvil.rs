@@ -1,11 +1,11 @@
-//! Read-only Minecraft Java Anvil world adapter for DataVersion 4189.
+//! Read-only Minecraft Java Anvil world adapter for verified classic profiles.
 //!
 //! This module deliberately has no write path. It reads `level.dat`, discovers the
 //! classic (pre-26.1) dimension folders and decodes region files one chunk at a time.
 //! Region chunks are returned as bounded [`NbtFile`] values so callers can preserve
 //! unknown fields instead of re-encoding a partial chunk.
 //!
-//! Region format notes (Minecraft Java 1.21.4):
+//! Region format notes (modern classic Anvil):
 //! - the file starts with two 4 KiB tables: 1024 locations and 1024 timestamps;
 //! - a location is a 24-bit sector offset plus an 8-bit sector count;
 //! - a chunk record is `length: u32`, `compression: u8`, then `length - 1` bytes;
@@ -230,7 +230,7 @@ pub struct JavaWorld {
 }
 
 impl JavaWorld {
-    /// Opens a classic 1.21.4 world in read-only mode.
+    /// Opens a verified classic world in read-only mode.
     ///
     /// The 26.1+ split layout is detected explicitly and refused: its Overworld does
     /// not live in `region/`, so treating it as a classic world would silently show an

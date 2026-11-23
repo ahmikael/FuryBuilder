@@ -127,7 +127,7 @@ export function MinecraftServerSection() {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
-        title: "Choose the official Minecraft 1.21.4 server.jar",
+        title: "Choose the official Minecraft server.jar",
         multiple: false,
         directory: false,
         filters: [{ name: "Minecraft server JAR", extensions: ["jar"] }],
@@ -223,8 +223,8 @@ export function MinecraftServerSection() {
           <Server className="size-4" /> Minecraft server JAR
         </h3>
         <Badge variant="secondary" className="font-mono">
-          MC {discovery?.targetMinecraftVersion ?? "1.21.4"} · DV{" "}
-          {discovery?.targetDataVersion ?? 4189} · Java {discovery?.targetJavaMajor ?? 21}
+          MC {discovery?.targetMinecraftVersion ?? "unknown"} · DV{" "}
+          {discovery?.targetDataVersion ?? "?"} · Java {discovery?.targetJavaMajor ?? "?"}
         </Badge>
       </div>
       <p className="text-sm leading-relaxed text-muted-foreground">

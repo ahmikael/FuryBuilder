@@ -253,8 +253,11 @@ export function Inspector() {
               label="Mode"
               value={projectSummary ? creationModeLabel(projectSummary.creationMode) : "—"}
             />
-            <Field label="Minecraft" value={projectSummary?.targetMinecraftVersion ?? "1.21.4"} />
-            <Field label="DataVersion" value={String(projectSummary?.targetDataVersion ?? 4189)} />
+            <Field label="Minecraft" value={projectSummary?.targetMinecraftVersion ?? "—"} />
+            <Field
+              label="DataVersion"
+              value={projectSummary ? String(projectSummary.targetDataVersion) : "—"}
+            />
             <Field
               label="Schema"
               value={projectSummary ? `v${projectSummary.schemaVersion}` : "—"}

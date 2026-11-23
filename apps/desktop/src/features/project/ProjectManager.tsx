@@ -59,6 +59,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useBackendInfo } from "@/hooks/use-backend";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
@@ -161,6 +162,7 @@ export function ProjectManager() {
   const worldAnalysis = useProjectStore((state) => state.worldAnalysis);
   const importGeneratedWorld = useProjectStore((state) => state.importGeneratedWorld);
   const analysisLoading = useProjectStore((state) => state.analysisLoading);
+  const backend = useBackendInfo();
   const worldRevision = useWorldStore((state) => state.revision);
   const [tab, setTab] = useState("projects");
   const [name, setName] = useState("");
@@ -187,6 +189,9 @@ export function ProjectManager() {
     () => projects.find((project) => project.folder === activeFolder) ?? null,
     [projects, activeFolder],
   );
+  const targetVersion =
+    currentProject?.targetMinecraftVersion ?? backend.info?.targetMinecraftVersion;
+  const targetDataVersion = currentProject?.targetDataVersion ?? backend.info?.targetDataVersion;
 
   const requestOpen = (folder: string, projectName: string): void => {
     if (folder === activeFolder) {
@@ -769,9 +774,8 @@ export function ProjectManager() {
                         </div>
                       ) : (
                         <p className="text-sm leading-relaxed text-muted-foreground">
-                          Read-only analysis validates level.dat, the classic 1.21.4 layout, every
-                          region and every chunk before import. The original folder is never
-                          written.
+                          Read-only analysis validates level.dat, the classic layout, every region
+                          and every chunk before import. The original folder is never written.
                         </p>
                       )}
                     </CardContent>
@@ -781,26 +785,33 @@ export function ProjectManager() {
                 <Card className="gap-0 py-0">
                   <CardContent className="flex flex-wrap items-center gap-3 p-4 text-sm">
                     <Sparkles className="size-4 text-primary" />
-                    <span className="text-muted-foreground">Target Java</span>
-                    <Select
-                      items={[
-                        {
-                          value: "1.21.4",
-                          label: "Minecraft Java 1.21.4 · DataVersion 4189",
-                        },
-                      ]}
-                      value="1.21.4"
-                      disabled
-                    >
-                      <SelectTrigger className="font-mono" aria-label="Target Java version">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1.21.4">
-                          Minecraft Java 1.21.4 · DataVersion 4189
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <span className="text-muted-foreground">Target version</span>
+                    {targetVersion ? (
+                      <Select
+                        items={[
+                          {
+                            value: targetVersion,
+                            label: `Minecraft Java ${targetVersion}${targetDataVersion ? ` · DataVersion ${targetDataVersion}` : ""}`,
+                          },
+                        ]}
+                        value={targetVersion}
+                        disabled
+                      >
+                        <SelectTrigger className="font-mono" aria-label="Target Java version">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={targetVersion}>
+                            Minecraft Java {targetVersion}
+                            {targetDataVersion ? ` · DataVersion ${targetDataVersion}` : ""}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">
+                        Selected when the project is created
+                      </span>
+                    )}
                     <span className="ml-auto text-xs text-muted-foreground">
                       Saved as <span className="font-mono">project_schema_version 1</span>
                     </span>

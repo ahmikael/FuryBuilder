@@ -252,14 +252,14 @@ export function JavaRuntimeSection() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">Java runtime</h3>
         <Badge variant="secondary" className="font-mono">
-          Java {discovery?.targetJavaMajor ?? 21} · MC{" "}
-          {discovery?.targetMinecraftVersion ?? "1.21.4"}
+          Java {discovery?.targetJavaMajor ?? "?"} · MC{" "}
+          {discovery?.targetMinecraftVersion ?? "unknown"}
         </Badge>
       </div>
 
       <p className="text-sm leading-relaxed text-muted-foreground">
-        Empty Project and editing do not require Java. A verified Java 21 runtime is needed only for
-        Vanilla World generation. Nothing is installed globally.
+        Empty Project and editing do not require Java. A verified Java runtime matching the project
+        version is needed only for Vanilla World generation. Nothing is installed globally.
       </p>
 
       {saved ? (

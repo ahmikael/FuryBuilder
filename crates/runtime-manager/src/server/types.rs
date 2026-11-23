@@ -6,7 +6,7 @@ use crate::target::{target_data_version, target_java_major, target_minecraft_ver
 pub const SERVER_SETTINGS_SCHEMA_VERSION: u32 = 1;
 /// Version of the manifest stored next to a managed server JAR.
 pub const SERVER_MANIFEST_SCHEMA_VERSION: u32 = 1;
-/// Hard cap for a downloaded/manual server JAR (the official 1.21.4 jar is ~54 MiB).
+/// Hard cap for a downloaded/manual server JAR (the official baseline jar is ~54 MiB).
 pub const MAX_SERVER_JAR_BYTES: u64 = 200 * 1024 * 1024;
 /// A real server jar is larger than this; smaller files are refused early.
 pub const MIN_SERVER_JAR_BYTES: u64 = 10 * 1024 * 1024;

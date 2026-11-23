@@ -1,6 +1,6 @@
 //! Process-tree containment for the isolated Minecraft server.
 //!
-//! The official 1.21.4 `server.jar` is a bundler: it extracts libraries and starts a second
+//! The official modern `server.jar` is a bundler: it extracts libraries and starts a second
 //! Java process. Killing only the immediate child would leave the real server running.
 //!
 //! On Windows the whole tree is placed in a Job Object with

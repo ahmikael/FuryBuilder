@@ -1,10 +1,10 @@
-//! Decoding of Minecraft Java 1.21.4 chunk sections.
+//! Decoding of modern Minecraft Java chunk sections.
 //!
 //! Region containers are decoded in [`crate::anvil`]. This module turns the NBT inside a
 //! chunk into real [`Section`] values and bounded biome data. It rejects any layout it
 //! cannot prove instead of treating a malformed palette as air.
 //!
-//! 1.21.4 paletted containers use values that do not span `long` boundaries:
+//! Modern paletted containers use values that do not span `long` boundaries:
 //! - block states use `max(4, ceil(log2(palette_len)))` bits and 4096 indices;
 //! - biomes use `ceil(log2(palette_len))` bits and 64 cells of 4×4×4 blocks.
 //!

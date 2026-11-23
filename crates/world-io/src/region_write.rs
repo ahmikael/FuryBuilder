@@ -3,7 +3,7 @@
 //! M8.7 does not expose a general-purpose Anvil writer. It only writes a **new** region
 //! file when every one of these conditions already holds:
 //!
-//! - the world is classic Java 1.21.4 (`DataVersion` 4189);
+//! - the world belongs to a verified classic profile;
 //! - the dimension is one of the three standard classic dimensions;
 //! - the only changed chunk fields are `sections[].block_states` and
 //!   `sections[].biomes`;
@@ -448,7 +448,7 @@ fn source_with_policy(
 /// Invalidates derived fields so the vanilla engine rebuilds them on the next load.
 ///
 /// This is an explicit hand-off, not a Rust-side recomputation. It is limited to a
-/// fully generated 1.21.4 chunk: `isLightOn = 0` marks the serialized light as not
+/// fully generated modern chunk: `isLightOn = 0` marks the serialized light as not
 /// trustworthy, missing `Heightmaps` are re-primed from section data, and queued
 /// `PostProcessing` positions refer to the pre-edit geometry.
 fn invalidate_derived_fields(nbt: &mut NbtFile) -> Result<(), RegionWriteError> {

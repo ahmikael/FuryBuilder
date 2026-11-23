@@ -10,7 +10,7 @@ import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 
 /**
- * M9.11 biome painter for the confirmed Java 1.21.4 layout. It paints the 4x4x4 biome
+ * M9.11 biome painter for the confirmed modern Java layout. It paints the 4x4x4 biome
  * cells covering the selection as one reversible operation and never invents biome data
  * for a world that has none.
  */
@@ -130,7 +130,7 @@ export function BiomePanel() {
           <Leaf className="size-3.5 text-primary" />
           <span className="font-medium">Biome painter</span>
           <span className="rounded bg-muted px-1 py-0.5 text-xs uppercase text-muted-foreground">
-            Java 1.21.4
+            Project version
           </span>
         </div>
         <label className="flex flex-col gap-0.5">
@@ -244,8 +244,8 @@ export function BiomePanel() {
           </div>
         ) : null}
         <div className="text-xs text-muted-foreground">
-          Requires source biome data (imported 1.21.4 world or generated base). Export writes
-          verified cells into a new world copy; no vanilla worldgen is simulated.
+          Requires source biome data (imported world or generated base). Export writes verified
+          cells into a new world copy; no vanilla worldgen is simulated.
         </div>
       </div>
     </div>

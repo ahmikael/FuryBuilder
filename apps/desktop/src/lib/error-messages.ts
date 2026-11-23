@@ -16,9 +16,9 @@ const HINTS: Record<string, string> = {
   out_of_bounds:
     "The target is outside the editable world height or the allowed area. Move the selection or adjust the world height.",
   unsupported_version:
-    "This data was produced by a Minecraft version FuryBuilder does not support yet. Supported: Java 1.21.4, DataVersion 4189.",
+    "This data was produced by a Minecraft version that this FuryBuilder build does not support yet. Open the project's version details to see the supported targets.",
   unsupported_format:
-    "The file or archive is not a supported format, or its structure is damaged. Use a verified Java 1.21.4 file.",
+    "The file or archive is not a supported format, or its structure is damaged. Use a file from a supported Java version.",
   permission_denied:
     "The action is blocked by the current policy, protected region or connection scope. Check the MCP access mode and workspace locks.",
   conflict:
