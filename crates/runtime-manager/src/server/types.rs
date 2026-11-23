@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION};
+use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
-/// `world_version` in the official 1.21.4 server's root `version.json`.
-pub const TARGET_DATA_VERSION: i32 = 4189;
 /// Version of `<app-data>/server.json`.
 pub const SERVER_SETTINGS_SCHEMA_VERSION: u32 = 1;
 /// Version of the manifest stored next to a managed server JAR.
@@ -137,9 +135,9 @@ pub struct SavedServerJar {
 impl ServerDiscoveryReport {
     pub fn target() -> (&'static str, i32, u32) {
         (
-            TARGET_MINECRAFT_VERSION,
-            TARGET_DATA_VERSION,
-            TARGET_JAVA_MAJOR,
+            target_minecraft_version(),
+            target_data_version(),
+            target_java_major(),
         )
     }
 }

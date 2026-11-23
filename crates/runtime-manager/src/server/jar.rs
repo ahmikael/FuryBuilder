@@ -8,9 +8,9 @@ use zip::ZipArchive;
 
 use crate::error::{unsupported_server, ServerError};
 use crate::managed::hex;
-use crate::types::TARGET_MINECRAFT_VERSION;
+use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
-use super::types::{MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, TARGET_DATA_VERSION};
+use super::types::{MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES};
 
 const MAX_VERSION_JSON_BYTES: u64 = 64 * 1024;
 const MAX_ZIP_ENTRIES: usize = 10_000;
@@ -48,8 +48,8 @@ pub struct ServerJarInfo {
 ///
 /// - be a regular file in the expected size range;
 /// - be a readable ZIP;
-/// - contain exactly one root `version.json` declaring `id` 1.21.4 and `world_version` 4189;
-/// - declare Java 21 when `java_version` is present;
+/// - contain exactly one root `version.json` declaring the target version and `world_version`;
+/// - declare the target Java major when `java_version` is present;
 /// - contain a known server entry point (`bundler/Main` or `server/Main`).
 pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
     let metadata = std::fs::symlink_metadata(path)
@@ -111,23 +111,25 @@ pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
         serde_json::from_slice::<ServerVersionJson>(&bytes)
             .map_err(|error| ServerError::Archive(format!("version.json: {error}")))?
     };
-    if version_json.id != TARGET_MINECRAFT_VERSION {
+    let expected_version = target_minecraft_version();
+    if version_json.id != expected_version {
         return Err(unsupported_server(format!(
             "the JAR declares Minecraft {}, expected {}",
-            version_json.id, TARGET_MINECRAFT_VERSION
+            version_json.id, expected_version
         )));
     }
-    if version_json.world_version != TARGET_DATA_VERSION {
+    let expected_data_version = target_data_version();
+    if version_json.world_version != expected_data_version {
         return Err(unsupported_server(format!(
-            "the JAR declares world_version {}, expected {TARGET_DATA_VERSION}",
+            "the JAR declares world_version {}, expected {expected_data_version}",
             version_json.world_version
         )));
     }
     if let Some(java_major) = version_json.java_version {
-        if java_major != crate::types::TARGET_JAVA_MAJOR {
+        let expected_java = target_java_major();
+        if java_major != expected_java {
             return Err(unsupported_server(format!(
-                "the JAR requires Java {java_major}, expected Java {}",
-                crate::types::TARGET_JAVA_MAJOR
+                "the JAR requires Java {java_major}, expected Java {expected_java}"
             )));
         }
     }

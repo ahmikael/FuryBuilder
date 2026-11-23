@@ -19,10 +19,10 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionFile};
 use crate::nbt::{NbtFile, NbtValue};
+use crate::version_support;
 
 pub const MAX_DERIVED_CHUNKS: usize = 65_536;
 pub const MAX_DERIVED_REGION_FILES: usize = 4_096;
@@ -200,7 +200,7 @@ pub struct SidecarScan {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedDataReport {
-    pub minecraft_version: &'static str,
+    pub minecraft_version: String,
     pub data_version: i32,
     pub layout: &'static str,
     pub counters: DerivedCounters,
@@ -215,8 +215,8 @@ pub enum DerivedDataError {
     Anvil(#[from] AnvilError),
     #[error("invalid derived data: {0}")]
     InvalidChunk(String),
-    #[error("derived data version {found} is not supported; supported version is {supported}")]
-    UnsupportedVersion { found: i32, supported: i32 },
+    #[error("derived data version {found} is not supported; supported versions: {supported:?}")]
+    UnsupportedVersion { found: i32, supported: Vec<i32> },
     #[error("unsafe derived data path: {0}")]
     UnsafePath(String),
     #[error("derived data limit exceeded: {0}")]
@@ -265,10 +265,10 @@ pub fn inspect_chunk_derived(
         }
         None => return Err(invalid(format!("chunk ({x}, {z}) has no DataVersion"))),
     };
-    if data_version != TARGET_DATA_VERSION {
+    if !version_support::supports_data_version(data_version) {
         return Err(DerivedDataError::UnsupportedVersion {
             found: data_version,
-            supported: TARGET_DATA_VERSION,
+            supported: version_support::supported_data_versions(),
         });
     }
 
@@ -493,10 +493,10 @@ fn inspect_heightmaps(
 pub fn analyze_java_world_derived(
     world: &JavaWorld,
 ) -> Result<DerivedDataReport, DerivedDataError> {
-    if world.level.data_version != TARGET_DATA_VERSION {
+    if world.level.data_version != world.profile.data_version {
         return Err(DerivedDataError::UnsupportedVersion {
             found: world.level.data_version,
-            supported: TARGET_DATA_VERSION,
+            supported: version_support::supported_data_versions(),
         });
     }
 
@@ -586,8 +586,8 @@ pub fn analyze_java_world_derived(
     }
 
     Ok(DerivedDataReport {
-        minecraft_version: TARGET_MINECRAFT_VERSION,
-        data_version: TARGET_DATA_VERSION,
+        minecraft_version: world.profile.minecraft_version.to_string(),
+        data_version: world.profile.data_version,
         layout: "classic_anvil",
         counters,
         dimensions,

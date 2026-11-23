@@ -40,7 +40,7 @@ impl RuntimeError {
 
 pub fn unsupported(detail: impl Into<String>) -> RuntimeError {
     RuntimeError::Unsupported {
-        target: crate::types::TARGET_MINECRAFT_VERSION,
+        target: crate::target::target_minecraft_version(),
         detail: detail.into(),
     }
 }
@@ -97,7 +97,7 @@ impl ServerError {
 
 pub fn unsupported_server(detail: impl Into<String>) -> ServerError {
     ServerError::Unsupported {
-        target: crate::types::TARGET_MINECRAFT_VERSION,
+        target: crate::target::target_minecraft_version(),
         detail: detail.into(),
     }
 }

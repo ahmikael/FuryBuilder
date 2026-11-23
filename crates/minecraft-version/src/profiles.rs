@@ -43,6 +43,25 @@ pub fn builtin_profiles() -> Vec<VersionProfile> {
     vec![java_classic_1_21_4()]
 }
 
+/// Returns the built-in profile that owns a Minecraft `DataVersion`.
+pub fn profile_for_data_version(data_version: i32) -> Option<VersionProfile> {
+    builtin_profiles()
+        .into_iter()
+        .find(|profile| profile.data_version == data_version)
+}
+
+/// Returns the built-in profile for an exact Minecraft version id.
+pub fn profile_for_version(version: &VersionId) -> Option<VersionProfile> {
+    builtin_profiles()
+        .into_iter()
+        .find(|profile| profile.minecraft_version == *version)
+}
+
+/// Returns the default profile for a new empty project.
+pub fn default_profile() -> VersionProfile {
+    java_classic_1_21_4()
+}
+
 fn version(value: &str) -> VersionId {
     value
         .parse()

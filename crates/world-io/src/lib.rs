@@ -20,6 +20,7 @@ pub mod passthrough;
 pub mod region_write;
 pub mod structure;
 pub mod support_matrix;
+pub mod version_support;
 pub mod world_export;
 pub mod world_import;
 pub mod world_selection;
@@ -68,10 +69,10 @@ pub use passthrough::{
     MAX_PASSTHROUGH_FILE_BYTES, MAX_PASSTHROUGH_TOTAL_BYTES,
 };
 pub use region_write::{
-    write_region_from_overlay, write_region_from_overlay_with_policy, write_verified_region,
-    write_verified_region_with_policy, DerivedDataPolicy, RegionWriteError, RegionWriteReport,
-    VerifiedChunkReplacement, VerifiedWriteSupport, VERIFIED_WRITE_DATA_VERSION,
-    VERIFIED_WRITE_FIELDS, VERIFIED_WRITE_LAYOUT, VERIFIED_WRITE_SUPPORT, VERIFIED_WRITE_VERSION,
+    verified_write_support, write_region_from_overlay, write_region_from_overlay_with_policy,
+    write_verified_region, write_verified_region_with_policy, DerivedDataPolicy, RegionWriteError,
+    RegionWriteReport, VerifiedChunkReplacement, VerifiedWriteSupport, VERIFIED_WRITE_FIELDS,
+    VERIFIED_WRITE_LAYOUT,
 };
 pub use structure::{
     Structure, StructureBlock, StructureError, MAX_STRUCTURE_AXIS, MAX_STRUCTURE_PALETTE,
@@ -79,6 +80,10 @@ pub use structure::{
 };
 pub use support_matrix::{
     support_matrix, CategorySupport, SupportMatrix, VersionSupport, SUPPORT_MATRIX_SCHEMA_VERSION,
+};
+pub use version_support::{
+    default_version_profile, profile_for, supported_data_versions, supports_data_version,
+    world_version,
 };
 pub use world_export::{
     export_java_world, export_java_world_with_options, ExportedRegion, WorldExportError,

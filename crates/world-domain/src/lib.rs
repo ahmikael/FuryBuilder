@@ -24,23 +24,19 @@ pub use coords::{
 pub use dimension::{
     BiomeWrite, BlockWrite, Dimension, DimensionError, DimensionInfo, DimensionKind,
 };
-pub use registry::{BlockDefinition, BlockRegistry, RegistryError, CATALOG_VERSION};
+pub use registry::{BlockDefinition, BlockRegistry, RegistryError};
 pub use section::Section;
-pub use world::{World, WorldError, WorldInfo};
-
-/// First write-verified Minecraft Java version (ADR-001).
-pub const TARGET_MINECRAFT_VERSION: &str = "1.21.4";
-/// `DataVersion` for Minecraft Java 1.21.4.
-pub const TARGET_DATA_VERSION: i32 = 4189;
+pub use world::{World, WorldError, WorldInfo, WorldVersion, WorldVersionError};
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn target_version_is_pinned() {
-        assert_eq!(TARGET_MINECRAFT_VERSION, "1.21.4");
-        assert_eq!(TARGET_DATA_VERSION, 4189);
+    fn empty_project_uses_the_verified_baseline_version() {
+        let version = WorldVersion::empty_project_default();
+        assert_eq!(version.minecraft_version(), "1.21.4");
+        assert_eq!(version.data_version(), 4189);
     }
 
     #[test]

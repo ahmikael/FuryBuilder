@@ -21,7 +21,10 @@ pub use profile_builder::{
     build_profile_from_version_json, build_version_profile, read_client_jar_version_json,
     JarPackVersion, JarVersionJson, ProfileBuildError, ProfileBuildInput,
 };
-pub use profiles::{builtin_profiles, java_classic_1_21_4, JAVA_CLASSIC_1_21_4_ID};
+pub use profiles::{
+    builtin_profiles, default_profile, java_classic_1_21_4, profile_for_data_version,
+    profile_for_version, JAVA_CLASSIC_1_21_4_ID,
+};
 pub use version_json::{
     fetch_version_json, AssetIndex, JavaVersion, VersionDownload, VersionDownloads, VersionJson,
     VersionJsonError,

@@ -8,13 +8,10 @@ use sha1::{Digest, Sha1};
 use crate::error::{unsupported_server, ServerError};
 use crate::managed::hex;
 use crate::net;
-use crate::types::{TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION};
+use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
 use super::jar::is_sha1;
-use super::types::{
-    ServerProgress, ServerReleaseInfo, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES,
-    TARGET_DATA_VERSION,
-};
+use super::types::{ServerProgress, ServerReleaseInfo, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES};
 
 pub const VERSION_MANIFEST_URL: &str =
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
@@ -86,11 +83,11 @@ impl MojangClient {
         }
     }
 
-    /// Resolves exactly `1.21.4` through the official manifest and that version's JSON.
+    /// Resolves the target version through the official manifest and that version's JSON.
     /// The version JSON body is checked against the manifest's SHA-1 before it is parsed.
     pub fn release(&self) -> Result<ServerReleaseInfo, ServerError> {
         let manifest_body = self.fetch(VERSION_MANIFEST_URL)?;
-        let entry = parse_manifest(&manifest_body, TARGET_MINECRAFT_VERSION)?;
+        let entry = parse_manifest(&manifest_body, target_minecraft_version())?;
         let version_body = self.fetch(&entry.url)?;
         let actual = sha1_bytes(&version_body);
         if !actual.eq_ignore_ascii_case(&entry.sha1) {
@@ -243,12 +240,13 @@ pub(crate) fn parse_version_json(
     body: &[u8],
     entry: &ManifestEntry,
 ) -> Result<ServerReleaseInfo, ServerError> {
+    let expected_version = target_minecraft_version();
     let details: VersionDetails = serde_json::from_slice(body)
         .map_err(|error| ServerError::Network(format!("invalid Mojang version JSON: {error}")))?;
-    if details.id != TARGET_MINECRAFT_VERSION || entry.id != TARGET_MINECRAFT_VERSION {
+    if details.id != expected_version || entry.id != expected_version {
         return Err(unsupported_server(format!(
             "Mojang returned version {}, expected {}",
-            details.id, TARGET_MINECRAFT_VERSION
+            details.id, expected_version
         )));
     }
     if details.version_type != "release" {
@@ -263,9 +261,10 @@ pub(crate) fn parse_version_json(
         .ok_or_else(|| {
             unsupported_server("the Mojang version JSON declares no Java version".to_owned())
         })?;
-    if java_major != TARGET_JAVA_MAJOR {
+    let expected_java = target_java_major();
+    if java_major != expected_java {
         return Err(unsupported_server(format!(
-            "the version requires Java {java_major}, expected Java {TARGET_JAVA_MAJOR}"
+            "the version requires Java {java_major}, expected Java {expected_java}"
         )));
     }
     let server = details
@@ -296,7 +295,7 @@ pub(crate) fn parse_version_json(
         sha1: server.sha1.to_ascii_lowercase(),
         size: server.size,
         java_major,
-        expected_data_version: TARGET_DATA_VERSION,
+        expected_data_version: target_data_version(),
         source: "Mojang version_manifest_v2".to_owned(),
     })
 }

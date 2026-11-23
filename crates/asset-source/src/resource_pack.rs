@@ -4,9 +4,8 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use crate::archive::Archive;
-use crate::types::{
-    ResourcePackKind, ResourcePackReport, ResourcePackStatus, TARGET_RESOURCE_PACK_FORMAT,
-};
+use crate::target::target_resource_pack_format;
+use crate::types::{ResourcePackKind, ResourcePackReport, ResourcePackStatus};
 
 const MAX_PACK_ENTRIES: usize = 20_000;
 const MAX_PACK_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
@@ -250,9 +249,10 @@ fn inspect_metadata(report: &mut ResourcePackReport, bytes: Option<Vec<u8>>) {
         report.supported_formats = Some(format!("{min}-{max}"));
     }
     report.description = pack.get("description").map(describe);
+    let target_format = target_resource_pack_format();
     let compatible = match range {
-        Some((min, max)) => (min..=max).contains(&TARGET_RESOURCE_PACK_FORMAT),
-        None => report.pack_format == Some(TARGET_RESOURCE_PACK_FORMAT),
+        Some((min, max)) => (min..=max).contains(&target_format),
+        None => report.pack_format == Some(target_format),
     };
     report.compatible = compatible;
     report.status = if compatible {

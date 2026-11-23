@@ -208,12 +208,12 @@ impl RuntimeManager {
                 return Err(error);
             }
         };
-        if probe.major != Some(crate::types::TARGET_JAVA_MAJOR) {
+        let expected_java = crate::target::target_java_major();
+        if probe.major != Some(expected_java) {
             self.inner.cache.discard(staged);
             return Err(RuntimeError::Archive(format!(
-                "downloaded Java reports {:?}, expected Java {}",
-                probe.version,
-                crate::types::TARGET_JAVA_MAJOR
+                "downloaded Java reports {:?}, expected Java {expected_java}",
+                probe.version
             )));
         }
         let runtime = self.inner.cache.commit(staged, manifest.clone(), &probe)?;

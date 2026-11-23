@@ -32,7 +32,6 @@ use crate::passthrough::{
 };
 use crate::region_write::{
     write_region_from_overlay_with_policy, DerivedDataPolicy, RegionWriteError,
-    VERIFIED_WRITE_DATA_VERSION,
 };
 
 pub const MAX_EXPORT_REGIONS: usize = 4_096;
@@ -158,11 +157,11 @@ pub fn export_java_world_with_options(
     options: WorldExportOptions,
 ) -> Result<WorldExportReport, WorldExportError> {
     let world = overlay.world();
-    if world.level.data_version != VERIFIED_WRITE_DATA_VERSION {
+    if world.level.data_version != world.profile.data_version {
         return Err(WorldExportError::RegionWrite(
             RegionWriteError::UnsupportedDataVersion {
                 found: world.level.data_version,
-                supported: VERIFIED_WRITE_DATA_VERSION,
+                supported: vec![world.profile.data_version],
             },
         ));
     }
@@ -428,10 +427,10 @@ fn validate_staged_world(
     passthrough: &PassthroughReport,
 ) -> Result<(), WorldExportError> {
     let world = JavaWorld::open(staged_world)?;
-    if world.level.data_version != VERIFIED_WRITE_DATA_VERSION {
+    if world.level.data_version != world.profile.data_version {
         return Err(WorldExportError::VerificationFailed(format!(
-            "staged world has DataVersion {}, expected {VERIFIED_WRITE_DATA_VERSION}",
-            world.level.data_version
+            "staged world has DataVersion {}, expected {}",
+            world.level.data_version, world.profile.data_version
         )));
     }
     let mut regions = 0usize;

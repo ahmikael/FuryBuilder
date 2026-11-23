@@ -3,10 +3,8 @@ use std::path::{Path, PathBuf};
 
 use crate::managed::ManagedRuntimeCache;
 use crate::probe::report_for;
-use crate::types::{
-    JavaRuntimeReport, ManagedCacheReport, RuntimeDiscoveryReport, RuntimeSource,
-    TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION,
-};
+use crate::target::{target_java_major, target_minecraft_version};
+use crate::types::{JavaRuntimeReport, ManagedCacheReport, RuntimeDiscoveryReport, RuntimeSource};
 
 const MAX_CANDIDATES: usize = 24;
 const MAX_SCAN_ENTRIES: usize = 96;
@@ -113,13 +111,14 @@ pub fn discover(cache: &ManagedRuntimeCache, saved: Option<&Path>) -> RuntimeDis
         .count();
     if compatible_count == 0 {
         problems.push(format!(
-            "no Java {TARGET_JAVA_MAJOR} runtime was found; choose java.exe manually or install managed Temurin"
+            "no Java {} runtime was found; choose java.exe manually or install managed Temurin",
+            target_java_major()
         ));
     }
 
     RuntimeDiscoveryReport {
-        target_java_major: TARGET_JAVA_MAJOR,
-        target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
+        target_java_major: target_java_major(),
+        target_minecraft_version: target_minecraft_version().to_owned(),
         candidates: reports,
         saved: saved_report,
         managed_root: managed.root,

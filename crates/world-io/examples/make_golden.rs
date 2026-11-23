@@ -3,15 +3,15 @@
 
 use std::fs;
 
-use world_domain::{BlockState, TARGET_DATA_VERSION};
-use world_io::{write_java_structure, Structure, StructureBlock};
+use world_domain::BlockState;
+use world_io::{default_version_profile, write_java_structure, Structure, StructureBlock};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let stairs: BlockState =
         "minecraft:oak_stairs[facing=west,half=top,shape=straight,waterlogged=false]".parse()?;
     let bricks: BlockState = "minecraft:stone_bricks".parse()?;
     let structure = Structure::new(
-        TARGET_DATA_VERSION,
+        default_version_profile().data_version,
         [3, 2, 2],
         vec![BlockState::default(), stairs, bricks],
         vec![

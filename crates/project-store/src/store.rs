@@ -530,7 +530,7 @@ impl ProjectStore {
         if !valid_source_component(source_reference) {
             return Err(ProjectError::UnsafeSource(source_reference.to_owned()));
         }
-        provenance.validate()?;
+        provenance.validate(world.version())?;
         let source = SourceInfo {
             kind: SourceKind::Generated,
             immutable: true,
@@ -585,8 +585,14 @@ impl ProjectStore {
 
         let now = now_ms();
         let project_id = uuid::Uuid::new_v4().to_string();
-        let mut manifest =
-            ProjectManifest::new(project_id, name.to_owned(), mode, world.revision(), now);
+        let mut manifest = ProjectManifest::new(
+            project_id,
+            name.to_owned(),
+            mode,
+            world.version().clone(),
+            world.revision(),
+            now,
+        );
         manifest.editor_state = editor_state;
         manifest.source = source;
         manifest.vanilla = vanilla;
@@ -1435,8 +1441,8 @@ mod tests {
                 size: 123,
                 pack_format: 61,
             }],
-            minecraft_version: world_domain::TARGET_MINECRAFT_VERSION.to_owned(),
-            data_version: world_domain::TARGET_DATA_VERSION,
+            minecraft_version: world.version().minecraft_version().to_owned(),
+            data_version: world.version().data_version(),
             java_version: "21.0.12".to_owned(),
             server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
             run_id: "run-1-2".to_owned(),

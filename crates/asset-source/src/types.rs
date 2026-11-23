@@ -1,12 +1,5 @@
 use serde::Serialize;
 
-/// The one Minecraft Java version whose world and asset formats this build verifies.
-pub const TARGET_MINECRAFT_VERSION: &str = "1.21.4";
-/// `DataVersion` stored by 1.21.4 worlds and by its internal `version.json`.
-pub const TARGET_DATA_VERSION: i32 = 4189;
-/// Resource pack format declared by the 1.21.4 client `version.json`.
-pub const TARGET_RESOURCE_PACK_FORMAT: i32 = 46;
-
 /// What a filesystem selection turned out to be.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -57,12 +50,12 @@ impl InstallationSource {
     }
 }
 
-/// Compatibility of one version folder with the fixed 1.21.4 target.
+/// Compatibility of one version folder with the catalog's default target.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VersionStatus {
     /// The target version, its client JAR checksum verified and its internal
-    /// `version.json` agrees with `DataVersion` 4189.
+    /// `version.json` agrees with the profile's `DataVersion`.
     Compatible,
     /// The target version, internally consistent, but no checksum was available to
     /// verify the JAR against.
@@ -197,9 +190,9 @@ pub struct AssetDiscoveryReport {
 pub struct AssetPathReport {
     pub path: String,
     pub kind: AssetSelectionKind,
-    /// True when the selection can be used for the fixed target.
+    /// True when the selection can be used for the catalog's target.
     pub valid: bool,
-    /// True only for a compatible 1.21.4 root or client JAR.
+    /// True only for a compatible root or client JAR of the target version.
     pub target_match: bool,
     pub installation: Option<InstallationReport>,
     pub version: Option<VersionReport>,

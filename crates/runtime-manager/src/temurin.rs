@@ -213,7 +213,7 @@ fn platform() -> Result<(String, String), RuntimeError> {
         "linux"
     } else {
         return Err(RuntimeError::Unsupported {
-            target: crate::types::TARGET_MINECRAFT_VERSION,
+            target: crate::target::target_minecraft_version(),
             detail: "managed Temurin downloads are not implemented for this operating system"
                 .to_owned(),
         });
@@ -223,7 +223,7 @@ fn platform() -> Result<(String, String), RuntimeError> {
         "aarch64" => "aarch64",
         other => {
             return Err(RuntimeError::Unsupported {
-                target: crate::types::TARGET_MINECRAFT_VERSION,
+                target: crate::target::target_minecraft_version(),
                 detail: format!("managed Temurin downloads are not available for {other}"),
             })
         }

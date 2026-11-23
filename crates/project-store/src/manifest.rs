@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use scene_model::{ParametricScene, Scene};
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
-use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
+use world_domain::WorldVersion;
 
 use crate::error::ProjectError;
 
@@ -109,7 +109,7 @@ pub struct VanillaProvenance {
 }
 
 impl VanillaProvenance {
-    pub fn validate(&self) -> Result<(), ProjectError> {
+    pub fn validate(&self, target: &WorldVersion) -> Result<(), ProjectError> {
         if self.seed.trim().is_empty()
             || self.seed.len() > 64
             || !self.seed.chars().all(|character| {
@@ -133,11 +133,11 @@ impl VanillaProvenance {
                 "vanilla provenance radius must be 1..=16 chunks",
             ));
         }
-        if self.minecraft_version != TARGET_MINECRAFT_VERSION
-            || self.data_version != TARGET_DATA_VERSION
+        if self.minecraft_version != target.minecraft_version()
+            || self.data_version != target.data_version()
         {
             return Err(ProjectError::invalid_manifest(
-                "vanilla provenance does not match the supported target version",
+                "vanilla provenance does not match the project target version",
             ));
         }
         if self.java_version.trim().is_empty() || self.java_version.len() > 64 {
@@ -290,6 +290,7 @@ impl ProjectManifest {
         project_id: String,
         name: String,
         creation_mode: CreationMode,
+        version: WorldVersion,
         revision: u64,
         now_ms: u64,
     ) -> Self {
@@ -298,8 +299,8 @@ impl ProjectManifest {
             project_id,
             name,
             creation_mode,
-            target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
-            target_data_version: TARGET_DATA_VERSION,
+            target_minecraft_version: version.minecraft_version().to_owned(),
+            target_data_version: version.data_version(),
             world_revision: revision,
             world_file: String::new(),
             world_checksum: String::new(),
@@ -331,14 +332,11 @@ impl ProjectManifest {
         if self.name.trim().is_empty() || self.name.chars().count() > MAX_PROJECT_NAME_CHARS {
             return Err(ProjectError::invalid_manifest("name is empty or too long"));
         }
-        if self.target_minecraft_version != TARGET_MINECRAFT_VERSION
-            || self.target_data_version != TARGET_DATA_VERSION
-        {
-            return Err(ProjectError::UnsupportedSchema {
-                found: self.target_data_version.max(0) as u32,
-                supported: TARGET_DATA_VERSION as u32,
-            });
-        }
+        let target = WorldVersion::new(
+            self.target_minecraft_version.clone(),
+            self.target_data_version,
+        )
+        .map_err(|error| ProjectError::invalid_manifest(error.to_string()))?;
         validate_relative_data_file(&self.world_file)?;
         if self.world_checksum.len() != 64
             || !self
@@ -360,7 +358,7 @@ impl ProjectManifest {
             let vanilla = self.vanilla.as_ref().ok_or_else(|| {
                 ProjectError::invalid_manifest("vanilla projects need generator provenance")
             })?;
-            vanilla.validate()?;
+            vanilla.validate(&target)?;
         } else if self.vanilla.is_some() {
             return Err(ProjectError::invalid_manifest(
                 "generator provenance is only valid for vanilla projects",

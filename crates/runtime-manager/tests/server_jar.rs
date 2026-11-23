@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use furybuilder_runtime_manager::{
-    inspect_server_jar, sha1_file, ServerManager, ServerSource, TARGET_DATA_VERSION,
+    inspect_server_jar, sha1_file, target_data_version, ServerManager, ServerSource,
 };
 
 const MIN_SIZE: usize = 10 * 1024 * 1024;
@@ -96,7 +96,7 @@ fn inspects_exact_version_and_rejects_non_server_archives() {
     write_jar(&valid, &version_json("1.21.4", 4189, 21), true);
     let info = inspect_server_jar(&valid).expect("valid server jar");
     assert_eq!(info.version, "1.21.4");
-    assert_eq!(info.data_version, TARGET_DATA_VERSION);
+    assert_eq!(info.data_version, target_data_version());
     assert_eq!(info.java_major, Some(21));
     assert_eq!(info.protocol_version, Some(769));
     assert_eq!(info.resource_pack_format, Some(46));

@@ -3,8 +3,6 @@ use std::collections::BTreeMap;
 use crate::block::{BlockState, BlockStateError};
 use thiserror::Error;
 
-pub const CATALOG_VERSION: &str = "1.21.4";
-
 type CatalogEntry = (&'static str, &'static [(&'static str, &'static str)]);
 
 /// Curated catalog for the target version. It covers common building blocks and the
@@ -204,7 +202,7 @@ const CATALOG: &[CatalogEntry] = &[
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum RegistryError {
-    #[error("unknown block for {CATALOG_VERSION}: `{0}`")]
+    #[error("unknown block: `{0}`")]
     UnknownBlock(String),
     #[error("block `{block}` has no property `{property}`")]
     UnknownProperty { block: String, property: String },

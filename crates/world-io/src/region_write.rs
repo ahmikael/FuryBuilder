@@ -29,10 +29,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use minecraft_version::VersionProfile;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use world_domain::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
 
 use crate::anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, RegionChunk, RegionEntry,
@@ -41,10 +41,9 @@ use crate::anvil::{
 };
 use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
 use crate::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
+use crate::version_support;
 
 pub const VERIFIED_WRITE_LAYOUT: &str = "classic_anvil";
-pub const VERIFIED_WRITE_VERSION: &str = TARGET_MINECRAFT_VERSION;
-pub const VERIFIED_WRITE_DATA_VERSION: i32 = TARGET_DATA_VERSION;
 /// The complete set of chunk fields this writer fills from the overlay.
 ///
 /// `DerivedDataPolicy::VanillaRebuild` may additionally invalidate the fields listed
@@ -88,25 +87,35 @@ impl DerivedDataPolicy {
 }
 
 /// Published support claim for the write path. It is deliberately small and explicit.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VerifiedWriteSupport {
-    pub minecraft_version: &'static str,
+    pub minecraft_version: String,
     pub data_version: i32,
-    pub layout: &'static str,
+    pub layout: String,
     pub fields: &'static [&'static str],
     pub derived_data_policies: &'static [&'static str],
     pub recomputes_derived_metadata: bool,
 }
 
-pub const VERIFIED_WRITE_SUPPORT: VerifiedWriteSupport = VerifiedWriteSupport {
-    minecraft_version: VERIFIED_WRITE_VERSION,
-    data_version: VERIFIED_WRITE_DATA_VERSION,
-    layout: VERIFIED_WRITE_LAYOUT,
-    fields: VERIFIED_WRITE_FIELDS,
-    derived_data_policies: &["preserve", "vanillaRebuild"],
-    recomputes_derived_metadata: false,
-};
+impl VerifiedWriteSupport {
+    pub fn for_profile(profile: &VersionProfile) -> Self {
+        Self {
+            minecraft_version: profile.minecraft_version.to_string(),
+            data_version: profile.data_version,
+            layout: VERIFIED_WRITE_LAYOUT.to_owned(),
+            fields: VERIFIED_WRITE_FIELDS,
+            derived_data_policies: &["preserve", "vanillaRebuild"],
+            recomputes_derived_metadata: false,
+        }
+    }
+}
+
+/// Support claim for the default profile; callers writing an existing world use
+/// [`VerifiedWriteSupport::for_profile`] with that world's profile.
+pub fn verified_write_support() -> VerifiedWriteSupport {
+    VerifiedWriteSupport::for_profile(&version_support::default_version_profile())
+}
 
 /// One chunk to replace. The NBT is re-verified against the source before it is written.
 #[derive(Debug, Clone, PartialEq)]
@@ -153,8 +162,8 @@ pub enum RegionWriteError {
     UnknownDimension(String),
     #[error("region write combination is not supported: {0}")]
     UnsupportedCombination(String),
-    #[error("region DataVersion {found} is not supported; supported version is {supported}")]
-    UnsupportedDataVersion { found: i32, supported: i32 },
+    #[error("region DataVersion {found} is not supported; expected {supported:?}")]
+    UnsupportedDataVersion { found: i32, supported: Vec<i32> },
     #[error("destination already exists: {0}")]
     AlreadyExists(String),
     #[error("unsafe region write path: {0}")]
@@ -227,10 +236,10 @@ pub fn write_verified_region_with_policy(
     policy: DerivedDataPolicy,
 ) -> Result<RegionWriteReport, RegionWriteError> {
     world.level.ensure_supported()?;
-    if world.level.data_version != VERIFIED_WRITE_DATA_VERSION {
+    if world.level.data_version != world.profile.data_version {
         return Err(RegionWriteError::UnsupportedDataVersion {
             found: world.level.data_version,
-            supported: VERIFIED_WRITE_DATA_VERSION,
+            supported: vec![world.profile.data_version],
         });
     }
     let dimension = world
@@ -343,7 +352,7 @@ pub fn write_verified_region_with_policy(
     staging.publish(destination)?;
 
     Ok(RegionWriteReport {
-        support: VERIFIED_WRITE_SUPPORT,
+        support: VerifiedWriteSupport::for_profile(&world.profile),
         dimension: dimension_id.to_owned(),
         region_x,
         region_z,
@@ -509,10 +518,10 @@ fn verify_replacement(
             )))
         }
     };
-    if data_version != VERIFIED_WRITE_DATA_VERSION {
+    if data_version != world.profile.data_version {
         return Err(RegionWriteError::UnsupportedDataVersion {
             found: data_version,
-            supported: VERIFIED_WRITE_DATA_VERSION,
+            supported: vec![world.profile.data_version],
         });
     }
     match (root.get("xPos"), root.get("zPos")) {

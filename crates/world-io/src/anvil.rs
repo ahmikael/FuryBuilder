@@ -21,10 +21,12 @@ use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use flate2::read::{GzDecoder, ZlibDecoder};
+use minecraft_version::VersionProfile;
 use thiserror::Error;
-use world_domain::{DimensionKind, TARGET_DATA_VERSION};
+use world_domain::DimensionKind;
 
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, MAX_NBT_BYTES, TAG_COMPOUND};
+use crate::version_support;
 
 pub const ANVIL_REGION_EXTENSION: &str = "mca";
 pub const ANVIL_SECTOR_BYTES: u64 = 4096;
@@ -56,8 +58,8 @@ pub enum AnvilError {
     Io(String),
     #[error("level.dat is invalid: {0}")]
     InvalidLevel(String),
-    #[error("world DataVersion {found} is not supported; supported version is {supported}")]
-    UnsupportedDataVersion { found: i32, supported: i32 },
+    #[error("world DataVersion {found} is not supported; supported versions: {supported:?}")]
+    UnsupportedDataVersion { found: i32, supported: Vec<i32> },
     #[error("world layout is not supported: {0}")]
     UnsupportedLayout(String),
     #[error("region file is invalid: {0}")]
@@ -159,15 +161,19 @@ impl LevelDat {
         })
     }
 
-    /// Reject a world whose version is not the one this adapter actually implements.
-    pub fn ensure_supported(&self) -> Result<(), AnvilError> {
-        if self.data_version != TARGET_DATA_VERSION || self.version_id != TARGET_DATA_VERSION {
-            return Err(AnvilError::UnsupportedDataVersion {
+    /// Returns the built-in profile that owns this world's `DataVersion`.
+    pub fn profile(&self) -> Result<VersionProfile, AnvilError> {
+        version_support::profile_for(self.data_version).ok_or_else(|| {
+            AnvilError::UnsupportedDataVersion {
                 found: self.data_version,
-                supported: TARGET_DATA_VERSION,
-            });
-        }
-        Ok(())
+                supported: version_support::supported_data_versions(),
+            }
+        })
+    }
+
+    /// Reject a world whose version is not backed by an implemented codec.
+    pub fn ensure_supported(&self) -> Result<(), AnvilError> {
+        self.profile().map(|_| ())
     }
 
     /// Dimension IDs declared by `Data.WorldGenSettings.dimensions`.
@@ -217,6 +223,8 @@ pub struct JavaWorldDimension {
 pub struct JavaWorld {
     pub root: PathBuf,
     pub level: LevelDat,
+    /// The verified profile for this world's exact `DataVersion`.
+    pub profile: VersionProfile,
     pub declared_dimensions: Vec<String>,
     pub dimensions: Vec<JavaWorldDimension>,
 }
@@ -238,7 +246,7 @@ impl JavaWorld {
         }
 
         let level = LevelDat::read(root.join("level.dat"))?;
-        level.ensure_supported()?;
+        let profile = level.profile()?;
         let declared_dimensions = level.declared_dimensions()?;
 
         let modern_overworld = root.join("dimensions").join("minecraft").join("overworld");
@@ -315,6 +323,7 @@ impl JavaWorld {
         Ok(Self {
             root: root.to_path_buf(),
             level,
+            profile,
             declared_dimensions,
             dimensions,
         })
@@ -707,10 +716,10 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         AnvilError::InvalidRegion(format!("chunk ({x}, {z}) root is not a compound"))
     })?;
     let data_version = int_field(root, "DataVersion", "chunk")?;
-    if data_version != TARGET_DATA_VERSION {
+    if !version_support::supports_data_version(data_version) {
         return Err(AnvilError::UnsupportedDataVersion {
             found: data_version,
-            supported: TARGET_DATA_VERSION,
+            supported: version_support::supported_data_versions(),
         });
     }
     let stored_x = int_field(root, "xPos", "chunk")?;

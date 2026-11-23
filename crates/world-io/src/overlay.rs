@@ -23,7 +23,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{
     BiomeSection as DomainBiomeSection, BiomeState, BlockState, Section, BIOME_CELLS, CHUNK_SIZE,
-    MAX_BIOME_PALETTE, SECTION_SIZE, TARGET_DATA_VERSION,
+    MAX_BIOME_PALETTE, SECTION_SIZE,
 };
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, ANVIL_REGION_AXIS_CHUNKS};
@@ -192,8 +192,8 @@ pub enum OverlayError {
         y: i32,
         z: i32,
     },
-    #[error("overlay DataVersion {found} is not supported; supported version is {supported}")]
-    UnsupportedDataVersion { found: i32, supported: i32 },
+    #[error("overlay DataVersion {found} does not match the world; expected {supported:?}")]
+    UnsupportedDataVersion { found: i32, supported: Vec<i32> },
     #[error("overlay schema version {found} is not supported; supported is {supported}")]
     UnsupportedSchema { found: u32, supported: u32 },
     #[error("overlay document is invalid: {0}")]
@@ -1056,12 +1056,12 @@ impl WorldOverlay {
                 supported: OVERLAY_SCHEMA_VERSION,
             });
         }
-        if document.data_version != TARGET_DATA_VERSION
+        if document.data_version != world.profile.data_version
             || world.level.data_version != document.data_version
         {
             return Err(OverlayError::UnsupportedDataVersion {
                 found: document.data_version,
-                supported: TARGET_DATA_VERSION,
+                supported: vec![world.profile.data_version],
             });
         }
         if document.chunks.len() > MAX_OVERLAY_CHUNKS {

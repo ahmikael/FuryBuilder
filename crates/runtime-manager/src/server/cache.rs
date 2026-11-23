@@ -5,11 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ServerError;
+use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
-use super::types::{
-    ManagedServerJar, ServerSource, SERVER_MANIFEST_SCHEMA_VERSION, TARGET_DATA_VERSION,
-};
-use crate::types::TARGET_JAVA_MAJOR;
+use super::types::{ManagedServerJar, ServerSource, SERVER_MANIFEST_SCHEMA_VERSION};
 
 pub(crate) const MANIFEST_NAME: &str = ".furybuilder-server.json";
 const MAX_ENTRIES: usize = 10_000;
@@ -110,9 +108,9 @@ impl ServerCache {
                     continue;
                 }
             };
-            if manifest.version != crate::types::TARGET_MINECRAFT_VERSION
-                || manifest.data_version != TARGET_DATA_VERSION
-                || manifest.java_major != TARGET_JAVA_MAJOR
+            if manifest.version != target_minecraft_version()
+                || manifest.data_version != target_data_version()
+                || manifest.java_major != target_java_major()
             {
                 problems.push(format!(
                     "{} declares an unsupported server version/data version",
@@ -163,17 +161,16 @@ impl ServerCache {
     }
 
     /// Publishes a fully verified `server.jar` (already inside `staging`) as the managed
-    /// 1.21.4 runtime. The directory becomes visible with one rename; the JAR bytes are never
+    /// target runtime. The directory becomes visible with one rename; the JAR bytes are never
     /// modified after verification.
     pub fn publish(
         &self,
         staging: PathBuf,
         manifest: ServerManifest,
     ) -> Result<ManagedServerJar, ServerError> {
-        let destination = self.root.join(format!(
-            "minecraft-{}",
-            crate::types::TARGET_MINECRAFT_VERSION
-        ));
+        let destination = self
+            .root
+            .join(format!("minecraft-{}", target_minecraft_version()));
         if destination.exists() {
             if let Some(existing) = self
                 .list()?
@@ -323,9 +320,9 @@ mod tests {
         fs::create_dir_all(&staging).expect("staging");
         fs::write(staging.join("server.jar"), vec![0u8; 32]).expect("jar");
         let manifest = ServerManifest {
-            version: crate::types::TARGET_MINECRAFT_VERSION.to_owned(),
-            data_version: TARGET_DATA_VERSION,
-            java_major: TARGET_JAVA_MAJOR,
+            version: target_minecraft_version().to_owned(),
+            data_version: target_data_version(),
+            java_major: target_java_major(),
             sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
             size: 32,
             release_time: "2024-12-03T10:12:57+00:00".to_owned(),

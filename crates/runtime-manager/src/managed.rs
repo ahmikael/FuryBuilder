@@ -213,12 +213,12 @@ impl ManagedRuntimeCache {
         manifest: RuntimeManifest,
         probe: &JavaProbe,
     ) -> Result<ManagedRuntime, RuntimeError> {
-        if probe.major != Some(crate::types::TARGET_JAVA_MAJOR) {
+        let expected_java = crate::target::target_java_major();
+        if probe.major != Some(expected_java) {
             self.discard(staged);
             return Err(RuntimeError::Archive(format!(
-                "downloaded Java reports {:?}, expected {}",
-                probe.version,
-                crate::types::TARGET_JAVA_MAJOR
+                "downloaded Java reports {:?}, expected {expected_java}",
+                probe.version
             )));
         }
         let destination = self.root.join(&manifest.id);

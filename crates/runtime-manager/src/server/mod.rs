@@ -35,7 +35,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::probe::probe_java;
 use crate::types::RuntimeStatus;
 
-pub use datapack::TARGET_DATAPACK_FORMAT;
 pub use jar::{inspect_server_jar, sha1_file, ServerJarInfo};
 pub use mojang::VERSION_MANIFEST_URL;
 pub use types::{
@@ -45,11 +44,11 @@ pub use types::{
     ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
     ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource,
     WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
-    SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION, TARGET_DATA_VERSION,
+    SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION,
 };
 
 use crate::error::ServerError;
-use crate::types::{TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION};
+use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
 struct ActiveGeneration {
     run_id: String,
@@ -143,9 +142,9 @@ impl ServerManager {
             _ => false,
         };
         ServerDiscoveryReport {
-            target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
-            target_data_version: types::TARGET_DATA_VERSION,
-            target_java_major: TARGET_JAVA_MAJOR,
+            target_minecraft_version: target_minecraft_version().to_owned(),
+            target_data_version: target_data_version(),
+            target_java_major: target_java_major(),
             selected,
             eula,
             eula_matches_selected,
@@ -364,7 +363,10 @@ impl ServerManager {
             ));
         }
         let saved = self.inner.settings.selected().ok_or_else(|| {
-            ServerError::Invalid("choose the Minecraft 1.21.4 server JAR first".to_owned())
+            ServerError::Invalid(format!(
+                "choose the Minecraft {} server JAR first",
+                target_minecraft_version()
+            ))
         })?;
         let info = inspect_server_jar(Path::new(&saved.path))?;
         if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
@@ -424,7 +426,10 @@ impl ServerManager {
         let datapacks = datapack::validate_selection(&datapack_paths)?;
         let consent_at = now_secs();
         let saved = self.inner.settings.selected().ok_or_else(|| {
-            ServerError::Invalid("choose the Minecraft 1.21.4 server JAR first".to_owned())
+            ServerError::Invalid(format!(
+                "choose the Minecraft {} server JAR first",
+                target_minecraft_version()
+            ))
         })?;
         let server_path = Path::new(&saved.path);
         let info = inspect_server_jar(server_path)?;
@@ -445,19 +450,20 @@ impl ServerManager {
             ));
         }
         let probe = probe_java(java).map_err(|error| ServerError::UnsupportedJava {
-            target: TARGET_MINECRAFT_VERSION,
+            target: target_minecraft_version(),
             detail: error.to_string(),
         })?;
         let (status, warnings) = probe.classify();
         if status != RuntimeStatus::Compatible {
             return Err(ServerError::UnsupportedJava {
-                target: TARGET_MINECRAFT_VERSION,
+                target: target_minecraft_version(),
                 detail: format!(
-                    "Java {} is not the required compatible Java {TARGET_JAVA_MAJOR}: {}",
+                    "Java {} is not the required compatible Java {}: {}",
                     probe
                         .version
                         .clone()
                         .unwrap_or_else(|| "unknown".to_owned()),
+                    target_java_major(),
                     warnings.join("; ")
                 ),
             });
@@ -643,8 +649,10 @@ impl ServerManager {
 }
 
 fn manual_hint() -> String {
-    "Choose the official Minecraft 1.21.4 server.jar, or download it explicitly from Mojang's version manifest. Client JARs and other versions are rejected."
-        .to_owned()
+    format!(
+        "Choose the official Minecraft {} server.jar, or download it explicitly from Mojang's version manifest. Client JARs and other versions are rejected.",
+        target_minecraft_version()
+    )
 }
 
 fn now_secs() -> u64 {
@@ -659,10 +667,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn target_constants_match_the_fixed_version() {
-        assert_eq!(TARGET_MINECRAFT_VERSION, "1.21.4");
-        assert_eq!(types::TARGET_DATA_VERSION, 4189);
-        assert_eq!(TARGET_JAVA_MAJOR, 21);
+    fn target_comes_from_the_version_profile() {
+        assert_eq!(target_minecraft_version(), "1.21.4");
+        assert_eq!(target_data_version(), 4189);
+        assert_eq!(target_java_major(), 21);
         assert!(!manual_hint().is_empty());
     }
 }

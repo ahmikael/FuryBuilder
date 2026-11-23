@@ -455,6 +455,7 @@ mod tests {
     use world_domain::{ChunkPos, Section};
 
     use crate::java_chunk::{BiomeSection, DecodedSection};
+    use crate::version_support;
 
     fn section_with(edits: &[(u8, u8, u8, &str)]) -> Section {
         let mut section = Section::empty();
@@ -473,7 +474,7 @@ mod tests {
         DecodedChunk {
             x,
             z,
-            data_version: world_domain::TARGET_DATA_VERSION,
+            data_version: version_support::default_version_profile().data_version,
             status: Some("minecraft:full".to_owned()),
             y_pos: -4,
             sections: BTreeMap::from([(

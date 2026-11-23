@@ -937,6 +937,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
+ "furybuilder-minecraft-version",
  "png 0.17.16",
  "serde",
  "serde_json",
@@ -1037,6 +1038,7 @@ name = "furybuilder-runtime-manager"
 version = "0.2.0"
 dependencies = [
  "flate2",
+ "furybuilder-minecraft-version",
  "libc",
  "serde",
  "serde_json",
@@ -1099,6 +1101,7 @@ version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "furybuilder-build-dsl",
+ "furybuilder-minecraft-version",
  "furybuilder-observation",
  "furybuilder-scene-model",
  "furybuilder-validation",
@@ -1132,6 +1135,7 @@ name = "furybuilder-world-io"
 version = "0.2.0"
 dependencies = [
  "flate2",
+ "furybuilder-minecraft-version",
  "furybuilder-world-domain",
  "serde",
  "serde_json",

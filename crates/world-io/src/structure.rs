@@ -252,7 +252,6 @@ fn world_pos(origin: BlockPos, local: [i32; 3]) -> Result<BlockPos, StructureErr
 #[cfg(test)]
 mod tests {
     use super::*;
-    use world_domain::TARGET_DATA_VERSION;
 
     fn stone() -> BlockState {
         "minecraft:stone".parse().unwrap()
@@ -274,9 +273,13 @@ mod tests {
             .set_block("minecraft:overworld", BlockPos::new(-1, 66, 0), &stairs())
             .unwrap();
         let bounds = BlockBox::new(BlockPos::new(-3, 64, -2), BlockPos::new(-1, 66, 0)).unwrap();
-        let structure =
-            Structure::from_world(&world, "minecraft:overworld", bounds, TARGET_DATA_VERSION)
-                .unwrap();
+        let structure = Structure::from_world(
+            &world,
+            "minecraft:overworld",
+            bounds,
+            world.version().data_version(),
+        )
+        .unwrap();
         assert_eq!(structure.size, [3, 3, 3]);
         assert_eq!(structure.palette, vec![stairs(), stone()]);
         assert_eq!(structure.blocks.len(), 2);
@@ -294,9 +297,13 @@ mod tests {
     fn all_air_region_has_a_valid_palette_and_no_blocks() {
         let world = World::new_empty();
         let bounds = BlockBox::new(BlockPos::new(0, 70, 0), BlockPos::new(1, 71, 1)).unwrap();
-        let structure =
-            Structure::from_world(&world, "minecraft:overworld", bounds, TARGET_DATA_VERSION)
-                .unwrap();
+        let structure = Structure::from_world(
+            &world,
+            "minecraft:overworld",
+            bounds,
+            world.version().data_version(),
+        )
+        .unwrap();
         assert_eq!(structure.palette, vec![BlockState::default()]);
         assert!(structure.blocks.is_empty());
         let changes = structure
@@ -309,7 +316,7 @@ mod tests {
     #[test]
     fn insertion_honours_air_and_origin() {
         let structure = Structure::new(
-            TARGET_DATA_VERSION,
+            world_domain::WorldVersion::empty_project_default().data_version(),
             [2, 1, 1],
             vec![stone(), BlockState::default()],
             vec![StructureBlock {

@@ -4,7 +4,8 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use crate::error::{unsupported, RuntimeError};
-use crate::types::{JavaRuntimeReport, RuntimeSource, RuntimeStatus, TARGET_JAVA_MAJOR};
+use crate::target::target_java_major;
+use crate::types::{JavaRuntimeReport, RuntimeSource, RuntimeStatus};
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 const PROBE_OUTPUT_LIMIT: usize = 64 * 1024;
@@ -28,17 +29,18 @@ impl JavaProbe {
                 vec!["no Java version was reported".to_owned()],
             );
         };
-        let status = match major.cmp(&TARGET_JAVA_MAJOR) {
+        let expected = target_java_major();
+        let status = match major.cmp(&expected) {
             std::cmp::Ordering::Equal => RuntimeStatus::Compatible,
             std::cmp::Ordering::Less => {
                 warnings.push(format!(
-                    "Java {major} is older than the required Java {TARGET_JAVA_MAJOR}"
+                    "Java {major} is older than the required Java {expected}"
                 ));
                 RuntimeStatus::Outdated
             }
             std::cmp::Ordering::Greater => {
                 warnings.push(format!(
-                    "Java {major} is newer than the verified Java {TARGET_JAVA_MAJOR}"
+                    "Java {major} is newer than the verified Java {expected}"
                 ));
                 RuntimeStatus::Newer
             }

@@ -17,8 +17,8 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use world_domain::BlockState;
 use world_io::{
-    region_file_name, write_region_from_overlay_with_policy, DerivedDataPolicy, JavaWorld,
-    RegionFile, WorldOverlay, ANVIL_REGION_AXIS_CHUNKS, VERIFIED_WRITE_SUPPORT,
+    region_file_name, verified_write_support, write_region_from_overlay_with_policy,
+    DerivedDataPolicy, JavaWorld, RegionFile, WorldOverlay, ANVIL_REGION_AXIS_CHUNKS,
 };
 
 struct Edit {
@@ -205,7 +205,7 @@ fn run(
     let output = json!({
         "tool": { "name": "furybuilder-region-write-probe", "version": 1 },
         "ok": true,
-        "support": VERIFIED_WRITE_SUPPORT,
+        "support": verified_write_support(),
         "source": source.display().to_string(),
         "sourceRegion": source_region.display().to_string(),
         "sourceRegionSha256Before": before,

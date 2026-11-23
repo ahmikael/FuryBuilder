@@ -17,6 +17,7 @@ use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
+use crate::version_support;
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
 pub const BIOME_SECTION_VOLUME: usize = 64;
@@ -204,10 +205,10 @@ fn decode_chunk(
         .as_compound()
         .ok_or_else(|| invalid(x, z, "root tag is not a compound"))?;
     let data_version = chunk_int(root, "DataVersion", x, z)?;
-    if data_version != world_domain::TARGET_DATA_VERSION {
+    if !version_support::supports_data_version(data_version) {
         return Err(AnvilError::UnsupportedDataVersion {
             found: data_version,
-            supported: world_domain::TARGET_DATA_VERSION,
+            supported: version_support::supported_data_versions(),
         });
     }
     let stored_x = chunk_int(root, "xPos", x, z)?;

@@ -16,11 +16,10 @@ use sha2::{Digest, Sha256};
 use zip::ZipArchive;
 
 use crate::error::ServerError;
+use crate::target::{target_datapack_format, target_minecraft_version};
 
 use super::types::{DatapackInspection, GenerationDatapack};
 
-/// Minecraft Java 1.21.4 data pack format (`version.json` → `pack_version.data`).
-pub const TARGET_DATAPACK_FORMAT: u32 = 61;
 pub const MAX_DATAPACKS: usize = 16;
 pub const MAX_DATAPACK_BYTES: u64 = 64 * 1024 * 1024;
 pub const MAX_DATAPACK_TOTAL_BYTES: u64 = 256 * 1024 * 1024;
@@ -174,20 +173,21 @@ fn inspect_path(path: &Path) -> Result<GenerationDatapack, ServerError> {
                 path.display()
             ))
         })?;
-    let supported = supports_format(&meta.pack, TARGET_DATAPACK_FORMAT);
-    if pack_format > TARGET_DATAPACK_FORMAT && !supported {
+    let expected_format = target_datapack_format();
+    let supported = supports_format(&meta.pack, expected_format);
+    if pack_format > expected_format && !supported {
         return Err(ServerError::Unsupported {
-            target: crate::types::TARGET_MINECRAFT_VERSION,
+            target: target_minecraft_version(),
             detail: format!(
-                "{} declares data pack format {pack_format}, newer than {TARGET_DATAPACK_FORMAT}",
+                "{} declares data pack format {pack_format}, newer than {expected_format}",
                 path.display()
             ),
         });
     }
     let mut warnings = Vec::new();
-    if pack_format < TARGET_DATAPACK_FORMAT && !supported {
+    if pack_format < expected_format && !supported {
         warnings.push(format!(
-            "data pack format {pack_format} predates {TARGET_DATAPACK_FORMAT}; the server may upgrade or reject it"
+            "data pack format {pack_format} predates {expected_format}; the server may upgrade or reject it"
         ));
     }
     Ok(GenerationDatapack {

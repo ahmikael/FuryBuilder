@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::anvil::{parse_region_file_name, JavaWorld, LevelDat, RegionFile};
+use crate::version_support;
 
 /// Layout identifier used by the supported classic Anvil reader.
 pub const CLASSIC_ANVIL_LAYOUT: &str = "classic_anvil";
@@ -102,7 +103,7 @@ pub struct WorldSelectionReport {
     /// This is structural completeness, not support. A complete 26.1+ split save still
     /// reports `supported = false`.
     pub complete_save: bool,
-    /// True only for a complete, structurally valid classic 1.21.4 save.
+    /// True only for a complete, structurally valid save of a codec-backed version.
     pub supported: bool,
     pub has_level_dat: bool,
     pub data_version: Option<i32>,
@@ -341,10 +342,10 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
     report.supported =
         report.complete_save && report.layout == CLASSIC_ANVIL_LAYOUT && report.blockers.is_empty();
     if report.supported {
-        report.warnings.push(
-            "the selection is a complete classic 1.21.4 save; full chunk validation runs before import"
-                .to_owned(),
-        );
+        report.warnings.push(format!(
+            "the selection is a complete classic {} save; full chunk validation runs before import",
+            version_support::default_version_profile().minecraft_version
+        ));
     }
 }
 

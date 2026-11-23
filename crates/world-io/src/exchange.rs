@@ -8,7 +8,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
-use world_domain::{BlockBox, BlockPos, World, TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
+use world_domain::{BlockBox, BlockPos, World};
 
 use crate::java_structure::{
     inspect_java_structure, read_java_structure, read_java_structure_unchecked,
@@ -16,6 +16,7 @@ use crate::java_structure::{
     JAVA_STRUCTURE_FORMAT,
 };
 use crate::structure::{Structure, StructureError};
+use crate::version_support;
 
 /// Upper bound on non-empty sections scanned when deriving content bounds. 8,192 sections
 /// is 33.5 million block checks, which keeps an accidental full-world scan bounded.
@@ -99,11 +100,13 @@ pub fn preview_from_structure(
     structure: &Structure,
     inspection: &StructureInspection,
 ) -> StructureImportPreview {
+    let target = version_support::profile_for(inspection.target_data_version)
+        .unwrap_or_else(version_support::default_version_profile);
     StructureImportPreview {
         format: inspection.format.to_owned(),
         data_version: inspection.data_version,
-        target_data_version: TARGET_DATA_VERSION,
-        target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
+        target_data_version: target.data_version,
+        target_minecraft_version: target.minecraft_version.to_string(),
         size: inspection.size,
         volume: inspection.volume,
         palette_size: inspection.palette_size,
@@ -150,8 +153,9 @@ pub fn prepare_export(
                 ))
             })?,
     };
-    let structure = Structure::from_world(world, dimension, bounds, TARGET_DATA_VERSION)
+    let structure = Structure::from_world(world, dimension, bounds, world.version().data_version())
         .map_err(JavaStructureError::from)?;
+    let data_version = structure.data_version;
     let bytes = write_java_structure(&structure, author)?;
     let read = read_java_structure(&bytes)?;
     if read.structure != structure {
@@ -178,8 +182,8 @@ pub fn prepare_export(
         bytes,
         inspection: StructureInspection {
             format: JAVA_STRUCTURE_FORMAT,
-            data_version: TARGET_DATA_VERSION,
-            target_data_version: TARGET_DATA_VERSION,
+            data_version,
+            target_data_version: data_version,
             size: read.inspection.size,
             volume: read.inspection.volume,
             palette_size: read.inspection.palette_size,
@@ -361,9 +365,13 @@ mod tests {
         let world = sample_world();
         let bundle = prepare_export(&world, "minecraft:overworld", None, "FuryBuilder").unwrap();
         let preview = import_preview(&bundle.bytes).unwrap();
+        let target = version_support::default_version_profile();
         assert_eq!(preview.format, JAVA_STRUCTURE_FORMAT);
-        assert_eq!(preview.target_data_version, TARGET_DATA_VERSION);
-        assert_eq!(preview.target_minecraft_version, TARGET_MINECRAFT_VERSION);
+        assert_eq!(preview.target_data_version, target.data_version);
+        assert_eq!(
+            preview.target_minecraft_version,
+            target.minecraft_version.as_str()
+        );
         assert_eq!(preview.non_air_blocks, 2);
         assert_eq!(
             preview.palette.iter().map(|entry| entry.count).sum::<u64>(),

@@ -248,8 +248,8 @@ fn level_dat_reads_target_version_and_requires_agreeing_versions() {
         other.ensure_supported(),
         Err(AnvilError::UnsupportedDataVersion {
             found: 4325,
-            supported: TARGET
-        })
+            supported
+        }) if supported == vec![TARGET]
     ));
 
     fs::write(&path, b"not a gzip stream").expect("write garbage");

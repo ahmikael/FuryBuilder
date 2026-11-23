@@ -20,10 +20,11 @@
 use std::collections::BTreeMap;
 
 use thiserror::Error;
-use world_domain::{BlockState, TARGET_DATA_VERSION};
+use world_domain::BlockState;
 
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, TAG_COMPOUND, TAG_END, TAG_INT};
 use crate::structure::{Structure, StructureBlock, StructureError, MAX_STRUCTURE_PALETTE};
+use crate::version_support;
 
 pub const JAVA_STRUCTURE_FORMAT: &str = "java_structure";
 pub const JAVA_STRUCTURE_EXTENSION: &str = "nbt";
@@ -34,8 +35,8 @@ pub enum JavaStructureError {
     Nbt(#[from] NbtError),
     #[error("structure file is invalid: {0}")]
     InvalidFormat(String),
-    #[error("structure DataVersion {found} is not supported; supported version is {supported}")]
-    UnsupportedDataVersion { found: i32, supported: i32 },
+    #[error("structure DataVersion {found} is not supported; supported versions: {supported:?}")]
+    UnsupportedDataVersion { found: i32, supported: Vec<i32> },
     #[error("structure contains unsupported content: {0}")]
     UnsupportedContent(String),
     #[error("structure limit exceeded: {0}")]
@@ -288,11 +289,14 @@ fn parse(bytes: &[u8]) -> Result<Parsed, JavaStructureError> {
     let structure = Structure::new(data_version, size, palette, blocks)?;
     let volume = structure.volume()?;
     let non_air_blocks = structure.non_air_blocks();
-    let data_version_supported = data_version == TARGET_DATA_VERSION;
+    let target = version_support::profile_for(data_version)
+        .unwrap_or_else(version_support::default_version_profile);
+    let data_version_supported = target.data_version == data_version;
     let mut warnings = Vec::new();
     if !data_version_supported {
         warnings.push(format!(
-            "DataVersion {data_version} is not supported; FuryBuilder writes {TARGET_DATA_VERSION}."
+            "DataVersion {data_version} is not supported; FuryBuilder writes {}.",
+            target.data_version
         ));
     }
     if entities > 0 {
@@ -317,7 +321,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed, JavaStructureError> {
     let inspection = StructureInspection {
         format: JAVA_STRUCTURE_FORMAT,
         data_version,
-        target_data_version: TARGET_DATA_VERSION,
+        target_data_version: target.data_version,
         size,
         volume,
         palette_size: structure.palette.len(),
@@ -346,10 +350,10 @@ pub fn inspect_java_structure(bytes: &[u8]) -> Result<StructureInspection, JavaS
 /// be silently dropped.
 pub fn read_java_structure(bytes: &[u8]) -> Result<JavaStructure, JavaStructureError> {
     let parsed = parse(bytes)?;
-    if parsed.inspection.data_version != TARGET_DATA_VERSION {
+    if !version_support::supports_data_version(parsed.inspection.data_version) {
         return Err(JavaStructureError::UnsupportedDataVersion {
             found: parsed.inspection.data_version,
-            supported: TARGET_DATA_VERSION,
+            supported: version_support::supported_data_versions(),
         });
     }
     if !parsed.inspection.compatible {
@@ -372,15 +376,15 @@ pub fn read_java_structure_unchecked(bytes: &[u8]) -> Result<Structure, JavaStru
     Ok(parse(bytes)?.structure)
 }
 
-/// Writes a deterministic gzip-compressed Java structure for DataVersion 4189.
+/// Writes a deterministic gzip-compressed Java structure for the structure's DataVersion.
 pub fn write_java_structure(
     structure: &Structure,
     author: &str,
 ) -> Result<Vec<u8>, JavaStructureError> {
-    if structure.data_version != TARGET_DATA_VERSION {
+    if !version_support::supports_data_version(structure.data_version) {
         return Err(JavaStructureError::UnsupportedDataVersion {
             found: structure.data_version,
-            supported: TARGET_DATA_VERSION,
+            supported: version_support::supported_data_versions(),
         });
     }
     structure.validate()?;
@@ -425,7 +429,7 @@ pub fn write_java_structure(
         .collect::<Vec<_>>();
 
     let root = NbtValue::compound([
-        ("DataVersion", NbtValue::Int(TARGET_DATA_VERSION)),
+        ("DataVersion", NbtValue::Int(structure.data_version)),
         (
             "size",
             NbtValue::int_list([structure.size[0], structure.size[1], structure.size[2]]),
@@ -455,13 +459,17 @@ mod tests {
     use super::*;
     use world_domain::{BlockBox, BlockPos, World};
 
+    fn target_data_version() -> i32 {
+        version_support::default_version_profile().data_version
+    }
+
     fn sample_structure() -> Structure {
         let stairs: BlockState =
             "minecraft:oak_stairs[facing=west,half=top,shape=straight,waterlogged=false]"
                 .parse()
                 .unwrap();
         Structure::new(
-            TARGET_DATA_VERSION,
+            target_data_version(),
             [3, 2, 2],
             vec![BlockState::default(), stairs],
             vec![
@@ -490,7 +498,7 @@ mod tests {
         assert_eq!(read.inspection.non_air_blocks, 2);
         assert_eq!(read.inspection.palette_size, 2);
         assert!(read.inspection.compatible);
-        assert_eq!(read.inspection.target_data_version, 4189);
+        assert_eq!(read.inspection.target_data_version, target_data_version());
     }
 
     #[test]
@@ -514,7 +522,7 @@ mod tests {
             .unwrap();
         let bounds = BlockBox::new(BlockPos::new(-2, 64, -2), BlockPos::new(0, 66, 0)).unwrap();
         let structure =
-            Structure::from_world(&world, "minecraft:overworld", bounds, TARGET_DATA_VERSION)
+            Structure::from_world(&world, "minecraft:overworld", bounds, target_data_version())
                 .unwrap();
         let bytes = write_java_structure(&structure, "FuryBuilder").unwrap();
         let read = read_java_structure(&bytes).unwrap();
@@ -542,7 +550,7 @@ mod tests {
             let file = NbtFile::new(
                 "",
                 NbtValue::compound([
-                    ("DataVersion", NbtValue::Int(TARGET_DATA_VERSION)),
+                    ("DataVersion", NbtValue::Int(target_data_version())),
                     ("size", NbtValue::int_list([1, 1, 1])),
                     (
                         "palette",
@@ -600,7 +608,7 @@ mod tests {
             let file = NbtFile::new(
                 "",
                 NbtValue::compound([
-                    ("DataVersion", NbtValue::Int(TARGET_DATA_VERSION)),
+                    ("DataVersion", NbtValue::Int(target_data_version())),
                     ("size", NbtValue::int_list([1, 1, 1])),
                     (
                         "palette",
@@ -639,7 +647,7 @@ mod tests {
             let file = NbtFile::new(
                 "",
                 NbtValue::compound([
-                    ("DataVersion", NbtValue::Int(TARGET_DATA_VERSION)),
+                    ("DataVersion", NbtValue::Int(target_data_version())),
                     ("size", NbtValue::int_list([1, 1, 1])),
                     (
                         "palette",

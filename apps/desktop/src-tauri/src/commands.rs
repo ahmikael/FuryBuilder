@@ -12,8 +12,7 @@ use runtime_manager::{
     GenerationSnapshot, GenerationStatusReport, InstalledRuntime, InstalledServerJar,
     JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport, RuntimeDiscoveryReport,
     RuntimeManager, RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport,
-    ServerJarReport, ServerManager, ServerProgress, ServerReleaseInfo, TARGET_DATAPACK_FORMAT,
-    TARGET_DATA_VERSION, TARGET_JAVA_MAJOR, TARGET_MINECRAFT_VERSION,
+    ServerJarReport, ServerManager, ServerProgress, ServerReleaseInfo,
 };
 use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
 use tauri::{AppHandle, Emitter, State};
@@ -949,6 +948,23 @@ pub fn project_import_generated_world(
     editor_state: project_store::EditorState,
 ) -> Result<OpenedProjectPayload, AppError> {
     let generated = manager.generated_world(&run_id).map_err(server_error)?;
+    let generated_version = world_io::analyze_java_world(&generated.world_dir);
+    let minecraft_version = generated_version
+        .version_name
+        .clone()
+        .filter(|name| !name.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::new(
+                ErrorCode::UnsupportedVersion,
+                "the generated world does not declare a Minecraft version",
+            )
+        })?;
+    let data_version = generated_version.data_version.ok_or_else(|| {
+        AppError::new(
+            ErrorCode::UnsupportedVersion,
+            "the generated world does not declare a DataVersion",
+        )
+    })?;
     let provenance = project_store::VanillaProvenance {
         seed: generated.seed.clone(),
         preset: generated.preset.label().to_owned(),
@@ -966,8 +982,8 @@ pub fn project_import_generated_world(
                 pack_format: datapack.pack_format,
             })
             .collect(),
-        minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
-        data_version: TARGET_DATA_VERSION,
+        minecraft_version,
+        data_version,
         java_version: generated.java_version,
         server_jar_sha1: generated.server_sha1,
         run_id: generated.run_id,
@@ -1371,7 +1387,10 @@ pub fn project_verify_vanilla_parity(
     let analysis = world_io::analyze_java_world(&reference_root);
     if !analysis.supported {
         let reasons = if analysis.blockers.is_empty() {
-            vec!["the reference world is not a supported complete 1.21.4 save".to_owned()]
+            vec![format!(
+                "the reference world is not a supported complete {} save",
+                runtime_manager::target_minecraft_version()
+            )]
         } else {
             analysis.blockers
         };
@@ -2448,7 +2467,7 @@ pub fn structure_export_preview(
             )
         })?
     };
-    let (bundle, revision, checksum) = {
+    let (bundle, revision, checksum, world_version) = {
         let service = state
             .service
             .lock()
@@ -2457,7 +2476,8 @@ pub fn structure_export_preview(
             .map_err(structure_error)?;
         let revision = service.world().revision();
         let checksum = project_store::checksum(&bundle.bytes);
-        (bundle, revision, checksum)
+        let version = service.world().version().clone();
+        (bundle, revision, checksum, version)
     };
     let mut warnings = bundle.warnings.clone();
     if revision != current.saved_revision {
@@ -2475,8 +2495,8 @@ pub fn structure_export_preview(
     Ok(StructureExportPreview {
         format: world_io::JAVA_STRUCTURE_FORMAT.to_owned(),
         data_version: bundle.inspection.data_version,
-        target_data_version: bundle.inspection.target_data_version,
-        target_minecraft_version: world_domain::TARGET_MINECRAFT_VERSION.to_owned(),
+        target_data_version: world_version.data_version(),
+        target_minecraft_version: world_version.minecraft_version().to_owned(),
         dimension,
         bounds: bundle.bounds,
         size: bundle.inspection.size,
@@ -2563,14 +2583,20 @@ pub fn structure_export(
     let size = read.inspection.size;
     let non_air_blocks = read.inspection.non_air_blocks;
     let data_version = read.inspection.data_version;
+    let target = world_io::profile_for(data_version).ok_or_else(|| {
+        AppError::new(
+            ErrorCode::UnsupportedVersion,
+            format!("no version profile owns DataVersion {data_version}"),
+        )
+    })?;
     Ok(StructureExportResult {
         outcome,
         verified: true,
         size,
         non_air_blocks,
         data_version,
-        target_data_version: world_domain::TARGET_DATA_VERSION,
-        target_minecraft_version: world_domain::TARGET_MINECRAFT_VERSION.to_owned(),
+        target_data_version: target.data_version,
+        target_minecraft_version: target.minecraft_version.to_string(),
     })
 }
 
@@ -2626,7 +2652,7 @@ pub fn assets_save_source(
     if expected != AssetSelectionKind::ResourcePack && !report.target_match {
         return Err(AppError::invalid_argument(format!(
             "the selection does not provide a compatible Minecraft {} client",
-            asset_source::TARGET_MINECRAFT_VERSION
+            asset_source::target_minecraft_version()
         ))
         .with_details(details()));
     }
@@ -2970,7 +2996,10 @@ pub async fn server_start_generation(
     if !java.is_compatible() {
         return Err(AppError::new(
             ErrorCode::InvalidArgument,
-            "The saved Java runtime is no longer compatible with Minecraft 1.21.4.",
+            format!(
+                "The saved Java runtime is no longer compatible with Minecraft {}.",
+                runtime_manager::target_minecraft_version()
+            ),
         ));
     }
     let manager = manager.inner().clone();
@@ -3058,21 +3087,24 @@ pub async fn vanilla_setup_check(
         .unwrap_or(false);
     let eula_matches_selected = discovery.eula_matches_selected;
     let eula_accepted_at = discovery.eula.as_ref().map(|eula| eula.accepted_at);
+    let profile = world_io::default_version_profile();
     let mut blockers = Vec::new();
     match java.as_ref() {
-        None => blockers.push(
-            "Select a compatible Java 21 runtime (Settings → Java runtime or this wizard)."
-                .to_owned(),
-        ),
-        Some(_) if !java_ready => blockers.push(
-            "The saved Java runtime is not compatible with Minecraft Java 1.21.4.".to_owned(),
-        ),
+        None => blockers.push(format!(
+            "Select a compatible Java {} runtime (Settings → Java runtime or this wizard).",
+            profile.java.recommended_major
+        )),
+        Some(_) if !java_ready => blockers.push(format!(
+            "The saved Java runtime is not compatible with Minecraft Java {}.",
+            profile.minecraft_version
+        )),
         Some(_) => {}
     }
     match discovery.selected.as_ref() {
-        None => {
-            blockers.push("Select or download the official Minecraft 1.21.4 server.jar.".to_owned())
-        }
+        None => blockers.push(format!(
+            "Select or download the official Minecraft {} server.jar.",
+            profile.minecraft_version
+        )),
         Some(server) if !server.ready => blockers.push(format!(
             "The selected server JAR is not ready: {}",
             server
@@ -3090,10 +3122,10 @@ pub async fn vanilla_setup_check(
     }
     let ready = java_ready && server_ready && eula_matches_selected;
     Ok(VanillaSetupReport {
-        target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
-        target_data_version: TARGET_DATA_VERSION,
-        target_java_major: TARGET_JAVA_MAJOR,
-        server_datapack_format: TARGET_DATAPACK_FORMAT,
+        target_minecraft_version: profile.minecraft_version.to_string(),
+        target_data_version: profile.data_version,
+        target_java_major: profile.java.recommended_major,
+        server_datapack_format: runtime_manager::target_datapack_format(),
         java,
         java_ready,
         server: discovery.selected,
@@ -3215,7 +3247,7 @@ mod workspace_tests {
     fn floor_template_bytes() -> Vec<u8> {
         let stone: BlockState = "minecraft:stone".parse().expect("state");
         let structure = Structure::new(
-            world_domain::TARGET_DATA_VERSION,
+            world_io::default_version_profile().data_version,
             [2, 1, 2],
             vec![stone],
             vec![

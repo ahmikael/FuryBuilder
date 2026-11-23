@@ -8,7 +8,6 @@ use crate::block::BlockState;
 use crate::coords::{BlockPos, ChunkPos};
 use crate::dimension::{BiomeWrite, BlockWrite, Dimension, DimensionError, DimensionInfo};
 use crate::section::Section;
-use crate::{TARGET_DATA_VERSION, TARGET_MINECRAFT_VERSION};
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum WorldError {
@@ -16,6 +15,73 @@ pub enum WorldError {
     UnknownDimension(String),
     #[error(transparent)]
     Dimension(#[from] DimensionError),
+}
+
+/// The Minecraft Java version that an editable world belongs to.
+///
+/// A world version is established when a world is created or imported. It is never
+/// inferred from a global constant at read time, so multiple projects with different
+/// versions can coexist in one process.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorldVersion {
+    minecraft_version: String,
+    data_version: i32,
+}
+
+impl WorldVersion {
+    pub fn new(
+        minecraft_version: impl Into<String>,
+        data_version: i32,
+    ) -> Result<Self, WorldVersionError> {
+        let version = Self {
+            minecraft_version: minecraft_version.into(),
+            data_version,
+        };
+        version.validate()?;
+        Ok(version)
+    }
+
+    /// Default for a brand-new empty project before a user selects a version.
+    ///
+    /// Imported and generated worlds always replace this with their own verified version.
+    pub fn empty_project_default() -> Self {
+        Self {
+            minecraft_version: "1.21.4".to_owned(),
+            data_version: 4189,
+        }
+    }
+
+    pub fn minecraft_version(&self) -> &str {
+        &self.minecraft_version
+    }
+
+    pub fn data_version(&self) -> i32 {
+        self.data_version
+    }
+
+    pub fn validate(&self) -> Result<(), WorldVersionError> {
+        if self.minecraft_version.trim().is_empty()
+            || self.minecraft_version.len() > 64
+            || self.minecraft_version.chars().any(char::is_whitespace)
+        {
+            return Err(WorldVersionError::InvalidMinecraftVersion(
+                self.minecraft_version.clone(),
+            ));
+        }
+        if self.data_version <= 0 {
+            return Err(WorldVersionError::InvalidDataVersion(self.data_version));
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
+pub enum WorldVersionError {
+    #[error("invalid Minecraft version id: `{0}`")]
+    InvalidMinecraftVersion(String),
+    #[error("invalid Minecraft DataVersion: {0}")]
+    InvalidDataVersion(i32),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -33,6 +99,7 @@ pub struct WorldInfo {
 /// Sparse, multi-dimension world. This is the single source of truth for block data.
 #[derive(Debug, Clone)]
 pub struct World {
+    version: WorldVersion,
     dimensions: BTreeMap<String, Dimension>,
     revision: u64,
 }
@@ -54,9 +121,18 @@ impl World {
             dimensions.insert(dimension.id().to_owned(), dimension);
         }
         Self {
+            version: WorldVersion::empty_project_default(),
             dimensions,
             revision: 0,
         }
+    }
+
+    pub fn version(&self) -> &WorldVersion {
+        &self.version
+    }
+
+    pub fn set_version(&mut self, version: WorldVersion) {
+        self.version = version;
     }
 
     pub fn revision(&self) -> u64 {
@@ -168,8 +244,8 @@ impl World {
 
     pub fn info(&self) -> WorldInfo {
         WorldInfo {
-            target_minecraft_version: TARGET_MINECRAFT_VERSION.to_owned(),
-            target_data_version: TARGET_DATA_VERSION,
+            target_minecraft_version: self.version.minecraft_version.clone(),
+            target_data_version: self.version.data_version,
             revision: self.revision,
             dimensions: self.dimensions.values().map(Dimension::info).collect(),
             chunk_count: self.chunk_count(),
@@ -244,5 +320,30 @@ mod tests {
         assert_eq!(info.block_count, 2);
         assert_eq!(info.section_count, 2);
         assert_eq!(info.target_data_version, 4189);
+        assert_eq!(info.target_minecraft_version, "1.21.4");
+    }
+
+    #[test]
+    fn world_can_belong_to_another_minecraft_version() {
+        let mut world = World::new_empty();
+        world.set_version(WorldVersion::new("1.20.6", 3839).expect("valid version"));
+
+        let info = world.info();
+        assert_eq!(world.version().minecraft_version(), "1.20.6");
+        assert_eq!(world.version().data_version(), 3839);
+        assert_eq!(info.target_minecraft_version, "1.20.6");
+        assert_eq!(info.target_data_version, 3839);
+    }
+
+    #[test]
+    fn world_version_rejects_invalid_identity() {
+        assert!(matches!(
+            WorldVersion::new("", 4189),
+            Err(WorldVersionError::InvalidMinecraftVersion(_))
+        ));
+        assert!(matches!(
+            WorldVersion::new("1.21.4", 0),
+            Err(WorldVersionError::InvalidDataVersion(0))
+        ));
     }
 }

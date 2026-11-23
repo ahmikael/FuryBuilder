@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// Minecraft Java 1.21.4 requires Java 21. Only this major is treated as compatible.
-pub const TARGET_JAVA_MAJOR: u32 = 21;
-/// The fixed Minecraft version whose runtime requirement this crate verifies.
-pub const TARGET_MINECRAFT_VERSION: &str = "1.21.4";
 /// Version of the small `runtime.json` settings file.
 pub const RUNTIME_SETTINGS_SCHEMA_VERSION: u32 = 1;
 

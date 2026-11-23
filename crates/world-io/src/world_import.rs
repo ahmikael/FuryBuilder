@@ -22,6 +22,7 @@ use world_domain::{ChunkPos, DimensionKind, World};
 use crate::anvil::{AnvilError, JavaWorld, LevelDat};
 use crate::passthrough::PassthroughError;
 use crate::support_matrix::{support_matrix, SupportMatrix};
+use crate::version_support;
 use crate::world_selection::{classify_world_selection, WorldSelectionKind};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
@@ -72,6 +73,8 @@ pub struct JavaWorldAnalysis {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaWorldLoadReport {
+    pub minecraft_version: String,
+    pub data_version: i32,
     pub chunks: usize,
     pub empty_chunks: usize,
     pub non_full_chunks: usize,
@@ -206,7 +209,7 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
             }
             analysis.blockers.push(match &error {
                 AnvilError::UnsupportedDataVersion { found, supported } => format!(
-                    "DataVersion {found} is not supported; this build edits {supported} (Minecraft Java 1.21.4)"
+                    "DataVersion {found} is not supported; this build edits DataVersions {supported:?}"
                 ),
                 other => other.to_string(),
             });
@@ -314,6 +317,8 @@ pub fn load_java_world_with_options(
 ) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
     let world = JavaWorld::open(root)?;
     let mut report = JavaWorldLoadReport {
+        minecraft_version: world.profile.minecraft_version.to_string(),
+        data_version: world.profile.data_version,
         chunks: 0,
         empty_chunks: 0,
         non_full_chunks: 0,
@@ -326,6 +331,7 @@ pub fn load_java_world_with_options(
         warnings: Vec::new(),
     };
     let mut editable = World::new_empty();
+    editable.set_version(version_support::world_version(&world.profile));
 
     for dimension in &world.dimensions {
         report.dimensions.push(dimension.id.clone());

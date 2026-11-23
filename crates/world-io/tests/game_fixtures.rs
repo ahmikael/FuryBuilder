@@ -4,10 +4,10 @@
 //! disposable Minecraft Java 1.21.4 server, so parsing them exercises the real format,
 //! including palette order, sparse air and block-entity payloads.
 
-use world_domain::{BlockState, TARGET_DATA_VERSION};
+use world_domain::BlockState;
 use world_io::{
-    inspect_java_structure, read_java_structure, read_verified_import, write_java_structure,
-    JavaStructureError,
+    default_version_profile, inspect_java_structure, read_java_structure, read_verified_import,
+    write_java_structure, JavaStructureError,
 };
 
 const PLAIN: &[u8] = include_bytes!("../../../fixtures/java-1.21.4/structures/plain.nbt");
@@ -17,8 +17,9 @@ const CHEST_BOUNDARY: &[u8] =
 #[test]
 fn official_plain_structure_round_trips_semantically() {
     let parsed = read_java_structure(PLAIN).expect("official plain structure parses");
-    assert_eq!(parsed.inspection.data_version, TARGET_DATA_VERSION);
-    assert_eq!(parsed.inspection.target_data_version, TARGET_DATA_VERSION);
+    let target = default_version_profile();
+    assert_eq!(parsed.inspection.data_version, target.data_version);
+    assert_eq!(parsed.inspection.target_data_version, target.data_version);
     assert_eq!(parsed.inspection.size, [1, 2, 1]);
     assert_eq!(parsed.inspection.volume, 2);
     assert_eq!(parsed.inspection.palette_size, 2);
@@ -52,7 +53,10 @@ fn official_plain_structure_round_trips_semantically() {
 #[test]
 fn official_structure_with_block_entity_is_refused_instead_of_dropped() {
     let inspection = inspect_java_structure(CHEST_BOUNDARY).expect("inspection is structural");
-    assert_eq!(inspection.data_version, TARGET_DATA_VERSION);
+    assert_eq!(
+        inspection.data_version,
+        default_version_profile().data_version
+    );
     assert_eq!(inspection.size, [2, 2, 2]);
     assert_eq!(inspection.non_air_blocks, 6);
     assert_eq!(inspection.block_entities, 1);

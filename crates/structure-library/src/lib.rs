@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
-use world_domain::{BlockBox, World, TARGET_DATA_VERSION};
+use world_domain::{BlockBox, World};
 use world_io::{Structure, StructureInspection};
 
 pub const LIBRARY_SCHEMA_VERSION: u32 = 1;
@@ -329,8 +329,9 @@ impl StructureLibrary {
         bounds: BlockBox,
         source: TemplateSource,
     ) -> Result<TemplateEntry, LibraryError> {
-        let structure = Structure::from_world(world, dimension, bounds, TARGET_DATA_VERSION)
-            .map_err(|error| LibraryError::InvalidStructure(error.to_string()))?;
+        let structure =
+            Structure::from_world(world, dimension, bounds, world.version().data_version())
+                .map_err(|error| LibraryError::InvalidStructure(error.to_string()))?;
         let bytes = world_io::write_java_structure(&structure, "FuryBuilder")
             .map_err(|error| LibraryError::InvalidStructure(error.to_string()))?;
         self.save_bytes(name, &bytes, source)
@@ -502,7 +503,7 @@ mod tests {
 
     fn example_bytes() -> Vec<u8> {
         let structure = Structure::new(
-            TARGET_DATA_VERSION,
+            world_domain::WorldVersion::empty_project_default().data_version(),
             [2, 1, 2],
             vec![stone()],
             vec![
@@ -544,7 +545,10 @@ mod tests {
         assert_eq!(entry.size, [2, 1, 2]);
         assert_eq!(entry.non_air_blocks, 4);
         assert_eq!(entry.source, TemplateSource::Selection);
-        assert_eq!(entry.data_version, TARGET_DATA_VERSION);
+        assert_eq!(
+            entry.data_version,
+            world_domain::WorldVersion::empty_project_default().data_version()
+        );
         assert!(entry.file.starts_with("objects/"));
 
         let listed = library.list().expect("list");

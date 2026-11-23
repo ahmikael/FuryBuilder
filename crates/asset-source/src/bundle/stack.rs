@@ -75,18 +75,19 @@ impl ResourceStack {
                     if !report.valid {
                         return Err(BundleError::UnsupportedFormat(format!(
                             "the selected Minecraft root is not usable: {}",
-                            report
-                                .errors
-                                .first()
-                                .cloned()
-                                .unwrap_or_else(|| "no verified 1.21.4 client".to_owned())
+                            report.errors.first().cloned().unwrap_or_else(|| {
+                                format!(
+                                    "no verified {} client",
+                                    crate::target::target_minecraft_version()
+                                )
+                            })
                         )));
                     }
                     let version = report.version.as_ref().ok_or_else(|| {
-                        BundleError::UnsupportedFormat(
-                            "the selected Minecraft root has no verified 1.21.4 client JAR"
-                                .to_owned(),
-                        )
+                        BundleError::UnsupportedFormat(format!(
+                            "the selected Minecraft root has no verified {} client JAR",
+                            crate::target::target_minecraft_version()
+                        ))
                     })?;
                     if !matches!(
                         version.status,
