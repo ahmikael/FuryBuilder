@@ -2791,7 +2791,8 @@ pub async fn runtime_install_temurin(
     let progress_app = app.clone();
     let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
     let installed = tauri::async_runtime::spawn_blocking(move || {
-        manager.install_temurin(&version, &|progress: RuntimeProgress| {
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        manager.install_temurin(&version, &cancel, &|progress: RuntimeProgress| {
             let should_emit = match last.lock() {
                 Ok(previous) => match previous.as_ref() {
                     None => true,
@@ -2905,7 +2906,8 @@ pub async fn server_install(
     let progress_app = app.clone();
     let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
     let installed = tauri::async_runtime::spawn_blocking(move || {
-        manager.install(&version, &|progress: ServerProgress| {
+        let cancel = std::sync::atomic::AtomicBool::new(false);
+        manager.install(&version, &cancel, &|progress: ServerProgress| {
             let should_emit = match last.lock() {
                 Ok(previous) => match previous.as_ref() {
                     None => true,

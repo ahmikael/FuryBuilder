@@ -21,6 +21,8 @@ pub enum RuntimeError {
     Limit(String),
     #[error("runtime cache is busy: {0}")]
     Busy(String),
+    #[error("runtime install was cancelled")]
+    Cancelled,
 }
 
 impl RuntimeError {
@@ -34,6 +36,7 @@ impl RuntimeError {
             RuntimeError::Archive(_) => "archive_error",
             RuntimeError::Limit(_) => "limit_exceeded",
             RuntimeError::Busy(_) => "busy",
+            RuntimeError::Cancelled => "cancelled",
         }
     }
 }
@@ -75,6 +78,8 @@ pub enum ServerError {
         target: &'static str,
         detail: String,
     },
+    #[error("server JAR install was cancelled")]
+    Cancelled,
 }
 
 impl ServerError {
@@ -91,6 +96,7 @@ impl ServerError {
             ServerError::EulaRequired(_) => "eula_required",
             ServerError::ConsentRequired(_) => "consent_required",
             ServerError::UnsupportedJava { .. } => "unsupported_runtime",
+            ServerError::Cancelled => "cancelled",
         }
     }
 }

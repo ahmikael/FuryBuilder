@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation и project data закрыты; единая модель компонентов готова, идёт facade `components_*`.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data и component facade закрыты; идёт Java по major.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -326,6 +326,8 @@ components_relink(kind, path)
 components_remove(kind, id)
 components_verify(kind, id)
 ```
+
+Facade реализован в `crates/component-manager`; чистые типы статусов — в `crates/component-model`. `status` сверяет компоненты с target проекта, `resolve` возвращает проверенный id/path/hash, `relink` не копирует и не редактирует пользовательский файл, `remove` удаляет только FuryBuilder-owned данные, а `install` отказывается от неизвестной версии/хэша. Java и server download умеют cooperative cancel с очисткой partial-файлов; assets download появится в P0-23.
 
 Типы:
 
@@ -1388,9 +1390,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-19` — facade `components_*` (§6.1): status/resolve/install/cancel/relink/remove/verify. Статус: P0 в работе.
+**Текущий фокус:** `P0-20` — Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-20`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-21`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1443,7 +1445,7 @@ UI:
 #### C. Component manager
 
 - [x] `P0-18` Модель компонентов: kind `java|assets|server`, mode `managed|manual|placeholder`, status DTO.
-- [ ] `P0-19` Facade `components_*` (§6.1): status/resolve/install/cancel/relink/remove/verify.
+- [x] `P0-19` Facade `components_*` (§6.1): status/resolve/install/cancel/relink/remove/verify.
 - [ ] `P0-20` Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`.
 - [ ] `P0-21` Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов.
 - [ ] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
@@ -1670,6 +1672,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Component facade | Новый crate `component-manager` (модель вынесена в `component-model`): единый status/resolve/relink/remove/verify/install/cancel, target-aware проверки, explicit placeholder и запрет неизвестного hash/version; Java/server install получили cooperative cancel с очисткой partial-файлов; per-id remove managed runtime/server; assets download остаётся явно недоступен до P0-23 | см. `git log` | 572 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Component model | Новый crate `component-manager`: kind `java|assets|server`, mode `managed|manual|placeholder`, состояния `ready/missing/unverified/incompatible/error/not_required`, checksum DTO и validation; `project-store` использует общий `ComponentMode` | см. `git log` | 558 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Project version reporting | `WorldInfo`/project summary/MCP `ping` берут версию из проекта и профиля; `AppInfo` больше не заявляет глобальный Minecraft target; Settings и Project Manager не подставляют глобальную версию; MCP ping отдаёт `targetMinecraftVersion`, `targetDataVersion`, `profileId` открытого проекта | см. `git log` | 552 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Checkpoint metadata v2 | Metadata пишет `checkpointSchemaVersion: 2`, `profileId`, label, reason и полный `editorState`; список и открытие проверяют схему, профиль, размер и SHA-256; restore применяет editor state; v1 не читается | см. `git log` | 551 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |

@@ -173,7 +173,12 @@ fn stages_commits_lists_and_clears_only_managed_runtimes() {
         ],
     );
     let staged = cache
-        .stage(&archive, &manifest(), &|_| {})
+        .stage(
+            &archive,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
         .expect("stage archive");
     assert!(ManagedRuntimeCache::probe_staged(&staged).is_file());
 
@@ -213,6 +218,38 @@ fn stages_commits_lists_and_clears_only_managed_runtimes() {
 }
 
 #[test]
+fn cancelled_staging_leaves_no_partial_runtime() {
+    let dir = TempDir::new("cancelled");
+    let cache = ManagedRuntimeCache::new(dir.path().join("runtimes"));
+    let java = java_entry("jdk-21.0.13+9-jre");
+    let archive = write_archive(
+        dir.path(),
+        "cancelled.zip",
+        &[(java.as_str(), b"fake-java", 0)],
+    );
+    let error = cache
+        .stage(
+            &archive,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(true),
+            &|_| {},
+        )
+        .expect_err("cancelled staging must stop");
+    assert!(matches!(error, RuntimeError::Cancelled), "{error:?}");
+    assert!(cache.list().expect("list runtimes").runtimes.is_empty());
+    if cache.root().exists() {
+        assert_eq!(
+            fs::read_dir(cache.root())
+                .expect("cache root")
+                .flatten()
+                .filter(|entry| entry.file_name().to_string_lossy().starts_with(".staging-"))
+                .count(),
+            0
+        );
+    }
+}
+
+#[test]
 fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
     let dir = TempDir::new("unsafe");
     let cache = ManagedRuntimeCache::new(dir.path().join("runtimes"));
@@ -224,7 +261,12 @@ fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
         &[("../escape.txt", b"escape", 0), (java.as_str(), b"java", 0)],
     );
     let error = cache
-        .stage(&traversal, &manifest(), &|_| {})
+        .stage(
+            &traversal,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
         .expect_err("traversal must fail");
     assert!(matches!(error, RuntimeError::Archive(_)), "{error:?}");
     assert!(!dir.path().join("escape.txt").exists());
@@ -235,19 +277,34 @@ fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
         &[(java.as_str(), b"java", 0), ("jdk/link", b"java", 0o120777)],
     );
     let error = cache
-        .stage(&symlink, &manifest(), &|_| {})
+        .stage(
+            &symlink,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
         .expect_err("symlink must fail");
     assert!(matches!(error, RuntimeError::Archive(_)), "{error:?}");
 
     let missing = write_archive(dir.path(), "missing.zip", &[("jdk/README", b"none", 0)]);
     let error = cache
-        .stage(&missing, &manifest(), &|_| {})
+        .stage(
+            &missing,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
         .expect_err("missing java must fail");
     assert!(matches!(error, RuntimeError::Archive(_)), "{error:?}");
 
     let archive = write_archive(dir.path(), "old.zip", &[(java.as_str(), b"java", 0)]);
     let staged = cache
-        .stage(&archive, &manifest(), &|_| {})
+        .stage(
+            &archive,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
         .expect("stage old archive");
     let old_probe = furybuilder_runtime_manager::JavaProbe {
         version: Some("17.0.12".to_owned()),

@@ -154,8 +154,13 @@ impl ManagedRuntimeCache {
         &self,
         archive: &Path,
         manifest: &RuntimeManifest,
+        cancel: &std::sync::atomic::AtomicBool,
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<StagedRuntime, RuntimeError> {
+        use std::sync::atomic::Ordering;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RuntimeError::Cancelled);
+        }
         validate_id(&manifest.id)?;
         fs::create_dir_all(&self.root)
             .map_err(|error| RuntimeError::Io(format!("{}: {error}", self.root.display())))?;
@@ -169,7 +174,7 @@ impl ManagedRuntimeCache {
         let raw = staging.join("raw");
         fs::create_dir_all(&raw)
             .map_err(|error| RuntimeError::Io(format!("{}: {error}", staging.display())))?;
-        let result = extract_zip(archive, &raw, progress).and_then(|_| {
+        let result = extract_zip(archive, &raw, cancel, progress).and_then(|_| {
             let java_root = find_java_root(&raw)?;
             let install = staging.join("install");
             fs::rename(&java_root, &install).map_err(|error| {
@@ -287,6 +292,32 @@ impl ManagedRuntimeCache {
 
     /// Removes only directories that carry a FuryBuilder runtime manifest. Nothing else in the
     /// cache root is touched; this is the UI's "clear managed Java" action.
+    /// Removes exactly one FuryBuilder-owned runtime directory. The id is validated as a
+    /// cache directory name, and the resolved path must stay inside the managed root.
+    pub fn remove(&self, id: &str) -> Result<bool, RuntimeError> {
+        validate_id(id)?;
+        let directory = self.root.join(id);
+        if !directory.exists() {
+            return Ok(false);
+        }
+        let root = fs::canonicalize(&self.root).map_err(|error| {
+            RuntimeError::Io(format!("cannot resolve {}: {error}", self.root.display()))
+        })?;
+        let target = fs::canonicalize(&directory).map_err(|error| {
+            RuntimeError::Io(format!("cannot resolve {}: {error}", directory.display()))
+        })?;
+        if target == root || !target.starts_with(&root) {
+            return Err(RuntimeError::Invalid(format!(
+                "{} is not a managed runtime directory",
+                directory.display()
+            )));
+        }
+        fs::remove_dir_all(&target).map_err(|error| {
+            RuntimeError::Io(format!("cannot remove {}: {error}", target.display()))
+        })?;
+        Ok(true)
+    }
+
     pub fn clear(&self) -> Result<ManagedCacheReport, RuntimeError> {
         let before = self.list()?;
         for runtime in &before.runtimes {
@@ -376,8 +407,10 @@ fn safe_relative(path: &str) -> Option<PathBuf> {
 fn extract_zip(
     archive: &Path,
     destination: &Path,
+    cancel: &std::sync::atomic::AtomicBool,
     progress: &dyn Fn(RuntimeProgress),
 ) -> Result<(), RuntimeError> {
+    use std::sync::atomic::Ordering;
     let file = File::open(archive)
         .map_err(|error| RuntimeError::Io(format!("{}: {error}", archive.display())))?;
     let mut zip = zip::ZipArchive::new(file)
@@ -390,6 +423,9 @@ fn extract_zip(
     }
     let mut total = 0u64;
     for index in 0..zip.len() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RuntimeError::Cancelled);
+        }
         let mut entry = zip
             .by_index(index)
             .map_err(|error| RuntimeError::Archive(error.to_string()))?;
@@ -440,6 +476,9 @@ fn extract_zip(
         let mut buffer = [0u8; 64 * 1024];
         let mut written = 0u64;
         loop {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(RuntimeError::Cancelled);
+            }
             let read = entry
                 .read(&mut buffer)
                 .map_err(|error| RuntimeError::Archive(format!("{name}: {error}")))?;

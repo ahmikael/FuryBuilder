@@ -72,7 +72,8 @@ fn run(
         let release = manager.latest_temurin()?;
         println!("{}", serde_json::to_string_pretty(&release)?);
         if install {
-            let installed = manager.install_temurin(&release.version, &|progress| {
+            let cancel = std::sync::atomic::AtomicBool::new(false);
+            let installed = manager.install_temurin(&release.version, &cancel, &|progress| {
                 eprintln!(
                     "progress {} {}/{}",
                     progress.phase, progress.downloaded, progress.total

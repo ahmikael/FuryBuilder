@@ -232,6 +232,52 @@ impl ServerCache {
         })
     }
 
+    /// Removes exactly one FuryBuilder-owned server directory after checking its manifest.
+    pub fn remove_version(&self, version: &str) -> Result<bool, ServerError> {
+        if version.is_empty()
+            || !version.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
+            })
+        {
+            return Err(ServerError::Invalid(format!(
+                "invalid server version directory `{version}`"
+            )));
+        }
+        let directory = self.root.join(format!("minecraft-{version}"));
+        if !directory.exists() {
+            return Ok(false);
+        }
+        let manifest_path = directory.join(MANIFEST_NAME);
+        if !manifest_path.is_file() {
+            return Err(ServerError::Invalid(format!(
+                "{} is not a FuryBuilder-managed server directory",
+                directory.display()
+            )));
+        }
+        let manifest = read_manifest(&manifest_path).map_err(ServerError::Invalid)?;
+        if manifest.version != version {
+            return Err(ServerError::Invalid(format!(
+                "{} declares Minecraft {}, not {version}",
+                directory.display(),
+                manifest.version
+            )));
+        }
+        let root = fs::canonicalize(&self.root)
+            .map_err(|error| ServerError::Io(format!("{}: {error}", self.root.display())))?;
+        let target = fs::canonicalize(&directory)
+            .map_err(|error| ServerError::Io(format!("{}: {error}", directory.display())))?;
+        if target == root || !target.starts_with(&root) {
+            return Err(ServerError::Invalid(format!(
+                "{} is not inside the managed server cache",
+                directory.display()
+            )));
+        }
+        fs::remove_dir_all(&target).map_err(|error| {
+            ServerError::Io(format!("cannot remove {}: {error}", target.display()))
+        })?;
+        Ok(true)
+    }
+
     /// Removes only FuryBuilder-owned server directories (identified by our manifest) and
     /// our temporary download/staging entries. A user-selected external JAR is never touched.
     pub fn clear(&self) -> Result<(), ServerError> {

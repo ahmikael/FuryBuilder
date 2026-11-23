@@ -105,8 +105,13 @@ impl MojangClient {
         &self,
         release: &ServerReleaseInfo,
         destination: &Path,
+        cancel: &std::sync::atomic::AtomicBool,
         progress: &dyn Fn(ServerProgress),
     ) -> Result<(), ServerError> {
+        use std::sync::atomic::Ordering;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ServerError::Cancelled);
+        }
         net::check_url(&release.download_url, MOJANG_HOSTS).map_err(ServerError::Network)?;
         let response = net::open(&self.agent, &release.download_url, MOJANG_HOSTS)
             .map_err(ServerError::Network)?;
@@ -135,6 +140,9 @@ impl MojangClient {
         let mut downloaded = 0u64;
         let mut last_report = 0u64;
         loop {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(ServerError::Cancelled);
+            }
             let read = reader.read(&mut buffer).map_err(|error| {
                 ServerError::Network(format!("server JAR download interrupted: {error}"))
             })?;
@@ -166,6 +174,9 @@ impl MojangClient {
                 "received {downloaded} bytes, expected {}",
                 release.size
             )));
+        }
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ServerError::Cancelled);
         }
         let actual = hex(&hasher.finalize());
         if !actual.eq_ignore_ascii_case(&release.sha1) {

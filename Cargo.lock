@@ -962,6 +962,20 @@ dependencies = [
 name = "furybuilder-component-manager"
 version = "0.2.0"
 dependencies = [
+ "furybuilder-asset-source",
+ "furybuilder-component-model",
+ "furybuilder-minecraft-version",
+ "furybuilder-runtime-manager",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "furybuilder-component-model"
+version = "0.2.0"
+dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.21",
@@ -1032,7 +1046,7 @@ dependencies = [
 name = "furybuilder-project-store"
 version = "0.2.0"
 dependencies = [
- "furybuilder-component-manager",
+ "furybuilder-component-model",
  "furybuilder-minecraft-version",
  "furybuilder-scene-model",
  "furybuilder-workspace-model",

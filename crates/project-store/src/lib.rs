@@ -21,7 +21,7 @@ pub mod snapshot;
 pub mod source;
 pub mod store;
 
-pub use component_manager::ComponentMode;
+pub use component_model::ComponentMode;
 pub use error::ProjectError;
 pub use manifest::{
     AssetsComponent, AssetsPack, CreationMode, EditorState, JavaComponent, ProjectComponents,

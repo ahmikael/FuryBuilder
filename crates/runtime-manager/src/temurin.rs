@@ -104,8 +104,13 @@ impl AdoptiumClient {
         &self,
         release: &RuntimeReleaseInfo,
         destination: &Path,
+        cancel: &std::sync::atomic::AtomicBool,
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<(), RuntimeError> {
+        use std::sync::atomic::Ordering;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RuntimeError::Cancelled);
+        }
         require_download_url(&release.download_url)?;
         let response = net::open(&self.agent, &release.download_url, DOWNLOAD_HOSTS)
             .map_err(RuntimeError::Network)?;
@@ -134,6 +139,9 @@ impl AdoptiumClient {
         let mut downloaded = 0u64;
         let mut last_report = 0u64;
         loop {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(RuntimeError::Cancelled);
+            }
             let read = reader
                 .read(&mut buffer)
                 .map_err(|error| RuntimeError::Network(format!("download interrupted: {error}")))?;
@@ -165,6 +173,9 @@ impl AdoptiumClient {
                 "received {downloaded} bytes, expected {}",
                 release.size
             )));
+        }
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RuntimeError::Cancelled);
         }
         let actual = hex(&hasher.finalize());
         if !actual.eq_ignore_ascii_case(&release.sha256) {

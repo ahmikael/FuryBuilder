@@ -69,7 +69,8 @@ fn run(
         let info = manager.release()?;
         println!("{}", serde_json::to_string_pretty(&info)?);
         if install {
-            let installed = manager.install(&info.minecraft_version, &|progress| {
+            let cancel = std::sync::atomic::AtomicBool::new(false);
+            let installed = manager.install(&info.minecraft_version, &cancel, &|progress| {
                 eprintln!(
                     "progress {} {}/{}",
                     progress.phase, progress.downloaded, progress.total

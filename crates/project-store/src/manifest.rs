@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use component_manager::ComponentMode;
+use component_model::ComponentMode;
 use minecraft_version::{builtin_profiles, profile_for_version, VersionId, VersionProfile};
 use scene_model::{ParametricScene, Scene};
 use serde::{Deserialize, Serialize};

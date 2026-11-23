@@ -208,12 +208,16 @@ impl ServerManager {
     pub fn install(
         &self,
         expected_version: &str,
+        cancel: &AtomicBool,
         progress: &dyn Fn(ServerProgress),
     ) -> Result<InstalledServerJar, ServerError> {
         let _guard =
             self.inner.install_lock.try_lock().map_err(|_| {
                 ServerError::Busy("another server JAR install is running".to_owned())
             })?;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ServerError::Cancelled);
+        }
         progress(ServerProgress {
             phase: "metadata".to_owned(),
             downloaded: 0,
@@ -269,7 +273,12 @@ impl ServerManager {
         let archive = root.join(format!(".download-{}-{stamp}.jar", std::process::id()));
         let staging = root.join(format!(".staging-{}-{stamp}", std::process::id()));
         let result = (|| -> Result<ManagedServerJar, ServerError> {
-            self.inner.mojang.download(&release, &archive, progress)?;
+            self.inner
+                .mojang
+                .download(&release, &archive, cancel, progress)?;
+            if cancel.load(Ordering::Relaxed) {
+                return Err(ServerError::Cancelled);
+            }
             progress(ServerProgress {
                 phase: "inspecting".to_owned(),
                 downloaded: release.size,
@@ -296,6 +305,9 @@ impl ServerManager {
                     "cannot move the verified server JAR into staging: {error}"
                 ))
             })?;
+            if cancel.load(Ordering::Relaxed) {
+                return Err(ServerError::Cancelled);
+            }
             let manifest = ServerManifest {
                 version: release.minecraft_version.clone(),
                 data_version: info.data_version,
@@ -330,6 +342,26 @@ impl ServerManager {
             report,
             selected: true,
         })
+    }
+
+    /// Removes one FuryBuilder-owned server JAR by Minecraft version. A manual selection
+    /// outside the cache is never removed; only a stale pointer is cleared.
+    pub fn remove_managed(&self, version: &str) -> Result<ManagedServerCacheReport, ServerError> {
+        let _guard = self
+            .inner
+            .install_lock
+            .try_lock()
+            .map_err(|_| ServerError::Busy("a server JAR install is running".to_owned()))?;
+        let saved = self.inner.settings.selected();
+        let removed = self.inner.cache.remove_version(version)?;
+        if removed {
+            if let Some(saved) = saved {
+                if !Path::new(&saved.path).exists() {
+                    self.inner.settings.clear()?;
+                }
+            }
+        }
+        self.managed_list()
     }
 
     /// Deletes only FuryBuilder-owned server directories and temporary entries. A manual

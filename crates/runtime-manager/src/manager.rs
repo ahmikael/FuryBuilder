@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -105,11 +106,15 @@ impl RuntimeManager {
     pub fn install_temurin(
         &self,
         expected_version: &str,
+        cancel: &AtomicBool,
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<InstalledRuntime, RuntimeError> {
         let _guard = self.inner.install_lock.try_lock().map_err(|_| {
             RuntimeError::Busy("another managed Java install is running".to_owned())
         })?;
+        if cancel.load(Ordering::Relaxed) {
+            return Err(RuntimeError::Cancelled);
+        }
         progress(RuntimeProgress {
             phase: "metadata".to_owned(),
             downloaded: 0,
@@ -174,7 +179,7 @@ impl RuntimeManager {
             os: release.os.clone(),
             arch: release.arch.clone(),
         };
-        let result = self.install_archive(&release, &archive, &manifest, progress);
+        let result = self.install_archive(&release, &archive, &manifest, cancel, progress);
         remove_file_if_exists(&archive);
         let (runtime, report) = result?;
         self.inner
@@ -192,10 +197,20 @@ impl RuntimeManager {
         release: &RuntimeReleaseInfo,
         archive: &Path,
         manifest: &RuntimeManifest,
+        cancel: &AtomicBool,
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<(crate::types::ManagedRuntime, JavaRuntimeReport), RuntimeError> {
-        self.inner.adoptium.download(release, archive, progress)?;
-        let staged = self.inner.cache.stage(archive, manifest, progress)?;
+        self.inner
+            .adoptium
+            .download(release, archive, cancel, progress)?;
+        let staged = self
+            .inner
+            .cache
+            .stage(archive, manifest, cancel, progress)?;
+        if cancel.load(Ordering::Relaxed) {
+            self.inner.cache.discard(staged);
+            return Err(RuntimeError::Cancelled);
+        }
         progress(RuntimeProgress {
             phase: "probing".to_owned(),
             downloaded: 0,
@@ -216,6 +231,10 @@ impl RuntimeManager {
                 probe.version
             )));
         }
+        if cancel.load(Ordering::Relaxed) {
+            self.inner.cache.discard(staged);
+            return Err(RuntimeError::Cancelled);
+        }
         let runtime = self.inner.cache.commit(staged, manifest.clone(), &probe)?;
         let report = probe_compatible(Path::new(&runtime.java_path), RuntimeSource::Managed, true)?;
         progress(RuntimeProgress {
@@ -224,6 +243,26 @@ impl RuntimeManager {
             total: release.size,
         });
         Ok((runtime, report))
+    }
+
+    /// Removes one FuryBuilder-owned runtime. A selection pointing at the removed runtime is
+    /// cleared; a user-selected external Java executable is never touched.
+    pub fn remove_managed(&self, id: &str) -> Result<ManagedCacheReport, RuntimeError> {
+        let _guard = self
+            .inner
+            .install_lock
+            .try_lock()
+            .map_err(|_| RuntimeError::Busy("a managed Java install is running".to_owned()))?;
+        let selected = self.inner.settings.selected();
+        let removed = self.inner.cache.remove(id)?;
+        if removed {
+            if let Some(selected) = selected {
+                if !selected.exists() {
+                    self.inner.settings.clear()?;
+                }
+            }
+        }
+        self.inner.cache.list()
     }
 
     /// Deletes FuryBuilder-owned runtimes only. A selected managed runtime is unselected
