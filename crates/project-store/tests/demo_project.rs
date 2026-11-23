@@ -7,7 +7,7 @@
 
 use std::path::{Path, PathBuf};
 
-use project_store::{CreationMode, ProjectStore};
+use project_store::{CreationMode, ProjectStore, SNAPSHOT_FORMAT_VERSION};
 use world_domain::BlockPos;
 
 fn examples_root() -> PathBuf {
@@ -43,6 +43,19 @@ fn bundled_demo_project_opens_through_the_versioned_store() {
     assert_eq!(detail.summary.target_data_version, 4189);
     assert_eq!(detail.summary.world_revision, 1);
     assert_eq!(detail.summary.schema_version, 2);
+    assert_eq!(detail.target.profile_id, "java-classic-1.21.4");
+    assert_eq!(detail.target.data_version, 4189);
+    let snapshot_path = examples_root()
+        .join(demo_folder())
+        .join("data")
+        .join(format!("world-{:020}.fwl", detail.summary.world_revision));
+    let snapshot = std::fs::read(snapshot_path).expect("demo snapshot");
+    assert_eq!(&snapshot[..8], b"FURYSNAP");
+    assert_eq!(
+        u16::from_le_bytes([snapshot[8], snapshot[9]]),
+        SNAPSHOT_FORMAT_VERSION,
+        "the demo must use the only readable snapshot format"
+    );
     assert!(
         recovery.is_none(),
         "a clean demo project must not offer crash recovery"

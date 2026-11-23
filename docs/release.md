@@ -31,7 +31,7 @@ Independent axes:
 | -------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | Desktop application        | `version.json`                                                                               | Release flow below                                            |
 | Project manifest           | `PROJECT_SCHEMA_VERSION` in `crates/project-store/src/manifest.rs`                           | Exact-match only; every other version is refused              |
-| World snapshot             | `SNAPSHOT_FORMAT_VERSION` / `SNAPSHOT_MIN_VERSION` in `crates/project-store/src/snapshot.rs` | Bump on binary layout changes; keep old readers or refuse     |
+| World snapshot             | `SNAPSHOT_FORMAT_VERSION` in `crates/project-store/src/snapshot.rs`                          | Exact-match only (current v3); every other version is refused |
 | Desktop discovery protocol | `DESKTOP_PROTOCOL_VERSION` in the MCP bridge                                                 | Bump on wire changes                                          |
 | MCP protocol               | Negotiated modern/legacy era                                                                 | Follows the MCP specification; never assumed                  |
 | MCP tool schema            | Bridge tool definitions                                                                      | Additive changes preferred; destructive changes need a rename |
@@ -123,12 +123,12 @@ Protections:
 | Immutable source       | Imported files are copied under `source/files/` with SHA-256 and never edited by overlay operations                                   | Source tree           |
 | Diagnostics            | Rotating JSON Lines log, no world payloads or secrets                                                                                 | 2 MiB x 4 files       |
 
-FuryBuilder reads only the current project schema. An older or newer manifest is refused with
-`unsupported_version` and is never rewritten; there is no migration or migration backup path.
-Settings files still migrate in memory; an unreadable or newer settings file falls back to
-defaults with a visible warning and is never deleted silently. Managed runtimes, the server
-cache and `cache/` are re-downloadable or regenerable and can be cleared without touching
-projects.
+FuryBuilder reads only the current project schema and the current world snapshot format. An
+older or newer manifest or `.fwl` file is refused with `unsupported_version` and is never
+rewritten; there is no migration or migration backup path. Settings files still migrate in
+memory; an unreadable or newer settings file falls back to defaults with a visible warning and
+is never deleted silently. Managed runtimes, the server cache and `cache/` are re-downloadable
+or regenerable and can be cleared without touching projects.
 
 Manual backup: close the app and copy `%APPDATA%\com.furybuilder.desktop`, or only
 `projects\`. Restore while closed; rename the current directory instead of deleting it, copy

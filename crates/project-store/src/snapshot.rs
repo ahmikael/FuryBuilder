@@ -7,8 +7,6 @@ use world_domain::{
 use crate::error::ProjectError;
 
 pub const SNAPSHOT_FORMAT_VERSION: u16 = 3;
-/// Snapshots v1/v2 predate the profile header and remain readable until the demo switches to v3.
-pub const SNAPSHOT_MIN_VERSION: u16 = 1;
 pub const SNAPSHOT_MAGIC: &[u8; 8] = b"FURYSNAP";
 pub const MAX_SNAPSHOT_BYTES: usize = 1024 * 1024 * 1024;
 const MAX_STRING_BYTES: usize = 512;
@@ -231,53 +229,45 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
         return Err(ProjectError::corrupt("snapshot magic does not match"));
     }
     let version = reader.u16()?;
-    if !(SNAPSHOT_MIN_VERSION..=SNAPSHOT_FORMAT_VERSION).contains(&version) {
+    if version != SNAPSHOT_FORMAT_VERSION {
         return Err(ProjectError::UnsupportedSchema {
             found: version as u32,
             supported: SNAPSHOT_FORMAT_VERSION as u32,
         });
     }
     let revision = reader.u64()?;
-    let world_version = if version >= 3 {
-        let profile_id = reader.string()?;
-        let data_version = reader.i32()?;
-        let layout = reader.string()?;
-        let biome_mode = reader.string()?;
-        let profile = profile_for_data_version(data_version)
-            .filter(|profile| profile.id == profile_id)
-            .ok_or_else(|| {
-                ProjectError::UnsupportedWorldVersion(format!(
-                    "snapshot profile `{profile_id}` (DataVersion {data_version})"
-                ))
-            })?;
-        if layout != layout_id(profile.world_layout) {
-            return Err(ProjectError::corrupt(format!(
-                "snapshot layout `{layout}` does not match profile `{}`",
-                profile.id
-            )));
-        }
-        if biome_mode != biome_mode_id(profile.biome_format) {
-            return Err(ProjectError::corrupt(format!(
-                "snapshot biome mode `{biome_mode}` does not match profile `{}`",
-                profile.id
-            )));
-        }
-        Some(
-            WorldVersion::new(profile.minecraft_version.to_string(), data_version)
-                .map_err(|error| ProjectError::corrupt(error.to_string()))?,
-        )
-    } else {
-        None
-    };
+    let profile_id = reader.string()?;
+    let data_version = reader.i32()?;
+    let layout = reader.string()?;
+    let biome_mode = reader.string()?;
+    let profile = profile_for_data_version(data_version)
+        .filter(|profile| profile.id == profile_id)
+        .ok_or_else(|| {
+            ProjectError::UnsupportedWorldVersion(format!(
+                "snapshot profile `{profile_id}` (DataVersion {data_version})"
+            ))
+        })?;
+    if layout != layout_id(profile.world_layout) {
+        return Err(ProjectError::corrupt(format!(
+            "snapshot layout `{layout}` does not match profile `{}`",
+            profile.id
+        )));
+    }
+    if biome_mode != biome_mode_id(profile.biome_format) {
+        return Err(ProjectError::corrupt(format!(
+            "snapshot biome mode `{biome_mode}` does not match profile `{}`",
+            profile.id
+        )));
+    }
+    let world_version = WorldVersion::new(profile.minecraft_version.to_string(), data_version)
+        .map_err(|error| ProjectError::corrupt(error.to_string()))?;
     let dimensions = reader.u32()?;
     if dimensions > MAX_DIMENSIONS {
         return Err(ProjectError::corrupt("snapshot has too many dimensions"));
     }
 
     let mut world = World::new_empty();
-    if let Some(version) = world_version {
-        world.set_version(version);
-    }
+    world.set_version(world_version);
     world.restore_revision(revision);
     for _ in 0..dimensions {
         let dimension_id = reader.string()?;
@@ -331,41 +321,37 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
                 }
                 let mut section = Section::from_raw(palette, data, bits)
                     .ok_or_else(|| ProjectError::corrupt("snapshot section is invalid"))?;
-                if version >= 2 {
-                    match reader.u8()? {
-                        0 => {}
-                        1 => {
-                            let palette_len = reader.u16()? as usize;
-                            if palette_len == 0 || palette_len > MAX_BIOME_PALETTE {
-                                return Err(ProjectError::corrupt(
-                                    "snapshot biome palette size is invalid",
-                                ));
-                            }
-                            let mut palette = Vec::with_capacity(palette_len);
-                            for _ in 0..palette_len {
-                                let encoded = reader.string()?;
-                                let biome: BiomeState = encoded.parse().map_err(|_| {
-                                    ProjectError::corrupt(format!(
-                                        "invalid biome state `{encoded}`"
-                                    ))
-                                })?;
-                                palette.push(biome);
-                            }
-                            let mut cells = Vec::with_capacity(BIOME_CELLS);
-                            for _ in 0..BIOME_CELLS {
-                                cells.push(reader.u16()?);
-                            }
-                            let biomes =
-                                BiomeSection::from_palette(palette, cells).ok_or_else(|| {
-                                    ProjectError::corrupt("snapshot biome section is invalid")
-                                })?;
-                            section.set_biomes(Some(biomes));
-                        }
-                        _ => {
+                match reader.u8()? {
+                    0 => {}
+                    1 => {
+                        let palette_len = reader.u16()? as usize;
+                        if palette_len == 0 || palette_len > MAX_BIOME_PALETTE {
                             return Err(ProjectError::corrupt(
-                                "snapshot biome presence flag is invalid",
-                            ))
+                                "snapshot biome palette size is invalid",
+                            ));
                         }
+                        let mut palette = Vec::with_capacity(palette_len);
+                        for _ in 0..palette_len {
+                            let encoded = reader.string()?;
+                            let biome: BiomeState = encoded.parse().map_err(|_| {
+                                ProjectError::corrupt(format!("invalid biome state `{encoded}`"))
+                            })?;
+                            palette.push(biome);
+                        }
+                        let mut cells = Vec::with_capacity(BIOME_CELLS);
+                        for _ in 0..BIOME_CELLS {
+                            cells.push(reader.u16()?);
+                        }
+                        let biomes =
+                            BiomeSection::from_palette(palette, cells).ok_or_else(|| {
+                                ProjectError::corrupt("snapshot biome section is invalid")
+                            })?;
+                        section.set_biomes(Some(biomes));
+                    }
+                    _ => {
+                        return Err(ProjectError::corrupt(
+                            "snapshot biome presence flag is invalid",
+                        ))
                     }
                 }
                 let first_y = section_y
@@ -423,57 +409,6 @@ mod tests {
         writer.string(biome_mode).expect("biome mode");
         writer.u32(0);
         writer.finish()
-    }
-
-    #[test]
-    fn decodes_a_version_1_snapshot_and_writes_v3() {
-        let mut writer = Writer::new();
-        writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
-        writer.u16(1);
-        writer.u64(7);
-        writer.u32(1);
-        writer.string("minecraft:overworld").expect("dimension");
-        writer.i32(-64);
-        writer.i32(384);
-        writer.u32(1);
-        writer.i32(0);
-        writer.i32(0);
-        writer.u32(1);
-        writer.i32(0);
-        writer.u8(0);
-        writer.u32(1);
-        writer.string("minecraft:stone").expect("palette");
-        writer.u32(0);
-        let bytes = writer.finish();
-
-        let world = decode_world(&bytes).expect("v1 snapshot");
-        assert_eq!(world.revision(), 7);
-        assert_eq!(
-            world
-                .get_block("minecraft:overworld", BlockPos::new(0, 0, 0))
-                .expect("block"),
-            stone()
-        );
-        assert_eq!(
-            world
-                .get_biome("minecraft:overworld", BlockPos::new(0, 0, 0))
-                .expect("biome"),
-            None,
-            "a version 1 snapshot has no biome data and must not invent any"
-        );
-
-        let upgraded = encode_world(&world).expect("upgrade snapshot");
-        assert_eq!(
-            u16::from_le_bytes([upgraded[8], upgraded[9]]),
-            SNAPSHOT_FORMAT_VERSION
-        );
-        let reloaded = decode_world(&upgraded).expect("v3 snapshot");
-        assert_eq!(
-            reloaded
-                .get_biome("minecraft:overworld", BlockPos::new(0, 0, 0))
-                .expect("biome"),
-            None
-        );
     }
 
     #[test]

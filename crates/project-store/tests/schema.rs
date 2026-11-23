@@ -5,7 +5,7 @@
 
 use project_store::{
     decode_world, snapshot_bytes, CreationMode, EditorState, ProjectError, ProjectStore,
-    PROJECT_FILE, PROJECT_SCHEMA_VERSION,
+    PROJECT_FILE, PROJECT_SCHEMA_VERSION, SNAPSHOT_FORMAT_VERSION,
 };
 
 mod common;
@@ -52,11 +52,21 @@ fn only_the_current_project_schema_is_read() {
 }
 
 #[test]
-fn newer_snapshot_version_is_refused_without_a_reader() {
-    let mut snapshot = snapshot_bytes(&world_domain::World::new_empty()).unwrap();
-    snapshot[8] = 99; // format version is the two bytes after the 8-byte magic
-    match decode_world(&snapshot) {
-        Err(ProjectError::UnsupportedSchema { found: 99, .. }) => {}
-        other => panic!("expected unsupported snapshot version, got {other:?}"),
+fn only_the_current_snapshot_version_is_read() {
+    let base = snapshot_bytes(&world_domain::World::new_empty()).expect("snapshot");
+    for version in [1u16, 2, SNAPSHOT_FORMAT_VERSION + 1] {
+        let mut snapshot = base.clone();
+        snapshot[8..10].copy_from_slice(&version.to_le_bytes());
+        match decode_world(&snapshot) {
+            Err(ProjectError::UnsupportedSchema { found, supported }) => {
+                assert_eq!(found, u32::from(version));
+                assert_eq!(supported, u32::from(SNAPSHOT_FORMAT_VERSION));
+            }
+            other => panic!("snapshot version {version} must be refused, got {other:?}"),
+        }
     }
+    assert!(
+        decode_world(&base).is_ok(),
+        "the current format must decode"
+    );
 }

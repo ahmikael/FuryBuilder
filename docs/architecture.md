@@ -48,8 +48,9 @@ it stores schema version, project id, name, creation mode, target version profil
 
 Saves are atomic at the project level: stage, verify, publish, keep the previous manifest.
 The MVP keeps one deterministic whole-world snapshot per committed revision, the newest
-eight, plus autosave and rolling checkpoints. Project schema versions are exact: FuryBuilder
-reads only the current schema and refuses older or newer manifests without rewriting them.
+eight, plus autosave and rolling checkpoints. Project schema and snapshot format versions are
+exact: FuryBuilder reads only the current versions and refuses older or newer files without
+rewriting them.
 
 ## MCP boundary
 
