@@ -1,11 +1,13 @@
+use minecraft_version::{profile_for_data_version, BiomeFormat, VersionProfile, WorldLayout};
 use world_domain::{
-    BiomeSection, BiomeState, BlockState, ChunkPos, Section, World, BIOME_CELLS, MAX_BIOME_PALETTE,
+    BiomeSection, BiomeState, BlockState, ChunkPos, Section, World, WorldVersion, BIOME_CELLS,
+    MAX_BIOME_PALETTE,
 };
 
 use crate::error::ProjectError;
 
-pub const SNAPSHOT_FORMAT_VERSION: u16 = 2;
-/// Older snapshots without biome data remain readable.
+pub const SNAPSHOT_FORMAT_VERSION: u16 = 3;
+/// Snapshots v1/v2 predate the profile header and remain readable until the demo switches to v3.
 pub const SNAPSHOT_MIN_VERSION: u16 = 1;
 pub const SNAPSHOT_MAGIC: &[u8; 8] = b"FURYSNAP";
 pub const MAX_SNAPSHOT_BYTES: usize = 1024 * 1024 * 1024;
@@ -122,14 +124,50 @@ impl<'a> Reader<'a> {
     }
 }
 
+fn layout_id(layout: WorldLayout) -> &'static str {
+    match layout {
+        WorldLayout::ClassicAnvil => "classic-anvil",
+        WorldLayout::SplitAnvil => "split-anvil",
+        WorldLayout::McRegion => "mc-region",
+        WorldLayout::Unknown => "unknown",
+    }
+}
+
+fn biome_mode_id(format: BiomeFormat) -> &'static str {
+    match format {
+        BiomeFormat::Palette4x4x4 => "palette-4x4x4",
+        BiomeFormat::Column => "column",
+        BiomeFormat::Section => "section",
+        BiomeFormat::Unknown => "unknown",
+    }
+}
+
+fn snapshot_profile(world: &World) -> Result<VersionProfile, ProjectError> {
+    let version = world.version();
+    profile_for_data_version(version.data_version())
+        .filter(|profile| profile.minecraft_version.as_str() == version.minecraft_version())
+        .ok_or_else(|| {
+            ProjectError::UnsupportedWorldVersion(format!(
+                "Minecraft {} (DataVersion {})",
+                version.minecraft_version(),
+                version.data_version()
+            ))
+        })
+}
+
 /// Deterministic binary encoding used by project snapshots. BTreeMap iteration makes the
 /// byte stream stable for the same world, which lets save verification compare a decode
 /// and re-encode byte-for-byte.
 pub fn encode_world(world: &World) -> Result<Vec<u8>, ProjectError> {
+    let profile = snapshot_profile(world)?;
     let mut writer = Writer::new();
     writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
     writer.u16(SNAPSHOT_FORMAT_VERSION);
     writer.u64(world.revision());
+    writer.string(&profile.id)?;
+    writer.i32(profile.data_version);
+    writer.string(layout_id(profile.world_layout))?;
+    writer.string(biome_mode_id(profile.biome_format))?;
     writer.u32(world.dimensions().len() as u32);
     for (id, dimension) in world.dimensions() {
         writer.string(id)?;
@@ -200,12 +238,46 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
         });
     }
     let revision = reader.u64()?;
+    let world_version = if version >= 3 {
+        let profile_id = reader.string()?;
+        let data_version = reader.i32()?;
+        let layout = reader.string()?;
+        let biome_mode = reader.string()?;
+        let profile = profile_for_data_version(data_version)
+            .filter(|profile| profile.id == profile_id)
+            .ok_or_else(|| {
+                ProjectError::UnsupportedWorldVersion(format!(
+                    "snapshot profile `{profile_id}` (DataVersion {data_version})"
+                ))
+            })?;
+        if layout != layout_id(profile.world_layout) {
+            return Err(ProjectError::corrupt(format!(
+                "snapshot layout `{layout}` does not match profile `{}`",
+                profile.id
+            )));
+        }
+        if biome_mode != biome_mode_id(profile.biome_format) {
+            return Err(ProjectError::corrupt(format!(
+                "snapshot biome mode `{biome_mode}` does not match profile `{}`",
+                profile.id
+            )));
+        }
+        Some(
+            WorldVersion::new(profile.minecraft_version.to_string(), data_version)
+                .map_err(|error| ProjectError::corrupt(error.to_string()))?,
+        )
+    } else {
+        None
+    };
     let dimensions = reader.u32()?;
     if dimensions > MAX_DIMENSIONS {
         return Err(ProjectError::corrupt("snapshot has too many dimensions"));
     }
 
     let mut world = World::new_empty();
+    if let Some(version) = world_version {
+        world.set_version(version);
+    }
     world.restore_revision(revision);
     for _ in 0..dimensions {
         let dimension_id = reader.string()?;
@@ -340,8 +412,21 @@ mod tests {
         "minecraft:plains".parse().expect("plains biome")
     }
 
+    fn v3_header(profile_id: &str, data_version: i32, layout: &str, biome_mode: &str) -> Vec<u8> {
+        let mut writer = Writer::new();
+        writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
+        writer.u16(3);
+        writer.u64(1);
+        writer.string(profile_id).expect("profile id");
+        writer.i32(data_version);
+        writer.string(layout).expect("layout");
+        writer.string(biome_mode).expect("biome mode");
+        writer.u32(0);
+        writer.finish()
+    }
+
     #[test]
-    fn decodes_a_version_1_snapshot_without_biome_data() {
+    fn decodes_a_version_1_snapshot_and_writes_v3() {
         let mut writer = Writer::new();
         writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
         writer.u16(1);
@@ -378,8 +463,11 @@ mod tests {
         );
 
         let upgraded = encode_world(&world).expect("upgrade snapshot");
-        assert_eq!(u16::from_le_bytes([upgraded[8], upgraded[9]]), 2);
-        let reloaded = decode_world(&upgraded).expect("v2 snapshot");
+        assert_eq!(
+            u16::from_le_bytes([upgraded[8], upgraded[9]]),
+            SNAPSHOT_FORMAT_VERSION
+        );
+        let reloaded = decode_world(&upgraded).expect("v3 snapshot");
         assert_eq!(
             reloaded
                 .get_biome("minecraft:overworld", BlockPos::new(0, 0, 0))
@@ -389,15 +477,26 @@ mod tests {
     }
 
     #[test]
-    fn round_trips_biome_cells_in_a_version_2_snapshot() {
+    fn round_trips_biome_cells_and_profile_header_in_v3() {
         let mut world = World::new_empty();
         let section = Section::single(stone()).with_biomes(BiomeSection::uniform(plains()));
         world
             .install_section("minecraft:overworld", ChunkPos::new(0, 0), 0, Some(section))
             .expect("install section");
 
-        let bytes = encode_world(&world).expect("encode v2");
-        let decoded = decode_world(&bytes).expect("decode v2");
+        let bytes = encode_world(&world).expect("encode v3");
+        let mut reader = Reader::new(&bytes);
+        assert_eq!(reader.take(SNAPSHOT_MAGIC.len()).unwrap(), SNAPSHOT_MAGIC);
+        assert_eq!(reader.u16().unwrap(), 3);
+        assert_eq!(reader.u64().unwrap(), 0);
+        assert_eq!(reader.string().unwrap(), "java-classic-1.21.4");
+        assert_eq!(reader.i32().unwrap(), 4189);
+        assert_eq!(reader.string().unwrap(), "classic-anvil");
+        assert_eq!(reader.string().unwrap(), "palette-4x4x4");
+
+        let decoded = decode_world(&bytes).expect("decode v3");
+        assert_eq!(decoded.version().minecraft_version(), "1.21.4");
+        assert_eq!(decoded.version().data_version(), 4189);
         assert_eq!(
             decoded
                 .get_biome("minecraft:overworld", BlockPos::new(5, 9, 15))
@@ -405,5 +504,51 @@ mod tests {
             Some(plains())
         );
         assert_eq!(encode_world(&decoded).expect("re-encode"), bytes);
+    }
+
+    #[test]
+    fn unsupported_world_versions_cannot_be_encoded() {
+        let mut world = World::new_empty();
+        world.set_version(WorldVersion::new("1.20.6", 3839).expect("world version"));
+        match encode_world(&world) {
+            Err(ProjectError::UnsupportedWorldVersion(_)) => {}
+            other => panic!("expected unsupported world version, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn profile_header_is_validated() {
+        let valid = v3_header(
+            "java-classic-1.21.4",
+            4189,
+            "classic-anvil",
+            "palette-4x4x4",
+        );
+        let world = decode_world(&valid).expect("valid profile header");
+        assert_eq!(world.version().minecraft_version(), "1.21.4");
+        assert_eq!(world.version().data_version(), 4189);
+
+        let wrong_layout = v3_header("java-classic-1.21.4", 4189, "split-anvil", "palette-4x4x4");
+        assert!(matches!(
+            decode_world(&wrong_layout),
+            Err(ProjectError::Corrupt(_))
+        ));
+
+        let wrong_biomes = v3_header("java-classic-1.21.4", 4189, "classic-anvil", "column");
+        assert!(matches!(
+            decode_world(&wrong_biomes),
+            Err(ProjectError::Corrupt(_))
+        ));
+
+        let unknown_profile = v3_header(
+            "java-classic-1.21.5",
+            4325,
+            "classic-anvil",
+            "palette-4x4x4",
+        );
+        assert!(matches!(
+            decode_world(&unknown_profile),
+            Err(ProjectError::UnsupportedWorldVersion(_))
+        ));
     }
 }

@@ -24,6 +24,8 @@ pub enum ProjectError {
         "stored schema version {found} is not supported; this build reads version {supported} only"
     )]
     UnsupportedSchema { found: u32, supported: u32 },
+    #[error("world version is not supported by this build: {0}")]
+    UnsupportedWorldVersion(String),
     #[error("project data is corrupt: {0}")]
     Corrupt(String),
     #[error("project snapshot checksum mismatch: expected {expected}, got {actual}")]
@@ -60,7 +62,9 @@ impl ProjectError {
             ProjectError::NotFound(_) => "not_found",
             ProjectError::AlreadyExists(_) => "conflict",
             ProjectError::InvalidName(_) | ProjectError::InvalidPath(_) => "invalid_argument",
-            ProjectError::UnsupportedSchema { .. } => "unsupported_version",
+            ProjectError::UnsupportedSchema { .. } | ProjectError::UnsupportedWorldVersion(_) => {
+                "unsupported_version"
+            }
             ProjectError::Corrupt(_) | ProjectError::ChecksumMismatch { .. } => "conflict",
             ProjectError::LimitExceeded(_) => "limit_exceeded",
             ProjectError::UnsafeSource(_) => "permission_denied",
