@@ -6,7 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::discovery;
 use crate::error::RuntimeError;
 use crate::managed::{ManagedRuntimeCache, RuntimeManifest};
-use crate::probe::{probe_compatible, probe_java, report_for};
+use crate::probe::{probe_compatible_for_major, probe_java, report_for_major};
 use crate::settings::RuntimeSettingsStore;
 use crate::temurin::{release_id, remove_file_if_exists, AdoptiumClient};
 use crate::types::{
@@ -58,14 +58,35 @@ impl RuntimeManager {
     }
 
     pub fn saved(&self) -> Option<JavaRuntimeReport> {
-        let path = self.inner.settings.selected()?;
-        let managed = self.inner.cache.contains(&path);
-        Some(report_for(&path, RuntimeSource::Manual, managed))
+        self.saved_for_major(crate::target::target_java_major())
     }
 
-    /// Validates and persists a manually chosen `java` executable. Incompatible runtimes are
-    /// rejected rather than silently stored for a later Vanilla World failure.
+    /// Reports the saved runtime against an explicit project Java major.
+    pub fn saved_for_major(&self, major: u32) -> Option<JavaRuntimeReport> {
+        let path = self.inner.settings.selected()?;
+        let managed = self.inner.cache.contains(&path);
+        Some(report_for_major(
+            &path,
+            RuntimeSource::Manual,
+            managed,
+            major,
+        ))
+    }
+
+    /// Validates and persists a manually chosen `java` executable against the default
+    /// profile. Project-aware callers use [`Self::select_for_major`].
     pub fn select(&self, path: &Path) -> Result<JavaRuntimeReport, RuntimeError> {
+        self.select_for_major(path, crate::target::target_java_major())
+    }
+
+    /// Validates and persists a manually chosen `java` executable for a project Java major.
+    /// Older runtimes are rejected; newer ones are accepted with a warning by the classifier.
+    pub fn select_for_major(
+        &self,
+        path: &Path,
+        major: u32,
+    ) -> Result<JavaRuntimeReport, RuntimeError> {
+        crate::validate_java_major(major)?;
         let canonical = std::fs::canonicalize(path)
             .map_err(|error| RuntimeError::Invalid(format!("{}: {error}", path.display())))?;
         if !canonical.is_file() {
@@ -75,7 +96,7 @@ impl RuntimeManager {
             )));
         }
         let managed = self.inner.cache.contains(&canonical);
-        let report = probe_compatible(
+        let report = probe_compatible_for_major(
             &canonical,
             if managed {
                 RuntimeSource::Managed
@@ -83,6 +104,7 @@ impl RuntimeManager {
                 RuntimeSource::Manual
             },
             managed,
+            major,
         )?;
         self.inner.settings.save_selected(&canonical)?;
         Ok(report)
@@ -92,8 +114,9 @@ impl RuntimeManager {
         self.inner.settings.clear()
     }
 
-    pub fn latest_temurin(&self) -> Result<RuntimeReleaseInfo, RuntimeError> {
-        self.inner.adoptium.latest_jre()
+    /// Returns the current Eclipse Temurin JRE for exactly this Java major.
+    pub fn latest_temurin(&self, major: u32) -> Result<RuntimeReleaseInfo, RuntimeError> {
+        self.inner.adoptium.latest_jre(major)
     }
 
     pub fn managed_list(&self) -> Result<ManagedCacheReport, RuntimeError> {
@@ -105,10 +128,12 @@ impl RuntimeManager {
     /// silently installing a different release if Adoptium publishes a new latest build.
     pub fn install_temurin(
         &self,
+        major: u32,
         expected_version: &str,
         cancel: &AtomicBool,
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<InstalledRuntime, RuntimeError> {
+        crate::validate_java_major(major)?;
         let _guard = self.inner.install_lock.try_lock().map_err(|_| {
             RuntimeError::Busy("another managed Java install is running".to_owned())
         })?;
@@ -120,7 +145,13 @@ impl RuntimeManager {
             downloaded: 0,
             total: 0,
         });
-        let release = self.inner.adoptium.latest_jre()?;
+        let release = self.inner.adoptium.latest_jre(major)?;
+        if release.major != major {
+            return Err(RuntimeError::Invalid(format!(
+                "Adoptium returned Java {}, not Java {major}",
+                release.major
+            )));
+        }
         if release.version != expected_version {
             return Err(RuntimeError::Invalid(format!(
                 "Adoptium now offers {}, not {expected_version}; refresh the download preview",
@@ -137,9 +168,19 @@ impl RuntimeManager {
             .into_iter()
             .find(|runtime| runtime.id == id);
         if let Some(runtime) = existing {
+            if runtime.major != major {
+                return Err(RuntimeError::Invalid(format!(
+                    "managed runtime {id} is stored as Java {}, not Java {major}",
+                    runtime.major
+                )));
+            }
             if runtime.sha256.eq_ignore_ascii_case(&release.sha256) {
-                let report =
-                    probe_compatible(Path::new(&runtime.java_path), RuntimeSource::Managed, true)?;
+                let report = probe_compatible_for_major(
+                    Path::new(&runtime.java_path),
+                    RuntimeSource::Managed,
+                    true,
+                    major,
+                )?;
                 self.inner
                     .settings
                     .save_selected(Path::new(&runtime.java_path))?;
@@ -171,6 +212,7 @@ impl RuntimeManager {
             .join(format!(".download-{}-{stamp}.zip", std::process::id()));
         let manifest = RuntimeManifest {
             id: id.clone(),
+            major,
             version: release.version.clone(),
             release_name: release.release_name.clone(),
             sha256: release.sha256.clone(),
@@ -223,12 +265,11 @@ impl RuntimeManager {
                 return Err(error);
             }
         };
-        let expected_java = crate::target::target_java_major();
-        if probe.major != Some(expected_java) {
+        if probe.major != Some(manifest.major) {
             self.inner.cache.discard(staged);
             return Err(RuntimeError::Archive(format!(
-                "downloaded Java reports {:?}, expected Java {expected_java}",
-                probe.version
+                "downloaded Java reports {:?}, expected Java {}",
+                probe.version, manifest.major
             )));
         }
         if cancel.load(Ordering::Relaxed) {
@@ -236,7 +277,12 @@ impl RuntimeManager {
             return Err(RuntimeError::Cancelled);
         }
         let runtime = self.inner.cache.commit(staged, manifest.clone(), &probe)?;
-        let report = probe_compatible(Path::new(&runtime.java_path), RuntimeSource::Managed, true)?;
+        let report = probe_compatible_for_major(
+            Path::new(&runtime.java_path),
+            RuntimeSource::Managed,
+            true,
+            manifest.major,
+        )?;
         progress(RuntimeProgress {
             phase: "complete".to_owned(),
             downloaded: release.size,

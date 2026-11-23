@@ -47,11 +47,11 @@ pub fn run() {
             app.manage(asset_source::AssetBundleService::new());
             app.manage(runtime_manager::RuntimeManager::new(
                 data_dir.join("runtime.json"),
-                data_dir.join("runtimes").join("java"),
+                data_dir.join("components").join("java"),
             ));
             app.manage(runtime_manager::ServerManager::new(
                 data_dir.join("server.json"),
-                data_dir.join("servers"),
+                data_dir.join("components").join("servers"),
             ));
             match local_bridge::start(app.handle().clone(), data_dir.clone()) {
                 Ok(runtime) => {

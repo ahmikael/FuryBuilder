@@ -27,13 +27,13 @@ export function clearJavaRuntime(): Promise<void> {
 }
 
 /** Adoptium metadata only; no download happens until installTemurin is called. */
-export function latestTemurinRuntime(): Promise<RuntimeReleaseInfo> {
-  return invokeCommand<RuntimeReleaseInfo>("runtime_temurin_latest");
+export function latestTemurinRuntime(major: number): Promise<RuntimeReleaseInfo> {
+  return invokeCommand<RuntimeReleaseInfo>("runtime_temurin_latest", { major });
 }
 
 /** Explicit opt-in download, checksum verification, safe extraction and installation. */
-export function installTemurinRuntime(version: string): Promise<InstalledRuntime> {
-  return invokeCommand<InstalledRuntime>("runtime_install_temurin", { version });
+export function installTemurinRuntime(major: number, version: string): Promise<InstalledRuntime> {
+  return invokeCommand<InstalledRuntime>("runtime_install_temurin", { major, version });
 }
 
 export function managedJavaRuntimes(): Promise<ManagedCacheReport> {

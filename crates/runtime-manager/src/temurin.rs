@@ -70,10 +70,11 @@ impl AdoptiumClient {
         Self { agent }
     }
 
-    pub fn latest_jre(&self) -> Result<RuntimeReleaseInfo, RuntimeError> {
+    pub fn latest_jre(&self, major: u32) -> Result<RuntimeReleaseInfo, RuntimeError> {
+        crate::validate_java_major(major)?;
         let (os, architecture) = platform()?;
         let url = format!(
-            "{API_BASE}/assets/latest/21/hotspot?architecture={architecture}&image_type=jre&os={os}&vendor=eclipse&project=jdk"
+            "{API_BASE}/assets/latest/{major}/hotspot?architecture={architecture}&image_type=jre&os={os}&vendor=eclipse&project=jdk"
         );
         let response = self.agent.get(&url).call().map_err(map_http_error)?;
         if response.status() != 200 {
@@ -95,7 +96,7 @@ impl AdoptiumClient {
                 "Adoptium response is larger than 1 MiB".to_owned(),
             ));
         }
-        parse_latest_release(&body, &os, &architecture)
+        parse_latest_release(&body, &os, &architecture, major)
     }
 
     /// Downloads with manual redirect validation, a hard size limit and streaming SHA-256.
@@ -258,6 +259,7 @@ pub fn parse_latest_release(
     body: &[u8],
     os: &str,
     architecture: &str,
+    major: u32,
 ) -> Result<RuntimeReleaseInfo, RuntimeError> {
     let releases: Vec<AdoptiumRelease> = serde_json::from_slice(body)
         .map_err(|error| RuntimeError::Network(format!("invalid Adoptium JSON: {error}")))?;
@@ -268,11 +270,11 @@ pub fn parse_latest_release(
                 && release.binary.os == os
                 && release.binary.architecture == architecture
                 && release.binary.image_type == "jre"
-                && release.version.major == 21
+                && release.version.major == major
         })
         .ok_or_else(|| {
             RuntimeError::Network(format!(
-                "Adoptium has no Java 21 JRE for {os}/{architecture}"
+                "Adoptium has no Java {major} JRE for {os}/{architecture}"
             ))
         })?;
     let sha256 = normalize_sha256(&release.binary.package.checksum)?;
@@ -289,6 +291,7 @@ pub fn parse_latest_release(
         ));
     }
     Ok(RuntimeReleaseInfo {
+        major,
         version: release.version.semver,
         release_name: release.release_name,
         download_url: release.binary.package.link,
@@ -340,8 +343,24 @@ mod tests {
     }
 
     #[test]
+    fn provisionable_java_majors_are_explicit() {
+        assert!(crate::is_supported_java_major(8));
+        assert!(crate::is_supported_java_major(16));
+        assert!(crate::is_supported_java_major(17));
+        assert!(crate::is_supported_java_major(21));
+        assert!(crate::is_supported_java_major(25));
+        assert!(!crate::is_supported_java_major(11));
+        assert!(!crate::is_supported_java_major(0));
+        assert!(matches!(
+            crate::validate_java_major(11),
+            Err(RuntimeError::Unsupported { .. })
+        ));
+    }
+
+    #[test]
     fn release_ids_are_safe_directory_names() {
         let release = RuntimeReleaseInfo {
+            major: 21,
             version: "21.0.13+9.0.LTS".to_owned(),
             release_name: "jdk-21.0.13+9".to_owned(),
             download_url: "https://github.com/x".to_owned(),
@@ -405,7 +424,8 @@ mod tests {
             &checksum,
             21,
         );
-        let release = parse_latest_release(&body, "windows", "x64").expect("release");
+        let release = parse_latest_release(&body, "windows", "x64", 21).expect("release");
+        assert_eq!(release.major, 21);
         assert_eq!(release.version, "21.0.13+9.0.LTS");
         assert_eq!(release.sha256, "ab".repeat(32));
         assert_eq!(release.size, 49_106_397);
@@ -417,11 +437,12 @@ mod tests {
             &checksum,
             17,
         );
-        assert!(parse_latest_release(&wrong_major, "windows", "x64").is_err());
+        assert!(parse_latest_release(&wrong_major, "windows", "x64", 21).is_err());
+        assert!(parse_latest_release(&body, "windows", "x64", 17).is_err());
 
         let wrong_host = adoptium_body("https://example.com/x.zip", 49_106_397, &checksum, 21);
         assert!(matches!(
-            parse_latest_release(&wrong_host, "windows", "x64"),
+            parse_latest_release(&wrong_host, "windows", "x64", 21),
             Err(RuntimeError::Network(_))
         ));
 
@@ -432,7 +453,7 @@ mod tests {
             21,
         );
         assert!(matches!(
-            parse_latest_release(&tiny, "windows", "x64"),
+            parse_latest_release(&tiny, "windows", "x64", 21),
             Err(RuntimeError::Limit(_))
         ));
     }

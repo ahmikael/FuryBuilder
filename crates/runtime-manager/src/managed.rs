@@ -15,11 +15,16 @@ const MAX_ENTRY_BYTES: u64 = 200 * 1024 * 1024;
 const MAX_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const MANIFEST_NAME: &str = ".furybuilder-runtime.json";
 
+/// Managed runtime manifests are internal cache metadata, not a user project format. The
+/// current layout is `<cache>/<java-major>/<release-id>`; no older layout is read.
+pub const RUNTIME_MANIFEST_SCHEMA_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct StoredManifest {
     schema_version: u32,
     id: String,
+    java_major: u32,
     version: String,
     release_name: String,
     sha256: String,
@@ -45,6 +50,7 @@ pub struct StagedRuntime {
 #[derive(Debug, Clone)]
 pub struct RuntimeManifest {
     pub id: String,
+    pub major: u32,
     pub version: String,
     pub release_name: String,
     pub sha256: String,
@@ -82,65 +88,53 @@ impl ManagedRuntimeCache {
         if !self.root.exists() {
             return Ok(report);
         }
-        let entries = fs::read_dir(&self.root)
-            .map_err(|error| RuntimeError::Io(format!("{}: {error}", self.root.display())))?;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            let metadata = match fs::symlink_metadata(&path) {
+        for entry in fs::read_dir(&self.root)
+            .map_err(|error| RuntimeError::Io(format!("{}: {error}", self.root.display())))?
+            .flatten()
+        {
+            let major_path = entry.path();
+            let metadata = match fs::symlink_metadata(&major_path) {
                 Ok(metadata) => metadata,
                 Err(error) => {
                     report
                         .problems
-                        .push(format!("cannot inspect {}: {error}", path.display()));
+                        .push(format!("cannot inspect {}: {error}", major_path.display()));
                     continue;
                 }
             };
             if metadata.file_type().is_symlink() {
                 report
                     .problems
-                    .push(format!("skipped symlink {}", path.display()));
+                    .push(format!("skipped symlink {}", major_path.display()));
                 continue;
             }
-            if !metadata.is_dir()
-                || path.file_name().and_then(|name| name.to_str()) == Some(".staging")
-            {
+            if !metadata.is_dir() {
                 continue;
             }
-            let manifest_path = path.join(MANIFEST_NAME);
-            if !manifest_path.is_file() {
-                report
-                    .problems
-                    .push(format!("{} has no FuryBuilder manifest", path.display()));
+            let Some(major) = major_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.parse::<u32>().ok())
+                .filter(|major| crate::is_supported_java_major(*major))
+            else {
+                report.problems.push(format!(
+                    "{} is not a Java major cache directory",
+                    major_path.display()
+                ));
                 continue;
-            }
-            let manifest = match read_manifest(&manifest_path) {
-                Ok(manifest) => manifest,
+            };
+            let entries = match fs::read_dir(&major_path) {
+                Ok(entries) => entries,
                 Err(error) => {
-                    report.problems.push(error);
+                    report
+                        .problems
+                        .push(format!("cannot read {}: {error}", major_path.display()));
                     continue;
                 }
             };
-            let Some(relative) = safe_relative(&manifest.java_relative_path) else {
-                report.problems.push(format!(
-                    "{} contains an unsafe java path",
-                    manifest_path.display()
-                ));
-                continue;
-            };
-            let java_path = path.join(relative);
-            if !java_path.is_file() {
-                report.problems.push(format!(
-                    "{} is missing {}",
-                    path.display(),
-                    manifest.java_relative_path
-                ));
-                continue;
+            for entry in entries.flatten() {
+                inspect_runtime_dir(&entry.path(), major, &mut report);
             }
-            let bytes = directory_bytes(&path).unwrap_or(0);
-            report.total_bytes = report.total_bytes.saturating_add(bytes);
-            report
-                .runtimes
-                .push(to_managed(&path, &java_path, &manifest, bytes));
         }
         report
             .runtimes
@@ -218,15 +212,16 @@ impl ManagedRuntimeCache {
         manifest: RuntimeManifest,
         probe: &JavaProbe,
     ) -> Result<ManagedRuntime, RuntimeError> {
-        let expected_java = crate::target::target_java_major();
-        if probe.major != Some(expected_java) {
+        crate::validate_java_major(manifest.major)?;
+        if probe.major != Some(manifest.major) {
             self.discard(staged);
             return Err(RuntimeError::Archive(format!(
-                "downloaded Java reports {:?}, expected {expected_java}",
-                probe.version
+                "downloaded Java reports {:?}, expected Java {}",
+                probe.version, manifest.major
             )));
         }
-        let destination = self.root.join(&manifest.id);
+        let major_root = self.root.join(manifest.major.to_string());
+        let destination = major_root.join(&manifest.id);
         if destination.exists() {
             let existing = self
                 .list()?
@@ -248,9 +243,12 @@ impl ManagedRuntimeCache {
                 destination.display()
             )));
         }
+        fs::create_dir_all(&major_root)
+            .map_err(|error| RuntimeError::Io(format!("{}: {error}", major_root.display())))?;
         let stored = StoredManifest {
-            schema_version: 1,
+            schema_version: RUNTIME_MANIFEST_SCHEMA_VERSION,
             id: manifest.id.clone(),
+            java_major: manifest.major,
             version: manifest.version.clone(),
             release_name: manifest.release_name.clone(),
             sha256: manifest.sha256.to_ascii_lowercase(),
@@ -296,10 +294,15 @@ impl ManagedRuntimeCache {
     /// cache directory name, and the resolved path must stay inside the managed root.
     pub fn remove(&self, id: &str) -> Result<bool, RuntimeError> {
         validate_id(id)?;
-        let directory = self.root.join(id);
-        if !directory.exists() {
+        let Some(runtime) = self
+            .list()?
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.id == id)
+        else {
             return Ok(false);
-        }
+        };
+        let directory = PathBuf::from(&runtime.path);
         let root = fs::canonicalize(&self.root).map_err(|error| {
             RuntimeError::Io(format!("cannot resolve {}: {error}", self.root.display()))
         })?;
@@ -315,6 +318,9 @@ impl ManagedRuntimeCache {
         fs::remove_dir_all(&target).map_err(|error| {
             RuntimeError::Io(format!("cannot remove {}: {error}", target.display()))
         })?;
+        if let Some(major_root) = target.parent() {
+            let _ = fs::remove_dir(major_root);
+        }
         Ok(true)
     }
 
@@ -332,9 +338,76 @@ impl ManagedRuntimeCache {
             }
             fs::remove_dir_all(path)
                 .map_err(|error| RuntimeError::Io(format!("{}: {error}", path.display())))?;
+            if let Some(major_root) = path.parent() {
+                let _ = fs::remove_dir(major_root);
+            }
         }
         self.list()
     }
+}
+
+fn inspect_runtime_dir(path: &Path, major: u32, report: &mut ManagedCacheReport) {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            report
+                .problems
+                .push(format!("cannot inspect {}: {error}", path.display()));
+            return;
+        }
+    };
+    if metadata.file_type().is_symlink() {
+        report
+            .problems
+            .push(format!("skipped symlink {}", path.display()));
+        return;
+    }
+    if !metadata.is_dir() {
+        return;
+    }
+    let manifest_path = path.join(MANIFEST_NAME);
+    if !manifest_path.is_file() {
+        report
+            .problems
+            .push(format!("{} has no FuryBuilder manifest", path.display()));
+        return;
+    }
+    let manifest = match read_manifest(&manifest_path) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            report.problems.push(error);
+            return;
+        }
+    };
+    if manifest.java_major != major {
+        report.problems.push(format!(
+            "{} declares Java {} but is stored under {major}",
+            manifest_path.display(),
+            manifest.java_major
+        ));
+        return;
+    }
+    let Some(relative) = safe_relative(&manifest.java_relative_path) else {
+        report.problems.push(format!(
+            "{} contains an unsafe java path",
+            manifest_path.display()
+        ));
+        return;
+    };
+    let java_path = path.join(relative);
+    if !java_path.is_file() {
+        report.problems.push(format!(
+            "{} is missing {}",
+            path.display(),
+            manifest.java_relative_path
+        ));
+        return;
+    }
+    let bytes = directory_bytes(path).unwrap_or(0);
+    report.total_bytes = report.total_bytes.saturating_add(bytes);
+    report
+        .runtimes
+        .push(to_managed(path, &java_path, &manifest, bytes));
 }
 
 fn read_manifest(path: &Path) -> Result<StoredManifest, String> {
@@ -342,9 +415,9 @@ fn read_manifest(path: &Path) -> Result<StoredManifest, String> {
         fs::read(path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
     let manifest: StoredManifest = serde_json::from_slice(&bytes)
         .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
-    if manifest.schema_version != 1 {
+    if manifest.schema_version != RUNTIME_MANIFEST_SCHEMA_VERSION {
         return Err(format!(
-            "{} uses unsupported manifest schema {}",
+            "{} uses unsupported manifest schema {}; the current managed cache layout is required",
             path.display(),
             manifest.schema_version
         ));
@@ -360,6 +433,7 @@ fn to_managed(
 ) -> ManagedRuntime {
     ManagedRuntime {
         id: manifest.id.clone(),
+        major: manifest.java_major,
         path: path.display().to_string(),
         java_path: java_path.display().to_string(),
         version: manifest.version.clone(),

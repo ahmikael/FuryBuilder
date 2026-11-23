@@ -79,6 +79,7 @@ impl JavaRuntimeReport {
 #[serde(rename_all = "camelCase")]
 pub struct ManagedRuntime {
     pub id: String,
+    pub major: u32,
     pub path: String,
     pub java_path: String,
     pub version: String,
@@ -96,6 +97,7 @@ pub struct ManagedRuntime {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeReleaseInfo {
+    pub major: u32,
     pub version: String,
     pub release_name: String,
     pub download_url: String,

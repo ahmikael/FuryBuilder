@@ -2773,9 +2773,10 @@ pub fn runtime_clear_selection(
 #[tauri::command]
 pub async fn runtime_temurin_latest(
     manager: State<'_, RuntimeManager>,
+    major: u32,
 ) -> Result<RuntimeReleaseInfo, AppError> {
     let manager = manager.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || manager.latest_temurin())
+    tauri::async_runtime::spawn_blocking(move || manager.latest_temurin(major))
         .await
         .map_err(|error| AppError::internal(format!("Adoptium request task failed: {error}")))?
         .map_err(runtime_error)
@@ -2785,6 +2786,7 @@ pub async fn runtime_temurin_latest(
 pub async fn runtime_install_temurin(
     app: AppHandle,
     manager: State<'_, RuntimeManager>,
+    major: u32,
     version: String,
 ) -> Result<InstalledRuntime, AppError> {
     let manager = manager.inner().clone();
@@ -2792,7 +2794,7 @@ pub async fn runtime_install_temurin(
     let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
     let installed = tauri::async_runtime::spawn_blocking(move || {
         let cancel = std::sync::atomic::AtomicBool::new(false);
-        manager.install_temurin(&version, &cancel, &|progress: RuntimeProgress| {
+        manager.install_temurin(major, &version, &cancel, &|progress: RuntimeProgress| {
             let should_emit = match last.lock() {
                 Ok(previous) => match previous.as_ref() {
                     None => true,

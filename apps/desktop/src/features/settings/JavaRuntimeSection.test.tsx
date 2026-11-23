@@ -64,6 +64,7 @@ const outdated: JavaRuntimeReport = {
 };
 
 const release: RuntimeReleaseInfo = {
+  major: 21,
   version: "21.0.13+9.0.LTS",
   releaseName: "jdk-21.0.13+9",
   downloadUrl:
@@ -159,6 +160,7 @@ describe("JavaRuntimeSection", () => {
     api.install.mockResolvedValue({
       runtime: {
         id: "temurin-21.0.13+9-windows-x64",
+        major: 21,
         path: "C:\\app\\runtimes\\temurin-21.0.13+9-windows-x64",
         javaPath: "C:\\app\\runtimes\\temurin-21.0.13+9-windows-x64\\bin\\java.exe",
         version: "21.0.13+9.0.LTS",
@@ -179,12 +181,12 @@ describe("JavaRuntimeSection", () => {
 
     expect(api.latest).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Check official Temurin download" }));
-    await waitFor(() => expect(api.latest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(api.latest).toHaveBeenCalledWith(21));
     expect(await screen.findByText("21.0.13+9.0.LTS")).toBeInTheDocument();
     expect(screen.getByText(/2332c0b4cff6/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Download and install Temurin" }));
-    await waitFor(() => expect(api.install).toHaveBeenCalledWith("21.0.13+9.0.LTS"));
+    await waitFor(() => expect(api.install).toHaveBeenCalledWith(21, "21.0.13+9.0.LTS"));
     expect(await screen.findByText(/installed, SHA-256 verified and selected/)).toBeInTheDocument();
   });
 
@@ -212,6 +214,7 @@ describe("JavaRuntimeSection", () => {
       managed: [
         {
           id: "temurin-21.0.13+9-windows-x64",
+          major: 21,
           path: "C:\\app\\runtimes\\temurin-21.0.13+9-windows-x64",
           javaPath: "C:\\app\\runtimes\\temurin-21.0.13+9-windows-x64\\bin\\java.exe",
           version: "21.0.13+9.0.LTS",

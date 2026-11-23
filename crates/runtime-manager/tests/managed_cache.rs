@@ -129,17 +129,102 @@ fn java_entry(root: &str) -> String {
 }
 
 fn manifest() -> furybuilder_runtime_manager::RuntimeManifest {
+    manifest_for(21, "temurin-21.0.13+9-windows-x64", "21.0.13+9")
+}
+
+fn manifest_for(
+    major: u32,
+    id: &str,
+    release: &str,
+) -> furybuilder_runtime_manager::RuntimeManifest {
     furybuilder_runtime_manager::RuntimeManifest {
-        id: "temurin-21.0.13+9-windows-x64".to_owned(),
-        version: "21.0.13+9.0.LTS".to_owned(),
-        release_name: "jdk-21.0.13+9".to_owned(),
+        id: id.to_owned(),
+        major,
+        version: format!("{release}.0.LTS"),
+        release_name: format!("jdk-{release}"),
         sha256: "a".repeat(64),
-        source_url: "https://github.com/adoptium/temurin21-binaries/releases/download/x.zip"
-            .to_owned(),
+        source_url: format!(
+            "https://github.com/adoptium/temurin{major}-binaries/releases/download/x.zip"
+        ),
         vendor: "Eclipse Adoptium".to_owned(),
         os: "windows".to_owned(),
         arch: "x64".to_owned(),
     }
+}
+
+fn stage_and_commit(
+    cache: &ManagedRuntimeCache,
+    dir: &Path,
+    major: u32,
+    release: &str,
+    id: &str,
+) -> furybuilder_runtime_manager::ManagedRuntime {
+    let archive_root = format!("jdk-{release}-jre");
+    let java = java_entry(&archive_root);
+    let archive = write_archive(
+        dir,
+        &format!("temurin-{major}.zip"),
+        &[(java.as_str(), b"fake-java", 0)],
+    );
+    let staged = cache
+        .stage(
+            &archive,
+            &manifest_for(major, id, release),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
+        .expect("stage archive");
+    let probe = furybuilder_runtime_manager::JavaProbe {
+        version: Some(release.to_owned()),
+        major: Some(major),
+        vendor: Some("Eclipse Adoptium".to_owned()),
+        arch: Some("amd64".to_owned()),
+        ..Default::default()
+    };
+    cache
+        .commit(staged, manifest_for(major, id, release), &probe)
+        .expect("commit runtime")
+}
+
+#[test]
+fn caches_each_java_major_under_its_own_release_directory() {
+    let dir = TempDir::new("majors");
+    let cache = ManagedRuntimeCache::new(dir.path().join("components").join("java"));
+    let java_21 = stage_and_commit(
+        &cache,
+        dir.path(),
+        21,
+        "21.0.13+9",
+        "temurin-21.0.13+9-windows-x64",
+    );
+    let java_17 = stage_and_commit(
+        &cache,
+        dir.path(),
+        17,
+        "17.0.13+8",
+        "temurin-17.0.13+8-windows-x64",
+    );
+
+    assert!(cache.root().join("21").join(&java_21.id).is_dir());
+    assert!(cache.root().join("17").join(&java_17.id).is_dir());
+    let list = cache.list().expect("list runtimes");
+    assert_eq!(list.runtimes.len(), 2);
+    assert_eq!(
+        list.runtimes
+            .iter()
+            .map(|runtime| runtime.major)
+            .collect::<Vec<_>>(),
+        vec![17, 21]
+    );
+
+    assert!(cache.remove(&java_17.id).expect("remove Java 17"));
+    let after = cache.list().expect("list after remove");
+    assert_eq!(after.runtimes.len(), 1);
+    assert_eq!(after.runtimes[0].major, 21);
+    assert!(!cache.root().join("17").exists());
+    assert!(!cache
+        .remove("missing-runtime")
+        .expect("missing is not an error"));
 }
 
 fn probe_21() -> furybuilder_runtime_manager::JavaRuntimeReport {
@@ -193,12 +278,15 @@ fn stages_commits_lists_and_clears_only_managed_runtimes() {
         .commit(staged, manifest(), &probe)
         .expect("commit runtime");
     assert_eq!(runtime.id, "temurin-21.0.13+9-windows-x64");
+    assert_eq!(runtime.major, 21);
     assert!(Path::new(&runtime.java_path).is_file());
     assert!(runtime.bytes > 0);
+    assert!(cache.root().join("21").join(&runtime.id).is_dir());
 
     let list = cache.list().expect("list runtimes");
     assert_eq!(list.runtimes.len(), 1);
     assert_eq!(list.runtimes[0].version, "21.0.13+9.0.LTS");
+    assert_eq!(list.runtimes[0].major, 21);
     assert!(list.total_bytes > 0);
 
     fs::write(cache.root().join("keep.txt"), b"not ours").expect("unrelated file");
@@ -206,7 +294,7 @@ fn stages_commits_lists_and_clears_only_managed_runtimes() {
     assert!(cleared.runtimes.is_empty());
     assert!(cleared.total_bytes == 0);
     assert!(cache.root().join("keep.txt").is_file());
-    assert!(!cache.root().join(&runtime.id).exists());
+    assert!(!cache.root().join("21").join(&runtime.id).exists());
     assert_eq!(
         fs::read_dir(cache.root())
             .expect("cache root")
@@ -315,7 +403,11 @@ fn rejects_traversal_symlinks_missing_java_and_wrong_version() {
         .commit(staged, manifest(), &old_probe)
         .expect_err("Java 17 must not be committed");
     assert!(matches!(error, RuntimeError::Archive(_)), "{error:?}");
-    assert!(!cache.root().join("temurin-21.0.13+9-windows-x64").exists());
+    assert!(!cache
+        .root()
+        .join("21")
+        .join("temurin-21.0.13+9-windows-x64")
+        .exists());
 }
 
 #[test]

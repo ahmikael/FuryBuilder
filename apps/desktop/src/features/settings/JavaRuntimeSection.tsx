@@ -147,7 +147,9 @@ export function JavaRuntimeSection() {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
-        title: "Choose the Java 21 executable",
+        title: discovery?.targetJavaMajor
+          ? `Choose the Java ${discovery.targetJavaMajor} executable`
+          : "Choose a Java executable",
         multiple: false,
         directory: false,
         filters: [{ name: "Java executable", extensions: ["exe"] }],
@@ -192,11 +194,13 @@ export function JavaRuntimeSection() {
   }
 
   async function checkAdoptium() {
+    const major = discovery?.targetJavaMajor;
+    if (!major) return;
     setBusy("release");
     setError(null);
     setNotice(null);
     try {
-      setRelease(await latestTemurinRuntime());
+      setRelease(await latestTemurinRuntime(major));
     } catch (cause) {
       setRelease(null);
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -211,7 +215,7 @@ export function JavaRuntimeSection() {
     setError(null);
     setNotice(null);
     try {
-      const installed = await installTemurinRuntime(release.version);
+      const installed = await installTemurinRuntime(release.major, release.version);
       setNotice(`Temurin ${installed.runtime.version} installed, SHA-256 verified and selected.`);
       setRelease(null);
       reload();
@@ -448,7 +452,7 @@ export function JavaRuntimeSection() {
               variant="outline"
               size="sm"
               onClick={() => void checkAdoptium()}
-              disabled={busy !== null}
+              disabled={busy !== null || !discovery}
             >
               {busy === "release" ? (
                 <Loader2 data-icon="inline-start" className="animate-spin" />
@@ -490,8 +494,8 @@ export function JavaRuntimeSection() {
               className="truncate rounded-lg border bg-background px-3 py-2 font-mono text-xs"
               title={runtime.path}
             >
-              {runtime.version} · {runtime.os}/{runtime.arch} · {formatBytes(runtime.bytes)} ·{" "}
-              {runtime.sha256.slice(0, 12)}…
+              Java {runtime.major} · {runtime.version} · {runtime.os}/{runtime.arch} ·{" "}
+              {formatBytes(runtime.bytes)} · {runtime.sha256.slice(0, 12)}…
             </div>
           ))}
         </CardContent>

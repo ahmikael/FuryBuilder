@@ -22,6 +22,13 @@ pub struct JavaProbe {
 
 impl JavaProbe {
     pub fn classify(&self) -> (RuntimeStatus, Vec<String>) {
+        self.classify_for(target_java_major())
+    }
+
+    /// Classifies a probe against an explicit Java major. The project target is authoritative,
+    /// so Java 17 can be ready for a project that requires 17 while this build's default
+    /// profile still requires 21.
+    pub fn classify_for(&self, expected: u32) -> (RuntimeStatus, Vec<String>) {
         let mut warnings = Vec::new();
         let Some(major) = self.major else {
             return (
@@ -29,7 +36,6 @@ impl JavaProbe {
                 vec!["no Java version was reported".to_owned()],
             );
         };
-        let expected = target_java_major();
         let status = match major.cmp(&expected) {
             std::cmp::Ordering::Equal => RuntimeStatus::Compatible,
             std::cmp::Ordering::Less => {
@@ -192,10 +198,20 @@ pub fn parse_java_major(version: &str) -> Option<u32> {
 }
 
 pub fn report_for(path: &Path, source: RuntimeSource, managed: bool) -> JavaRuntimeReport {
+    report_for_major(path, source, managed, target_java_major())
+}
+
+/// Probes a runtime and classifies it against an explicit project Java major.
+pub fn report_for_major(
+    path: &Path,
+    source: RuntimeSource,
+    managed: bool,
+    expected_major: u32,
+) -> JavaRuntimeReport {
     let text = path.display().to_string();
     match probe_java(path) {
         Ok(probe) => {
-            let (status, warnings) = probe.classify();
+            let (status, warnings) = probe.classify_for(expected_major);
             JavaRuntimeReport {
                 path: text,
                 source,
@@ -226,13 +242,14 @@ pub fn report_for(path: &Path, source: RuntimeSource, managed: bool) -> JavaRunt
     }
 }
 
-/// Validates a manually selected executable and rejects incompatible runtimes.
-pub fn probe_compatible(
+/// Validates a manually selected executable against the project's Java major.
+pub fn probe_compatible_for_major(
     path: &Path,
     source: RuntimeSource,
     managed: bool,
+    expected_major: u32,
 ) -> Result<JavaRuntimeReport, RuntimeError> {
-    let report = report_for(path, source, managed);
+    let report = report_for_major(path, source, managed, expected_major);
     if report.status == RuntimeStatus::Compatible {
         Ok(report)
     } else {

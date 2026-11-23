@@ -404,9 +404,8 @@ impl ComponentManager {
         target.validate()?;
         match kind {
             ComponentKind::Java => {
-                self.ensure_managed_target(target)?;
                 self.ensure_java_major(target)?;
-                self.inner.java.select(path)?;
+                self.inner.java.select_for_major(path, target.java_major)?;
                 Ok(self.java_status(target, true))
             }
             ComponentKind::Assets => {
@@ -546,7 +545,6 @@ impl ComponentManager {
             hash.validate()
                 .map_err(|error| ComponentError::InvalidRequest(error.to_string()))?;
         }
-        self.ensure_managed_target(&request.target)?;
         match request.kind {
             ComponentKind::Assets => Err(ComponentError::Unavailable {
                 kind: ComponentKind::Assets.as_str(),
@@ -558,7 +556,7 @@ impl ComponentManager {
                 self.ensure_java_major(&request.target)?;
                 let guarded = self.begin_install(ComponentKind::Java)?;
                 let cancel = guarded.token();
-                let release = self.inner.java.latest_temurin()?;
+                let release = self.inner.java.latest_temurin(request.target.java_major)?;
                 let expected_version = request.expected_version.as_deref().ok_or_else(|| {
                     ComponentError::InvalidRequest(
                         "a Java install requires the reviewed Adoptium release version"
@@ -580,20 +578,24 @@ impl ComponentManager {
                         });
                     }
                 }
-                self.inner
-                    .java
-                    .install_temurin(expected_version, &cancel, &|update| {
+                self.inner.java.install_temurin(
+                    request.target.java_major,
+                    expected_version,
+                    &cancel,
+                    &|update| {
                         progress(ComponentProgress {
                             kind: ComponentKind::Java,
                             phase: update.phase,
                             downloaded: update.downloaded,
                             total: update.total,
                         });
-                    })?;
+                    },
+                )?;
                 let status = self.java_status(&request.target, true);
                 resolved_from_status(status)
             }
             ComponentKind::Server => {
+                self.ensure_managed_target(&request.target)?;
                 let guarded = self.begin_install(ComponentKind::Server)?;
                 let cancel = guarded.token();
                 let release = self.inner.server.release()?;
@@ -688,7 +690,7 @@ impl ComponentManager {
         if !required {
             return ComponentStatus::not_required(ComponentKind::Java);
         }
-        let Some(report) = self.inner.java.saved() else {
+        let Some(report) = self.inner.java.saved_for_major(target.java_major) else {
             let mut status = ComponentStatus::new(ComponentKind::Java, ComponentState::Missing);
             status
                 .notes
@@ -979,18 +981,18 @@ impl ComponentManager {
     }
 
     fn ensure_java_major(&self, target: &ComponentTarget) -> Result<(), ComponentError> {
-        let managed_java = runtime_manager::target_java_major();
-        if target.java_major != managed_java {
-            return Err(ComponentError::UnsupportedTarget {
-                minecraft_version: target.minecraft_version.to_string(),
-                data_version: target.data_version,
-                detail: format!(
-                    "managed Java downloads require Java {managed_java}; this target asks for Java {}",
-                    target.java_major
-                ),
-            });
+        if runtime_manager::is_supported_java_major(target.java_major) {
+            return Ok(());
         }
-        Ok(())
+        Err(ComponentError::UnsupportedTarget {
+            minecraft_version: target.minecraft_version.to_string(),
+            data_version: target.data_version,
+            detail: format!(
+                "Temurin provisioning supports Java {:?}; this target asks for Java {}",
+                runtime_manager::JAVA_MAJORS,
+                target.java_major
+            ),
+        })
     }
 }
 
@@ -1424,6 +1426,27 @@ mod tests {
         match manager(&root).remove(ComponentKind::Java, "unknown") {
             Err(ComponentError::NotFound { kind, .. }) => assert_eq!(kind, "java"),
             other => panic!("expected not-found, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn java_provisioning_accepts_any_supported_project_major() {
+        let root = TempDir::new("java-majors");
+        let manager = manager(&root);
+        let profile = minecraft_version::default_profile();
+        let mut target = ComponentTarget::from_profile(&profile);
+        for major in [8, 16, 17, 21, 25] {
+            target.java_major = major;
+            manager
+                .ensure_java_major(&target)
+                .unwrap_or_else(|error| panic!("Java {major} must be provisionable: {error}"));
+        }
+        target.java_major = 11;
+        match manager.ensure_java_major(&target) {
+            Err(ComponentError::UnsupportedTarget { detail, .. }) => {
+                assert!(detail.contains("asks for Java 11"), "{detail}");
+            }
+            other => panic!("expected an unsupported Java major, got {other:?}"),
         }
     }
 

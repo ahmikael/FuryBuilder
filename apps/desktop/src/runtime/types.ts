@@ -24,6 +24,7 @@ export interface JavaRuntimeReport {
 
 export interface ManagedRuntime {
   id: string;
+  major: number;
   path: string;
   javaPath: string;
   version: string;
@@ -38,6 +39,7 @@ export interface ManagedRuntime {
 }
 
 export interface RuntimeReleaseInfo {
+  major: number;
   version: string;
   releaseName: string;
   downloadUrl: string;

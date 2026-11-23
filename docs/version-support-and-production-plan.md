@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data и component facade закрыты; идёт Java по major.
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade и Java по major закрыты; идёт Java download pipeline.
 > Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1390,9 +1390,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-20` — Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`. Статус: P0 в работе.
+**Текущий фокус:** `P0-21` — Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-21`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-22`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1446,7 +1446,7 @@ UI:
 
 - [x] `P0-18` Модель компонентов: kind `java|assets|server`, mode `managed|manual|placeholder`, status DTO.
 - [x] `P0-19` Facade `components_*` (§6.1): status/resolve/install/cancel/relink/remove/verify.
-- [ ] `P0-20` Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`.
+- [x] `P0-20` Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`.
 - [ ] `P0-21` Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов.
 - [ ] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
 - [ ] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
@@ -1672,6 +1672,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Java by major | Adoptium выбирается по требуемому Java major профиля (8/16/17/21/25), а не 21; managed cache переехал на `components/java/<major>/<release-id>`, manifest schema 2 хранит major, удаление и проверка идут по logical id; probe/select/saved/facade target-aware, Java 17 не блокируется глобальным baseline; Tauri/TS/UI передают major | см. `git log` | 574 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Component facade | Новый crate `component-manager` (модель вынесена в `component-model`): единый status/resolve/relink/remove/verify/install/cancel, target-aware проверки, explicit placeholder и запрет неизвестного hash/version; Java/server install получили cooperative cancel с очисткой partial-файлов; per-id remove managed runtime/server; assets download остаётся явно недоступен до P0-23 | см. `git log` | 572 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Component model | Новый crate `component-manager`: kind `java|assets|server`, mode `managed|manual|placeholder`, состояния `ready/missing/unverified/incompatible/error/not_required`, checksum DTO и validation; `project-store` использует общий `ComponentMode` | см. `git log` | 558 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Project version reporting | `WorldInfo`/project summary/MCP `ping` берут версию из проекта и профиля; `AppInfo` больше не заявляет глобальный Minecraft target; Settings и Project Manager не подставляют глобальную версию; MCP ping отдаёт `targetMinecraftVersion`, `targetDataVersion`, `profileId` открытого проекта | см. `git log` | 552 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
