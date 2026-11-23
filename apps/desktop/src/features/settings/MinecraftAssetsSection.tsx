@@ -45,6 +45,7 @@ type BusyAction =
   | "load"
   | "detect"
   | "root"
+  | "version"
   | "jar"
   | "pack-zip"
   | "pack-folder"
@@ -113,10 +114,13 @@ export function MinecraftAssetsSection() {
   }
 
   async function chooseFolder(kind: AssetSourceKind, action: BusyAction) {
-    const selected = await selectPath(
-      true,
-      kind === "minecraft_root" ? "Select .minecraft folder" : "Select resource pack folder",
-    );
+    const title =
+      kind === "minecraft_root"
+        ? "Select .minecraft folder"
+        : kind === "version_directory"
+          ? "Select a versions/<id> folder"
+          : "Select resource pack folder";
+    const selected = await selectPath(true, title);
     if (!selected) return;
     await acceptSelection(kind, selected, action);
   }
@@ -485,6 +489,19 @@ export function MinecraftAssetsSection() {
             <FolderOpen data-icon="inline-start" />
           )}
           .minecraft
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => void chooseFolder("version_directory", "version")}
+          disabled={busy !== null}
+        >
+          {busy === "version" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <FolderOpen data-icon="inline-start" />
+          )}
+          Version folder
         </Button>
         <Button
           variant="outline"

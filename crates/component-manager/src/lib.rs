@@ -1021,13 +1021,18 @@ impl ComponentManager {
             status
                 .notes
                 .push("no SHA-1 is available for the client JAR".to_owned());
-        } else if version.checksum_verified {
+        } else {
+            // A manual client JAR is a supported offline path. When its exact version and
+            // DataVersion are confirmed from `version.json`, the local file is usable even
+            // if no launcher metadata was available to compare the SHA-1 against. The
+            // warning stays in the report; a declared mismatch is still rejected above.
             status.state = ComponentState::Ready;
-        } else if status.state != ComponentState::Unverified {
-            status.state = ComponentState::Unverified;
-            status
-                .notes
-                .push("the client JAR checksum could not be verified".to_owned());
+            if !version.checksum_verified {
+                status.notes.push(
+                    "the client JAR SHA-1 was not matched against launcher metadata; the local file is used as-is"
+                        .to_owned(),
+                );
+            }
         }
         finalize(status)
     }
@@ -1373,6 +1378,56 @@ mod tests {
         ComponentTarget::from_profile(&minecraft_version::default_profile())
     }
 
+    /// Creates a conventional `.minecraft/versions/<version>/` fixture with a valid client
+    /// JAR and its launcher metadata, then returns the root and the version folder.
+    fn manual_installation(root: &TempDir, version: &str, data_version: i32) -> (PathBuf, PathBuf) {
+        let (_, document, jar) = client_jar::test_fixture(version, data_version);
+        let minecraft = root.path.join(".minecraft");
+        let version_dir = minecraft.join("versions").join(version);
+        fs::create_dir_all(&version_dir).expect("create version directory");
+        fs::write(version_dir.join(format!("{version}.jar")), jar).expect("write client jar");
+        fs::write(version_dir.join(format!("{version}.json")), document)
+            .expect("write launcher metadata");
+        (minecraft, version_dir)
+    }
+
+    fn assert_manual_assets_ready(
+        manager: &ComponentManager,
+        status: &ComponentStatus,
+        jar: &Path,
+        expected_kind: &str,
+    ) {
+        assert_eq!(status.mode, Some(ComponentMode::Manual));
+        assert_eq!(status.state, ComponentState::Ready);
+        assert_eq!(status.id.as_deref(), Some("assets-1.21.4"));
+        assert_eq!(status.version.as_deref(), Some("1.21.4"));
+        assert!(
+            status
+                .path
+                .as_deref()
+                .is_some_and(|path| same_path(path, &jar.display().to_string())),
+            "status path {:?} must resolve to {}",
+            status.path,
+            jar.display()
+        );
+        assert_eq!(
+            status.hash.as_ref().map(|hash| hash.algorithm),
+            Some(component_model::HashAlgorithm::Sha1)
+        );
+        assert!(status.bytes.is_some_and(|bytes| bytes > 0));
+        status.validate().expect("valid manual assets status");
+        assert_eq!(
+            manager
+                .inner
+                .assets
+                .saved_source()
+                .source
+                .as_ref()
+                .map(|source| source.kind.as_str()),
+            Some(expected_kind)
+        );
+    }
+
     #[test]
     fn status_without_components_is_explicit() {
         let root = TempDir::new("empty-status");
@@ -1507,6 +1562,108 @@ mod tests {
         match manager.relink(ComponentKind::Assets, &file, &target()) {
             Err(ComponentError::InvalidRequest(_)) => {}
             other => panic!("expected an invalid selection, got {other:?}"),
+        }
+        assert!(manager.inner.assets.saved_source().source.is_none());
+    }
+
+    #[test]
+    fn manual_minecraft_root_relinks_to_its_exact_client_jar() {
+        let root = TempDir::new("manual-root");
+        let manager = manager(&root);
+        let (minecraft, version_dir) = manual_installation(&root, "1.21.4", 4189);
+        let jar = version_dir.join("1.21.4.jar");
+
+        let status = manager
+            .relink(ComponentKind::Assets, &minecraft, &target())
+            .expect("relink .minecraft root");
+        assert_manual_assets_ready(&manager, &status, &jar, "minecraft_root");
+
+        let resolved = manager
+            .resolve(
+                ComponentKind::Assets,
+                &target(),
+                &ComponentRequirements::EDITOR,
+            )
+            .expect("resolve manual root");
+        assert_eq!(resolved.mode, ComponentMode::Manual);
+        assert!(same_path(&resolved.path, &jar.display().to_string()));
+    }
+
+    #[test]
+    fn manual_version_directory_relinks_to_its_client_jar() {
+        let root = TempDir::new("manual-version-dir");
+        let manager = manager(&root);
+        let (_, version_dir) = manual_installation(&root, "1.21.4", 4189);
+        let jar = version_dir.join("1.21.4.jar");
+
+        let status = manager
+            .relink(ComponentKind::Assets, &version_dir, &target())
+            .expect("relink version directory");
+        assert_manual_assets_ready(&manager, &status, &jar, "version_directory");
+    }
+
+    #[test]
+    fn manual_client_jar_relinks_with_its_sibling_metadata() {
+        let root = TempDir::new("manual-client-jar");
+        let manager = manager(&root);
+        let (_, version_dir) = manual_installation(&root, "1.21.4", 4189);
+        let jar = version_dir.join("1.21.4.jar");
+
+        let status = manager
+            .relink(ComponentKind::Assets, &jar, &target())
+            .expect("relink client.jar");
+        assert_manual_assets_ready(&manager, &status, &jar, "client_jar");
+    }
+
+    #[test]
+    fn manual_client_jar_without_launcher_metadata_stays_usable_with_a_warning() {
+        let root = TempDir::new("manual-bare-jar");
+        let manager = manager(&root);
+        let (_, _, jar) = client_jar::test_fixture("1.21.4", 4189);
+        let standalone = root.path.join("standalone-client.jar");
+        fs::write(&standalone, jar).expect("write standalone jar");
+
+        let status = manager
+            .relink(ComponentKind::Assets, &standalone, &target())
+            .expect("relink standalone client.jar");
+        assert_eq!(status.mode, Some(ComponentMode::Manual));
+        assert_eq!(status.state, ComponentState::Ready);
+        assert_eq!(status.id.as_deref(), Some("assets-1.21.4"));
+        assert!(status
+            .notes
+            .iter()
+            .any(|note| note.contains("was not matched against launcher metadata")));
+        status.validate().expect("valid status");
+        assert!(manager
+            .resolve(
+                ComponentKind::Assets,
+                &target(),
+                &ComponentRequirements::EDITOR,
+            )
+            .is_ok());
+    }
+
+    #[test]
+    fn manual_client_jar_with_a_declared_checksum_mismatch_is_refused() {
+        let root = TempDir::new("manual-wrong-hash");
+        let manager = manager(&root);
+        let (_, document, jar) = client_jar::test_fixture("1.21.4", 4189);
+        let mut value: serde_json::Value =
+            serde_json::from_slice(&document).expect("parse version json");
+        value["downloads"]["client"]["sha1"] = serde_json::json!("b".repeat(40));
+        let jar_path = root.path.join("client.jar");
+        fs::write(&jar_path, jar).expect("write jar");
+        fs::write(
+            root.path.join("client.json"),
+            serde_json::to_vec(&value).expect("serialize metadata"),
+        )
+        .expect("write metadata");
+
+        match manager.relink(ComponentKind::Assets, &jar_path, &target()) {
+            Err(ComponentError::InvalidRequest(message)) => {
+                assert!(message.contains("not a usable"), "{message}");
+            }
+            other => panic!("expected a checksum mismatch to be refused, got {other:?}"),
         }
         assert!(manager.inner.assets.saved_source().source.is_none());
     }

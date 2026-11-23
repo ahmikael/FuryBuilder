@@ -233,8 +233,10 @@ confidence, bounds, position count and the authoritative revision.
 ### Minecraft assets
 
 `Settings → Minecraft assets` discovers conventional launcher roots and launcher profiles,
-or accepts a manual `.minecraft` folder, `client.jar` or resource pack. A 1.21.4 client is
-accepted only when its declared SHA-1, internal `version.json` and `DataVersion` 4189 agree.
+or accepts a manual `.minecraft` folder, a `versions/<id>` folder, a `client.jar` or a resource
+pack. A 1.21.4 client is accepted after its internal `version.json` and `DataVersion` 4189
+agree. When launcher metadata is present, the declared SHA-1 and size are checked too; a
+declared mismatch is refused, while a correct JAR without metadata is used with a warning.
 
 Configured resource packs are applied in a saved priority order (up to 16). Blockstates,
 parent models and PNG textures are resolved into a cached atlas. A missing asset shows a

@@ -158,6 +158,36 @@ describe("MinecraftAssetsSection", () => {
     expect(await screen.findByText("Minecraft asset source saved.")).toBeInTheDocument();
   });
 
+  it("saves a manually selected version folder after validating it", async () => {
+    const user = userEvent.setup();
+    const versionFolder = "C:\\mc\\versions\\1.21.4";
+    const validReport: AssetPathReport = {
+      path: versionFolder,
+      kind: "version_directory",
+      valid: true,
+      targetMatch: true,
+      installation: null,
+      version: targetVersion,
+      resourcePack: null,
+      errors: [],
+      warnings: [],
+    };
+    dialog.open.mockResolvedValue(versionFolder);
+    api.inspect.mockResolvedValue(validReport);
+    api.save.mockResolvedValue({
+      source: { kind: "version_directory", path: versionFolder },
+      report: validReport,
+      loadWarning: null,
+    });
+    render(<MinecraftAssetsSection />);
+    await screen.findByText("target found");
+
+    await user.click(screen.getByRole("button", { name: /Version folder/ }));
+    await waitFor(() => expect(api.save).toHaveBeenCalledWith("version_directory", versionFolder));
+    expect(api.inspect).toHaveBeenCalledWith(versionFolder);
+    expect(await screen.findByText("Minecraft asset source saved.")).toBeInTheDocument();
+  });
+
   it("explains an empty automatic detection without hiding manual fallback", async () => {
     api.discover.mockResolvedValue({
       ...discovery,

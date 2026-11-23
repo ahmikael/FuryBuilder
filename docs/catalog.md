@@ -11,6 +11,20 @@ and its block/item catalog is built from that version's exact client JAR.
   not add or remove catalog entries. The pack stack enters the render/atlas cache key.
 - `asset-source` reads the JAR in memory. No archive entry is extracted to disk.
 
+## Manual source selection
+
+The catalog accepts a manually selected asset source in three forms:
+
+- a `.minecraft` root, resolved to its compatible `versions/<id>/<id>.jar`;
+- a single `versions/<id>` folder;
+- a `client.jar` or any JAR whose internal `version.json` declares the project version.
+
+A selection is accepted only when the internal version id and `DataVersion` match the project
+target. When a sibling `<id>.json`/`client.json` declares the client SHA-1 and size, the JAR is
+hashed and compared; a declared mismatch is refused. A correct JAR without launcher metadata
+is still usable offline with an explicit warning in the component status. FuryBuilder never
+copies, edits or deletes the selected file.
+
 ## What is read
 
 | JAR path | Catalog use |

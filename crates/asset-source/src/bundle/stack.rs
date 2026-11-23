@@ -71,10 +71,15 @@ impl ResourceStack {
         if let Some(source) = source {
             let report = inspect_asset_path(&source.path);
             match source.kind.as_str() {
-                "minecraft_root" => {
+                "minecraft_root" | "version_directory" => {
+                    let label = if source.kind == "version_directory" {
+                        "version folder"
+                    } else {
+                        "Minecraft root"
+                    };
                     if !report.valid {
                         return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected Minecraft root is not usable: {}",
+                            "the selected {label} is not usable: {}",
                             report.errors.first().cloned().unwrap_or_else(|| {
                                 format!(
                                     "no verified {} client",
@@ -85,7 +90,7 @@ impl ResourceStack {
                     }
                     let version = report.version.as_ref().ok_or_else(|| {
                         BundleError::UnsupportedFormat(format!(
-                            "the selected Minecraft root has no verified {} client JAR",
+                            "the selected {label} has no verified {} client JAR",
                             crate::target::target_minecraft_version()
                         ))
                     })?;
@@ -94,7 +99,7 @@ impl ResourceStack {
                         VersionStatus::Compatible | VersionStatus::CompatibleUnverified
                     ) {
                         return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected root's client JAR status is {}",
+                            "the selected {label}'s client JAR status is {}",
                             version.status.as_str()
                         )));
                     }
@@ -181,8 +186,9 @@ impl ResourceStack {
         let report = inspect_resource_pack(path);
         if report.status != ResourcePackStatus::Compatible || !report.errors.is_empty() {
             return Err(BundleError::UnsupportedFormat(format!(
-                "resource pack {} is not compatible with format 46: {}",
+                "resource pack {} is not compatible with resource pack format {}: {}",
                 path.display(),
+                crate::target::target_resource_pack_format(),
                 report
                     .errors
                     .first()
@@ -449,6 +455,60 @@ fn hex(bytes: &[u8]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Write;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    struct TempDir {
+        path: PathBuf,
+    }
+
+    impl TempDir {
+        fn new(label: &str) -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "furybuilder-stack-{label}-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map(|duration| duration.as_nanos())
+                    .unwrap_or(0)
+            ));
+            let _ = fs::remove_dir_all(&path);
+            fs::create_dir_all(&path).expect("create temp directory");
+            Self { path }
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn write_client_jar(version_dir: &Path, version: &str) -> PathBuf {
+        use zip::write::SimpleFileOptions;
+
+        fs::create_dir_all(version_dir).expect("create version directory");
+        let jar_path = version_dir.join(format!("{version}.jar"));
+        let file = fs::File::create(&jar_path).expect("create client jar");
+        let mut zip = zip::ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("version.json", options)
+            .expect("start version.json");
+        zip.write_all(
+            format!(
+                r#"{{"id":"{version}","world_version":4189,"pack_version":{{"resource":46,"data":61}},"stable":true}}"#
+            )
+            .as_bytes(),
+        )
+        .expect("write version.json");
+        zip.start_file("assets/minecraft/blockstates/stone.json", options)
+            .expect("start blockstate");
+        zip.write_all(br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#)
+            .expect("write blockstate");
+        zip.finish().expect("finish client jar");
+        jar_path
+    }
 
     #[test]
     fn unsafe_logical_paths_are_rejected() {
@@ -464,5 +524,24 @@ mod tests {
             assert!(safe_components(path).is_none(), "{path:?}");
         }
         assert!(safe_components("assets/minecraft/models/block/stone.json").is_some());
+    }
+
+    #[test]
+    fn a_selected_version_directory_is_a_valid_client_source() {
+        let root = TempDir::new("version-directory");
+        let version_dir = root.path.join(".minecraft").join("versions").join("1.21.4");
+        let jar = write_client_jar(&version_dir, "1.21.4");
+        let source = AssetSourceSetting {
+            kind: "version_directory".to_owned(),
+            path: version_dir.display().to_string(),
+        };
+
+        let stack = ResourceStack::open(Some(&source), &[]).expect("open version directory");
+        assert_eq!(stack.base_jar_path(), Some(jar.as_path()));
+        assert!(stack.base_jar_sha1().is_some());
+        assert!(stack
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("SHA-1 was not verified")));
     }
 }

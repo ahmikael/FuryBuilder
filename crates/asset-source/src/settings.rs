@@ -10,7 +10,6 @@ use crate::resource_pack::inspect_resource_pack;
 use crate::types::{AssetPathReport, ResourcePackReport};
 
 /// Version of the small settings file that records the selected asset source and pack order.
-/// Schema 1 stored only `source`; schema 2 adds the ordered resource-pack stack.
 pub const ASSET_SETTINGS_SCHEMA_VERSION: u32 = 2;
 /// Maximum number of user resource packs. Bounded so a single render request stays predictable.
 pub const MAX_RESOURCE_PACKS: usize = 16;
@@ -236,21 +235,13 @@ fn path_key(path: &str) -> String {
 fn load_settings(path: &Path) -> Result<AssetSettingsFile, String> {
     match fs::read(path) {
         Ok(bytes) => {
-            let mut settings: AssetSettingsFile = serde_json::from_slice(&bytes)
+            let settings: AssetSettingsFile = serde_json::from_slice(&bytes)
                 .map_err(|error| format!("cannot parse {}: {error}", path.display()))?;
-            match settings.schema_version {
-                0 | 1 => {
-                    // Schema 1 had no pack stack. Treat it as an empty stack and rewrite
-                    // only on the next explicit save.
-                    settings.schema_version = ASSET_SETTINGS_SCHEMA_VERSION;
-                    settings.packs.clear();
-                }
-                ASSET_SETTINGS_SCHEMA_VERSION => {}
-                other => {
-                    return Err(format!(
-                        "unsupported asset settings schema {other}; expected {ASSET_SETTINGS_SCHEMA_VERSION}"
-                    ));
-                }
+            if settings.schema_version != ASSET_SETTINGS_SCHEMA_VERSION {
+                return Err(format!(
+                    "unsupported asset settings schema {}; expected {ASSET_SETTINGS_SCHEMA_VERSION}",
+                    settings.schema_version
+                ));
             }
             Ok(settings)
         }

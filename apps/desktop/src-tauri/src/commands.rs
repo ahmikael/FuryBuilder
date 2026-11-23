@@ -2626,6 +2626,7 @@ pub fn assets_save_source(
 ) -> Result<SavedAssetSource, AppError> {
     let expected = match kind.as_str() {
         "minecraft_root" => AssetSelectionKind::MinecraftRoot,
+        "version_directory" => AssetSelectionKind::VersionDirectory,
         "client_jar" => AssetSelectionKind::ClientJar,
         "resource_pack" => AssetSelectionKind::ResourcePack,
         other => {

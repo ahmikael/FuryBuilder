@@ -237,8 +237,9 @@ prerequisites.
 - **Appearance** — theme (dark/light/system) and UI scale.
 - **Backend** — application and target version information.
 - **Minecraft assets** — automatic launcher discovery, a manual `.minecraft` folder,
-  `client.jar` or resource pack, the ordered resource-pack stack, the verified 1.21.4
-  checksum/version status, and a button that clears only the derived asset cache.
+  `versions/<id>` folder, `client.jar` or resource pack, the ordered resource-pack stack,
+  internal version/DataVersion validation with declared SHA-1 verification when launcher
+  metadata is present, and a button that clears only the derived asset cache.
 - **Java & World Generation** — readiness, Java runtime discovery/manual selection, the
   official server JAR, and explicit downloads.
 - **Diagnostics** — a bounded, path-redacted JSON Lines log with open-folder, refresh and

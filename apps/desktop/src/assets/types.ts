@@ -36,7 +36,11 @@ export type ResourcePackStatus =
   | "unsafe_contents"
   | "unreadable";
 
-export type AssetSourceKind = "minecraft_root" | "client_jar" | "resource_pack";
+export type AssetSourceKind =
+  | "minecraft_root"
+  | "version_directory"
+  | "client_jar"
+  | "resource_pack";
 
 export interface VersionReport {
   id: string;
