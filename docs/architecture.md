@@ -130,6 +130,28 @@ it cannot touch the closed project. The editor shell unmounts and the viewport c
 disposes the renderer, removes its bus and asset listeners, and returns the world store to
 idle.
 
+## Project wizard
+
+Creating a project is a full-screen wizard, never a dialog over an empty scene. The shell owns
+the ordered steps, progress, validation and navigation: `Basics → Source → Review`. `Vanilla
+World` uses the same shell with its generation step in place of review, because the generated
+world names the project and creates it from the generation panel.
+
+`Basics` names the project and chooses Empty, Flat, Import or Vanilla. `Source` shows the
+starting world: a compact description for Empty/Flat, read-only analysis with blockers and
+warnings for Import, and the existing generation panel for Vanilla. `Review` repeats the name,
+mode and source before creation. Every step returns its own validation errors; `Next` refuses
+to advance, shows the reason, and the step buttons only reach steps that were already unlocked.
+`Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only
+progress indicators.
+
+Submitting shows `preparing` inside the wizard with the lifecycle message; a failure keeps the
+wizard open with the stable code, message and hint plus `Retry`, so the entered source is not
+lost. The wizard is built from stock shadcn primitives (`Button`, `Card`, `Alert`, `Badge`,
+`Field`, `Input`, `Progress`, `Separator`, `ToggleGroup`) and uses semantic theme variables
+only. Later steps are added to the shell as their backend data becomes available, so no step
+shows a dead control.
+
 ## Welcome screen
 
 The top bar and status bar are always present; the content area switches between the
@@ -140,8 +162,8 @@ is `ready`, `saving`, or `error` with an already-open project. While `closed` or
 The welcome screen shows the brand, up to six recent projects sorted by last save, and the
 three entry points: `New project`, `Open project`, and `Import world`. Recent rows show the
 creation mode, project version/DataVersion, size, relative save time, recoverability, and
-honest schema warnings. `New project` and `Import world` open the project manager on the
-matching creation mode; `Open project` uses the desktop folder picker and falls back to the
+honest schema warnings. `New project` and `Import world` open the full-screen project wizard on
+the matching creation mode; `Open project` uses the desktop folder picker and falls back to the
 project list in a browser preview. A desktop-offline alert explains why project actions
 cannot work, and an unreadable library shows the backend error with a retry action.
 

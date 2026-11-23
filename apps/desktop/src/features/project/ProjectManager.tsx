@@ -63,6 +63,7 @@ import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
+import { ProjectWizard } from "@/features/project/ProjectWizard";
 import { isManagerTab, projectIsDirty, useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 import { useWorldStore } from "@/state/world-store";
@@ -191,6 +192,11 @@ export function ProjectManager() {
   );
   const targetVersion = currentProject?.targetMinecraftVersion;
   const targetDataVersion = currentProject?.targetDataVersion;
+
+  // A new project starts from a full-screen wizard, not a dialog over the empty shell.
+  if (open && tab === "create" && !current) {
+    return <ProjectWizard />;
+  }
 
   const requestOpen = (folder: string, projectName: string): void => {
     if (folder === activeFolder) {

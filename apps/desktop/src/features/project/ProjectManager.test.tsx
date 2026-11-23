@@ -429,3 +429,148 @@ describe("project manager", () => {
     expect(api.importWorld).not.toHaveBeenCalled();
   });
 });
+
+describe("project wizard", () => {
+  function openWizard(mode: "empty" | "flat" | "import" | "vanilla" = "empty"): void {
+    useProjectStore.setState({
+      managerOpen: true,
+      managerTab: "create",
+      managerCreateMode: mode,
+      current: null,
+      phase: "closed",
+      failure: null,
+      error: null,
+      worldAnalysis: null,
+      analysisLoading: false,
+      prepareMessage: null,
+    });
+  }
+
+  it("shows steps, progress and validates the basics step", async () => {
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
+    expect(screen.getAllByText("Step 1 of 3").length).toBeGreaterThan(0);
+    expect(
+      screen.getByRole("progressbar", { name: "Project creation progress" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Source/ })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Enter a project name.")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Project name"), "Wizard World");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
+    expect(screen.getAllByText("Step 2 of 3").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Source/ })).toHaveAttribute("aria-current", "step");
+
+    await user.click(screen.getByRole("button", { name: /Basics/ }));
+    expect(screen.getByRole("heading", { name: "Basics" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Wizard World")).toBeInTheDocument();
+  });
+
+  it("creates a flat project from the review step", async () => {
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Wizard Flat");
+    await user.click(screen.getByRole("button", { name: /Flat base/ }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(screen.getByText("Wizard Flat")).toBeInTheDocument();
+    expect(screen.getByText("Flat base")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith("Wizard Flat", "flat", {
+        selectedDimension: "minecraft:overworld",
+        loadRadius: 1,
+        workspace: defaultWorkspacePolicy(),
+        scene: defaultScene(),
+      }),
+    );
+    await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("blocks import until the world is analyzed and then imports it", async () => {
+    api.analyze.mockResolvedValue(worldAnalysis);
+    const importedSummary: ProjectSummary = {
+      ...first,
+      folder: "Imported Wizard.furybuilder",
+      name: "Imported Wizard",
+      creationMode: "import",
+    };
+    api.importWorld.mockResolvedValue(opened(importedSummary));
+    const user = userEvent.setup();
+    openWizard("import");
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Imported Wizard");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Choose a Java world folder.")).toBeInTheDocument();
+    expect(screen.getByText("Analyze the world before continuing.")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Java world folder"), "C:\\saves\\Wizard");
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    await waitFor(() => expect(api.analyze).toHaveBeenCalledWith("C:\\saves\\Wizard"));
+    expect(await screen.findByText(/DataVersion 4189/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+
+    await waitFor(() =>
+      expect(api.importWorld).toHaveBeenCalledWith("Imported Wizard", "C:\\saves\\Wizard", {
+        selectedDimension: "minecraft:overworld",
+        loadRadius: 1,
+        workspace: defaultWorkspacePolicy(),
+        scene: defaultScene(),
+      }),
+    );
+    await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("keeps the wizard open on failure and retries the same request", async () => {
+    api.create
+      .mockRejectedValueOnce({ code: "disk_space", message: "Not enough free space" })
+      .mockResolvedValue(opened(first));
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Retry World");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+
+    const region = screen.getByRole("region", { name: "New project" });
+    expect(await within(region).findByText("Not enough free space")).toBeInTheDocument();
+    await user.click(within(region).getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("closes the full-screen wizard without creating anything", async () => {
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(useProjectStore.getState().managerOpen).toBe(false);
+    expect(screen.queryByRole("region", { name: "New project" })).not.toBeInTheDocument();
+    expect(api.create).not.toHaveBeenCalled();
+  });
+});

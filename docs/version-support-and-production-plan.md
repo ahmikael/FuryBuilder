@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave и lifecycle-тесты закрыты; идёт каркас wizard.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты и каркас wizard закрыты; идёт шаг Basics.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1407,9 +1407,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-39` — Каркас wizard: шаги, навигация, валидация, прогресс, полноэкранный режим. Статус: P0 в работе.
+**Текущий фокус:** `P0-40` — Basics: имя, папка, режим Empty/Flat/Import/Vanilla, требования режима. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-40`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-41`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1488,7 +1488,7 @@ UI:
 
 #### E. Мастер создания
 
-- [ ] `P0-39` Каркас wizard: шаги, навигация, валидация, прогресс, полноэкранный режим.
+- [x] `P0-39` Каркас wizard: шаги, навигация, валидация, прогресс, полноэкранный режим.
 - [ ] `P0-40` Basics: имя, папка, режим Empty/Flat/Import/Vanilla, требования режима.
 - [ ] `P0-41` Version: каталог, поиск, latest/recommended, snapshot toggle, карточка, badges, предупреждения.
 - [ ] `P0-42` Source Empty/Flat: параметры слоёв/высоты/биома под версию.
@@ -1689,6 +1689,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Project wizard shell | Новый полноэкранный `ProjectWizard` открывается вместо dialog в режиме «нет проекта»: шаги Basics → Source → Review (Vanilla использует шаги Basics → Source), навигация по уже открытым шагам, отдельная валидация каждого шага с понятной ошибкой, `Step X of Y` и progress bar; Basics даёт имя и режим, Source показывает Empty/Flat, разбор импортируемого мира или генерацию Vanilla, Review повторяет сводку; отправка показывает `preparing`, ошибка остаётся в мастере с `Retry`, значения не теряются; UI собран из штатных shadcn `Button`/`Card`/`Alert`/`Badge`/`Field`/`Input`/`Progress`/`Separator`/`ToggleGroup`, visual QA в браузере без console errors; тесты на шаги, прогресс, валидацию, создание, импорт, retry и отмену | см. `git log` | 660 Rust tests, TS tests, clippy, fmt, typecheck/lint/format, browser QA |
 | 2026-11-23 | Lifecycle tests | Закреплены оба инварианта: без ready-проекта `Viewport` не создаёт renderer и не вызывает ни одну IPC-команду, `resume` без сессии ограничивается `project_status`, а editor-команды не пишут и не перезагружают viewport; после закрытия проверяются отмена job, очистка selection/clipboard/last operation, world summary/camera/metrics, workspace policy/error, history, а renderer не реагирует на bus-события после dispose | см. `git log` | 660 Rust tests, TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Recoverable autosave | Welcome явно показывает восстановление: recent-row с verified autosave получает badge `Recoverable`, пояснение и кнопку `Recover`, карточка предупреждает о количестве таких проектов, а Recover открывает восстановленную ревизию через единственный `open`-путь; редакторский `RecoveryBanner` предлагает `Save now`/`Discard recovered changes`/`Later`, а невалидный autosave честно открывает saved revision; тесты на badge, alert, Recover-действие, отсутствие ложного recovery и пустой список | см. `git log` | 660 Rust tests, TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Session teardown | Закрытие проекта сначала инвалидирует autosave и ждёт уже начатую запись, затем `project_close` отменяет backend jobs; после успеха очищаются job, selection, clipboard, world summary, camera/metrics, layers, scene, parametric и undo history; `WorldStore.reset()` возвращает полный дефолт, `resetTransient` чистит last operation; поздний результат autosave отбрасывается по generation, а тик autosave работает только в `ready`; renderer dispose и снятие bus/asset listeners происходят при размонтировании editor shell; тесты на ожидание autosave, полный сброс состояния, отсутствие autosave после close и dispose renderer | см. `git log` | 660 Rust tests, TS tests, clippy, fmt, typecheck/lint/format |
