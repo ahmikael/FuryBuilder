@@ -127,3 +127,79 @@ export interface SavedAssetSource {
   /** Saved packs in priority order, highest priority first. */
   packs: ResourcePackReport[];
 }
+
+/** One block from the client JAR's blockstate files. */
+export interface CatalogBlock {
+  id: string;
+  displayName: string | null;
+  /** Every property key and all values declared by the blockstate file. */
+  properties: Record<string, string[]>;
+  /** First declared variant; null for multipart blocks. */
+  defaultProperties: Record<string, string> | null;
+  variants: number;
+  multipart: boolean;
+  model: string | null;
+  iconTexture: string | null;
+  tags: string[];
+  hasItem: boolean;
+}
+
+/** One item from item definitions (modern layouts) or item models (older layouts). */
+export interface CatalogItem {
+  id: string;
+  displayName: string | null;
+  itemDefinition: boolean;
+  model: string | null;
+  iconTexture: string | null;
+  block: string | null;
+  tags: string[];
+}
+
+export interface CatalogAtlasSource {
+  kind: string;
+  source: string | null;
+  prefix: string | null;
+  resource: string | null;
+}
+
+export interface CatalogAtlas {
+  id: string;
+  sources: CatalogAtlasSource[];
+}
+
+export interface CatalogCounts {
+  blocks: number;
+  items: number;
+  blocksWithItems: number;
+  itemOnly: number;
+  blockstateFiles: number;
+  blockModels: number;
+  itemModels: number;
+  itemDefinitions: number;
+  textures: number;
+  languages: number;
+  langEntries: number;
+  blockTags: number;
+  itemTags: number;
+  atlases: number;
+  atlasSources: number;
+}
+
+/** Deterministic catalog built from one exact client JAR. */
+export interface CatalogSnapshot {
+  schemaVersion: number;
+  catalogId: string;
+  catalogHash: string;
+  minecraftVersion: string;
+  dataVersion: number;
+  clientJar: string;
+  clientJarSha1: string | null;
+  resourcePackFormat: number | null;
+  datapackFormat: number | null;
+  blocks: CatalogBlock[];
+  items: CatalogItem[];
+  atlases: CatalogAtlas[];
+  counts: CatalogCounts;
+  warnings: string[];
+  cacheHit: boolean;
+}

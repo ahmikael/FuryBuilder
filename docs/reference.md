@@ -4,8 +4,8 @@ Target: Minecraft Java **1.21.4**, `DataVersion` 4189. Last reviewed: 2026-11-20
 
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
-[formats.md](formats.md); architecture and security boundaries are in
-[architecture.md](architecture.md).
+[formats.md](formats.md); content catalog rules are in [catalog.md](catalog.md);
+architecture and security boundaries are in [architecture.md](architecture.md).
 
 ## Supported baseline
 

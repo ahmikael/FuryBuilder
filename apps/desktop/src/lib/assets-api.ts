@@ -3,6 +3,7 @@ import type {
   AssetDiscoveryReport,
   AssetPathReport,
   AssetSourceKind,
+  CatalogSnapshot,
   SavedAssetSource,
 } from "@/assets/types";
 import { invokeCommand } from "@/lib/ipc";
@@ -52,4 +53,15 @@ export function loadAssetBundle(
 
 export function clearAssetBundleCache(): Promise<void> {
   return invokeCommand<void>("assets_clear_cache");
+}
+
+/** Builds the full block/item catalog from the selected client JAR. */
+export function loadAssetCatalog(override?: {
+  sourceKind: AssetSourceKind;
+  sourcePath: string;
+}): Promise<CatalogSnapshot> {
+  return invokeCommand<CatalogSnapshot>(
+    "assets_catalog",
+    override ? { sourceKind: override.sourceKind, sourcePath: override.sourcePath } : {},
+  );
 }

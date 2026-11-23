@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual и client JAR download закрыты; идёт инспекция JAR и baseline-каталог.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция и baseline-каталог закрыты; идут manual assets и placeholder.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -42,7 +42,7 @@
 | Рендер | `MeshBasicMaterial`, тёмный фон, нет освещения; `GridHelper` 256×256 на y=64.04 | `renderer/viewport-renderer.ts` |
 | Границы чанков | Жёстко `yBottom = -64`, `yTop = 72` | `renderer/viewport-renderer.ts` |
 | Дерево мира | Три захардкоженных измерения, Overworld всегда “loaded” | `features/workspace/WorldTree.tsx` |
-| Блоки и предметы | Курируемый каталог ~60 блоков для 1.21.4; предметов нет; каталог не версионный | `crates/world-domain/src/registry.rs` |
+| Блоки и предметы | Курируемый каталог ~60 блоков остаётся fallback/quick picks и для валидации; `asset-source::catalog` строит полный каталог точной версии из client JAR (blockstates, item definitions/models, textures, lang, tags, atlases) | `crates/asset-source/src/catalog.rs`, `crates/world-domain/src/registry.rs` |
 
 Вывод: проблема не в одном экране. Нужно ввести **версию как сквозную модель**, затем аккуратно провести её через backend, компоненты, проект, UI и рендер.
 
@@ -256,6 +256,13 @@ WorldCodec
 - **1.8–1.12:** numeric ID + metadata mapping.
 - **pre-1.8:** fallback-каталог и конвертация.
 
+Реализация `P0-24`: `asset-source::AssetCatalogService` читает выбранный client JAR и строит
+`CatalogSnapshot`: все blockstate-файлы, item definitions/models, parent-цепочки моделей,
+существующие textures, `en_us`, прямые tags и atlas sources. `catalogHash` считается по
+содержимому каталога, версии, DataVersion и SHA-1 JAR; `catalogId` имеет вид
+`java-<version>-<hash16>`. Кэш пока process-local. Точные in-code defaults, категории, флаги,
+item components, транзитивные tags и persistent cache остаются в P1.
+
 #### Модель каталога
 
 `CatalogEntry`:
@@ -369,6 +376,8 @@ Facade реализован в `crates/component-manager`; чистые типы
   - `assets/minecraft/models` и item definitions/models;
   - `assets/minecraft/textures`;
   - `assets/minecraft/lang` и tags.
+
+- Инспекция JAR и baseline-каталог: `asset-source::catalog` (см. `docs/catalog.md`).
 - Если текстуры отсутствуют в client JAR — добирать из asset index (по необходимости), но не скачивать весь asset index без нужды.
 - Строить atlas и полный каталог блоков/предметов под версию (§5.4); каталог кэшировать по `version + jarSha1 + packStackHash + catalogSchema`.
 - Resource packs — per-project ordered stack, с проверкой `pack_format` под версию.
@@ -1391,9 +1400,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-24` — Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4. Статус: P0 в работе.
+**Текущий фокус:** `P0-25` — Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-25`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-26`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1451,7 +1460,7 @@ UI:
 - [x] `P0-21` Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов.
 - [x] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
 - [x] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
-- [ ] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4.
+- [x] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4.
 - [ ] `P0-25` Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar.
 - [ ] `P0-26` Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры.
 - [ ] `P0-27` Server: download по точной версии, SHA-1, кэш, проверка внутреннего `version.json`.
@@ -1673,6 +1682,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Client JAR catalog | `asset-source::AssetCatalogService` строит `CatalogSnapshot` из точного client JAR: version.json, blockstates, block/item models, item definitions/models, textures, `en_us`, прямые tags и atlas sources; block/item ids, properties, display names, icon textures и counts; `catalogHash`/`catalogId`, process-local cache и bounded warnings; Tauri `assets_catalog` + TS `loadAssetCatalog`; malformed files warn, JAR без blockstates отклоняется; `docs/catalog.md` | см. `git log` | 593 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Managed client JAR | Preview и install берут exact client download из официального version JSON; потоковая загрузка проверяет announced SHA-1/размер, пишет в `<components/assets>/<version>/client.jar` + exact `client.json` + `.furybuilder-assets.json`, публикует atomic rename и удаляет staging при ошибке/cancel; уже установленный JAR проверяется по хэшу и перекачивается при повреждении; facade `install(assets)` сохраняет managed selection, status находит managed JAR без сохранённого указателя, `remove` удаляет только FuryBuilder-owned cache; `fetch_version_json_document` отдаёт exact version JSON | см. `git log` | 588 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java manual | Ручной `java.exe` проверяется запуском `-XshowSettings:properties -version`; major/arch/vendor сохраняются в отчёте, 32-bit/unreadable/старее target блокируются, новее target разрешается с warning; тот же policy применяется к facade relink и server generation, discovery считает и сортирует usable runtimes и больше не переписывает managed source на manual; Settings UI разрешает выбрать newer и показывает предупреждение; старый и новый Java покрыты тестами | см. `git log` | 578 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java download pipeline | Скачивание Temurin уже проверяет announced size и потоковый SHA-256, пишет один temp-архив, распаковывает с traversal/symlink/лимитами, пробует Java и публикует atomic rename; добавлены self-cleaning `StagedRuntime` (staging удаляется на любом error/panic пути), очистка stale `.staging-*`/`.download-*` старше 24 часов перед install и при явном Clear, тесты на failed commit и безопасную очистку partial-файлов; mock HTTP остаётся в P0-31 | см. `git log` | 577 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |

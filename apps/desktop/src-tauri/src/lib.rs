@@ -45,6 +45,7 @@ pub fn run() {
                 data_dir.join("assets.json"),
             ));
             app.manage(asset_source::AssetBundleService::new());
+            app.manage(asset_source::AssetCatalogService::new());
             app.manage(runtime_manager::RuntimeManager::new(
                 data_dir.join("runtime.json"),
                 data_dir.join("components").join("java"),
@@ -150,6 +151,7 @@ pub fn run() {
             commands::assets_save_pack_stack,
             commands::assets_clear_pack_stack,
             commands::assets_render_bundle,
+            commands::assets_catalog,
             commands::assets_clear_cache,
             commands::runtime_discover,
             commands::runtime_saved,

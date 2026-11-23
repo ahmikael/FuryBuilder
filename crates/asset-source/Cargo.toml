@@ -19,3 +19,6 @@ sha1 = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
+
+[dev-dependencies]
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }

@@ -2,8 +2,9 @@
 //! application facade, returning structured `AppError` values.
 
 use asset_source::{
-    AssetBundle, AssetBundleService, AssetDiscoveryReport, AssetPathReport, AssetSelectionKind,
-    AssetSettingsStore, AssetSourceSetting, BlockStateRequest, SavedAssetSource,
+    AssetBundle, AssetBundleService, AssetCatalogService, AssetDiscoveryReport, AssetPathReport,
+    AssetSelectionKind, AssetSettingsStore, AssetSourceSetting, BlockStateRequest, CatalogSnapshot,
+    SavedAssetSource,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -2710,23 +2711,50 @@ pub fn assets_render_bundle(
     source_kind: Option<String>,
     source_path: Option<String>,
 ) -> Result<AssetBundle, AppError> {
-    let source = match (source_kind, source_path) {
-        (Some(kind), Some(path)) => Some(AssetSourceSetting { kind, path }),
-        (None, None) => store.saved_source().source,
-        _ => {
-            return Err(AppError::invalid_argument(
-                "sourceKind and sourcePath must be provided together",
-            ))
-        }
-    };
+    let source = resolve_asset_source(&store, source_kind, source_path)?;
     service
         .bundle(source.as_ref(), &store.pack_stack(), &block_states)
         .map_err(asset_bundle_error)
 }
 
+/// Builds the block/item catalog from the selected client JAR. No files are downloaded or
+/// written; callers must have an explicit asset source.
 #[tauri::command]
-pub fn assets_clear_cache(service: State<'_, AssetBundleService>) {
+pub fn assets_catalog(
+    store: State<'_, AssetSettingsStore>,
+    service: State<'_, AssetCatalogService>,
+    source_kind: Option<String>,
+    source_path: Option<String>,
+) -> Result<CatalogSnapshot, AppError> {
+    let source = resolve_asset_source(&store, source_kind, source_path)?.ok_or_else(|| {
+        AppError::invalid_argument(
+            "select Minecraft client assets before building a block/item catalog",
+        )
+    })?;
+    service.catalog(&source).map_err(asset_catalog_error)
+}
+
+#[tauri::command]
+pub fn assets_clear_cache(
+    service: State<'_, AssetBundleService>,
+    catalog: State<'_, AssetCatalogService>,
+) {
     service.clear_cache();
+    catalog.clear();
+}
+
+fn resolve_asset_source(
+    store: &AssetSettingsStore,
+    source_kind: Option<String>,
+    source_path: Option<String>,
+) -> Result<Option<AssetSourceSetting>, AppError> {
+    match (source_kind, source_path) {
+        (Some(kind), Some(path)) => Ok(Some(AssetSourceSetting { kind, path })),
+        (None, None) => Ok(store.saved_source().source),
+        _ => Err(AppError::invalid_argument(
+            "sourceKind and sourcePath must be provided together",
+        )),
+    }
 }
 
 #[tauri::command]
@@ -3207,6 +3235,16 @@ fn asset_bundle_error(error: asset_source::BundleError) -> AppError {
         "invalid_argument" => ErrorCode::InvalidArgument,
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "unsupported_format" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+fn asset_catalog_error(error: asset_source::CatalogError) -> AppError {
+    let code = match error.code() {
+        "invalid_argument" => ErrorCode::InvalidArgument,
+        "unsupported_format" | "invalid_version" => ErrorCode::UnsupportedFormat,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
