@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use component_manager::ComponentMode;
 use minecraft_version::{builtin_profiles, profile_for_version, VersionId, VersionProfile};
 use scene_model::{ParametricScene, Scene};
 use serde::{Deserialize, Serialize};
@@ -348,15 +349,6 @@ impl ProjectTarget {
         WorldVersion::new(self.minecraft_version.to_string(), self.data_version)
             .map_err(|error| ProjectError::invalid_manifest(error.to_string()))
     }
-}
-
-/// How a project refers to an installed component.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ComponentMode {
-    Managed,
-    Manual,
-    Placeholder,
 }
 
 /// Logical reference to a Java runtime. The path is resolved from the global component

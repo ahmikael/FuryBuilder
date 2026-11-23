@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/minecraft-version",
+    "crates/component-manager",
     "crates/world-domain",
     "crates/world-operations",
     "crates/world-io",

@@ -21,11 +21,12 @@ pub mod snapshot;
 pub mod source;
 pub mod store;
 
+pub use component_manager::ComponentMode;
 pub use error::ProjectError;
 pub use manifest::{
-    AssetsComponent, AssetsPack, ComponentMode, CreationMode, EditorState, JavaComponent,
-    ProjectComponents, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, ProjectTarget,
-    RecoveryInfo, SaveKind, SaveOutcome, ServerComponent, SourceInfo, SourceKind, VanillaDatapack,
+    AssetsComponent, AssetsPack, CreationMode, EditorState, JavaComponent, ProjectComponents,
+    ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, ProjectTarget, RecoveryInfo,
+    SaveKind, SaveOutcome, ServerComponent, SourceInfo, SourceKind, VanillaDatapack,
     VanillaProvenance, PROJECT_EXTENSION, PROJECT_FILE, PROJECT_SCHEMA_VERSION,
 };
 pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION};

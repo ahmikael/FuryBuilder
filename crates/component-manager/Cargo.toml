@@ -1,0 +1,16 @@
+[package]
+name = "furybuilder-component-manager"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Unified component kinds, modes and status DTOs for Java, assets and server"
+[lib]
+name = "component_manager"
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }

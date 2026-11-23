@@ -14,6 +14,7 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
+component-manager = { path = "../component-manager", package = "furybuilder-component-manager" }
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
 world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
 workspace-model = { path = "../workspace-model", package = "furybuilder-workspace-model" }

@@ -959,6 +959,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "furybuilder-component-manager"
+version = "0.2.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "furybuilder-desktop"
 version = "0.2.0"
 dependencies = [
@@ -1023,6 +1032,7 @@ dependencies = [
 name = "furybuilder-project-store"
 version = "0.2.0"
 dependencies = [
+ "furybuilder-component-manager",
  "furybuilder-minecraft-version",
  "furybuilder-scene-model",
  "furybuilder-workspace-model",
