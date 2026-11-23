@@ -27,6 +27,11 @@ export function saveMinecraftAssets(
   return invokeCommand<SavedAssetSource>("assets_save_source", { kind, path });
 }
 
+/** Explicitly selects original placeholder textures instead of a client JAR. */
+export function useMinecraftPlaceholder(): Promise<SavedAssetSource> {
+  return invokeCommand<SavedAssetSource>("assets_use_placeholder");
+}
+
 export function clearMinecraftAssets(): Promise<SavedAssetSource> {
   return invokeCommand<SavedAssetSource>("assets_clear_source");
 }

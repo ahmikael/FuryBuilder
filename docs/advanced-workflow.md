@@ -243,6 +243,11 @@ parent models and PNG textures are resolved into a cached atlas. A missing asset
 clearly marked checker and never changes block data. Clearing the derived cache is a separate
 explicit action and does not touch projects or user resource packs.
 
+Placeholder textures are an explicit mode, not a silent fallback. Placeholder mode has no
+client JAR, so no block/item catalog or resource-pack stack is available: the viewport shows
+original FuryBuilder textures and labels them, while the palette stays on the curated quick
+picks. Selecting a client source replaces placeholder mode.
+
 ### Java and the official server
 
 `Settings → Java & World Generation` is optional for `Empty Project`. It provides:

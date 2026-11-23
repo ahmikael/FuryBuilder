@@ -147,6 +147,7 @@ pub fn run() {
             commands::assets_inspect_path,
             commands::assets_saved_source,
             commands::assets_save_source,
+            commands::assets_use_placeholder,
             commands::assets_clear_source,
             commands::assets_save_pack_stack,
             commands::assets_clear_pack_stack,

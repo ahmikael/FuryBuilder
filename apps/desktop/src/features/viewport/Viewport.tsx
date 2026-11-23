@@ -10,6 +10,7 @@ import {
   Eraser,
   FolderOpen,
   Grid3X3,
+  ImageOff,
   Loader2,
   MousePointer2,
   Orbit,
@@ -52,7 +53,7 @@ import {
 
 import { invokeCommand, isTauriRuntime } from "@/lib/ipc";
 import { listenForRendererRequests } from "@/lib/renderer-bridge";
-import { loadAssetBundle } from "@/lib/assets-api";
+import { loadAssetBundle, savedMinecraftAssets } from "@/lib/assets-api";
 import { blockStateKey, type AssetStats } from "@/assets/model-assets";
 import type { WorldInfo } from "@/lib/contracts";
 import { createDemoSnapshot } from "@/renderer/demo";
@@ -258,6 +259,7 @@ export function Viewport() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [assetStats, setAssetStats] = useState<AssetStats | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
+  const [placeholderActive, setPlaceholderActive] = useState<boolean | null>(null);
   const [sceneEpoch, setSceneEpoch] = useState(0);
   const assetSignature = useRef("");
   const assetBusy = useRef(false);
@@ -302,6 +304,17 @@ export function Viewport() {
     if (!force && signature === assetSignature.current) return;
     assetBusy.current = true;
     try {
+      const saved = await savedMinecraftAssets();
+      if (saved.placeholder || !saved.source) {
+        // Placeholder mode is explicit: never ask the Rust bundle service to fabricate
+        // Minecraft models from an absent client JAR. The renderer keeps its own atlas.
+        assetSignature.current = signature;
+        renderer.clearAssetBundle();
+        setAssetStats(null);
+        setAssetError(null);
+        setPlaceholderActive(true);
+        return;
+      }
       const bundle = await loadAssetBundle(
         states.map((state) => ({
           name: state.name,
@@ -312,11 +325,13 @@ export function Viewport() {
       assetSignature.current = signature;
       setAssetStats(renderer.assetStats);
       setAssetError(null);
+      setPlaceholderActive(false);
     } catch (cause) {
       // Keep the documented placeholder fallback; never invent Minecraft textures.
       assetSignature.current = signature;
       renderer.clearAssetBundle();
       setAssetStats(null);
+      setPlaceholderActive(true);
       setAssetError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       assetBusy.current = false;
@@ -456,7 +471,9 @@ export function Viewport() {
 
   useEffect(() => {
     if (!tauri || status !== "ready") return;
-    void refreshAssets();
+    void (async () => {
+      await refreshAssets();
+    })();
   }, [tauri, status, revision, sceneEpoch, refreshAssets]);
 
   useEffect(() => {
@@ -762,6 +779,19 @@ export function Viewport() {
           {" · "}
           {positionLabel}
         </Badge>
+        {placeholderActive ? (
+          <Badge
+            variant="outline"
+            className="gap-1"
+            title={
+              assetError ??
+              "Original FuryBuilder placeholder textures; Minecraft block data is unchanged."
+            }
+          >
+            <ImageOff />
+            Placeholder textures
+          </Badge>
+        ) : null}
       </div>
 
       <div className="absolute top-3 left-1/2 z-30 flex -translate-x-1/2 flex-col items-center gap-2">

@@ -237,16 +237,18 @@ prerequisites.
 - **Appearance** — theme (dark/light/system) and UI scale.
 - **Backend** — application and target version information.
 - **Minecraft assets** — automatic launcher discovery, a manual `.minecraft` folder,
-  `versions/<id>` folder, `client.jar` or resource pack, the ordered resource-pack stack,
-  internal version/DataVersion validation with declared SHA-1 verification when launcher
-  metadata is present, and a button that clears only the derived asset cache.
+  `versions/<id>` folder, `client.jar` or resource pack, an explicit placeholder mode, the
+  ordered resource-pack stack, internal version/DataVersion validation with declared SHA-1
+  verification when launcher metadata is present, and a button that clears only the derived
+  asset cache.
 - **Java & World Generation** — readiness, Java runtime discovery/manual selection, the
   official server JAR, and explicit downloads.
 - **Diagnostics** — a bounded, path-redacted JSON Lines log with open-folder, refresh and
   clear actions. Clearing affects only `furybuilder*.log`.
 
-Missing Minecraft assets are not an error: the viewport uses clearly marked placeholder
-textures and never changes block data.
+Placeholder textures are an explicit mode, not an error and not a hidden fallback. The
+viewport labels them, the palette stays on curated quick picks instead of the version catalog,
+and block data is never changed. Selecting a client source replaces placeholder mode.
 
 ## 12. Quick troubleshooting
 

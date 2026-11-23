@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
   inspect: vi.fn(),
   saved: vi.fn(),
   save: vi.fn(),
+  usePlaceholder: vi.fn(),
   clear: vi.fn(),
   savePacks: vi.fn(),
   clearPacks: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/lib/assets-api", () => ({
   inspectAssetPath: api.inspect,
   savedMinecraftAssets: api.saved,
   saveMinecraftAssets: api.save,
+  useMinecraftPlaceholder: api.usePlaceholder,
   clearMinecraftAssets: api.clear,
   saveMinecraftPackStack: api.savePacks,
   clearMinecraftPackStack: api.clearPacks,
@@ -89,6 +91,7 @@ const discovery: AssetDiscoveryReport = {
 const noSource: SavedAssetSource = {
   source: null,
   report: null,
+  placeholder: false,
   loadWarning: null,
   packs: [],
 };
@@ -99,6 +102,7 @@ describe("MinecraftAssetsSection", () => {
     api.inspect.mockReset();
     api.saved.mockReset();
     api.save.mockReset();
+    api.usePlaceholder.mockReset();
     api.clear.mockReset();
     api.savePacks.mockReset();
     api.clearPacks.mockReset();
@@ -115,7 +119,9 @@ describe("MinecraftAssetsSection", () => {
     expect(screen.getAllByText("1.21.4").length).toBeGreaterThan(0);
     expect(screen.getByText("SHA-1 verified")).toBeInTheDocument();
     expect(screen.getByText(/1 version\(s\)/)).toBeInTheDocument();
-    expect(screen.getByText(/No Minecraft asset source is selected/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No Minecraft asset source or placeholder mode is selected/),
+    ).toBeInTheDocument();
   });
 
   it("re-runs discovery from the Detect again button", async () => {
@@ -147,6 +153,7 @@ describe("MinecraftAssetsSection", () => {
     api.save.mockResolvedValue({
       source: { kind: "minecraft_root", path: "C:\\mc" },
       report: validReport,
+      placeholder: false,
       loadWarning: null,
     });
     render(<MinecraftAssetsSection />);
@@ -177,6 +184,7 @@ describe("MinecraftAssetsSection", () => {
     api.save.mockResolvedValue({
       source: { kind: "version_directory", path: versionFolder },
       report: validReport,
+      placeholder: false,
       loadWarning: null,
     });
     render(<MinecraftAssetsSection />);
@@ -186,6 +194,27 @@ describe("MinecraftAssetsSection", () => {
     await waitFor(() => expect(api.save).toHaveBeenCalledWith("version_directory", versionFolder));
     expect(api.inspect).toHaveBeenCalledWith(versionFolder);
     expect(await screen.findByText("Minecraft asset source saved.")).toBeInTheDocument();
+  });
+
+  it("selects placeholder textures explicitly and explains the limitation", async () => {
+    const user = userEvent.setup();
+    api.usePlaceholder.mockResolvedValue({
+      source: null,
+      report: null,
+      placeholder: true,
+      loadWarning: null,
+      packs: [],
+    });
+    render(<MinecraftAssetsSection />);
+    await screen.findByText("target found");
+
+    await user.click(screen.getByRole("button", { name: /Use placeholder/ }));
+    await waitFor(() => expect(api.usePlaceholder).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Placeholder textures are active")).toBeInTheDocument();
+    expect(screen.getByText(/not the version's block\/item catalog/)).toBeInTheDocument();
+    expect(screen.getByText(/Placeholder mode has no client JAR/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Add pack \.zip/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Forget/ })).toBeEnabled();
   });
 
   it("explains an empty automatic detection without hiding manual fallback", async () => {
@@ -222,6 +251,7 @@ describe("MinecraftAssetsSection", () => {
     api.saved.mockResolvedValue({
       source: { kind: "minecraft_root", path: "C:\\gone" },
       report: invalidReport,
+      placeholder: false,
       loadWarning: null,
       packs: [],
     });
@@ -265,6 +295,7 @@ describe("MinecraftAssetsSection", () => {
     api.savePacks.mockResolvedValue({
       source: null,
       report: null,
+      placeholder: false,
       loadWarning: null,
       packs: [pack],
     });
@@ -309,6 +340,7 @@ describe("MinecraftAssetsSection", () => {
     api.savePacks.mockResolvedValue({
       source: null,
       report: null,
+      placeholder: false,
       loadWarning: null,
       packs: [second, first],
     });
@@ -323,6 +355,7 @@ describe("MinecraftAssetsSection", () => {
     api.savePacks.mockResolvedValue({
       source: null,
       report: null,
+      placeholder: false,
       loadWarning: null,
       packs: [second],
     });

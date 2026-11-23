@@ -127,6 +127,8 @@ export interface AssetSourceSetting {
 export interface SavedAssetSource {
   source: AssetSourceSetting | null;
   report: AssetPathReport | null;
+  /** True when the user explicitly chose original placeholder textures. */
+  placeholder: boolean;
   loadWarning: string | null;
   /** Saved packs in priority order, highest priority first. */
   packs: ResourcePackReport[];

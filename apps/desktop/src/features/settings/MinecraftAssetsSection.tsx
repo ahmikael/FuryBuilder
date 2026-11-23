@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   FolderOpen,
   HardDrive,
+  ImageOff,
   Loader2,
   RefreshCw,
   ShieldAlert,
@@ -38,6 +39,7 @@ import {
   saveMinecraftAssets,
   saveMinecraftPackStack,
   savedMinecraftAssets,
+  useMinecraftPlaceholder,
 } from "@/lib/assets-api";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +49,7 @@ type BusyAction =
   | "root"
   | "version"
   | "jar"
+  | "placeholder"
   | "pack-zip"
   | "pack-folder"
   | "pack"
@@ -166,7 +169,18 @@ export function MinecraftAssetsSection() {
     if (next) {
       setSaved(next);
       setInspection(null);
-      setNotice("Minecraft asset source cleared. Placeholder textures stay available.");
+      setNotice("Minecraft asset source cleared. No placeholder mode is selected.");
+    }
+  }
+
+  async function selectPlaceholder() {
+    const next = await run("placeholder", useMinecraftPlaceholder);
+    if (next) {
+      setSaved(next);
+      setInspection(null);
+      setNotice(
+        "Placeholder textures selected. FuryBuilder uses its own textures and the curated block list; block data is unchanged.",
+      );
     }
   }
 
@@ -258,8 +272,8 @@ export function MinecraftAssetsSection() {
 
       <p className="text-sm leading-relaxed text-muted-foreground">
         Read-only discovery of an installed Java Edition. FuryBuilder never downloads, extracts or
-        redistributes Mojang files; Empty Project keeps using placeholder textures when nothing is
-        found.
+        redistributes Mojang files. Placeholder textures are an explicit mode: they use original
+        FuryBuilder textures and the curated block list, never Minecraft assets.
       </p>
 
       {busy === "load" ? (
@@ -286,11 +300,19 @@ export function MinecraftAssetsSection() {
                 The saved path is no longer valid: {saved.report.errors[0]}
               </p>
             ) : null}
-            {saved.loadWarning ? (
-              <p className="text-sm text-status-warn">Settings warning: {saved.loadWarning}</p>
-            ) : null}
           </CardContent>
         </Card>
+      ) : saved?.placeholder ? (
+        <Alert>
+          <ImageOff />
+          <AlertTitle>Placeholder textures are active</AlertTitle>
+          <AlertDescription>
+            No Minecraft client JAR is selected. The viewport uses original FuryBuilder placeholder
+            textures and the curated quick-pick block list, not the version's block/item catalog.
+            Block names, states and world data are unchanged. Choose a client source to replace the
+            placeholders.
+          </AlertDescription>
+        </Alert>
       ) : (
         <Empty className="border p-6">
           <EmptyHeader>
@@ -299,11 +321,16 @@ export function MinecraftAssetsSection() {
             </EmptyMedia>
             <EmptyTitle>No asset source selected</EmptyTitle>
             <EmptyDescription>
-              No Minecraft asset source is selected. Placeholder textures remain active.
+              No Minecraft asset source or placeholder mode is selected. The viewport keeps using
+              the built-in placeholder textures; block data is unchanged.
             </EmptyDescription>
           </EmptyHeader>
         </Empty>
       )}
+
+      {saved?.loadWarning ? (
+        <p className="text-sm text-status-warn">Settings warning: {saved.loadWarning}</p>
+      ) : null}
 
       <Card className="gap-0 py-0">
         <CardContent className="space-y-4 p-4">
@@ -313,7 +340,12 @@ export function MinecraftAssetsSection() {
               {packs.length}/16 · highest first
             </span>
           </div>
-          {packs.length === 0 ? (
+          {saved?.placeholder ? (
+            <p className="text-sm text-status-warn">
+              Placeholder mode has no client JAR, so a resource pack stack cannot be used. Select a
+              client source before adding packs.
+            </p>
+          ) : packs.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               No user packs. Verified assets from the selected source are used directly.
             </p>
@@ -384,7 +416,7 @@ export function MinecraftAssetsSection() {
               variant="outline"
               size="sm"
               onClick={() => void addPack("zip")}
-              disabled={busy !== null}
+              disabled={busy !== null || saved?.placeholder}
             >
               {busy === "pack" ? (
                 <Loader2 data-icon="inline-start" className="animate-spin" />
@@ -397,7 +429,7 @@ export function MinecraftAssetsSection() {
               variant="outline"
               size="sm"
               onClick={() => void addPack("folder")}
-              disabled={busy !== null}
+              disabled={busy !== null || saved?.placeholder}
             >
               {busy === "pack" ? (
                 <Loader2 data-icon="inline-start" className="animate-spin" />
@@ -517,6 +549,20 @@ export function MinecraftAssetsSection() {
           client.jar
         </Button>
         <Button
+          variant={saved?.placeholder ? "secondary" : "outline"}
+          size="sm"
+          onClick={() => void selectPlaceholder()}
+          disabled={busy !== null}
+          aria-pressed={saved?.placeholder ?? false}
+        >
+          {busy === "placeholder" ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <ImageOff data-icon="inline-start" />
+          )}
+          Use placeholder
+        </Button>
+        <Button
           variant="outline"
           size="sm"
           onClick={() => void chooseFile("resource_pack", "pack-zip")}
@@ -542,7 +588,7 @@ export function MinecraftAssetsSection() {
           )}
           Pack folder
         </Button>
-        {saved?.source ? (
+        {saved?.source || saved?.placeholder ? (
           <Button variant="ghost" size="sm" onClick={() => void forget()} disabled={busy !== null}>
             {busy === "clear" ? (
               <Loader2 data-icon="inline-start" className="animate-spin" />

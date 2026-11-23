@@ -8,8 +8,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use asset_source::{
-    discover_root, discover_roots, inspect_asset_path, AssetSelectionKind, AssetSettingsStore,
-    AssetSourceSetting, InstallationSource, ResourcePackStatus, VersionStatus,
+    discover_root, discover_roots, inspect_asset_path, AssetSelectionKind, AssetSettingsError,
+    AssetSettingsStore, AssetSourceSetting, InstallationSource, ResourcePackStatus, VersionStatus,
 };
 use flate2::write::DeflateEncoder;
 use flate2::Compression;
@@ -461,6 +461,7 @@ fn asset_settings_round_trip_and_clear() {
     let storage = dir.path().join("config").join("assets.json");
     let store = AssetSettingsStore::new(&storage);
     assert!(store.saved_source().source.is_none());
+    assert!(!store.saved_source().placeholder);
 
     let root = dir.path().join("mc");
     write_target_root(&root, "1.21.4", 4189);
@@ -471,6 +472,7 @@ fn asset_settings_round_trip_and_clear() {
         })
         .expect("save source");
     assert!(saved.source.is_some());
+    assert!(!saved.placeholder);
     assert!(saved.report.as_ref().is_some_and(|report| report.valid));
 
     let reopened = AssetSettingsStore::new(&storage);
@@ -483,7 +485,99 @@ fn asset_settings_round_trip_and_clear() {
 
     let cleared = reopened.clear().expect("clear source");
     assert!(cleared.source.is_none());
+    assert!(!cleared.placeholder);
     let bytes = fs::read(&storage).expect("settings file");
     let value: serde_json::Value = serde_json::from_slice(&bytes).expect("settings json");
     assert!(value.get("source").is_some_and(|source| source.is_null()));
+}
+
+#[test]
+fn explicit_placeholder_mode_is_never_a_client_source() {
+    let dir = TempDir::new("settings-placeholder");
+    let storage = dir.path().join("config").join("assets.json");
+    let store = AssetSettingsStore::new(&storage);
+
+    let placeholder = store.use_placeholder().expect("select placeholder");
+    assert!(placeholder.placeholder);
+    assert!(placeholder.source.is_none());
+    assert!(placeholder.report.is_none());
+    assert!(placeholder.packs.is_empty());
+
+    let reopened = AssetSettingsStore::new(&storage);
+    let saved = reopened.saved_source();
+    assert!(saved.placeholder);
+    assert!(saved.source.is_none());
+
+    let root = dir.path().join("mc");
+    write_target_root(&root, "1.21.4", 4189);
+    let saved = reopened
+        .save(AssetSourceSetting {
+            kind: "minecraft_root".to_owned(),
+            path: root.display().to_string(),
+        })
+        .expect("save source");
+    assert!(!saved.placeholder);
+    assert!(saved.source.is_some());
+
+    let cleared = reopened.clear().expect("clear source");
+    assert!(!cleared.placeholder);
+    assert!(cleared.source.is_none());
+}
+
+#[test]
+fn placeholder_mode_clears_and_rejects_the_pack_stack() {
+    let dir = TempDir::new("settings-placeholder-packs");
+    let storage = dir.path().join("config").join("assets.json");
+    let store = AssetSettingsStore::new(&storage);
+    let root = dir.path().join("mc");
+    write_target_root(&root, "1.21.4", 4189);
+    write_resource_pack(&root, "A", 46);
+    store
+        .save(AssetSourceSetting {
+            kind: "minecraft_root".to_owned(),
+            path: root.display().to_string(),
+        })
+        .expect("save source");
+    let pack = root.join("resourcepacks").join("A").display().to_string();
+    let saved = store
+        .save_pack_stack(vec![pack.clone()])
+        .expect("save pack");
+    assert_eq!(saved.packs.len(), 1);
+
+    let placeholder = store.use_placeholder().expect("select placeholder");
+    assert!(placeholder.placeholder);
+    assert!(placeholder.packs.is_empty());
+
+    match store.save_pack_stack(vec![pack]) {
+        Err(AssetSettingsError::Invalid(message)) => {
+            assert!(message.contains("placeholder"), "{message}");
+        }
+        other => panic!("expected placeholder to reject a pack stack, got {other:?}"),
+    }
+}
+
+#[test]
+fn asset_settings_reject_a_placeholder_and_a_source_together() {
+    let dir = TempDir::new("settings-placeholder-conflict");
+    let storage = dir.path().join("config").join("assets.json");
+    fs::create_dir_all(storage.parent().expect("parent")).expect("config directory");
+    fs::write(
+        &storage,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "schemaVersion": 3,
+            "source": { "kind": "minecraft_root", "path": "C:\\mc" },
+            "placeholder": true,
+            "packs": []
+        }))
+        .expect("settings json"),
+    )
+    .expect("write settings");
+
+    let store = AssetSettingsStore::new(&storage);
+    let saved = store.saved_source();
+    assert!(saved.source.is_none());
+    assert!(!saved.placeholder);
+    assert!(saved.load_warning.as_deref().is_some_and(
+        |warning| warning.contains("both placeholder textures and a client asset source")
+    ));
 }

@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог и manual assets закрыты; идёт placeholder.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets и explicit placeholder закрыты; идёт server.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1401,9 +1401,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-26` — Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры. Статус: P0 в работе.
+**Текущий фокус:** `P0-27` — Server: download по точной версии, SHA-1, кэш, проверка внутреннего `version.json`. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-27`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-28`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1463,7 +1463,7 @@ UI:
 - [x] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
 - [x] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4.
 - [x] `P0-25` Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar.
-- [ ] `P0-26` Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры.
+- [x] `P0-26` Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры.
 - [ ] `P0-27` Server: download по точной версии, SHA-1, кэш, проверка внутреннего `version.json`.
 - [ ] `P0-28` EULA: consent привязан к SHA-1 JAR + версии; без consent запуск запрещён.
 - [ ] `P0-29` Общий pipeline: allowlist хостов, disk preflight, atomic rename, proxy, retry, offline.
@@ -1683,6 +1683,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Assets placeholder | Placeholder стал явным выбором: asset settings schema 3 хранит `placeholder` отдельно от `source`, выбор placeholder очищает и блокирует pack stack, facade сообщает `placeholder`/`unverified` без id/hash/path и никогда не `ready`, ручной источник заменяет placeholder; Tauri `assets_use_placeholder`, Settings UI с предупреждением, viewport badge «Placeholder textures» и отказ от синтетического bundle без client JAR; catalog и render bundle требуют реальный источник | см. `git log` | 603 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Assets manual | Ручной источник принимается в трёх формах: `.minecraft` root, `versions/<id>` и выбранный `client.jar`; facade relink сохраняет canonical path, статус резолвит точный JAR, версию, DataVersion, SHA-1 и размер; рендер-стек принимает `version_directory`; Tauri `assets_save_source` и Settings UI получили выбор version folder; корректный JAR без launcher metadata используется с предупреждением, объявленный checksum mismatch отклоняется; из asset settings удалён schema 0/1 migration | см. `git log` | 599 Rust tests, 292 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Client JAR catalog | `asset-source::AssetCatalogService` строит `CatalogSnapshot` из точного client JAR: version.json, blockstates, block/item models, item definitions/models, textures, `en_us`, прямые tags и atlas sources; block/item ids, properties, display names, icon textures и counts; `catalogHash`/`catalogId`, process-local cache и bounded warnings; Tauri `assets_catalog` + TS `loadAssetCatalog`; malformed files warn, JAR без blockstates отклоняется; `docs/catalog.md` | см. `git log` | 593 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Managed client JAR | Preview и install берут exact client download из официального version JSON; потоковая загрузка проверяет announced SHA-1/размер, пишет в `<components/assets>/<version>/client.jar` + exact `client.json` + `.furybuilder-assets.json`, публикует atomic rename и удаляет staging при ошибке/cancel; уже установленный JAR проверяется по хэшу и перекачивается при повреждении; facade `install(assets)` сохраняет managed selection, status находит managed JAR без сохранённого указателя, `remove` удаляет только FuryBuilder-owned cache; `fetch_version_json_document` отдаёт exact version JSON | см. `git log` | 588 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |

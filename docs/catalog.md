@@ -1,7 +1,7 @@
 # Content catalog
 
-Status: baseline client-JAR catalog (`P0-24`). One project has one Minecraft version,
-and its block/item catalog is built from that version's exact client JAR.
+Status: baseline client-JAR catalog and explicit placeholder mode. One project has one
+Minecraft version, and its block/item catalog is built from that version's exact client JAR.
 
 ## Source and licensing
 
@@ -24,6 +24,15 @@ target. When a sibling `<id>.json`/`client.json` declares the client SHA-1 and s
 hashed and compared; a declared mismatch is refused. A correct JAR without launcher metadata
 is still usable offline with an explicit warning in the component status. FuryBuilder never
 copies, edits or deletes the selected file.
+
+## Placeholder mode
+
+Placeholder textures are an explicit selection, not a silent fallback. Placeholder mode has no
+client JAR, so FuryBuilder cannot build a block/item catalog for it: the palette stays on the
+curated quick picks, the viewport uses original FuryBuilder textures, and the component status
+reports `placeholder`/`unverified` with a warning. Block names, states and world data are
+unchanged. Selecting a real client source replaces placeholder mode; choosing placeholder
+clears the resource-pack stack because packs require a client JAR.
 
 ## What is read
 

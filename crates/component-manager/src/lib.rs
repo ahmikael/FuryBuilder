@@ -868,6 +868,11 @@ impl ComponentManager {
             return ComponentStatus::not_required(ComponentKind::Assets);
         }
         let saved = self.inner.assets.saved_source();
+        // An explicit placeholder choice wins over any cached source: the project asked for
+        // original FuryBuilder textures, not for Minecraft assets from another project.
+        if placeholder || saved.placeholder {
+            return finalize(placeholder_assets_status());
+        }
         let managed_fallback = if saved.source.is_none() {
             match self.inner.client_jars.find(&target.minecraft_version) {
                 Ok(found) => found,
@@ -900,16 +905,6 @@ impl ComponentManager {
                     saved.load_warning,
                 ),
                 None => {
-                    if placeholder {
-                        let mut status =
-                            ComponentStatus::new(ComponentKind::Assets, ComponentState::Unverified);
-                        status.mode = Some(ComponentMode::Placeholder);
-                        status.notes.push(
-                            "placeholder textures are enabled; there is no client JAR catalog for this project"
-                                .to_owned(),
-                        );
-                        return finalize(status);
-                    }
                     let mut status =
                         ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
                     status.notes.push(
@@ -1215,6 +1210,18 @@ fn finalize(mut status: ComponentStatus) -> ComponentStatus {
     status
 }
 
+/// The one status used for an explicit placeholder selection. It never carries an identity,
+/// checksum, path or catalog and is never reported as ready.
+fn placeholder_assets_status() -> ComponentStatus {
+    let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Unverified);
+    status.mode = Some(ComponentMode::Placeholder);
+    status.notes.push(
+        "placeholder textures are active; there is no client JAR catalog for this project and block data is unchanged"
+            .to_owned(),
+    );
+    status
+}
+
 fn version_for_target<'a>(
     report: &'a AssetPathReport,
     target: &ComponentTarget,
@@ -1495,6 +1502,56 @@ mod tests {
             .notes
             .iter()
             .any(|note| note.contains("placeholder textures")));
+    }
+
+    #[test]
+    fn explicit_placeholder_selection_wins_over_a_global_source_and_is_never_ready() {
+        let root = TempDir::new("placeholder-selection");
+        let manager = manager(&root);
+        let (minecraft, _) = manual_installation(&root, "1.21.4", 4189);
+        manager
+            .inner
+            .assets
+            .save(AssetSourceSetting {
+                kind: "minecraft_root".to_owned(),
+                path: minecraft.display().to_string(),
+            })
+            .expect("save source");
+        assert!(
+            manager
+                .status(&target(), &ComponentRequirements::EDITOR)
+                .expect("status")
+                .ready
+        );
+
+        manager
+            .inner
+            .assets
+            .use_placeholder()
+            .expect("select placeholder");
+        let report = manager
+            .status(&target(), &ComponentRequirements::EDITOR)
+            .expect("status");
+        let assets = report.status(ComponentKind::Assets).expect("assets");
+        assert_eq!(assets.mode, Some(ComponentMode::Placeholder));
+        assert_eq!(assets.state, ComponentState::Unverified);
+        assert!(assets.id.is_none());
+        assert!(assets.path.is_none());
+        assert!(assets.hash.is_none());
+        assert!(!report.ready);
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("placeholder textures")));
+
+        match manager.resolve(
+            ComponentKind::Assets,
+            &target(),
+            &ComponentRequirements::EDITOR,
+        ) {
+            Err(ComponentError::NotReady { state, .. }) => assert_eq!(state, "unverified"),
+            other => panic!("expected placeholder to be unresolvable, got {other:?}"),
+        }
     }
 
     #[test]

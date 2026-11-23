@@ -2668,6 +2668,19 @@ pub fn assets_save_source(
 }
 
 #[tauri::command]
+pub fn assets_use_placeholder(
+    app: AppHandle,
+    store: State<'_, AssetSettingsStore>,
+) -> Result<SavedAssetSource, AppError> {
+    store
+        .use_placeholder()
+        .map_err(asset_settings_error)
+        .inspect(|_| {
+            let _ = app.emit("furybuilder-assets-changed", ());
+        })
+}
+
+#[tauri::command]
 pub fn assets_clear_source(
     app: AppHandle,
     store: State<'_, AssetSettingsStore>,
@@ -2712,9 +2725,13 @@ pub fn assets_render_bundle(
     source_kind: Option<String>,
     source_path: Option<String>,
 ) -> Result<AssetBundle, AppError> {
-    let source = resolve_asset_source(&store, source_kind, source_path)?;
+    let source = resolve_asset_source(&store, source_kind, source_path)?.ok_or_else(|| {
+        AppError::invalid_argument(
+            "select Minecraft client assets before rendering Minecraft models; placeholder textures are used meanwhile",
+        )
+    })?;
     service
-        .bundle(source.as_ref(), &store.pack_stack(), &block_states)
+        .bundle(Some(&source), &store.pack_stack(), &block_states)
         .map_err(asset_bundle_error)
 }
 
@@ -2727,10 +2744,17 @@ pub fn assets_catalog(
     source_kind: Option<String>,
     source_path: Option<String>,
 ) -> Result<CatalogSnapshot, AppError> {
+    let saved = store.saved_source();
     let source = resolve_asset_source(&store, source_kind, source_path)?.ok_or_else(|| {
-        AppError::invalid_argument(
-            "select Minecraft client assets before building a block/item catalog",
-        )
+        if saved.placeholder {
+            AppError::invalid_argument(
+                "placeholder textures have no block/item catalog; select or download a Minecraft client JAR",
+            )
+        } else {
+            AppError::invalid_argument(
+                "select Minecraft client assets before building a block/item catalog",
+            )
+        }
     })?;
     service.catalog(&source).map_err(asset_catalog_error)
 }
