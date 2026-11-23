@@ -7,8 +7,6 @@
 export interface AppInfo {
   name: string;
   version: string;
-  targetMinecraftVersion: string;
-  targetDataVersion: number;
 }
 
 export interface PingResponse {

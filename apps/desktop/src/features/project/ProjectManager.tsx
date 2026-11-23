@@ -59,7 +59,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useBackendInfo } from "@/hooks/use-backend";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
@@ -162,7 +161,6 @@ export function ProjectManager() {
   const worldAnalysis = useProjectStore((state) => state.worldAnalysis);
   const importGeneratedWorld = useProjectStore((state) => state.importGeneratedWorld);
   const analysisLoading = useProjectStore((state) => state.analysisLoading);
-  const backend = useBackendInfo();
   const worldRevision = useWorldStore((state) => state.revision);
   const [tab, setTab] = useState("projects");
   const [name, setName] = useState("");
@@ -189,9 +187,8 @@ export function ProjectManager() {
     () => projects.find((project) => project.folder === activeFolder) ?? null,
     [projects, activeFolder],
   );
-  const targetVersion =
-    currentProject?.targetMinecraftVersion ?? backend.info?.targetMinecraftVersion;
-  const targetDataVersion = currentProject?.targetDataVersion ?? backend.info?.targetDataVersion;
+  const targetVersion = currentProject?.targetMinecraftVersion;
+  const targetDataVersion = currentProject?.targetDataVersion;
 
   const requestOpen = (folder: string, projectName: string): void => {
     if (folder === activeFolder) {
@@ -813,7 +810,7 @@ export function ProjectManager() {
                       </span>
                     )}
                     <span className="ml-auto text-xs text-muted-foreground">
-                      Saved as <span className="font-mono">project_schema_version 1</span>
+                      Saved as <span className="font-mono">project.json v2</span>
                     </span>
                   </CardContent>
                 </Card>

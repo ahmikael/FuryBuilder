@@ -16,7 +16,6 @@ uuid = { workspace = true }
 base64 = { workspace = true }
 world-domain = { path = "../world-domain", package = "furybuilder-world-domain" }
 world-operations = { path = "../world-operations", package = "furybuilder-world-operations" }
-minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
 workspace-model = { path = "../workspace-model", package = "furybuilder-workspace-model" }
 scene-model = { path = "../scene-model", package = "furybuilder-scene-model" }
 build-dsl = { path = "../build-dsl", package = "furybuilder-build-dsl" }

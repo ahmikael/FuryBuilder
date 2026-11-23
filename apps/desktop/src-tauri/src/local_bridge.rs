@@ -686,6 +686,7 @@ fn dispatch_inner(
     match method {
         "ping" => {
             let (project_id, project_name) = active_project_identity(state)?;
+            let target = active_project_target(state)?;
             let revision = world_revision(state)?;
             Ok(json!({
                 "app": app_info(),
@@ -693,6 +694,11 @@ fn dispatch_inner(
                     "projectId": project_id,
                     "name": project_name,
                     "worldRevision": revision,
+                    "targetMinecraftVersion": target
+                        .as_ref()
+                        .map(|target| target.minecraft_version.to_string()),
+                    "targetDataVersion": target.as_ref().map(|target| target.data_version),
+                    "profileId": target.as_ref().map(|target| target.profile_id.clone()),
                 },
                 "bridge": {
                     "protocolVersion": PROTOCOL_VERSION,
@@ -1902,6 +1908,19 @@ fn active_project_identity(state: &AppState) -> Result<(String, Option<String>),
     })
 }
 
+fn active_project_target(
+    state: &AppState,
+) -> Result<Option<project_store::ProjectTarget>, AppError> {
+    let projects = state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?;
+    Ok(projects
+        .current
+        .as_ref()
+        .map(|current| current.target.clone()))
+}
+
 fn world_revision(state: &AppState) -> Result<u64, AppError> {
     let service = state
         .service
@@ -1991,7 +2010,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::*;
-    use crate::state::AppState;
+    use crate::state::{AppState, CurrentProject};
     use std::sync::atomic::{AtomicUsize, Ordering};
     use world_application::Selection;
     use world_domain::{BlockBox, BlockPos};
@@ -2605,6 +2624,43 @@ mod tests {
     }
 
     #[test]
+    fn ping_reports_the_open_project_target_version() {
+        let root = temp_root("ping-target");
+        let state = AppState::new(root.clone());
+        let store = project_store::ProjectStore::new(&root);
+        let detail = store
+            .create(
+                "Versioned",
+                project_store::CreationMode::Empty,
+                project_store::EditorState::default(),
+            )
+            .expect("create project");
+        state.projects.lock().expect("projects").current = Some(CurrentProject {
+            folder: detail.summary.folder.clone(),
+            project_id: detail.summary.project_id.clone(),
+            name: detail.summary.name.clone(),
+            target: detail.target.clone(),
+            saved_revision: detail.summary.world_revision,
+            autosaved_revision: None,
+            editor_state: detail.editor_state.clone(),
+        });
+
+        let response = handle_request(
+            &state,
+            "token",
+            request("req-target", "token", "ping", json!({})),
+        );
+        let ping = response.result.expect("ping");
+        assert!(
+            ping["app"].get("targetMinecraftVersion").is_none(),
+            "app metadata must not claim a global Minecraft target"
+        );
+        assert_eq!(ping["project"]["targetMinecraftVersion"], "1.21.4");
+        assert_eq!(ping["project"]["targetDataVersion"], 4189);
+        assert_eq!(ping["project"]["profileId"], "java-classic-1.21.4");
+    }
+
+    #[test]
     fn serves_world_info_and_bounded_queries_for_the_open_project() {
         let state = AppState::new(temp_root("query"));
         let response = handle_request(
@@ -2620,6 +2676,7 @@ mod tests {
         assert!(response.ok, "{:?}", response.error);
         let info = response.result.expect("result");
         assert_eq!(info["targetMinecraftVersion"], "1.21.4");
+        assert_eq!(info["targetDataVersion"], 4189);
         assert_eq!(info["revision"], 0);
 
         let response = handle_request(

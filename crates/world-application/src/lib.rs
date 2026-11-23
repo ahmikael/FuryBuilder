@@ -51,7 +51,6 @@ pub use workspace_model::{
 };
 pub use world_operations::{BlockChange, Operation, Selection, TerrainBrushKind};
 
-use minecraft_version::default_profile;
 use serde::{Deserialize, Serialize};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -63,8 +62,6 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub struct AppInfo {
     pub name: String,
     pub version: String,
-    pub target_minecraft_version: String,
-    pub target_data_version: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,12 +73,9 @@ pub struct PingResponse {
 }
 
 pub fn app_info() -> AppInfo {
-    let profile = default_profile();
     AppInfo {
         name: APP_NAME.to_owned(),
         version: APP_VERSION.to_owned(),
-        target_minecraft_version: profile.minecraft_version.to_string(),
-        target_data_version: profile.data_version,
     }
 }
 
@@ -109,15 +103,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn app_info_matches_the_default_profile() {
+    fn app_info_reports_only_the_application_identity() {
         let info = app_info();
-        let profile = default_profile();
         assert_eq!(info.name, "FuryBuilder");
-        assert_eq!(
-            info.target_minecraft_version,
-            profile.minecraft_version.as_str()
-        );
-        assert_eq!(info.target_data_version, profile.data_version);
+        assert_eq!(info.version, APP_VERSION);
     }
 
     #[test]

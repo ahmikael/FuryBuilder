@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use project_store::{EditorState, ProjectStore};
+use project_store::{EditorState, ProjectStore, ProjectTarget};
 use serde::Serialize;
 use world_application::{AppError, JobQueue, WorldService};
 
@@ -21,6 +21,7 @@ pub struct CurrentProject {
     pub folder: String,
     pub project_id: String,
     pub name: String,
+    pub target: ProjectTarget,
     pub saved_revision: u64,
     pub autosaved_revision: Option<u64>,
     pub editor_state: EditorState,

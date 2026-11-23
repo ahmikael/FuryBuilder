@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation и project data закрыты; checkpoint metadata v2 готова, идёт project version reporting.
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation и project data закрыты; версия проекта отдаётся через world/project/MCP, идёт component manager.
 > Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -23,7 +23,7 @@
 
 | Область | Текущее состояние | Файлы |
 | --- | --- | --- |
-| Версия мира | Жёстко закреплена **Minecraft Java 1.21.4 / DataVersion 4189** | `crates/world-domain/src/lib.rs`, `crates/world-io/src/support_matrix.rs` |
+| Версия мира | `VersionProfile` в проекте; baseline 1.21.4 / DataVersion 4189 write-verified; глобальные `TARGET_*` удалены | `crates/minecraft-version/`, `crates/project-store/src/manifest.rs` |
 | Импорт | Только classic Anvil 1.21.4; остальные версии определяются и отклоняются | `crates/world-io/src/anvil.rs`, `world_import.rs` |
 | Экспорт мира | Backend умеет экспортировать полную папку, но one-click UI нет | `crates/world-io/src/world_export.rs` |
 | Структуры | Только Java `.nbt`; `.schem`, `.schematic`, `.litematic` не включены | `crates/world-io/src/structure.rs`, `java_structure.rs` |
@@ -1388,9 +1388,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-17` — `world_info`, project summary и MCP metadata возвращают версию проекта, а не глобальную константу. Статус: P0 в работе.
+**Текущий фокус:** `P0-18` — модель компонентов: kind `java|assets|server`, mode `managed|manual|placeholder`, status DTO. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-18`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-19`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1438,7 +1438,7 @@ UI:
 - [x] `P0-14` Snapshot `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode.
 - [x] `P0-15` Удалить snapshot v2 reader/writer и тесты v2; пересоздать `examples/furybuilder-demo.furybuilder` под schema v2 / `.fwl` v3 и обновить `demo_project` тест.
 - [x] `P0-16` Checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; v1 не читается, compatibility-полей нет.
-- [ ] `P0-17` `world_info`, project summary и MCP metadata возвращают версию проекта, а не глобальную константу.
+- [x] `P0-17` `world_info`, project summary и MCP metadata возвращают версию проекта, а не глобальную константу.
 
 #### C. Component manager
 
@@ -1670,6 +1670,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Project version reporting | `WorldInfo`/project summary/MCP `ping` берут версию из проекта и профиля; `AppInfo` больше не заявляет глобальный Minecraft target; Settings и Project Manager не подставляют глобальную версию; MCP ping отдаёт `targetMinecraftVersion`, `targetDataVersion`, `profileId` открытого проекта | см. `git log` | 552 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Checkpoint metadata v2 | Metadata пишет `checkpointSchemaVersion: 2`, `profileId`, label, reason и полный `editorState`; список и открытие проверяют схему, профиль, размер и SHA-256; restore применяет editor state; v1 не читается | см. `git log` | 551 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Snapshot v3 only | Удалены v1/v2 reader и их тесты: `.fwl` принимается только в v3; demo-тест проверяет profile target и номер формата снимка; docs описывают exact-match snapshot policy | см. `git log` | 550 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Snapshot v3 | `.fwl` пишет `profileId`, `dataVersion`, layout и biome mode; decoder сверяет заголовок с built-in профилем и восстанавливает версию мира; демо пересобрано на v3 с обновлённым checksum | см. `git log` | 551 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |

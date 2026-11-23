@@ -122,11 +122,6 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
               <span className="font-mono">{backend.info?.name ?? "FuryBuilder"}</span>
               <span className="text-muted-foreground">Version</span>
               <span className="font-mono">{backend.info?.version ?? "0.1.0"}</span>
-              <span className="text-muted-foreground">Minecraft target</span>
-              <span className="font-mono">
-                {backend.info?.targetMinecraftVersion ?? "unknown"} · DV{" "}
-                {backend.info?.targetDataVersion ?? "?"}
-              </span>
             </CardContent>
           </Card>
           {backend.error ? <p className="text-sm text-status-warn">{backend.error}</p> : null}
