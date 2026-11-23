@@ -182,7 +182,11 @@ impl DownloadClient {
                                 "the remote source returned a redirect without Location".to_owned(),
                             )
                         })?;
-                        current = resolve_redirect(&current, location)?;
+                        current = resolve_redirect_with(
+                            &current,
+                            location,
+                            allowlist.allows_plain_http(),
+                        )?;
                         continue;
                     }
                     if !(200..=299).contains(&status) {
@@ -305,7 +309,16 @@ fn parse_retry_after(value: Option<&str>) -> Option<Duration> {
 
 /// Resolves an HTTP `Location` against the request URL without ever accepting a non-HTTPS
 /// scheme. The resulting host is checked again by the redirect loop.
+#[cfg(test)]
 fn resolve_redirect(current: &str, location: &str) -> Result<String, PipelineError> {
+    resolve_redirect_with(current, location, false)
+}
+
+fn resolve_redirect_with(
+    current: &str,
+    location: &str,
+    allow_plain_http: bool,
+) -> Result<String, PipelineError> {
     if location.is_empty() {
         return Err(PipelineError::Transport(
             "the remote source returned an empty redirect target".to_owned(),
@@ -318,6 +331,9 @@ fn resolve_redirect(current: &str, location: &str) -> Result<String, PipelineErr
         return Err(PipelineError::DisallowedUrl(location.to_owned()));
     }
     if location.starts_with("https://") {
+        return Ok(location.to_owned());
+    }
+    if allow_plain_http && location.starts_with("http://") {
         return Ok(location.to_owned());
     }
     if location.starts_with("http://") || location.contains("://") {
@@ -334,7 +350,12 @@ fn resolve_redirect(current: &str, location: &str) -> Result<String, PipelineErr
         .unwrap_or(current.len());
     let origin = &current[..authority_end];
     if location.starts_with("//") {
-        return Ok(format!("https:{location}"));
+        let scheme = if allow_plain_http && current.starts_with("http://") {
+            "http"
+        } else {
+            "https"
+        };
+        return Ok(format!("{scheme}:{location}"));
     }
     if location.starts_with('/') {
         return Ok(format!("{origin}{location}"));
@@ -475,6 +496,20 @@ mod tests {
                 "{location}"
             );
         }
+    }
+
+    #[test]
+    fn local_test_redirects_keep_the_loopback_scheme() {
+        let current = "http://127.0.0.1:51234/start";
+        assert_eq!(
+            resolve_redirect_with(current, "//127.0.0.1:51234/final", true).expect("relative"),
+            "http://127.0.0.1:51234/final"
+        );
+        assert_eq!(
+            resolve_redirect_with(current, "http://127.0.0.1:51234/final", true).expect("absolute"),
+            "http://127.0.0.1:51234/final"
+        );
+        assert!(resolve_redirect_with(current, "http://127.0.0.1:51234/final", false).is_err());
     }
 
     #[test]
