@@ -112,6 +112,34 @@ describe("welcome screen", () => {
     expect(open).toHaveBeenCalledWith(first.folder);
   });
 
+  it("restores a recoverable project from the recent list", async () => {
+    seed();
+    const open = mockOpen();
+    const user = userEvent.setup();
+    render(<WelcomeScreen backend={online} />);
+
+    expect(screen.getByText("Unsaved recovery data")).toBeInTheDocument();
+    expect(
+      screen.getByText(/verified autosave is newer than the saved revision/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Recover Second Base" })).toHaveTextContent(
+      "Recover",
+    );
+    expect(screen.queryByRole("button", { name: "Recover First Castle" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Recover Second Base" }));
+    expect(open).toHaveBeenCalledWith(second.folder);
+  });
+
+  it("does not advertise recovery when every autosave is settled", () => {
+    seed([{ ...first, recoverable: false }]);
+    render(<WelcomeScreen backend={online} />);
+
+    expect(screen.queryByText("Unsaved recovery data")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Recover / })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open First Castle" })).toBeInTheDocument();
+  });
+
   it("shows an honest empty state without projects", () => {
     seed([]);
     render(<WelcomeScreen backend={online} />);

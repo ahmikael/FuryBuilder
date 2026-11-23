@@ -76,6 +76,12 @@ function RecentProject({
           {project.targetMinecraftVersion} · DV {project.targetDataVersion} ·{" "}
           {formatBytes(project.bytes)} · saved {formatRelativeTime(project.lastSavedAtMs)}
         </p>
+        {project.recoverable ? (
+          <p className="mt-1 text-xs leading-relaxed text-status-warn">
+            A verified autosave is newer than the saved revision. Recover opens it; the editor lets
+            you save or discard it.
+          </p>
+        ) : null}
         {warnings.length > 0 ? (
           <p className="mt-1 text-xs leading-relaxed text-status-warn">{warnings.join(" · ")}</p>
         ) : null}
@@ -83,12 +89,16 @@ function RecentProject({
       <Button
         size="sm"
         variant="outline"
-        aria-label={`Open ${project.name}`}
+        aria-label={`${project.recoverable ? "Recover" : "Open"} ${project.name}`}
         disabled={disabled}
         onClick={onOpen}
       >
-        <FolderOpen data-icon="inline-start" />
-        Open
+        {project.recoverable ? (
+          <RotateCcw data-icon="inline-start" />
+        ) : (
+          <FolderOpen data-icon="inline-start" />
+        )}
+        {project.recoverable ? "Recover" : "Open"}
       </Button>
     </li>
   );
@@ -147,6 +157,7 @@ export function WelcomeScreen({ backend }: { backend: BackendState }) {
   const busy = listing || picking || loading;
   const actionsDisabled = busy || (desktop && coreOffline);
   const recent = recentProjects(projects);
+  const recoverableCount = recent.filter((project) => project.recoverable).length;
 
   const refresh = async (): Promise<void> => {
     setListing(true);
@@ -349,6 +360,20 @@ export function WelcomeScreen({ backend }: { backend: BackendState }) {
                 </ul>
               </ScrollArea>
             )}
+
+            {recoverableCount > 0 ? (
+              <Alert>
+                <TriangleAlert />
+                <AlertTitle>Unsaved recovery data</AlertTitle>
+                <AlertDescription>
+                  {recoverableCount === 1
+                    ? "One recent project has"
+                    : `${recoverableCount} recent projects have`}{" "}
+                  a verified autosave newer than the saved revision. Recover opens that revision;
+                  save or discard it from the editor banner.
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
             {warnings.length > 0 ? (
               <Alert>

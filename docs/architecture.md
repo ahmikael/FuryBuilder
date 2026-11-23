@@ -145,6 +145,13 @@ matching creation mode; `Open project` uses the desktop folder picker and falls 
 project list in a browser preview. A desktop-offline alert explains why project actions
 cannot work, and an unreadable library shows the backend error with a retry action.
 
+Recoverable projects carry a `Recoverable` badge, a short explanation, and a `Recover`
+action instead of `Open`; the card also summarises how many recent projects have a verified
+autosave newer than the saved revision. Recovering opens the verified autosave revision and
+the editor banner offers `Save now`, `Discard recovered changes`, or `Later`. When the
+autosave cannot be verified, opening falls back to the saved revision and the banner says
+so instead of pretending the recovery succeeded.
+
 Startup probes the stored session once before any project UI mounts. A failure during
 preparation stays on the welcome screen with the stable code, message, hint, Retry, and
 Dismiss; the viewport is never opened halfway. The screen is built from the stock shadcn
