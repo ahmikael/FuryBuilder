@@ -53,6 +53,7 @@ pub fn run() {
             app.manage(runtime_manager::ServerManager::new(
                 data_dir.join("server.json"),
                 data_dir.join("components").join("servers"),
+                data_dir.join("version-manifest.json"),
             ));
             match local_bridge::start(app.handle().clone(), data_dir.clone()) {
                 Ok(runtime) => {

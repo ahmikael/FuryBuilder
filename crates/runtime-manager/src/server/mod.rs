@@ -32,6 +32,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use minecraft_version::VersionId;
+
 use crate::probe::probe_java;
 use crate::types::RuntimeStatus;
 
@@ -43,8 +45,8 @@ pub use types::{
     GenerationSnapshot, GenerationStatusReport, GenerationStopReason, InstalledServerJar,
     ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
     ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource,
-    WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
-    SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION,
+    ServerTarget, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES,
+    RUN_MANIFEST_SCHEMA_VERSION, SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION,
 };
 
 use crate::error::ServerError;
@@ -80,7 +82,11 @@ pub struct ServerManager {
 }
 
 impl ServerManager {
-    pub fn new(settings_path: impl Into<PathBuf>, managed_root: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        settings_path: impl Into<PathBuf>,
+        managed_root: impl Into<PathBuf>,
+        manifest_cache: impl Into<PathBuf>,
+    ) -> Self {
         let settings_path = settings_path.into();
         let runs_root = settings_path
             .parent()
@@ -91,7 +97,7 @@ impl ServerManager {
             inner: Arc::new(ServerManagerInner {
                 settings: ServerSettingsStore::new(settings_path),
                 cache: ServerCache::new(managed_root),
-                mojang: MojangClient::new(),
+                mojang: MojangClient::new(manifest_cache),
                 install_lock: Mutex::new(()),
                 generation_start_lock: Mutex::new(()),
                 generation: Mutex::new(GenerationState { active: None, last }),
@@ -119,6 +125,7 @@ impl ServerManager {
     }
 
     pub fn discover(&self) -> ServerDiscoveryReport {
+        let target = ServerTarget::baseline();
         let (managed, managed_bytes, mut problems) = match self.inner.cache.list() {
             Ok((managed, bytes, problems)) => (managed, bytes, problems),
             Err(error) => (
@@ -130,7 +137,7 @@ impl ServerManager {
         if let Some(warning) = self.inner.settings.load_warning() {
             problems.push(warning.to_owned());
         }
-        let selected = self.selected();
+        let selected = self.selected(&target);
         let eula = self.inner.settings.eula();
         let eula_matches_selected = match (
             eula.as_ref(),
@@ -152,19 +159,31 @@ impl ServerManager {
             managed,
             managed_bytes,
             problems,
-            manual_hint: manual_hint(),
+            manual_hint: manual_hint(&target),
         }
     }
 
-    pub fn selected(&self) -> Option<ServerJarReport> {
-        let saved = self.inner.settings.selected()?;
+    /// Returns the remembered selection for exactly this target after re-reading the file.
+    /// A selection for another Minecraft version is never substituted.
+    pub fn selected(&self, target: &ServerTarget) -> Option<ServerJarReport> {
+        let saved = self.inner.settings.selected(&target.minecraft_version)?;
         let official = self.official_sha1_for(Path::new(&saved.path));
-        Some(self.report_for(Path::new(&saved.path), Some(&saved), official.as_deref()))
+        Some(self.report_for(
+            Path::new(&saved.path),
+            Some(&saved),
+            official.as_deref(),
+            target,
+        ))
     }
 
-    /// Validates a manual `server.jar` path and records it only after the internal
-    /// `version.json`, DataVersion, server entry point and hash have been checked.
-    pub fn select_manual(&self, path: &Path) -> Result<ServerJarReport, ServerError> {
+    /// Validates a manual `server.jar` path against the exact project target and records it
+    /// only after the internal `version.json`, DataVersion, Java major, server entry point and
+    /// hash have been checked.
+    pub fn select_manual(
+        &self,
+        path: &Path,
+        target: &ServerTarget,
+    ) -> Result<ServerJarReport, ServerError> {
         let metadata = fs::symlink_metadata(path)
             .map_err(|error| ServerError::Invalid(format!("{}: {error}", path.display())))?;
         if metadata.file_type().is_symlink() {
@@ -176,22 +195,28 @@ impl ServerManager {
         let canonical = fs::canonicalize(path)
             .map_err(|error| ServerError::Invalid(format!("{}: {error}", path.display())))?;
         let info = inspect_server_jar(&canonical)?;
+        info.validate_for(target)?;
         self.inner.settings.save_selected(SavedServerJar {
+            minecraft_version: info.version.clone(),
             path: canonical.display().to_string(),
             sha1: info.sha1.clone(),
             size: info.size,
             data_version: info.data_version,
         })?;
         let official = self.official_sha1_for(&canonical);
-        Ok(self.report_for(&canonical, None, official.as_deref()))
+        Ok(self.report_for(&canonical, None, official.as_deref(), target))
     }
 
-    pub fn clear_selection(&self) -> Result<(), ServerError> {
-        self.inner.settings.clear()
+    pub fn clear_selection(&self, version: &VersionId) -> Result<(), ServerError> {
+        self.inner.settings.clear_selection(version)
     }
 
-    pub fn release(&self) -> Result<ServerReleaseInfo, ServerError> {
-        self.inner.mojang.release()
+    pub fn has_selection(&self, version: &VersionId) -> bool {
+        self.inner.settings.selected(version).is_some()
+    }
+
+    pub fn release(&self, target: &ServerTarget) -> Result<ServerReleaseInfo, ServerError> {
+        self.inner.mojang.release(target)
     }
 
     pub fn managed_list(&self) -> Result<ManagedServerCacheReport, ServerError> {
@@ -204,10 +229,11 @@ impl ServerManager {
         })
     }
 
-    /// Downloads, verifies, inspects and publishes the exact release the user previewed.
+    /// Downloads, verifies, inspects and publishes exactly the requested release. A cached
+    /// JAR for the same version is reused only after the same internal checks.
     pub fn install(
         &self,
-        expected_version: &str,
+        target: &ServerTarget,
         cancel: &AtomicBool,
         progress: &dyn Fn(ServerProgress),
     ) -> Result<InstalledServerJar, ServerError> {
@@ -223,11 +249,19 @@ impl ServerManager {
             downloaded: 0,
             total: 0,
         });
-        let release = self.inner.mojang.release()?;
-        if release.minecraft_version != expected_version {
+        let release = self.inner.mojang.release(target)?;
+        if release.minecraft_version != target.minecraft_version.as_str() {
             return Err(ServerError::Invalid(format!(
-                "Mojang now offers Minecraft {}, not {expected_version}; refresh the download preview",
-                release.minecraft_version
+                "Mojang now offers Minecraft {}, not {}; refresh the download preview",
+                release.minecraft_version, target.minecraft_version
+            )));
+        }
+        if release.expected_data_version != target.data_version
+            || release.java_major != target.java_major
+        {
+            return Err(ServerError::Invalid(format!(
+                "Mojang metadata for Minecraft {} no longer matches DataVersion {} / Java {}; refresh the download preview",
+                target.minecraft_version, target.data_version, target.java_major
             )));
         }
 
@@ -237,19 +271,25 @@ impl ServerManager {
             .list()?
             .0
             .into_iter()
-            .find(|server| server.version == release.minecraft_version)
+            .find(|server| server.version == target.minecraft_version.as_str())
         {
             if existing.sha1.eq_ignore_ascii_case(&release.sha1) {
                 let info = inspect_server_jar(Path::new(&existing.jar_path))?;
+                info.validate_for(target)?;
                 if info.sha1.eq_ignore_ascii_case(&release.sha1) {
                     self.inner.settings.save_selected(SavedServerJar {
+                        minecraft_version: info.version.clone(),
                         path: existing.jar_path.clone(),
                         sha1: info.sha1.clone(),
                         size: info.size,
                         data_version: info.data_version,
                     })?;
-                    let report =
-                        self.report_for(Path::new(&existing.jar_path), None, Some(&release.sha1));
+                    let report = self.report_for(
+                        Path::new(&existing.jar_path),
+                        None,
+                        Some(&release.sha1),
+                        target,
+                    );
                     return Ok(InstalledServerJar {
                         server: existing,
                         report,
@@ -285,6 +325,7 @@ impl ServerManager {
                 total: release.size,
             });
             let info = inspect_server_jar(&archive)?;
+            info.validate_for(target)?;
             if !info.sha1.eq_ignore_ascii_case(&release.sha1) {
                 return Err(ServerError::Checksum(format!(
                     "server JAR SHA-1 changed between download and inspection: expected {}, found {}",
@@ -316,6 +357,7 @@ impl ServerManager {
                 size: info.size,
                 release_time: release.release_time.clone(),
                 source_url: release.download_url.clone(),
+                version_json_sha1: release.version_json_sha1.clone(),
             };
             self.inner.cache.publish(staging.clone(), manifest)
         })();
@@ -325,13 +367,19 @@ impl ServerManager {
         }
         let server = result?;
         let saved = SavedServerJar {
+            minecraft_version: server.version.clone(),
             path: server.jar_path.clone(),
             sha1: server.sha1.clone(),
             size: server.size,
             data_version: server.data_version,
         };
         self.inner.settings.save_selected(saved)?;
-        let report = self.report_for(Path::new(&server.jar_path), None, Some(&release.sha1));
+        let report = self.report_for(
+            Path::new(&server.jar_path),
+            None,
+            Some(&release.sha1),
+            target,
+        );
         progress(ServerProgress {
             phase: "complete".to_owned(),
             downloaded: release.size,
@@ -352,12 +400,14 @@ impl ServerManager {
             .install_lock
             .try_lock()
             .map_err(|_| ServerError::Busy("a server JAR install is running".to_owned()))?;
-        let saved = self.inner.settings.selected();
+        let saved = self.inner.settings.selections();
         let removed = self.inner.cache.remove_version(version)?;
         if removed {
-            if let Some(saved) = saved {
-                if !Path::new(&saved.path).exists() {
-                    self.inner.settings.clear()?;
+            for selection in saved {
+                if !Path::new(&selection.path).exists() {
+                    if let Ok(version) = selection.minecraft_version.parse::<VersionId>() {
+                        self.inner.settings.clear_selection(&version)?;
+                    }
                 }
             }
         }
@@ -372,15 +422,20 @@ impl ServerManager {
             .install_lock
             .try_lock()
             .map_err(|_| ServerError::Busy("a server JAR install is running".to_owned()))?;
-        let saved = self.inner.settings.selected();
-        let was_managed = saved
-            .as_ref()
-            .map(|saved| self.inner.cache.contains(Path::new(&saved.path)))
-            .unwrap_or(false);
+        let saved = self.inner.settings.selections();
+        let managed_paths: Vec<String> = saved
+            .iter()
+            .filter(|selection| self.inner.cache.contains(Path::new(&selection.path)))
+            .map(|selection| selection.minecraft_version.clone())
+            .collect();
         self.inner.cache.clear()?;
-        if let Some(saved) = saved {
-            if was_managed || !Path::new(&saved.path).exists() {
-                self.inner.settings.clear()?;
+        for selection in saved {
+            if managed_paths.contains(&selection.minecraft_version)
+                || !Path::new(&selection.path).exists()
+            {
+                if let Ok(version) = selection.minecraft_version.parse::<VersionId>() {
+                    self.inner.settings.clear_selection(&version)?;
+                }
             }
         }
         self.managed_list()
@@ -388,19 +443,28 @@ impl ServerManager {
 
     /// Records an explicit EULA acceptance for the exact selected server JAR.
     /// Passing `false` is rejected; this method never accepts the EULA implicitly.
-    pub fn accept_eula(&self, accepted: bool) -> Result<SavedEula, ServerError> {
+    pub fn accept_eula(
+        &self,
+        accepted: bool,
+        target: &ServerTarget,
+    ) -> Result<SavedEula, ServerError> {
         if !accepted {
             return Err(ServerError::EulaRequired(
                 "the Minecraft EULA must be accepted explicitly by the user".to_owned(),
             ));
         }
-        let saved = self.inner.settings.selected().ok_or_else(|| {
-            ServerError::Invalid(format!(
-                "choose the Minecraft {} server JAR first",
-                target_minecraft_version()
-            ))
-        })?;
+        let saved = self
+            .inner
+            .settings
+            .selected(&target.minecraft_version)
+            .ok_or_else(|| {
+                ServerError::Invalid(format!(
+                    "choose the Minecraft {} server JAR first",
+                    target.minecraft_version
+                ))
+            })?;
         let info = inspect_server_jar(Path::new(&saved.path))?;
+        info.validate_for(target)?;
         if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
             return Err(ServerError::Invalid(
                 "the selected server JAR changed on disk; choose it again before accepting the EULA"
@@ -457,14 +521,20 @@ impl ServerManager {
             .collect();
         let datapacks = datapack::validate_selection(&datapack_paths)?;
         let consent_at = now_secs();
-        let saved = self.inner.settings.selected().ok_or_else(|| {
-            ServerError::Invalid(format!(
-                "choose the Minecraft {} server JAR first",
-                target_minecraft_version()
-            ))
-        })?;
+        let target = ServerTarget::baseline();
+        let saved = self
+            .inner
+            .settings
+            .selected(&target.minecraft_version)
+            .ok_or_else(|| {
+                ServerError::Invalid(format!(
+                    "choose the Minecraft {} server JAR first",
+                    target_minecraft_version()
+                ))
+            })?;
         let server_path = Path::new(&saved.path);
         let info = inspect_server_jar(server_path)?;
+        info.validate_for(&target)?;
         if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
             return Err(ServerError::Invalid(
                 "the selected server JAR changed on disk; choose it again to re-verify".to_owned(),
@@ -625,6 +695,7 @@ impl ServerManager {
         path: &Path,
         expected: Option<&SavedServerJar>,
         official_sha1: Option<&str>,
+        target: &ServerTarget,
     ) -> ServerJarReport {
         let (source, managed) = source_for(&self.inner.cache, path);
         let mut report = ServerJarReport {
@@ -675,15 +746,19 @@ impl ServerManager {
                     .to_owned(),
             );
         }
+        if let Err(error) = info.validate_for(target) {
+            report.warnings.push(error.to_string());
+            return report;
+        }
         report.ready = true;
         report
     }
 }
 
-fn manual_hint() -> String {
+fn manual_hint(target: &ServerTarget) -> String {
     format!(
         "Choose the official Minecraft {} server.jar, or download it explicitly from Mojang's version manifest. Client JARs and other versions are rejected.",
-        target_minecraft_version()
+        target.minecraft_version
     )
 }
 
@@ -703,6 +778,8 @@ mod tests {
         assert_eq!(target_minecraft_version(), "1.21.4");
         assert_eq!(target_data_version(), 4189);
         assert_eq!(target_java_major(), 21);
-        assert!(!manual_hint().is_empty());
+        let target = ServerTarget::baseline();
+        assert_eq!(target.minecraft_version.as_str(), "1.21.4");
+        assert!(!manual_hint(&target).is_empty());
     }
 }

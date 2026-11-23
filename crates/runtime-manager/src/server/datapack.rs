@@ -177,7 +177,7 @@ fn inspect_path(path: &Path) -> Result<GenerationDatapack, ServerError> {
     let supported = supports_format(&meta.pack, expected_format);
     if pack_format > expected_format && !supported {
         return Err(ServerError::Unsupported {
-            target: target_minecraft_version(),
+            target: target_minecraft_version().to_owned(),
             detail: format!(
                 "{} declares data pack format {pack_format}, newer than {expected_format}",
                 path.display()

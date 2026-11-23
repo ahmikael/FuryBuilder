@@ -13,7 +13,7 @@
 
 use std::path::PathBuf;
 
-use furybuilder_runtime_manager::ServerManager;
+use furybuilder_runtime_manager::{ServerManager, ServerTarget};
 
 fn main() {
     let mut args = std::env::args().skip(1);
@@ -46,7 +46,13 @@ fn main() {
         .parent()
         .unwrap_or_else(|| std::path::Path::new("."))
         .join("server.json");
-    let manager = ServerManager::new(&settings, &root);
+    let manager = ServerManager::new(
+        &settings,
+        &root,
+        root.parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("version-manifest.json"),
+    );
     if let Err(error) = run(&manager, jar.as_deref(), discover, release, install, clear) {
         eprintln!("server probe failed: {error}");
         std::process::exit(1);
@@ -62,15 +68,16 @@ fn run(
     clear: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(path) = jar {
-        let report = manager.select_manual(path)?;
+        let report = manager.select_manual(path, &ServerTarget::baseline())?;
         println!("{}", serde_json::to_string_pretty(&report)?);
     }
     if release || install {
-        let info = manager.release()?;
+        let target = ServerTarget::baseline();
+        let info = manager.release(&target)?;
         println!("{}", serde_json::to_string_pretty(&info)?);
         if install {
             let cancel = std::sync::atomic::AtomicBool::new(false);
-            let installed = manager.install(&info.minecraft_version, &cancel, &|progress| {
+            let installed = manager.install(&target, &cancel, &|progress| {
                 eprintln!(
                     "progress {} {}/{}",
                     progress.phase, progress.downloaded, progress.total

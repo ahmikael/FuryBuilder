@@ -255,8 +255,15 @@ picks. Selecting a client source replaces placeholder mode.
 - a read-only readiness card with Java/JAR/EULA blockers;
 - discovery and manual selection of a Java 21 runtime;
 - an opt-in Adoptium Temurin download into a managed, clearable cache;
-- official `server.jar` resolution through Mojang metadata with SHA-1/size/version checks;
-- manual JAR selection with the same internal checks.
+- exact-version `server.jar` resolution through Mojang metadata with SHA-1/size and internal
+  `version.json`/DataVersion/Java checks;
+- a managed cache at `components/servers/<version>/` with one remembered selection per
+  Minecraft version;
+- manual JAR selection with the same exact-version checks.
+
+The backend accepts any exact server target and never substitutes another version. The
+Settings page and isolated generation still operate on the write-verified baseline until the
+project-aware component UI lands.
 
 Nothing is installed globally, no `PATH` is changed, and no EULA is accepted automatically.
 

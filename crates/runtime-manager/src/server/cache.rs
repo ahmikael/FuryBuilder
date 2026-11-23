@@ -2,11 +2,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use minecraft_version::VersionId;
 use serde::{Deserialize, Serialize};
 
 use crate::error::ServerError;
-use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
+use super::jar::is_sha1;
 use super::types::{ManagedServerJar, ServerSource, SERVER_MANIFEST_SCHEMA_VERSION};
 
 pub(crate) const MANIFEST_NAME: &str = ".furybuilder-server.json";
@@ -23,6 +24,7 @@ struct StoredServerManifest {
     size: u64,
     release_time: String,
     source_url: String,
+    version_json_sha1: String,
     installed_at: u64,
 }
 
@@ -35,6 +37,7 @@ pub(crate) struct ServerManifest {
     pub size: u64,
     pub release_time: String,
     pub source_url: String,
+    pub version_json_sha1: String,
 }
 
 pub(crate) struct ServerCache {
@@ -108,12 +111,22 @@ impl ServerCache {
                     continue;
                 }
             };
-            if manifest.version != target_minecraft_version()
-                || manifest.data_version != target_data_version()
-                || manifest.java_major != target_java_major()
+            if manifest.version != name {
+                problems.push(format!(
+                    "{} declares Minecraft {}, not its directory name",
+                    path.display(),
+                    manifest.version
+                ));
+                continue;
+            }
+            if manifest.version.parse::<VersionId>().is_err()
+                || manifest.data_version <= 0
+                || manifest.java_major == 0
+                || manifest.size == 0
+                || !is_sha1(&manifest.sha1)
             {
                 problems.push(format!(
-                    "{} declares an unsupported server version/data version",
+                    "{} declares an invalid server version/data version",
                     path.display()
                 ));
                 continue;
@@ -153,24 +166,37 @@ impl ServerCache {
                 java_major: manifest.java_major,
                 release_time: manifest.release_time.clone(),
                 source_url: manifest.source_url.clone(),
+                version_json_sha1: manifest.version_json_sha1.clone(),
                 installed_at: manifest.installed_at,
             });
         }
-        runtimes.sort_by(|left, right| left.version.cmp(&right.version));
+        runtimes.sort_by(|left, right| {
+            match (
+                left.version.parse::<VersionId>(),
+                right.version.parse::<VersionId>(),
+            ) {
+                (Ok(left), Ok(right)) => left.cmp(&right),
+                _ => left.version.cmp(&right.version),
+            }
+        });
         Ok((runtimes, total_bytes, problems))
     }
 
     /// Publishes a fully verified `server.jar` (already inside `staging`) as the managed
-    /// target runtime. The directory becomes visible with one rename; the JAR bytes are never
-    /// modified after verification.
+    /// runtime for exactly the manifest's version. The directory becomes visible with one
+    /// rename; the JAR bytes are never modified after verification.
     pub fn publish(
         &self,
         staging: PathBuf,
         manifest: ServerManifest,
     ) -> Result<ManagedServerJar, ServerError> {
-        let destination = self
-            .root
-            .join(format!("minecraft-{}", target_minecraft_version()));
+        let version = manifest.version.parse::<VersionId>().map_err(|_| {
+            ServerError::Invalid(format!(
+                "invalid managed server version `{}`",
+                manifest.version
+            ))
+        })?;
+        let destination = self.root.join(version.as_str());
         if destination.exists() {
             if let Some(existing) = self
                 .list()?
@@ -201,6 +227,7 @@ impl ServerCache {
             size: manifest.size,
             release_time: manifest.release_time.clone(),
             source_url: manifest.source_url.clone(),
+            version_json_sha1: manifest.version_json_sha1.clone(),
             installed_at: now_secs(),
         };
         let bytes = serde_json::to_vec_pretty(&stored)
@@ -228,22 +255,17 @@ impl ServerCache {
             java_major: stored.java_major,
             release_time: stored.release_time,
             source_url: stored.source_url,
+            version_json_sha1: stored.version_json_sha1,
             installed_at: stored.installed_at,
         })
     }
 
     /// Removes exactly one FuryBuilder-owned server directory after checking its manifest.
     pub fn remove_version(&self, version: &str) -> Result<bool, ServerError> {
-        if version.is_empty()
-            || !version.chars().all(|character| {
-                character.is_ascii_alphanumeric() || matches!(character, '.' | '-' | '_')
-            })
-        {
-            return Err(ServerError::Invalid(format!(
-                "invalid server version directory `{version}`"
-            )));
-        }
-        let directory = self.root.join(format!("minecraft-{version}"));
+        let version = version
+            .parse::<VersionId>()
+            .map_err(|_| ServerError::Invalid(format!("invalid server version `{version}`")))?;
+        let directory = self.root.join(version.as_str());
         if !directory.exists() {
             return Ok(false);
         }
@@ -255,7 +277,7 @@ impl ServerCache {
             )));
         }
         let manifest = read_manifest(&manifest_path).map_err(ServerError::Invalid)?;
-        if manifest.version != version {
+        if manifest.version != version.as_str() {
             return Err(ServerError::Invalid(format!(
                 "{} declares Minecraft {}, not {version}",
                 directory.display(),
@@ -366,15 +388,20 @@ mod tests {
         fs::create_dir_all(&staging).expect("staging");
         fs::write(staging.join("server.jar"), vec![0u8; 32]).expect("jar");
         let manifest = ServerManifest {
-            version: target_minecraft_version().to_owned(),
-            data_version: target_data_version(),
-            java_major: target_java_major(),
+            version: "1.21.4".to_owned(),
+            data_version: 4189,
+            java_major: 21,
             sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
             size: 32,
             release_time: "2024-12-03T10:12:57+00:00".to_owned(),
             source_url: "https://piston-data.mojang.com/x".to_owned(),
+            version_json_sha1: "c88775961e316f2be09859c54e13017660ee7770".to_owned(),
         };
         let runtime = cache.publish(staging, manifest).expect("publish");
+        assert!(
+            runtime.jar_path.ends_with("1.21.4\\server.jar")
+                || runtime.jar_path.ends_with("1.21.4/server.jar")
+        );
         assert!(Path::new(&runtime.jar_path).is_file());
         let (runtimes, bytes, problems) = cache.list().expect("list");
         assert_eq!(runtimes.len(), 1);

@@ -55,10 +55,7 @@ pub enum ServerError {
     #[error("server JAR request is not valid: {0}")]
     Invalid(String),
     #[error("server JAR does not match Minecraft {target}: {detail}")]
-    Unsupported {
-        target: &'static str,
-        detail: String,
-    },
+    Unsupported { target: String, detail: String },
     #[error("server JAR network request failed: {0}")]
     Network(String),
     #[error("server JAR failed an integrity check: {0}")]
@@ -98,12 +95,5 @@ impl ServerError {
             ServerError::UnsupportedJava { .. } => "unsupported_runtime",
             ServerError::Cancelled => "cancelled",
         }
-    }
-}
-
-pub fn unsupported_server(detail: impl Into<String>) -> ServerError {
-    ServerError::Unsupported {
-        target: crate::target::target_minecraft_version(),
-        detail: detail.into(),
     }
 }

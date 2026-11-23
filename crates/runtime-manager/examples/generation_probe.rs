@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use furybuilder_runtime_manager::{
-    DatapackSelection, GenerationRequest, ServerManager, WorldPreset,
+    DatapackSelection, GenerationRequest, ServerManager, ServerTarget, WorldPreset,
 };
 
 fn main() {
@@ -83,9 +83,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let root = root.ok_or("--root is required")?;
     let java = java.ok_or("--java is required")?;
     std::fs::create_dir_all(&root)?;
-    let manager = ServerManager::new(root.join("server.json"), root.join("servers"));
+    let manager = ServerManager::new(
+        root.join("server.json"),
+        root.join("servers"),
+        root.join("version-manifest.json"),
+    );
     if let Some(jar) = jar {
-        let report = manager.select_manual(&jar)?;
+        let report = manager.select_manual(&jar, &ServerTarget::baseline())?;
         eprintln!(
             "selected server JAR: {} {} DV {:?}",
             report.version.as_deref().unwrap_or("?"),
@@ -94,7 +98,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     if accept_eula {
-        let eula = manager.accept_eula(true)?;
+        let eula = manager.accept_eula(true, &ServerTarget::baseline())?;
         eprintln!(
             "EULA explicitly accepted for {} sha1 {}",
             eula.minecraft_version, eula.jar_sha1

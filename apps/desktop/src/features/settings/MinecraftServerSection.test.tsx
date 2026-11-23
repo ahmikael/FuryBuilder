@@ -43,8 +43,8 @@ vi.mock("@/lib/server-api", () => ({
 
 const managed: ManagedServerJar = {
   version: "1.21.4",
-  path: "C:\\app\\servers\\minecraft-1.21.4",
-  jarPath: "C:\\app\\servers\\minecraft-1.21.4\\server.jar",
+  path: "C:\\app\\servers\\1.21.4",
+  jarPath: "C:\\app\\servers\\1.21.4\\server.jar",
   sha1: "4707d00eb834b446575d89a61a11b5d548d8c001",
   size: 56_880_250,
   dataVersion: 4189,
@@ -52,6 +52,7 @@ const managed: ManagedServerJar = {
   releaseTime: "2024-12-03T10:12:57+00:00",
   sourceUrl:
     "https://piston-data.mojang.com/v1/objects/4707d00eb834b446575d89a61a11b5d548d8c001/server.jar",
+  versionJsonSha1: "c88775961e316f2be09859c54e13017660ee7770",
   installedAt: 1,
 };
 

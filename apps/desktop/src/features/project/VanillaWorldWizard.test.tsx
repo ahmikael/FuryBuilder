@@ -69,7 +69,7 @@ const java: JavaRuntimeReport = {
 };
 
 const server = {
-  path: "C:\\servers\\minecraft-1.21.4\\server.jar",
+  path: "C:\\servers\\1.21.4\\server.jar",
   source: "managed" as const,
   managed: true,
   ready: true,

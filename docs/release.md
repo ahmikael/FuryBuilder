@@ -94,7 +94,7 @@ User data lives under `%APPDATA%\com.furybuilder.desktop`:
 projects\<name>.furybuilder\   # the only irreplaceable user data
 assets.json / runtime.json / server.json
 runtimes\java\                 # re-downloadable
-servers\                       # re-downloadable server JAR cache
+servers\<version>\              # re-downloadable server JAR cache, one directory per version
 logs\                          # bounded diagnostics
 mcp\                           # local bridge discovery metadata
 ```

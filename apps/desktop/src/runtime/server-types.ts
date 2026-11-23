@@ -29,6 +29,7 @@ export interface ManagedServerJar {
   javaMajor: number;
   releaseTime: string;
   sourceUrl: string;
+  versionJsonSha1: string;
   installedAt: number;
 }
 

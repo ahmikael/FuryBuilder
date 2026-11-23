@@ -38,7 +38,7 @@ const java: JavaRuntimeReport = {
 };
 
 const serverJar: ServerJarReport = {
-  path: "C:\\app\\servers\\minecraft-1.21.4\\server.jar",
+  path: "C:\\app\\servers\\1.21.4\\server.jar",
   source: "managed",
   managed: true,
   ready: true,

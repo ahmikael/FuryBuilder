@@ -2910,7 +2910,7 @@ pub async fn server_discover(
 
 #[tauri::command]
 pub fn server_saved(manager: State<'_, ServerManager>) -> Option<ServerJarReport> {
-    manager.selected()
+    manager.selected(&runtime_manager::ServerTarget::baseline())
 }
 
 #[tauri::command]
@@ -2921,7 +2921,10 @@ pub async fn server_select_jar(
 ) -> Result<ServerJarReport, AppError> {
     let manager = manager.inner().clone();
     let report = tauri::async_runtime::spawn_blocking(move || {
-        manager.select_manual(std::path::Path::new(&path))
+        manager.select_manual(
+            std::path::Path::new(&path),
+            &runtime_manager::ServerTarget::baseline(),
+        )
     })
     .await
     .map_err(|error| AppError::internal(format!("server validation task failed: {error}")))?
@@ -2935,7 +2938,10 @@ pub fn server_clear_selection(
     app: AppHandle,
     manager: State<'_, ServerManager>,
 ) -> Result<(), AppError> {
-    manager.clear_selection().map_err(server_error)?;
+    let target = runtime_manager::ServerTarget::baseline();
+    manager
+        .clear_selection(&target.minecraft_version)
+        .map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
     Ok(())
 }
@@ -2945,10 +2951,12 @@ pub async fn server_release(
     manager: State<'_, ServerManager>,
 ) -> Result<ServerReleaseInfo, AppError> {
     let manager = manager.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || manager.release())
-        .await
-        .map_err(|error| AppError::internal(format!("Mojang metadata task failed: {error}")))?
-        .map_err(server_error)
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.release(&runtime_manager::ServerTarget::baseline())
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("Mojang metadata task failed: {error}")))?
+    .map_err(server_error)
 }
 
 #[tauri::command]
@@ -2957,12 +2965,19 @@ pub async fn server_install(
     manager: State<'_, ServerManager>,
     version: String,
 ) -> Result<InstalledServerJar, AppError> {
+    let target = runtime_manager::ServerTarget::baseline();
+    if version != target.minecraft_version.as_str() {
+        return Err(AppError::invalid_argument(format!(
+            "The server settings page can install Minecraft {}; project-specific versions use the component installer.",
+            target.minecraft_version
+        )));
+    }
     let manager = manager.inner().clone();
     let progress_app = app.clone();
     let last = std::sync::Mutex::new(None::<(String, std::time::Instant)>);
     let installed = tauri::async_runtime::spawn_blocking(move || {
         let cancel = std::sync::atomic::AtomicBool::new(false);
-        manager.install(&version, &cancel, &|progress: ServerProgress| {
+        manager.install(&target, &cancel, &|progress: ServerProgress| {
             let should_emit = match last.lock() {
                 Ok(previous) => match previous.as_ref() {
                     None => true,
@@ -3019,7 +3034,9 @@ pub fn server_accept_eula(
     manager: State<'_, ServerManager>,
     accepted: bool,
 ) -> Result<SavedEula, AppError> {
-    let eula = manager.accept_eula(accepted).map_err(server_error)?;
+    let eula = manager
+        .accept_eula(accepted, &runtime_manager::ServerTarget::baseline())
+        .map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
     Ok(eula)
 }

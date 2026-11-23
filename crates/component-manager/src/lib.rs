@@ -43,6 +43,7 @@ use component_model::{
 use minecraft_version::{VersionId, VersionProfile};
 use runtime_manager::{
     JavaRuntimeReport, RuntimeError, RuntimeManager, ServerError, ServerManager, ServerProgress,
+    ServerTarget,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -336,11 +337,12 @@ impl ComponentManager {
         server_settings: impl Into<PathBuf>,
         server_root: impl Into<PathBuf>,
     ) -> Self {
+        let manifest_cache = manifest_cache.into();
         Self::new(
             RuntimeManager::new(java_settings, java_root),
             AssetSettingsStore::new(assets_settings),
-            ClientJarManager::new(assets_root, manifest_cache),
-            ServerManager::new(server_settings, server_root),
+            ClientJarManager::new(assets_root, manifest_cache.clone()),
+            ServerManager::new(server_settings, server_root, manifest_cache),
         )
     }
 
@@ -467,8 +469,8 @@ impl ComponentManager {
                 Ok(self.assets_status(target, true, false))
             }
             ComponentKind::Server => {
-                self.ensure_managed_target(target)?;
-                self.inner.server.select_manual(path)?;
+                let server_target = server_target(target)?;
+                self.inner.server.select_manual(path, &server_target)?;
                 Ok(self.server_status(target, true))
             }
         }
@@ -569,12 +571,17 @@ impl ComponentManager {
                         self.inner.server.remove_managed(version)?;
                         removed_managed = true;
                     }
-                } else if id.starts_with("server-manual-") {
-                    if let Some(report) = self.inner.server.selected() {
-                        if server_id(&report) == id {
-                            self.inner.server.clear_selection()?;
-                            cleared_selection = true;
-                        }
+                } else if let Some(version) = id.strip_prefix("server-manual-") {
+                    let version =
+                        version
+                            .parse::<VersionId>()
+                            .map_err(|_| ComponentError::NotFound {
+                                kind: ComponentKind::Server.as_str(),
+                                id: id.to_owned(),
+                            })?;
+                    if self.inner.server.has_selection(&version) {
+                        self.inner.server.clear_selection(&version)?;
+                        cleared_selection = true;
                     }
                 }
             }
@@ -697,10 +704,10 @@ impl ComponentManager {
                 resolved_from_status(status)
             }
             ComponentKind::Server => {
-                self.ensure_managed_target(&request.target)?;
+                let server_target = server_target(&request.target)?;
                 let guarded = self.begin_install(ComponentKind::Server)?;
                 let cancel = guarded.token();
-                let release = self.inner.server.release()?;
+                let release = self.inner.server.release(&server_target)?;
                 let expected_version = request
                     .expected_version
                     .as_deref()
@@ -720,18 +727,16 @@ impl ComponentManager {
                         });
                     }
                 }
-                self.inner.server.install(
-                    expected_version,
-                    &cancel,
-                    &|update: ServerProgress| {
+                self.inner
+                    .server
+                    .install(&server_target, &cancel, &|update: ServerProgress| {
                         progress(ComponentProgress {
                             kind: ComponentKind::Server,
                             phase: update.phase,
                             downloaded: update.downloaded,
                             total: update.total,
                         });
-                    },
-                )?;
+                    })?;
                 let status = self.server_status(&request.target, true);
                 resolved_from_status(status)
             }
@@ -1036,7 +1041,15 @@ impl ComponentManager {
         if !required {
             return ComponentStatus::not_required(ComponentKind::Server);
         }
-        let Some(report) = self.inner.server.selected() else {
+        let server_target = match server_target(target) {
+            Ok(target) => target,
+            Err(error) => {
+                let mut status = ComponentStatus::new(ComponentKind::Server, ComponentState::Error);
+                status.error = Some(error.to_string());
+                return finalize(status);
+            }
+        };
+        let Some(report) = self.inner.server.selected(&server_target) else {
             let mut status = ComponentStatus::new(ComponentKind::Server, ComponentState::Missing);
             status
                 .notes
@@ -1053,7 +1066,7 @@ impl ComponentManager {
         status.version = report.version.clone();
         status.bytes = report.size;
         status.notes.extend(report.warnings.clone());
-        status.id = Some(server_id(&report));
+        status.id = Some(server_id(&report, target.minecraft_version.as_str()));
         if let Some(error) = report.error {
             status.state = ComponentState::Error;
             status.error = Some(error);
@@ -1290,11 +1303,20 @@ fn java_manual_id(report: &JavaRuntimeReport) -> String {
     format!("java-manual-{}", report.major.unwrap_or(0))
 }
 
-fn server_id(report: &runtime_manager::ServerJarReport) -> String {
+fn server_target(target: &ComponentTarget) -> Result<ServerTarget, ComponentError> {
+    ServerTarget::new(
+        target.minecraft_version.clone(),
+        target.data_version,
+        target.java_major,
+    )
+    .map_err(|error| ComponentError::InvalidRequest(error.to_string()))
+}
+
+fn server_id(report: &runtime_manager::ServerJarReport, fallback_version: &str) -> String {
     let mode = if report.managed { "managed" } else { "manual" };
     format!(
         "server-{mode}-{}",
-        report.version.as_deref().unwrap_or("unknown")
+        report.version.as_deref().unwrap_or(fallback_version)
     )
 }
 
@@ -1340,7 +1362,7 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use runtime_manager::RuntimeStatus;
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     struct TempDir {
@@ -1396,6 +1418,38 @@ mod tests {
         fs::write(version_dir.join(format!("{version}.json")), document)
             .expect("write launcher metadata");
         (minecraft, version_dir)
+    }
+
+    /// Writes a structurally valid synthetic server JAR with the exact declared facts.
+    fn write_server_jar(path: &Path, version: &str, data_version: i32, java_major: u32) {
+        let file = fs::File::create(path).expect("create server jar");
+        let mut zip = zip::ZipWriter::new(file);
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("version.json", options)
+            .expect("start version.json");
+        let version_json = serde_json::to_vec(&serde_json::json!({
+            "id": version,
+            "name": version,
+            "world_version": data_version,
+            "protocol_version": 769,
+            "pack_version": { "resource": 46, "data": 61 },
+            "java_version": java_major
+        }))
+        .expect("version json");
+        zip.write_all(&version_json).expect("write version.json");
+        zip.start_file("net/minecraft/bundler/Main.class", options)
+            .expect("start main");
+        zip.write_all(b"not-a-real-main-class").expect("write main");
+        zip.start_file("padding.bin", options)
+            .expect("start padding");
+        let chunk = vec![0u8; 1024 * 1024];
+        let mut written = 0usize;
+        while written < runtime_manager::MIN_SERVER_JAR_BYTES as usize {
+            zip.write_all(&chunk).expect("write padding");
+            written += chunk.len();
+        }
+        zip.finish().expect("finish server jar");
     }
 
     fn assert_manual_assets_ready(
@@ -1726,24 +1780,83 @@ mod tests {
     }
 
     #[test]
-    fn relink_refuses_a_target_the_managers_do_not_manage() {
+    fn assets_relink_still_refuses_a_target_the_asset_manager_does_not_manage() {
         let root = TempDir::new("relink-target");
         let manager = manager(&root);
-        let file = root.path.join("server.jar");
-        fs::write(&file, "not a server JAR").expect("write fixture");
+        let file = root.path.join("client.jar");
+        fs::write(&file, "not a client JAR").expect("write fixture");
         let other_target = ComponentTarget {
             profile_id: "java-classic-1.20.6".to_owned(),
             minecraft_version: "1.20.6".parse().expect("version"),
             data_version: 3839,
             java_major: 21,
         };
-        match manager.relink(ComponentKind::Server, &file, &other_target) {
+        match manager.relink(ComponentKind::Assets, &file, &other_target) {
             Err(ComponentError::UnsupportedTarget {
                 minecraft_version, ..
             }) => assert_eq!(minecraft_version, "1.20.6"),
             other => panic!("expected an unsupported target, got {other:?}"),
         }
-        assert!(manager.inner.server.selected().is_none());
+        assert!(manager.inner.assets.saved_source().source.is_none());
+    }
+
+    #[test]
+    fn server_relink_supports_an_exact_non_baseline_target() {
+        let root = TempDir::new("server-other-version");
+        let manager = manager(&root);
+        let other_target = ComponentTarget {
+            profile_id: "java-classic-1.20.6".to_owned(),
+            minecraft_version: "1.20.6".parse().expect("version"),
+            data_version: 3839,
+            java_major: 21,
+        };
+        let jar = root.path.join("server.jar");
+        write_server_jar(&jar, "1.20.6", 3839, 21);
+
+        let status = manager
+            .relink(ComponentKind::Server, &jar, &other_target)
+            .expect("relink exact server version");
+        assert_eq!(status.mode, Some(ComponentMode::Manual));
+        assert_eq!(status.state, ComponentState::Ready);
+        assert_eq!(status.id.as_deref(), Some("server-manual-1.20.6"));
+        assert_eq!(status.version.as_deref(), Some("1.20.6"));
+        status.validate().expect("valid server status");
+        assert!(manager
+            .inner
+            .server
+            .has_selection(&other_target.minecraft_version));
+
+        // The baseline target does not silently reuse the 1.20.6 selection.
+        let baseline = manager.server_status(&target(), true);
+        assert_eq!(baseline.state, ComponentState::Missing);
+
+        let removal = manager
+            .remove(ComponentKind::Server, "server-manual-1.20.6")
+            .expect("remove manual server selection");
+        assert!(!removal.removed_managed);
+        assert!(removal.cleared_selection);
+        assert!(jar.exists(), "a manual file is never deleted");
+        assert!(!manager
+            .inner
+            .server
+            .has_selection(&other_target.minecraft_version));
+    }
+
+    #[test]
+    fn server_relink_refuses_a_jar_for_another_target() {
+        let root = TempDir::new("server-wrong-version");
+        let manager = manager(&root);
+        let jar = root.path.join("server.jar");
+        write_server_jar(&jar, "1.20.6", 3839, 21);
+        match manager.relink(ComponentKind::Server, &jar, &target()) {
+            Err(ComponentError::Server(_)) => {}
+            other => panic!("expected the server JAR to be refused, got {other:?}"),
+        }
+        assert!(manager
+            .inner
+            .server
+            .selected(&runtime_manager::ServerTarget::baseline())
+            .is_none());
     }
 
     #[test]

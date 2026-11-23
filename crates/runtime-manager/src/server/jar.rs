@@ -6,11 +6,10 @@ use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use zip::ZipArchive;
 
-use crate::error::{unsupported_server, ServerError};
+use crate::error::ServerError;
 use crate::managed::hex;
-use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
-use super::types::{MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES};
+use super::types::{ServerTarget, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES};
 
 const MAX_VERSION_JSON_BYTES: u64 = 64 * 1024;
 const MAX_ZIP_ENTRIES: usize = 10_000;
@@ -44,13 +43,53 @@ pub struct ServerJarInfo {
     pub size: u64,
 }
 
-/// Reads the actual archive instead of trusting a file name. A valid target JAR must:
+impl ServerJarInfo {
+    /// Checks the exact version, DataVersion and declared Java major against a project target.
+    /// A mismatch is never repaired or substituted; the caller reports the actual facts.
+    pub fn validate_for(&self, target: &ServerTarget) -> Result<(), ServerError> {
+        let expected = target.minecraft_version.as_str();
+        if self.version != expected {
+            return Err(ServerError::Unsupported {
+                target: expected.to_owned(),
+                detail: format!(
+                    "the JAR declares Minecraft {}, expected {expected}",
+                    self.version
+                ),
+            });
+        }
+        if self.data_version != target.data_version {
+            return Err(ServerError::Unsupported {
+                target: expected.to_owned(),
+                detail: format!(
+                    "the JAR declares world_version {}, expected {}",
+                    self.data_version, target.data_version
+                ),
+            });
+        }
+        if let Some(java_major) = self.java_major {
+            if java_major != target.java_major {
+                return Err(ServerError::Unsupported {
+                    target: expected.to_owned(),
+                    detail: format!(
+                        "the JAR requires Java {java_major}, expected Java {}",
+                        target.java_major
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Reads the actual archive instead of trusting a file name. A structurally valid JAR must:
 ///
 /// - be a regular file in the expected size range;
 /// - be a readable ZIP;
-/// - contain exactly one root `version.json` declaring the target version and `world_version`;
-/// - declare the target Java major when `java_version` is present;
+/// - contain exactly one root `version.json`;
 /// - contain a known server entry point (`bundler/Main` or `server/Main`).
+///
+/// Whether the declared version, DataVersion and Java major fit a project is checked by
+/// [`ServerJarInfo::validate_for`], so callers can report the actual facts of a stale file.
 pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
     let metadata = std::fs::symlink_metadata(path)
         .map_err(|error| ServerError::Invalid(format!("{}: {error}", path.display())))?;
@@ -111,28 +150,6 @@ pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
         serde_json::from_slice::<ServerVersionJson>(&bytes)
             .map_err(|error| ServerError::Archive(format!("version.json: {error}")))?
     };
-    let expected_version = target_minecraft_version();
-    if version_json.id != expected_version {
-        return Err(unsupported_server(format!(
-            "the JAR declares Minecraft {}, expected {}",
-            version_json.id, expected_version
-        )));
-    }
-    let expected_data_version = target_data_version();
-    if version_json.world_version != expected_data_version {
-        return Err(unsupported_server(format!(
-            "the JAR declares world_version {}, expected {expected_data_version}",
-            version_json.world_version
-        )));
-    }
-    if let Some(java_major) = version_json.java_version {
-        let expected_java = target_java_major();
-        if java_major != expected_java {
-            return Err(unsupported_server(format!(
-                "the JAR requires Java {java_major}, expected Java {expected_java}"
-            )));
-        }
-    }
     let mut has_server_main = false;
     for name in archive.file_names() {
         let name =

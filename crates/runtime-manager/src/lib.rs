@@ -71,9 +71,9 @@ pub use server::{
     GenerationRunsReport, GenerationSnapshot, GenerationStatusReport, GenerationStopReason,
     InstalledServerJar, ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula,
     SavedServerJar, ServerDiscoveryReport, ServerJarInfo, ServerJarReport, ServerManager,
-    ServerProgress, ServerReleaseInfo, ServerSource, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES,
-    MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION, SERVER_MANIFEST_SCHEMA_VERSION,
-    SERVER_SETTINGS_SCHEMA_VERSION, VERSION_MANIFEST_URL,
+    ServerProgress, ServerReleaseInfo, ServerSource, ServerTarget, WorldPreset, EULA_URL,
+    MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION,
+    SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION, VERSION_MANIFEST_URL,
 };
 pub use settings::RuntimeSettingsStore;
 pub use target::{

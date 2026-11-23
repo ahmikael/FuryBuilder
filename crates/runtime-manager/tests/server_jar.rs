@@ -1,13 +1,13 @@
-//! M9.4 tests: exact server JAR inspection, manual selection and stale-file handling.
+//! Exact server JAR inspection, manual selection and stale-file handling.
 //! Archives are synthetic and padded to the minimum real-JAR size; no Mojang binary is
-//! committed. The real official 1.21.4 download is exercised by `examples/server_probe.rs`.
+//! committed. Real downloads are exercised by `examples/server_probe.rs`.
 
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use furybuilder_runtime_manager::{
-    inspect_server_jar, sha1_file, target_data_version, ServerManager, ServerSource,
+    inspect_server_jar, sha1_file, target_data_version, ServerManager, ServerSource, ServerTarget,
 };
 
 const MIN_SIZE: usize = 10 * 1024 * 1024;
@@ -34,12 +34,26 @@ impl TempDir {
     fn path(&self) -> &Path {
         &self.path
     }
+
+    fn manager(&self) -> ServerManager {
+        let appdata = self.path.join("appdata");
+        ServerManager::new(
+            appdata.join("server.json"),
+            self.path.join("servers"),
+            appdata.join("version-manifest.json"),
+        )
+    }
 }
 
 impl Drop for TempDir {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.path);
     }
+}
+
+fn target(version: &str, data_version: i32, java_major: u32) -> ServerTarget {
+    ServerTarget::new(version.parse().expect("version"), data_version, java_major)
+        .expect("server target")
 }
 
 fn version_json(id: &str, world_version: i32, java_version: u32) -> Vec<u8> {
@@ -90,7 +104,7 @@ fn write_jar(path: &Path, version_json: &[u8], include_server_main: bool) {
 }
 
 #[test]
-fn inspects_exact_version_and_rejects_non_server_archives() {
+fn inspects_structural_facts_and_validates_them_against_an_exact_target() {
     let dir = TempDir::new("inspect");
     let valid = dir.path().join("server.jar");
     write_jar(&valid, &version_json("1.21.4", 4189, 21), true);
@@ -103,22 +117,27 @@ fn inspects_exact_version_and_rejects_non_server_archives() {
     assert_eq!(info.size, fs::metadata(&valid).expect("metadata").len());
     assert_eq!(info.sha1, sha1_file(&valid).expect("sha1"));
     assert_eq!(info.sha1.len(), 40);
+    info.validate_for(&target("1.21.4", 4189, 21))
+        .expect("exact target");
+
+    let wrong_world = dir.path().join("wrong-world.jar");
+    write_jar(&wrong_world, &version_json("1.21.4", 5023, 21), true);
+    let info = inspect_server_jar(&wrong_world).expect("structural inspection");
+    assert!(info.validate_for(&target("1.21.4", 4189, 21)).is_err());
+
+    let wrong_id = dir.path().join("wrong-id.jar");
+    write_jar(&wrong_id, &version_json("1.20.6", 3839, 21), true);
+    let info = inspect_server_jar(&wrong_id).expect("structural inspection");
+    assert!(info.validate_for(&target("1.21.4", 4189, 21)).is_err());
+
+    let wrong_java = dir.path().join("wrong-java.jar");
+    write_jar(&wrong_java, &version_json("1.21.4", 4189, 17), true);
+    let info = inspect_server_jar(&wrong_java).expect("structural inspection");
+    assert!(info.validate_for(&target("1.21.4", 4189, 21)).is_err());
 
     let client = dir.path().join("client.jar");
     write_jar(&client, &version_json("1.21.4", 4189, 21), false);
     assert!(inspect_server_jar(&client).is_err());
-
-    let wrong_world = dir.path().join("wrong-world.jar");
-    write_jar(&wrong_world, &version_json("1.21.4", 5023, 21), true);
-    assert!(inspect_server_jar(&wrong_world).is_err());
-
-    let wrong_id = dir.path().join("wrong-id.jar");
-    write_jar(&wrong_id, &version_json("1.21.3", 4189, 21), true);
-    assert!(inspect_server_jar(&wrong_id).is_err());
-
-    let wrong_java = dir.path().join("wrong-java.jar");
-    write_jar(&wrong_java, &version_json("1.21.4", 4189, 17), true);
-    assert!(inspect_server_jar(&wrong_java).is_err());
 
     let tiny = dir.path().join("tiny.jar");
     fs::write(&tiny, b"not a jar").expect("tiny jar");
@@ -128,13 +147,14 @@ fn inspects_exact_version_and_rejects_non_server_archives() {
 #[test]
 fn manual_selection_verifies_reports_and_detects_disk_changes() {
     let dir = TempDir::new("manual");
+    let manager = dir.manager();
+    let exact = target("1.21.4", 4189, 21);
     let jar = dir.path().join("server.jar");
     write_jar(&jar, &version_json("1.21.4", 4189, 21), true);
-    let settings = dir.path().join("appdata").join("server.json");
-    fs::create_dir_all(settings.parent().expect("settings parent")).expect("settings dir");
-    let manager = ServerManager::new(&settings, dir.path().join("servers"));
 
-    let report = manager.select_manual(&jar).expect("select server jar");
+    let report = manager
+        .select_manual(&jar, &exact)
+        .expect("select server jar");
     assert!(report.ready);
     assert_eq!(report.source, ServerSource::Manual);
     assert!(!report.managed);
@@ -157,54 +177,107 @@ fn manual_selection_verifies_reports_and_detects_disk_changes() {
         .expect("open jar")
         .write_all(b"x")
         .expect("append");
-    let changed = manager.selected().expect("saved report");
+    let changed = manager.selected(&exact).expect("saved report");
     assert!(!changed.ready);
     assert!(changed
         .error
         .expect("changed error")
         .contains("changed on disk"));
 
-    manager.clear_selection().expect("clear selection");
-    assert!(manager.selected().is_none());
+    manager
+        .clear_selection(&exact.minecraft_version)
+        .expect("clear selection");
+    assert!(manager.selected(&exact).is_none());
 
     let client = dir.path().join("client.jar");
     write_jar(&client, &version_json("1.21.4", 4189, 21), false);
-    assert!(manager.select_manual(&client).is_err());
-    assert!(manager.selected().is_none());
+    assert!(manager.select_manual(&client, &exact).is_err());
+    assert!(manager.selected(&exact).is_none());
+}
+
+#[test]
+fn selections_are_kept_per_exact_version() {
+    let dir = TempDir::new("versions");
+    let manager = dir.manager();
+    let first = target("1.21.4", 4189, 21);
+    let second = target("1.20.6", 3839, 21);
+    let first_jar = dir.path().join("server-first.jar");
+    let second_jar = dir.path().join("server-second.jar");
+    write_jar(&first_jar, &version_json("1.21.4", 4189, 21), true);
+    write_jar(&second_jar, &version_json("1.20.6", 3839, 21), true);
+
+    manager
+        .select_manual(&first_jar, &first)
+        .expect("select first version");
+    manager
+        .select_manual(&second_jar, &second)
+        .expect("select second version");
+
+    assert!(manager.selected(&first).expect("first").ready);
+    assert!(manager.selected(&second).expect("second").ready);
+    assert_eq!(
+        manager
+            .selected(&second)
+            .expect("second")
+            .version
+            .as_deref(),
+        Some("1.20.6")
+    );
+
+    // A JAR for another version is refused and never replaces an existing selection.
+    assert!(manager.select_manual(&first_jar, &second).is_err());
+    assert!(manager.selected(&second).expect("second").ready);
+    assert!(manager.selected(&first).expect("first").ready);
+
+    manager
+        .clear_selection(&second.minecraft_version)
+        .expect("clear second");
+    assert!(manager.selected(&second).is_none());
+    assert!(manager.selected(&first).is_some());
 }
 
 #[test]
 fn eula_acceptance_is_explicit_and_tied_to_the_selected_jar() {
     let dir = TempDir::new("eula");
+    let manager = dir.manager();
+    let exact = target("1.21.4", 4189, 21);
     let jar = dir.path().join("server.jar");
     write_jar(&jar, &version_json("1.21.4", 4189, 21), true);
-    let settings = dir.path().join("appdata").join("server.json");
-    fs::create_dir_all(settings.parent().expect("settings parent")).expect("settings dir");
-    let manager = ServerManager::new(&settings, dir.path().join("servers"));
 
-    assert!(manager.accept_eula(false).is_err());
+    assert!(manager.accept_eula(false, &exact).is_err());
     assert!(manager.eula().is_none());
-    assert!(manager.accept_eula(true).is_err(), "no selected JAR yet");
+    assert!(
+        manager.accept_eula(true, &exact).is_err(),
+        "no selected JAR yet"
+    );
 
-    let report = manager.select_manual(&jar).expect("select server jar");
+    let report = manager
+        .select_manual(&jar, &exact)
+        .expect("select server jar");
     let sha1 = report.sha1.clone().expect("sha1");
     assert!(manager.discover().eula.is_none());
     assert!(!manager.discover().eula_matches_selected);
 
-    let eula = manager.accept_eula(true).expect("explicit acceptance");
+    let eula = manager
+        .accept_eula(true, &exact)
+        .expect("explicit acceptance");
     assert_eq!(eula.minecraft_version, "1.21.4");
     assert_eq!(eula.jar_sha1, sha1);
     assert_eq!(eula.eula_url, "https://aka.ms/MinecraftEULA");
     let discovery = manager.discover();
     assert!(discovery.eula_matches_selected);
 
-    manager.clear_selection().expect("clear selection");
+    manager
+        .clear_selection(&exact.minecraft_version)
+        .expect("clear selection");
     let discovery = manager.discover();
     assert!(discovery.selected.is_none());
     assert!(discovery.eula.is_some(), "acceptance is a separate record");
     assert!(!discovery.eula_matches_selected);
 
-    manager.select_manual(&jar).expect("reselect server jar");
+    manager
+        .select_manual(&jar, &exact)
+        .expect("reselect server jar");
     assert!(manager.discover().eula_matches_selected);
     manager.clear_eula().expect("withdraw eula");
     assert!(manager.eula().is_none());
@@ -214,24 +287,29 @@ fn eula_acceptance_is_explicit_and_tied_to_the_selected_jar() {
 #[test]
 fn missing_manual_jar_is_reported_not_hidden() {
     let dir = TempDir::new("missing");
-    let settings = dir.path().join("server.json");
+    let manager = dir.manager();
     let missing = dir.path().join("gone").join("server.jar");
+    fs::create_dir_all(manager.settings_path().parent().expect("settings parent"))
+        .expect("settings dir");
     fs::write(
-        &settings,
+        manager.settings_path(),
         serde_json::to_vec(&serde_json::json!({
-            "schemaVersion": 1,
-            "selected": {
+            "schemaVersion": 2,
+            "selected": [{
+                "minecraftVersion": "1.21.4",
                 "path": missing.display().to_string(),
                 "sha1": "4707d00eb834b446575d89a61a11b5d548d8c001",
                 "size": 56880250,
                 "dataVersion": 4189
-            }
+            }]
         }))
         .expect("settings json"),
     )
     .expect("settings file");
-    let manager = ServerManager::new(&settings, dir.path().join("servers"));
-    let report = manager.selected().expect("saved report");
+    let manager = dir.manager();
+    let report = manager
+        .selected(&target("1.21.4", 4189, 21))
+        .expect("saved report");
     assert!(!report.ready);
     assert!(report.error.is_some());
     assert_eq!(report.source, ServerSource::Manual);
