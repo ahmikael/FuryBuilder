@@ -20,7 +20,7 @@ Start with the guide that matches your task.
 - [Architecture](architecture.md) - system shape, decisions, boundaries, security and
   dependency policy.
 - [Release and data policy](release.md) - versioning, changelog, installer, updates,
-  backups and migrations.
+  backups and schema policy.
 - [Third-party notices](legal/third-party-notices.md) and the generated
   [dependency inventory](legal/third-party-inventory.md).
 

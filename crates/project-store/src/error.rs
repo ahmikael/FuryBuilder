@@ -20,7 +20,9 @@ pub enum ProjectError {
     InvalidName(String),
     #[error("invalid project path: {0}")]
     InvalidPath(String),
-    #[error("project schema version {found} is newer than supported version {supported}; open it read-only or use a newer FuryBuilder")]
+    #[error(
+        "stored schema version {found} is not supported; this build reads version {supported} only"
+    )]
     UnsupportedSchema { found: u32, supported: u32 },
     #[error("project data is corrupt: {0}")]
     Corrupt(String),

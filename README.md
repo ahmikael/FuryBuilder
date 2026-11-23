@@ -85,7 +85,7 @@ desktop app to exercise the typed Tauri IPC (`app_info`, `ping`).
 - [Architecture](docs/architecture.md) - system shape, decisions, security and dependency
   policy.
 - [Release and data policy](docs/release.md) - versioning, changelog, installer, updates,
-  backups and migrations.
+  backups and schema policy.
 - [Documentation index](docs/README.md)
 
 ## Known limitations (Windows beta)

@@ -340,21 +340,11 @@ impl ProjectStore {
             .get("projectSchemaVersion")
             .and_then(serde_json::Value::as_u64)
             .unwrap_or(0) as u32;
-        if version > PROJECT_SCHEMA_VERSION {
+        if version != PROJECT_SCHEMA_VERSION {
             return Err(ProjectError::UnsupportedSchema {
                 found: version,
                 supported: PROJECT_SCHEMA_VERSION,
             });
-        }
-        if version < PROJECT_SCHEMA_VERSION {
-            // Copy the manifest exactly as it exists on disk before migrating, so a failed
-            // migration never destroys the only copy and the backup is byte-identical.
-            let backup = dir.join(format!("project.json.v{version}.bak"));
-            fs::copy(&path, &backup)
-                .map_err(|error| io_error(format!("backing up {}", path.display()), error))?;
-            let manifest = migrate_manifest(raw)?;
-            write_json(&path, &manifest)?;
-            return Ok(manifest);
         }
         let manifest: ProjectManifest = serde_json::from_value(raw)?;
         manifest.validate()?;
@@ -857,7 +847,7 @@ impl ProjectStore {
         manifest.editor_state = editor_state;
         manifest.validate()?;
 
-        // Keep the previous manifest as a migration/backup breadcrumb before publishing.
+        // Keep the previous manifest as a backup breadcrumb before publishing.
         let previous_manifest = dir.join(PROJECT_FILE);
         let mut backup_created = false;
         if previous_manifest.exists() {
@@ -1043,9 +1033,7 @@ impl ProjectStore {
         Ok(pruned)
     }
 
-    /// Keeps only the newest `MAX_MANIFEST_BACKUPS` per-save manifest copies. Migration
-    /// backups named `project.json.v<version>.bak` are intentionally left untouched because
-    /// they are evidence of a schema transition, not routine saves.
+    /// Keeps only the newest `MAX_MANIFEST_BACKUPS` per-save manifest copies.
     fn prune_manifest_backups(dir: &Path) -> usize {
         let Ok(entries) = fs::read_dir(dir) else {
             return 0;
@@ -1296,59 +1284,6 @@ fn valid_source_relative_path(value: &str) -> bool {
         && value
             .split('/')
             .all(|component| !component.is_empty() && component != "." && component != "..")
-}
-
-/// Migrates a stored manifest to the current schema. Unknown/newer versions are refused;
-/// older draft versions gain the fields introduced after them. The caller is responsible
-/// for copying the original manifest bytes before calling this function.
-pub fn migrate_manifest(raw: serde_json::Value) -> Result<ProjectManifest, ProjectError> {
-    let version = raw
-        .get("projectSchemaVersion")
-        .and_then(serde_json::Value::as_u64)
-        .unwrap_or(0) as u32;
-    match version {
-        v if v == PROJECT_SCHEMA_VERSION => {
-            let manifest: ProjectManifest = serde_json::from_value(raw)?;
-            manifest.validate()?;
-            Ok(manifest)
-        }
-        v if v > PROJECT_SCHEMA_VERSION => Err(ProjectError::UnsupportedSchema {
-            found: v,
-            supported: PROJECT_SCHEMA_VERSION,
-        }),
-        v if v < PROJECT_SCHEMA_VERSION => {
-            // Draft folders from before schema 1 used snake_case and lacked editorState.
-            let mut value = raw;
-            if let Some(object) = value.as_object_mut() {
-                object.insert(
-                    "projectSchemaVersion".to_owned(),
-                    serde_json::Value::from(PROJECT_SCHEMA_VERSION),
-                );
-                object
-                    .entry("editorState")
-                    .or_insert_with(|| serde_json::to_value(EditorState::default()).unwrap());
-                object
-                    .entry("source")
-                    .or_insert_with(|| serde_json::to_value(SourceInfo::generated()).unwrap());
-                object
-                    .entry("createdBy")
-                    .or_insert_with(|| serde_json::Value::from("FuryBuilder"));
-                object
-                    .entry("appVersion")
-                    .or_insert_with(|| serde_json::Value::from(env!("CARGO_PKG_VERSION")));
-                object
-                    .entry("lastSaveKind")
-                    .or_insert_with(|| serde_json::Value::from("manual"));
-            }
-            let manifest: ProjectManifest = serde_json::from_value(value)?;
-            manifest.validate()?;
-            Ok(manifest)
-        }
-        _ => Err(ProjectError::UnsupportedSchema {
-            found: version,
-            supported: PROJECT_SCHEMA_VERSION,
-        }),
-    }
 }
 
 /// Stable checksum helper used by tests and the UI.
@@ -1776,7 +1711,7 @@ mod tests {
     }
 
     #[test]
-    fn unsupported_newer_schema_is_refused() {
+    fn non_current_project_schema_is_refused_without_a_backup() {
         let root = temp_root("schema");
         let store = ProjectStore::new(&root);
         let detail = store
@@ -1784,24 +1719,19 @@ mod tests {
             .expect("create");
         let dir = root.join(&detail.summary.folder);
         let path = dir.join(PROJECT_FILE);
-        let mut value: serde_json::Value =
-            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-        value["projectSchemaVersion"] = serde_json::Value::from(99);
-        fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
-        match store.open(&detail.summary.folder) {
-            Err(ProjectError::UnsupportedSchema { found: 99, .. }) => {}
-            other => panic!("expected unsupported schema, got {other:?}"),
+        let raw: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        for version in [0u32, 1, 99] {
+            let mut value = raw.clone();
+            value["projectSchemaVersion"] = serde_json::Value::from(version);
+            fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
+            match store.open(&detail.summary.folder) {
+                Err(ProjectError::UnsupportedSchema { found, .. }) => {
+                    assert_eq!(found, version);
+                }
+                other => panic!("expected schema {version} to be refused, got {other:?}"),
+            }
+            assert!(!dir.join(format!("project.json.v{version}.bak")).exists());
         }
-        value["projectSchemaVersion"] = serde_json::Value::from(0);
-        fs::write(&path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
-        let (_, world, _) = store
-            .open(&detail.summary.folder)
-            .expect("draft schema migrates");
-        assert_eq!(world.revision(), 1);
-        assert!(root
-            .join(&detail.summary.folder)
-            .join("project.json.v0.bak")
-            .exists());
     }
 
     #[test]

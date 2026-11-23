@@ -21,7 +21,7 @@ application API over an authenticated local endpoint and never opens world files
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | ADR-001 | First and only write-verified target is Minecraft Java **1.21.4**, `DataVersion` 4189. Other versions are detected and refused.           |
-| ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and explicit migrations. |
+| ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
 | ADR-005 | MCP is a local stdio adapter over the same Application API; no world logic in the bridge, no network port by default.                     |
@@ -43,13 +43,13 @@ application API over an authenticated local endpoint and never opens world files
 A project folder contains `project.json`, `source/` (immutable imported source), `data/`
 (versioned world snapshots), `changes/` (journal and checkpoints), `cache/` (regenerable)
 and optional `assets/` and `previews/`. `project.json` is the only eagerly parsed document;
-it stores schema version, project id, name, creation mode, target version/DataVersion,
-world revision and provenance.
+it stores schema version, project id, name, creation mode, target version profile
+(version/DataVersion/Java/pack formats), component references, world revision and provenance.
 
 Saves are atomic at the project level: stage, verify, publish, keep the previous manifest.
 The MVP keeps one deterministic whole-world snapshot per committed revision, the newest
-eight, plus autosave and rolling checkpoints. Schema migrations copy the original manifest
-byte for byte before changing it; newer unknown schemas are refused.
+eight, plus autosave and rolling checkpoints. Project schema versions are exact: FuryBuilder
+reads only the current schema and refuses older or newer manifests without rewriting them.
 
 ## MCP boundary
 

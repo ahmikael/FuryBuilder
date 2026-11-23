@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation и project schema v2 закрыты; идёт удаление schema v1.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2, version profiles, baseline 1.21.4).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation закрыт; `project.json` существует только в v2, идёт snapshot v3.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, version profiles, baseline 1.21.4).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1388,9 +1388,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-13` — удалить schema v1 целиком: reader/writer, миграцию, backup-путь и тесты старой схемы. Статус: P0 в работе.
+**Текущий фокус:** `P0-14` — snapshot `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-14`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-15`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1434,7 +1434,7 @@ UI:
 #### B. Project data
 
 - [x] `P0-12` `project.json` schema v2: `target` + `components` (см. §5.3), serde + validation.
-- [ ] `P0-13` Удалить schema v1 целиком: reader/writer, миграцию, backup-путь и тесты старой схемы; `project.json` существует только в v2.
+- [x] `P0-13` Удалить schema v1 целиком: reader/writer, миграцию, backup-путь и тесты старой схемы; `project.json` существует только в v2.
 - [ ] `P0-14` Snapshot `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode.
 - [ ] `P0-15` Удалить snapshot v2 reader/writer и тесты v2; пересоздать `examples/furybuilder-demo.furybuilder` под schema v2 / `.fwl` v3 и обновить `demo_project` тест.
 - [ ] `P0-16` Checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; v1 не читается, compatibility-полей нет.
@@ -1670,7 +1670,8 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
-| 2026-11-23 | Project schema v2 | `project.json` хранит `target` (version/profile/DataVersion/Java/pack formats) и `components` (java/assets/server); target сверяется с профилем, placeholder не выдаёт себя за проверенный компонент; демо пересобрано на v2 | см. `git log` | 549 Rust tests, clippy, fmt |
+| 2026-11-23 | Project schema v1 removal | `project.json` читается только в v2: любой другой номер схемы отклоняется без миграции, backup-файла и перезаписи; старые migration-тесты заменены тестами текущего контракта; docs описывают exact-match schema policy | см. `git log` | 549 Rust tests, clippy, fmt, typecheck/lint/format |
+| 2026-11-23 | Project schema v2 | `project.json` хранит `target` (version/profile/DataVersion/Java/pack formats) и `components` (java/assets/server); target сверяется с профилем, placeholder не выдаёт себя за проверенный компонент; демо переведено на v2 | см. `git log` | 549 Rust tests, clippy, fmt |
 | 2026-11-23 | Version foundation | CI-grep запрещает `1.21.4`/`4189` вне каталога, фикстур и тестов; UI и support matrix читают версию из проекта/профиля | см. `git log` | 543 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Version foundation | Удалены `TARGET_*`; мир, импорт, структуры, проект, ассеты, Java и server берут версию из profile/world | см. `git log` | 542 tests, clippy, fmt |
 | 2026-11-23 | Version foundation | Инварианты профилей: capabilities, release/family, уникальные dimensions, full ⇒ write | см. `git log` | 43 tests, clippy, fmt |

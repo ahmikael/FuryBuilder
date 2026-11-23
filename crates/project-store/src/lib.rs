@@ -32,9 +32,9 @@ pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION, SNAPSHOT
 pub use source::{SourceFile, SourceManifest};
 pub use store::TEMPLATES_DIR;
 pub use store::{
-    build_world, checksum, create_flat_base, is_safe_file_name, migrate_manifest, snapshot_bytes,
-    CheckpointMeta, ExportOutcome, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR,
-    DATA_DIR, EXPORTS_DIR, MAX_CHECKPOINTS, MAX_MANIFEST_BACKUPS, MAX_SNAPSHOTS, MAX_SOURCE_FILES,
-    SESSION_MARKER, SOURCE_DIR,
+    build_world, checksum, create_flat_base, is_safe_file_name, snapshot_bytes, CheckpointMeta,
+    ExportOutcome, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR, DATA_DIR, EXPORTS_DIR,
+    MAX_CHECKPOINTS, MAX_MANIFEST_BACKUPS, MAX_SNAPSHOTS, MAX_SOURCE_FILES, SESSION_MARKER,
+    SOURCE_DIR,
 };
 pub use workspace_model::WorkspacePolicy;
