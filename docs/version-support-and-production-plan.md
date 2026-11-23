@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты и hardening manual/placeholder/relink закрыты; идёт lifecycle store.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink и lifecycle store закрыты; идёт Welcome screen.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1407,9 +1407,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-33` — Lifecycle store: `CLOSED → PREPARING → READY → SAVING/ERROR`; единый источник состояния проекта. Статус: P0 в работе.
+**Текущий фокус:** `P0-34` — Welcome screen: бренд, недавние проекты, `New project`/`Open`/`Import`, статус ядра. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-34`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-35`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1479,7 +1479,7 @@ UI:
 
 #### D. Lifecycle и Welcome
 
-- [ ] `P0-33` Lifecycle store: `CLOSED → PREPARING → READY → SAVING/ERROR`; единый источник состояния.
+- [x] `P0-33` Lifecycle store: `CLOSED → PREPARING → READY → SAVING/ERROR`; единый источник состояния.
 - [ ] `P0-34` Welcome screen: бренд, недавние проекты, `New project`/`Open`/`Import`, статус ядра.
 - [ ] `P0-35` Project gate: viewport/renderer/`world_info`/`render_snapshot`/`resume` только в `READY`.
 - [ ] `P0-36` Teardown при закрытии: dispose renderer, reset stores, stop autosave, cancel jobs.
@@ -1689,6 +1689,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Project lifecycle | `useProjectStore` стал единственным источником фаз `closed → preparing → ready → saving/error`: create/open/import/restore/close переводят состояние явно, save идёт через `saving` с сохранением открытого мира, ошибка несёт стабильный `code`/`message`/`hint` и остаётся retryable; `resume`/`refreshSession` выводят фазу из сессии, `clearFailure` возвращает в `ready`/`closed`; тесты на preparing во время open, retry после failed create, saving без размонтирования, failed save с открытым проектом и close/refresh | см. `git log` | 660 Rust tests, 300 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Manual/placeholder tests | Новые тесты facade и probe: symlink/junction в `.minecraft` root, version folder, server JAR и Java executable отклоняется до сохранения выбора; client JAR другой версии и неизвестный Java major отклоняются; 32-bit Java никогда не `usable`; placeholder переживает новый `ComponentManager` и остаётся `unverified` без id/path/hash/size; helper создаёт symlink на Unix и junction на Windows без admin-прав | см. `git log` | 660 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Mock HTTP suite | Новые integration-тесты `crates/download-pipeline/tests/mock_http.rs` на реальном loopback TCP-сервере: success + atomic publish, 404 без retry, read timeout, relative redirect на том же host, отказ redirect на чужой host, hash mismatch без retry и с очисткой temp, wrong size до публикации, cooperative cancel с удалением partial-файла, disconnect, retry 503 → 200; `Allowlist::for_local_test` допускает plain HTTP только для loopback ephemeral port, production allowlists по-прежнему требуют HTTPS:443; redirect resolver сохраняет схему только в тестовом режиме | см. `git log` | 653 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Components API | Tauri shell владеет одним `ComponentManager`: runtime/assets/server commands читают его через accessors, добавлены `components_status/resolve/inventory/*_release/install/cancel/relink/remove/verify`; install стримит `furybuilder-component-progress` (throttled 250 ms), мутации — `furybuilder-component-changed` + старые kind-events, ошибки — `furybuilder-component-error`; `ErrorCode` получил `offline`/`disk_space`; facade отдаёт previews и inventory; TS `components-api.ts` + типы + contract-тесты | см. `git log` | 641 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |

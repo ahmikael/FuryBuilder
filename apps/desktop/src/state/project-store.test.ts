@@ -150,6 +150,17 @@ function insertOutcome(): StructureInsertOutcome {
   };
 }
 
+function saveOutcome() {
+  return {
+    project: payload().detail,
+    checksum: "a".repeat(64),
+    snapshotFile: "data/world-00000000000000000004.fwl",
+    bytesWritten: 8192,
+    backupCreated: true,
+    prunedSnapshots: 0,
+  };
+}
+
 function resetStores(): void {
   useWorldStore.setState({
     status: "ready",
@@ -180,6 +191,9 @@ function resetStores(): void {
     projects: [],
     warnings: [],
     current: null,
+    phase: "closed",
+    prepareMessage: null,
+    failure: null,
     recovery: null,
     checkpoints: [],
     lastSavedAtMs: null,
@@ -195,14 +209,7 @@ beforeEach(() => {
   api.status.mockReset().mockResolvedValue(session());
   api.create.mockReset().mockResolvedValue(payload());
   api.open.mockReset().mockResolvedValue(payload());
-  api.save.mockReset().mockResolvedValue({
-    project: payload().detail,
-    checksum: "a".repeat(64),
-    snapshotFile: "data/world-00000000000000000004.fwl",
-    bytesWritten: 8192,
-    backupCreated: true,
-    prunedSnapshots: 0,
-  });
+  api.save.mockReset().mockResolvedValue(saveOutcome());
   api.autosave.mockReset().mockResolvedValue(5);
   api.checkpoint.mockReset().mockResolvedValue([]);
   api.checkpoints.mockReset().mockResolvedValue([]);
@@ -303,6 +310,104 @@ describe("project activation", () => {
     expect(toast?.title).toContain("recovery warning");
     expect(toast?.description).toContain("Opened saved revision 4");
     expect(toast?.description).not.toContain("restored from the autosave");
+  });
+});
+
+describe("project lifecycle", () => {
+  it("reports preparing while opening and ready only after the payload is applied", async () => {
+    let resolveOpen!: (value: OpenedProjectPayload) => void;
+    api.open.mockReturnValue(
+      new Promise<OpenedProjectPayload>((resolve) => {
+        resolveOpen = resolve;
+      }),
+    );
+
+    const opening = useProjectStore.getState().open(summary.folder, { discardCurrent: true });
+    expect(useProjectStore.getState().phase).toBe("preparing");
+    expect(useProjectStore.getState().prepareMessage).toContain("Opening");
+    expect(useProjectStore.getState().loading).toBe(true);
+    expect(useProjectStore.getState().current).toBeNull();
+
+    resolveOpen(payload());
+    expect(await opening).toBe(true);
+    const state = useProjectStore.getState();
+    expect(state.phase).toBe("ready");
+    expect(state.prepareMessage).toBeNull();
+    expect(state.failure).toBeNull();
+    expect(state.current?.folder).toBe(summary.folder);
+  });
+
+  it("enters a retryable error state when creation fails and recovers on retry", async () => {
+    api.create.mockRejectedValue({ code: "disk_space", message: "the volume is full" });
+
+    const created = await useProjectStore.getState().create("My Castle", "flat");
+    expect(created).toBe(false);
+    const failed = useProjectStore.getState();
+    expect(failed.phase).toBe("error");
+    expect(failed.current).toBeNull();
+    expect(failed.loading).toBe(false);
+    expect(failed.prepareMessage).toBeNull();
+    expect(failed.failure).toMatchObject({
+      code: "disk_space",
+      message: "the volume is full",
+    });
+    expect(failed.error).toBe("the volume is full");
+
+    api.create.mockResolvedValue(payload());
+    expect(await useProjectStore.getState().create("My Castle", "flat")).toBe(true);
+    expect(useProjectStore.getState().phase).toBe("ready");
+    expect(useProjectStore.getState().failure).toBeNull();
+  });
+
+  it("marks the open project saving without unmounting it", async () => {
+    useProjectStore.setState({ current: session(), phase: "ready" });
+    let resolveSave!: (value: ReturnType<typeof saveOutcome>) => void;
+    api.save.mockReturnValue(
+      new Promise<ReturnType<typeof saveOutcome>>((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    const saving = useProjectStore.getState().save();
+    expect(useProjectStore.getState().phase).toBe("saving");
+    expect(useProjectStore.getState().loading).toBe(true);
+    expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
+
+    resolveSave(saveOutcome());
+    expect(await saving).toBe(true);
+    expect(useProjectStore.getState().phase).toBe("ready");
+    expect(useProjectStore.getState().loading).toBe(false);
+  });
+
+  it("keeps the project open when saving fails and clears the failure explicitly", async () => {
+    useProjectStore.setState({ current: session(), phase: "ready" });
+    api.save.mockRejectedValue({ code: "conflict", message: "the project changed" });
+
+    expect(await useProjectStore.getState().save()).toBe(false);
+    const failed = useProjectStore.getState();
+    expect(failed.phase).toBe("error");
+    expect(failed.current?.folder).toBe(summary.folder);
+    expect(failed.failure?.code).toBe("conflict");
+
+    useProjectStore.getState().clearFailure();
+    expect(useProjectStore.getState().phase).toBe("ready");
+    expect(useProjectStore.getState().failure).toBeNull();
+    expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
+  });
+
+  it("returns to closed after a close and derives the session phase on refresh", async () => {
+    useProjectStore.setState({ current: session(), phase: "ready" });
+    expect(await useProjectStore.getState().close(false)).toBe(true);
+    expect(useProjectStore.getState().phase).toBe("closed");
+    expect(useProjectStore.getState().current).toBeNull();
+
+    api.status.mockResolvedValue(session());
+    await useProjectStore.getState().refreshSession();
+    expect(useProjectStore.getState().phase).toBe("ready");
+
+    api.status.mockResolvedValue(session({ folder: null, name: null }));
+    await useProjectStore.getState().refreshSession();
+    expect(useProjectStore.getState().phase).toBe("closed");
   });
 });
 

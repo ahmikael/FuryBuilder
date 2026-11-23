@@ -46,10 +46,23 @@ import { useSceneStore } from "@/state/scene-store";
 import { useParametricStore } from "@/state/parametric-store";
 import { reloadViewport } from "@/features/viewport/viewport-bus";
 
+/** The single app-level state of the open project. */
+export type ProjectPhase = "closed" | "preparing" | "ready" | "saving" | "error";
+
+/** Actionable lifecycle failure shown by the welcome/editor error state. */
+export interface ProjectFailure {
+  code: string;
+  message: string;
+  hint: string | null;
+}
+
 interface ProjectUiState {
   projects: ProjectSummary[];
   warnings: string[];
   current: SessionStatus | null;
+  phase: ProjectPhase;
+  prepareMessage: string | null;
+  failure: ProjectFailure | null;
   recovery: RecoveryInfo | null;
   checkpoints: CheckpointMeta[];
   lastSavedAtMs: number | null;
@@ -60,6 +73,11 @@ interface ProjectUiState {
   error: string | null;
   managerOpen: boolean;
   setManagerOpen: (open: boolean) => void;
+  beginPreparing: (message: string) => void;
+  markReady: () => void;
+  beginSaving: () => void;
+  fail: (error: unknown) => void;
+  clearFailure: () => void;
   refreshList: () => Promise<void>;
   refreshSession: () => Promise<void>;
   resume: () => Promise<void>;
@@ -87,6 +105,9 @@ const initial = {
   projects: [] as ProjectSummary[],
   warnings: [] as string[],
   current: null as SessionStatus | null,
+  phase: "closed" as ProjectPhase,
+  prepareMessage: null as string | null,
+  failure: null as ProjectFailure | null,
   recovery: null as RecoveryInfo | null,
   checkpoints: [] as CheckpointMeta[],
   lastSavedAtMs: null as number | null,
@@ -97,6 +118,57 @@ const initial = {
   error: null as string | null,
   managerOpen: false,
 };
+
+function preparingState(message: string) {
+  return {
+    phase: "preparing" as const,
+    prepareMessage: message,
+    loading: true,
+    failure: null,
+    error: null,
+  };
+}
+
+function readyState() {
+  return {
+    phase: "ready" as const,
+    prepareMessage: null,
+    loading: false,
+    failure: null,
+    error: null,
+  };
+}
+
+function savingState() {
+  return {
+    phase: "saving" as const,
+    prepareMessage: "Saving the project…",
+    loading: true,
+    failure: null,
+    error: null,
+  };
+}
+
+function failureState(error: unknown) {
+  const presented = presentError(error);
+  return {
+    phase: "error" as const,
+    prepareMessage: null,
+    loading: false,
+    failure: presented,
+    error: presented.message,
+  };
+}
+
+function closedState() {
+  return {
+    phase: "closed" as const,
+    prepareMessage: null,
+    loading: false,
+    failure: null,
+    error: null,
+  };
+}
 
 export function currentEditorState(): EditorState {
   return {
@@ -125,11 +197,10 @@ function applyPayload(payload: OpenedProjectPayload): void {
     recovery,
     lastSavedAtMs: detail.summary.lastSavedAtMs,
     lastSave: null,
-    loading: false,
-    error: null,
     checkpoints: [],
     worldAnalysis: null,
     analysisLoading: false,
+    ...readyState(),
   });
   const editorState = detail.editorState;
   useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
@@ -158,6 +229,21 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   setManagerOpen: (managerOpen) => set({ managerOpen }),
 
+  beginPreparing: (prepareMessage) => set(preparingState(prepareMessage)),
+
+  markReady: () => set(readyState()),
+
+  beginSaving: () => set(savingState()),
+
+  fail: (error) => set(failureState(error)),
+
+  clearFailure: () =>
+    set((state) => ({
+      failure: null,
+      error: null,
+      phase: state.current?.folder ? "ready" : "closed",
+    })),
+
   refreshList: async () => {
     try {
       const list = await fetchProjects();
@@ -170,11 +256,19 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
   refreshSession: async () => {
     try {
       const current = await fetchProjectStatus();
-      set({
-        current: current.folder ? current : null,
-        loading: false,
+      const hasProject = Boolean(current.folder);
+      set((state) => {
+        const inFlight = state.phase === "preparing" || state.phase === "saving";
+        return {
+          current: hasProject ? current : inFlight ? state.current : null,
+          loading: inFlight ? state.loading : false,
+          phase: inFlight ? state.phase : hasProject ? "ready" : state.failure ? "error" : "closed",
+          prepareMessage: inFlight ? state.prepareMessage : null,
+          failure: hasProject ? null : state.failure,
+          error: hasProject ? null : state.error,
+        };
       });
-      if (!current.folder) {
+      if (!hasProject) {
         set({ recovery: null, checkpoints: [] });
       }
     } catch (error) {
@@ -183,14 +277,15 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
   },
 
   resume: async () => {
+    set(preparingState("Restoring the last project…"));
     try {
       const session = await fetchProjectStatus();
       if (!session.folder) {
-        set({ current: null });
+        set({ current: null, ...closedState() });
         return;
       }
       const info = await fetchProjectWorldInfo();
-      set({ current: session });
+      set({ current: session, ...readyState() });
       const editorState = session.editorState ?? currentEditorState();
       useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
       useWorldStore.getState().setLoadRadius(editorState.loadRadius);
@@ -208,12 +303,12 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void useHistoryStore.getState().refresh();
       reloadViewport();
     } catch (error) {
-      set({ error: normalizeError(error).message });
+      set(failureState(error));
     }
   },
 
   create: async (name, mode) => {
-    set({ loading: true });
+    set(preparingState("Creating the project…"));
     try {
       const payload = await createProject(name.trim(), mode, currentEditorState());
       applyPayload(payload);
@@ -226,7 +321,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Project creation failed");
       return false;
     }
@@ -267,7 +362,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     const trimmed = folder.trim();
     if (!trimmed) return false;
     const analysis = get().worldAnalysis;
-    set({ loading: true });
+    set(preparingState("Importing the world…"));
     try {
       const payload = await importJavaWorld(name.trim(), trimmed, currentEditorState());
       applyPayload(payload);
@@ -280,7 +375,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "World import failed");
       return false;
     }
@@ -288,7 +383,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   importGeneratedWorld: async (name, runId) => {
     if (!runId.trim()) return false;
-    set({ loading: true });
+    set(preparingState("Importing the generated world…"));
     try {
       const payload = await importGeneratedWorldApi(name.trim(), runId, currentEditorState());
       applyPayload(payload);
@@ -304,14 +399,14 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Generated world import failed");
       return false;
     }
   },
 
   importStructure: async (args) => {
-    set({ loading: true });
+    set(preparingState("Importing the structure…"));
     try {
       const payload = await importStructureProjectApi(args);
       applyPayload(payload);
@@ -324,7 +419,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Structure import failed");
       return false;
     }
@@ -380,7 +475,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       });
       return false;
     }
-    set({ loading: true });
+    set(preparingState(`Opening “${folder}”…`));
     try {
       const payload = await openProject(folder);
       applyPayload(payload);
@@ -401,7 +496,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Project open failed");
       return false;
     }
@@ -417,11 +512,12 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       });
       return false;
     }
-    set({ loading: true });
+    set(savingState());
     try {
       const outcome = await saveProject(currentEditorState());
       const revision = useWorldStore.getState().revision;
       set((stateValue) => ({
+        ...readyState(),
         current: stateValue.current
           ? {
               ...stateValue.current,
@@ -432,7 +528,6 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
           : stateValue.current,
         lastSavedAtMs: outcome.project.summary.lastSavedAtMs,
         lastSave: outcome,
-        loading: false,
         recovery: null,
       }));
       useToolStore.getState().markSaved();
@@ -447,7 +542,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshSession();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Save failed");
       return false;
     }
@@ -506,11 +601,11 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   restoreCheckpoint: async (revision) => {
     if (!get().current?.folder) return false;
-    set({ loading: true });
+    set(preparingState(`Restoring checkpoint r${revision}…`));
     try {
       await openCheckpoint(revision);
       await get().refreshSession();
-      set({ loading: false });
+      set(readyState());
       useToolStore.getState().markModified();
       void useHistoryStore.getState().refresh();
       reloadViewport();
@@ -521,7 +616,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       });
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Checkpoint restore failed");
       return false;
     }
@@ -529,8 +624,11 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   close: async (saveBeforeClose) => {
     const state = get();
-    if (!state.current?.folder) return true;
-    set({ loading: true });
+    if (!state.current?.folder) {
+      set(closedState());
+      return true;
+    }
+    set(saveBeforeClose ? savingState() : preparingState("Closing the project…"));
     try {
       await closeProject(saveBeforeClose, currentEditorState());
       set({
@@ -539,7 +637,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
         checkpoints: [],
         lastSave: null,
         lastSavedAtMs: null,
-        loading: false,
+        ...closedState(),
       });
       useToolStore.getState().markSaved();
       useToolStore.getState().resetTransient();
@@ -563,7 +661,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Close failed");
       return false;
     }
@@ -595,15 +693,15 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     const state = get();
     const folder = state.current?.folder;
     if (!folder) return false;
-    set({ loading: true });
+    set(preparingState("Discarding the recovered autosave…"));
     try {
       await closeProject(false, currentEditorState());
-      set({ current: null, recovery: null, loading: false });
+      set({ current: null, recovery: null, ...closedState() });
       useToolStore.getState().markSaved();
       const opened = await get().open(folder, { discardCurrent: true });
       return opened;
     } catch (error) {
-      set({ loading: false });
+      set(failureState(error));
       reportError(error, "Recovery discard failed");
       return false;
     }

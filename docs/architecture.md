@@ -99,6 +99,22 @@ the unified change event while the remaining panels migrate. Manual Java, client
 server selections refuse symlinks, junctions and other reparse points, verify the exact
 version/DataVersion and never copy or edit the user's file.
 
+## Project lifecycle
+
+The desktop project store is the single source of project state. It exposes
+`closed → preparing → ready → saving/error`:
+
+- `closed` — no project is open; the welcome screen owns the shell.
+- `preparing` — create, open, import or checkpoint restore is running; progress is visible
+  and no viewport is mounted.
+- `ready` — an opened project may mount the editor and renderer.
+- `saving` — a manual save or save-before-close is in flight; the open world stays mounted.
+- `error` — the last lifecycle operation failed. The failure carries a stable code, message
+  and hint; retry returns to `preparing` or `ready` without opening a project halfway.
+
+Only the store transitions these phases; components read them instead of inferring state
+from ad-hoc booleans. Autosave stays a background operation and does not leave `ready`.
+
 ## Security boundaries
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.
