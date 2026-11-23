@@ -756,3 +756,12 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 export function projectIsDirty(session: SessionStatus | null, worldRevision: number): boolean {
   return Boolean(session?.folder) && worldRevision !== (session?.savedRevision ?? 0);
 }
+
+/**
+ * True when the editor and renderer may mount. A project session must exist, and the
+ * lifecycle must be past `closed`/`preparing`; saving and a recoverable error keep the
+ * already-open world visible.
+ */
+export function projectAllowsEditor(phase: ProjectPhase, session: SessionStatus | null): boolean {
+  return Boolean(session?.folder) && phase !== "closed" && phase !== "preparing";
+}

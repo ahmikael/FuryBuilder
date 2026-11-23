@@ -115,6 +115,13 @@ The desktop project store is the single source of project state. It exposes
 Only the store transitions these phases; components read them instead of inferring state
 from ad-hoc booleans. Autosave stays a background operation and does not leave `ready`.
 
+The shell uses a single predicate, `projectAllowsEditor(phase, session)`. The viewport
+mounts its renderer only when it returns true; before that no renderer, asset listener,
+`world_info`, `render_snapshot`, `render_chunks`, `renderer_ready` or world write is
+issued. Editor commands re-check the predicate as well, so a global shortcut cannot edit
+while the welcome screen is visible. `resume` runs from startup and from an explicit
+retry, never from the viewport.
+
 ## Welcome screen
 
 The top bar and status bar are always present; the content area switches between the

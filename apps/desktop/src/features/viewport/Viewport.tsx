@@ -8,7 +8,6 @@ import {
   ClipboardPaste,
   Copy,
   Eraser,
-  FolderOpen,
   Grid3X3,
   ImageOff,
   Loader2,
@@ -68,7 +67,7 @@ import {
   useWorldStore,
 } from "@/state/world-store";
 import { useToolStore } from "@/state/tool-store";
-import { projectIsDirty, useProjectStore } from "@/state/project-store";
+import { projectAllowsEditor, projectIsDirty, useProjectStore } from "@/state/project-store";
 import {
   applyActiveTool,
   copySelection,
@@ -133,7 +132,14 @@ function previewSummary(snapshot: RenderSnapshot): {
   return { blockCount, sectionCount };
 }
 
+/** World and render commands are only valid for a project the editor may mount. */
+function worldCallsAllowed(): boolean {
+  const state = useProjectStore.getState();
+  return projectAllowsEditor(state.phase, state.current);
+}
+
 async function loadPreview(renderer: ViewportRenderer): Promise<void> {
+  if (!worldCallsAllowed()) return;
   const snapshot = createDemoSnapshot(useWorldStore.getState().loadRadius);
   const summary = previewSummary(snapshot);
   renderer.setSnapshot(snapshot);
@@ -148,6 +154,7 @@ async function loadPreview(renderer: ViewportRenderer): Promise<void> {
 }
 
 async function loadCore(renderer: ViewportRenderer, radius: number): Promise<void> {
+  if (!worldCallsAllowed()) return;
   const dimension = useWorldStore.getState().dimension;
   const info = await invokeCommand<WorldInfo>("world_info");
   const snapshot = await invokeCommand<RenderSnapshot>("render_snapshot", {
@@ -168,6 +175,10 @@ async function loadCore(renderer: ViewportRenderer, radius: number): Promise<voi
 
 async function initialLoad(renderer: ViewportRenderer): Promise<void> {
   const store = useWorldStore.getState();
+  if (!worldCallsAllowed()) {
+    store.setStatus("idle");
+    return;
+  }
   store.setStatus("loading");
   try {
     if (isTauriRuntime()) {
@@ -187,6 +198,7 @@ async function initialLoad(renderer: ViewportRenderer): Promise<void> {
 }
 
 async function reloadRadius(renderer: ViewportRenderer, radius: number): Promise<void> {
+  if (!worldCallsAllowed()) return;
   const store = useWorldStore.getState();
   store.setStatus("loading");
   try {
@@ -204,7 +216,7 @@ async function reloadRadius(renderer: ViewportRenderer, radius: number): Promise
 }
 
 async function refreshChunks(renderer: ViewportRenderer, chunks: ChunkPos[]): Promise<void> {
-  if (chunks.length === 0) return;
+  if (chunks.length === 0 || !worldCallsAllowed()) return;
   try {
     if (isTauriRuntime()) {
       const batch = await invokeCommand<ChunkSnapshotBatch>("render_chunks", {
@@ -265,8 +277,9 @@ export function Viewport() {
   const assetBusy = useRef(false);
   const tauri = isTauriRuntime();
   const project = useProjectStore((state) => state.current);
-  const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
-  const editingEnabled = tauri && Boolean(project?.folder);
+  const phase = useProjectStore((state) => state.phase);
+  const canRender = projectAllowsEditor(phase, project);
+  const editingEnabled = tauri && canRender;
 
   const status = useWorldStore((state) => state.status);
   const error = useWorldStore((state) => state.error);
@@ -340,7 +353,7 @@ export function Viewport() {
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !webgl2) return;
+    if (!container || !webgl2 || !canRender) return;
 
     let renderer: ViewportRenderer;
     try {
@@ -443,7 +456,7 @@ export function Viewport() {
       }
       useWorldStore.getState().setStatus("idle");
     };
-  }, [webgl2, tauri]);
+  }, [webgl2, tauri, canRender]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -621,6 +634,8 @@ export function Viewport() {
   const toolLabel = TOOL_ITEMS.find((item) => item.tool === tool)?.label ?? "Tool";
   const canApplySelection = Boolean(boxSelection);
 
+  if (!canRender) return null;
+
   return (
     <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-background">
       <div
@@ -738,34 +753,6 @@ export function Viewport() {
             >
               Retry
             </Button>
-          </div>
-        </div>
-      ) : null}
-
-      {webgl2 && tauri && !project?.folder && status === "ready" ? (
-        <div className="absolute inset-0 z-10 grid place-items-center bg-background/60 p-6">
-          <div className="w-full max-w-md space-y-4 rounded-xl border bg-card p-6 text-center shadow-xl">
-            <div className="mx-auto grid size-12 place-items-center rounded-xl border border-primary/30 bg-primary/10">
-              <FolderOpen className="size-6 text-primary" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold">No project open</h2>
-              <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                Create an Empty Project or a flat base, or open an existing{" "}
-                <span className="font-mono text-xs">.furybuilder</span> folder. Edits are saved
-                atomically with checksums and autosave.
-              </p>
-            </div>
-            <div className="flex justify-center gap-2">
-              <Button size="sm" onClick={() => setManagerOpen(true)}>
-                <Plus data-icon="inline-start" />
-                New project
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setManagerOpen(true)}>
-                <FolderOpen data-icon="inline-start" />
-                Open project
-              </Button>
-            </div>
           </div>
         </div>
       ) : null}
@@ -896,9 +883,7 @@ export function Viewport() {
           </div>
         ) : (
           <div className="rounded-lg border border-status-warn/30 bg-background/85 px-3 py-1.5 font-mono text-xs text-status-warn backdrop-blur-md">
-            {tauri
-              ? "No project open — create or open a project to edit blocks"
-              : "Preview only · open the desktop app to edit"}
+            Preview only · open the desktop app to edit
           </div>
         )}
 
@@ -1116,22 +1101,13 @@ export function Viewport() {
             </Select>
             <span>Save</span>
             <span
-              className={cn(
-                "text-right",
-                !project?.folder
-                  ? "text-muted-foreground"
-                  : projectDirty
-                    ? "text-status-warn"
-                    : "text-status-ok",
-              )}
+              className={cn("text-right", projectDirty ? "text-status-warn" : "text-status-ok")}
             >
-              {!project?.folder
-                ? "no project"
-                : projectDirty
-                  ? autosaved
-                    ? `autosaved r${project.autosavedRevision}`
-                    : "unsaved"
-                  : `saved r${project.savedRevision}`}
+              {projectDirty
+                ? autosaved
+                  ? `autosaved r${project?.autosavedRevision}`
+                  : "unsaved"
+                : `saved r${project?.savedRevision}`}
             </span>
             {lastOperation ? (
               <>
@@ -1148,9 +1124,7 @@ export function Viewport() {
       <div className="pointer-events-none absolute right-3 bottom-3 z-20 max-w-[45%] rounded-lg border bg-background/85 px-3 py-1.5 font-mono text-xs text-muted-foreground backdrop-blur-md">
         {editingEnabled
           ? "WASD move · RMB look · 1–8 tools · Alt-click pick"
-          : tauri
-            ? "Open a project to edit"
-            : "Preview · WASD move · RMB look"}
+          : "Preview · WASD move · RMB look"}
       </div>
 
       {boxSelection && editingEnabled ? (

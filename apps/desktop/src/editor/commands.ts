@@ -30,21 +30,32 @@ import {
 import type { BlockState, ChunkPos } from "@/renderer/types";
 import type { RayHit } from "@/renderer/raycast";
 import { useHistoryStore } from "@/state/history-store";
-import { useProjectStore } from "@/state/project-store";
+import { projectAllowsEditor, useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 import { isJobCancelled, useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { refreshViewportChunks, reloadViewport } from "@/features/viewport/viewport-bus";
 
 function requireCore(): boolean {
-  if (isTauriRuntime()) return true;
-  pushToast({
-    kind: "warning",
-    title: "Desktop core required",
-    description:
-      "Editing writes through the Rust world core. Run the desktop app (pnpm tauri dev) to edit blocks.",
-  });
-  return false;
+  if (!isTauriRuntime()) {
+    pushToast({
+      kind: "warning",
+      title: "Desktop core required",
+      description:
+        "Editing writes through the Rust world core. Run the desktop app (pnpm tauri dev) to edit blocks.",
+    });
+    return false;
+  }
+  const project = useProjectStore.getState();
+  if (!projectAllowsEditor(project.phase, project.current)) {
+    pushToast({
+      kind: "warning",
+      title: "No project ready",
+      description: "Create or open a project before editing blocks.",
+    });
+    return false;
+  }
+  return true;
 }
 
 function reportError(error: unknown, title = "Edit failed"): void {
@@ -93,6 +104,8 @@ export interface ExternalWorldChange {
  * dirty chunks falls back to a bounded full reload instead of showing a stale frame.
  */
 export function applyExternalWorldChange(change: ExternalWorldChange): void {
+  const project = useProjectStore.getState();
+  if (!projectAllowsEditor(project.phase, project.current)) return;
   if (change.reload || !change.dirtyChunks || change.dirtyChunks.length === 0) {
     reloadViewport();
   } else {
@@ -226,6 +239,7 @@ function toolContextFor(hit: RayHit | null, overrideTool?: EditorTool) {
  * other tools resolve to one atomic operation.
  */
 export async function handleToolClick(hit: RayHit | null): Promise<void> {
+  if (!requireCore()) return;
   const state = useToolStore.getState();
   if (state.tool === "select") return;
   if (!hit && state.tool !== "fill" && state.tool !== "replace") {
@@ -300,6 +314,7 @@ export async function handleToolClick(hit: RayHit | null): Promise<void> {
 
 /** Applies fill/replace to the current selection using the active tool. */
 export async function applyActiveTool(tool?: EditorTool): Promise<void> {
+  if (!requireCore()) return;
   const state = useToolStore.getState();
   const active = tool ?? state.tool;
   if (active !== "fill" && active !== "replace") {
@@ -347,6 +362,7 @@ export async function applyActiveTool(tool?: EditorTool): Promise<void> {
 }
 
 export async function deleteSelection(): Promise<void> {
+  if (!requireCore()) return;
   const state = useToolStore.getState();
   if (!state.selection) {
     pushToast({ kind: "info", title: "Select a box first." });

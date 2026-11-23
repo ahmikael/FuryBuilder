@@ -101,6 +101,7 @@ describe("Viewport", () => {
     useProjectStore.setState({
       projects: [],
       warnings: [],
+      phase: "ready",
       current: {
         folder: "Test.furybuilder",
         name: "Test",
@@ -187,6 +188,18 @@ describe("Viewport", () => {
     expect(state.revision).toBe(1);
     expect(state.chunkCount).toBe(9);
     expect(state.blockCount).toBe(288_000);
+  });
+
+  it("renders nothing and touches no world API without a ready project", async () => {
+    ipc.tauri = true;
+    useProjectStore.setState({ phase: "preparing", prepareMessage: "Opening…" });
+
+    const { container } = render(<Viewport />);
+
+    expect(container).toBeEmptyDOMElement();
+    expect(mocks.instances).toHaveLength(0);
+    expect(ipc.invoke).not.toHaveBeenCalled();
+    expect(useWorldStore.getState().status).toBe("idle");
   });
 
   it("uses an explicitly labelled preview scene in a plain browser", async () => {

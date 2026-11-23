@@ -23,7 +23,7 @@ import { useAppliedScale, useAppliedTheme } from "@/app/theme";
 import { useAppHotkeys } from "@/app/use-app-hotkeys";
 import { useEditorHotkeys } from "@/editor/use-editor-hotkeys";
 import { useEditorStore } from "@/state/editor-store";
-import { useProjectStore } from "@/state/project-store";
+import { projectAllowsEditor, useProjectStore } from "@/state/project-store";
 import { useUiStore } from "@/state/ui-store";
 
 export function App() {
@@ -62,7 +62,7 @@ export function App() {
         ? "dark"
         : "light"
       : theme;
-  const editorVisible = Boolean(current?.folder) && phase !== "closed" && phase !== "preparing";
+  const editorVisible = projectAllowsEditor(phase, current);
 
   return (
     <Toaster limit={4}>

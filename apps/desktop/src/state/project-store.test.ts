@@ -58,7 +58,7 @@ vi.mock("@/lib/structure-api", () => ({
   insertStructure: structureApi.insert,
 }));
 
-const { currentEditorState, projectIsDirty, useProjectStore } =
+const { currentEditorState, projectAllowsEditor, projectIsDirty, useProjectStore } =
   await import("@/state/project-store");
 
 const workspace = defaultWorkspacePolicy();
@@ -317,6 +317,16 @@ describe("project activation", () => {
 });
 
 describe("project lifecycle", () => {
+  it("allows the editor only for a session past preparing", () => {
+    expect(projectAllowsEditor("ready", session())).toBe(true);
+    expect(projectAllowsEditor("saving", session())).toBe(true);
+    expect(projectAllowsEditor("error", session())).toBe(true);
+    expect(projectAllowsEditor("closed", session())).toBe(false);
+    expect(projectAllowsEditor("preparing", session())).toBe(false);
+    expect(projectAllowsEditor("ready", session({ folder: null, name: null }))).toBe(false);
+    expect(projectAllowsEditor("ready", null)).toBe(false);
+  });
+
   it("reports preparing while opening and ready only after the payload is applied", async () => {
     let resolveOpen!: (value: OpenedProjectPayload) => void;
     api.open.mockReturnValue(

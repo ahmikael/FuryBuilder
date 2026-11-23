@@ -5,6 +5,7 @@ import { LARGE_PASTE_THRESHOLD } from "@/editor/clipboard";
 import type { BoxBounds, EditorOperation } from "@/editor/types";
 import type { BlockState } from "@/renderer/types";
 import { useHistoryStore } from "@/state/history-store";
+import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { clearToasts, getToasts } from "@/test-utils/toast-log";
 import { useWorldStore } from "@/state/world-store";
@@ -172,10 +173,41 @@ beforeEach(async () => {
     entries: [],
     error: null,
   });
+  useProjectStore.setState({
+    phase: "ready",
+    current: {
+      folder: "Tests.furybuilder",
+      name: "Tests",
+      savedRevision: 1,
+      autosavedRevision: null,
+      revision: 1,
+      dirty: false,
+      editorState: { selectedDimension: "minecraft:overworld", loadRadius: 1 },
+      availableCheckpoints: 0,
+    },
+  });
   clearToasts();
 });
 
 describe("edit commands", () => {
+  it("refuses every write while no project is ready", async () => {
+    useProjectStore.setState({ phase: "closed", current: null });
+
+    expect(await applyEditorOperation(operation)).toBeNull();
+    await handleToolClick({
+      pos: { x: 0, y: 64, z: 0 },
+      face: "up",
+      state: stone,
+    } as never);
+    await applyActiveTool("fill");
+    await undoWorld();
+
+    expect(api.preview).not.toHaveBeenCalled();
+    expect(api.apply).not.toHaveBeenCalled();
+    expect(api.undo).not.toHaveBeenCalled();
+    expect(getToasts().filter((toast) => toast.title === "No project ready")).not.toHaveLength(0);
+  });
+
   it("validates, applies, refreshes dirty chunks and records revision", async () => {
     const refresh = vi.fn();
     viewportBus.addEventListener("refresh-chunks", refresh);
