@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент и mock HTTP-тесты закрыты; идёт hardening manual/placeholder/relink.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты и hardening manual/placeholder/relink закрыты; идёт lifecycle store.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1407,9 +1407,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-32` — Тесты manual/placeholder/relink, включая symlink, неверную архитектуру и версию. Статус: P0 в работе.
+**Текущий фокус:** `P0-33` — Lifecycle store: `CLOSED → PREPARING → READY → SAVING/ERROR`; единый источник состояния проекта. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-33`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-34`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1475,7 +1475,7 @@ UI:
 - [x] `P0-29` Общий pipeline: allowlist хостов, disk preflight, atomic rename, proxy, retry, offline.
 - [x] `P0-30` Tauri commands + TS-клиент + события progress/error.
 - [x] `P0-31` Mock HTTP-тесты: success/404/timeout/redirect/hash mismatch/wrong size/cancel/disconnect.
-- [ ] `P0-32` Тесты manual/placeholder/relink, включая symlink, неверную архитектуру и версию.
+- [x] `P0-32` Тесты manual/placeholder/relink, включая symlink, неверную архитектуру и версию.
 
 #### D. Lifecycle и Welcome
 
@@ -1689,6 +1689,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Manual/placeholder tests | Новые тесты facade и probe: symlink/junction в `.minecraft` root, version folder, server JAR и Java executable отклоняется до сохранения выбора; client JAR другой версии и неизвестный Java major отклоняются; 32-bit Java никогда не `usable`; placeholder переживает новый `ComponentManager` и остаётся `unverified` без id/path/hash/size; helper создаёт symlink на Unix и junction на Windows без admin-прав | см. `git log` | 660 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Mock HTTP suite | Новые integration-тесты `crates/download-pipeline/tests/mock_http.rs` на реальном loopback TCP-сервере: success + atomic publish, 404 без retry, read timeout, relative redirect на том же host, отказ redirect на чужой host, hash mismatch без retry и с очисткой temp, wrong size до публикации, cooperative cancel с удалением partial-файла, disconnect, retry 503 → 200; `Allowlist::for_local_test` допускает plain HTTP только для loopback ephemeral port, production allowlists по-прежнему требуют HTTPS:443; redirect resolver сохраняет схему только в тестовом режиме | см. `git log` | 653 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Components API | Tauri shell владеет одним `ComponentManager`: runtime/assets/server commands читают его через accessors, добавлены `components_status/resolve/inventory/*_release/install/cancel/relink/remove/verify`; install стримит `furybuilder-component-progress` (throttled 250 ms), мутации — `furybuilder-component-changed` + старые kind-events, ошибки — `furybuilder-component-error`; `ErrorCode` получил `offline`/`disk_space`; facade отдаёт previews и inventory; TS `components-api.ts` + типы + contract-тесты | см. `git log` | 641 Rust tests, 295 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Download pipeline | Новый crate `download-pipeline` заменил три копии сетевых helper-ов: точный host allowlist на каждом redirect hop, HTTPS-only и default port, явный `FURYBUILDER_PROXY`/`FURYBUILDER_HTTPS_PROXY` или стандартные proxy env, offline (`FURYBUILDER_OFFLINE`, `VersionCatalog::load_offline`), bounded retry для transport/408/425/429/5xx, disk preflight с запасом, потоковая проверка размера и SHA-1/SHA-256, same-directory temp + atomic replace через `MoveFileExW`/`rename`; manifest cache, Temurin, client JAR и server JAR переведены на общий клиент, `settings` persist тоже atomic; новые коды `offline`/`disk_space` и UI hints; тесты allowlist/redirect/offline/proxy/retry/disk/atomic/verification | см. `git log` | 637 Rust tests, 293 TS tests, clippy, fmt, typecheck/lint/format |

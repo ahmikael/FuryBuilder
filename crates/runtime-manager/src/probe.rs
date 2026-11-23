@@ -268,6 +268,57 @@ pub fn probe_compatible_for_major(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(label: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "furybuilder-probe-{label}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).expect("create temp directory");
+        path
+    }
+
+    /// Creates a directory reparse point: a symlink on Unix, a junction on Windows.
+    fn link_directory(link: &Path, target: &Path) {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).expect("create directory symlink");
+        }
+        #[cfg(windows)]
+        {
+            let status = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .expect("run mklink");
+            assert!(status.success(), "mklink /J must create a junction");
+        }
+    }
+
+    #[test]
+    fn probe_refuses_a_symlink_or_junction() {
+        let root = temp_dir("symlink");
+        let real = root.join("jdk");
+        std::fs::create_dir_all(&real).expect("create jdk directory");
+        let link = root.join("linked-jdk");
+        link_directory(&link, &real);
+
+        let error = probe_java(&link).expect_err("a reparse point must be refused");
+        assert!(matches!(error, RuntimeError::Invalid(_)), "{error:?}");
+        assert!(error.to_string().contains("not a regular file"), "{error}");
+
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn parses_temurin_properties_and_versions() {
@@ -343,7 +394,26 @@ OpenJDK Runtime Environment Temurin-21.0.13+9 (build 21.0.13+9-LTS)
         assert_eq!(newer.classify().0, RuntimeStatus::Newer);
 
         let x86 = parse_java_probe("java.version = 21.0.1\nos.arch = x86");
-        assert_eq!(x86.classify().0, RuntimeStatus::UnsupportedArch);
+        let (status, warnings) = x86.classify_for(21);
+        assert_eq!(status, RuntimeStatus::UnsupportedArch);
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.contains("32-bit Java")));
+        let report = JavaRuntimeReport {
+            path: "java.exe".to_owned(),
+            source: RuntimeSource::Manual,
+            status,
+            version: Some("21.0.1".to_owned()),
+            major: Some(21),
+            vendor: None,
+            arch: Some("x86".to_owned()),
+            vm: None,
+            managed: false,
+            warnings,
+            error: None,
+        };
+        assert!(!report.is_usable(), "32-bit Java must never be usable");
+        assert!(!report.is_compatible());
 
         let missing = parse_java_probe("openjdk version \"21.0.1\" 2024-10-15");
         assert_eq!(missing.major, Some(21));

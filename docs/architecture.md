@@ -95,7 +95,9 @@ Every mutation validates the project target and the reviewed version/hash before
 the network. Installs stream `furybuilder-component-progress`; successful mutations emit
 `furybuilder-component-changed`; failures emit `furybuilder-component-error` with the same
 stable code the command rejects with. The kind-specific legacy events are emitted alongside
-the unified change event while the remaining panels migrate.
+the unified change event while the remaining panels migrate. Manual Java, client-asset and
+server selections refuse symlinks, junctions and other reparse points, verify the exact
+version/DataVersion and never copy or edit the user's file.
 
 ## Security boundaries
 

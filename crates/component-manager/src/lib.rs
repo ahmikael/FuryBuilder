@@ -1500,6 +1500,27 @@ mod tests {
         (minecraft, version_dir)
     }
 
+    /// Creates a directory reparse point: a symlink on Unix, a junction on Windows. Junctions
+    /// need no administrator rights and are refused by the same guard as symlinks.
+    fn link_directory(link: &Path, target: &Path) {
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(target, link).expect("create directory symlink");
+        }
+        #[cfg(windows)]
+        {
+            let status = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(link)
+                .arg(target)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .expect("run mklink");
+            assert!(status.success(), "mklink /J must create a junction");
+        }
+    }
+
     /// Writes a structurally valid synthetic server JAR with the exact declared facts.
     fn write_server_jar(path: &Path, version: &str, data_version: i32, java_major: u32) {
         let file = fs::File::create(path).expect("create server jar");
@@ -1857,6 +1878,127 @@ mod tests {
             other => panic!("expected a checksum mismatch to be refused, got {other:?}"),
         }
         assert!(manager.inner.assets.saved_source().source.is_none());
+    }
+
+    #[test]
+    fn manual_assets_relink_refuses_a_symlinked_root_or_version_directory() {
+        let root = TempDir::new("manual-symlink");
+        let manager = manager(&root);
+        let (minecraft, version_dir) = manual_installation(&root, "1.21.4", 4189);
+        for (label, source) in [("root", &minecraft), ("version", &version_dir)] {
+            let link = root.path.join(format!("linked-{label}"));
+            link_directory(&link, source);
+            match manager.relink(ComponentKind::Assets, &link, &target()) {
+                Err(ComponentError::InvalidRequest(message)) => {
+                    assert!(message.contains("symlink"), "{label}: {message}");
+                }
+                other => panic!("expected the {label} reparse point to be refused, got {other:?}"),
+            }
+        }
+        assert!(manager.inner.assets.saved_source().source.is_none());
+    }
+
+    #[test]
+    fn manual_assets_relink_refuses_a_client_jar_for_another_version() {
+        let root = TempDir::new("manual-wrong-version");
+        let manager = manager(&root);
+        let (_, _, jar) = client_jar::test_fixture("1.20.6", 3839);
+        let path = root.path.join("client.jar");
+        fs::write(&path, jar).expect("write client jar");
+
+        match manager.relink(ComponentKind::Assets, &path, &target()) {
+            Err(ComponentError::InvalidRequest(message)) => {
+                assert!(message.contains("not a usable Minecraft"), "{message}");
+            }
+            other => panic!("expected a version mismatch to be refused, got {other:?}"),
+        }
+        assert!(manager.inner.assets.saved_source().source.is_none());
+    }
+
+    #[test]
+    fn manual_server_relink_refuses_a_symlinked_jar() {
+        let root = TempDir::new("server-symlink");
+        let manager = manager(&root);
+        let real = root.path.join("server");
+        fs::create_dir_all(&real).expect("create server directory");
+        let link = root.path.join("linked-server.jar");
+        link_directory(&link, &real);
+
+        match manager.relink(ComponentKind::Server, &link, &target()) {
+            Err(ComponentError::Server(runtime_manager::ServerError::Invalid(message))) => {
+                assert!(message.contains("symlink"), "{message}");
+            }
+            other => panic!("expected the server reparse point to be refused, got {other:?}"),
+        }
+        assert!(manager
+            .inner
+            .server
+            .selected(&runtime_manager::ServerTarget::baseline())
+            .is_none());
+    }
+
+    #[test]
+    fn manual_java_relink_refuses_a_symlinked_or_directory_path() {
+        let root = TempDir::new("java-symlink");
+        let manager = manager(&root);
+        let real = root.path.join("jdk");
+        fs::create_dir_all(&real).expect("create jdk directory");
+        let link = root.path.join("linked-jdk");
+        link_directory(&link, &real);
+
+        match manager.relink(ComponentKind::Java, &link, &target()) {
+            Err(ComponentError::Runtime(runtime_manager::RuntimeError::Invalid(message))) => {
+                assert!(message.contains("not a Java executable"), "{message}");
+            }
+            other => panic!("expected the Java reparse point to be refused, got {other:?}"),
+        }
+        assert!(manager.inner.java.saved().is_none());
+    }
+
+    #[test]
+    fn manual_java_relink_refuses_an_unsupported_major_before_probing() {
+        let root = TempDir::new("java-major");
+        let manager = manager(&root);
+        let unsupported = ComponentTarget {
+            java_major: 22,
+            ..target()
+        };
+        match manager.relink(
+            ComponentKind::Java,
+            &root.path.join("missing-java"),
+            &unsupported,
+        ) {
+            Err(ComponentError::UnsupportedTarget { detail, .. }) => {
+                assert!(detail.contains("Java 22"), "{detail}");
+            }
+            other => panic!("expected an unsupported Java major, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn placeholder_selection_survives_a_fresh_manager_and_stays_unverified() {
+        let root = TempDir::new("placeholder-persist");
+        manager(&root)
+            .inner
+            .assets
+            .use_placeholder()
+            .expect("select placeholder");
+
+        let manager = manager(&root);
+        let status = manager.assets_status(&target(), true, false);
+        assert_eq!(status.mode, Some(ComponentMode::Placeholder));
+        assert_eq!(status.state, ComponentState::Unverified);
+        assert!(status.id.is_none());
+        assert!(status.path.is_none());
+        assert!(status.hash.is_none());
+        assert!(status.bytes.is_none());
+        assert!(manager
+            .resolve(
+                ComponentKind::Assets,
+                &target(),
+                &ComponentRequirements::EDITOR,
+            )
+            .is_err());
     }
 
     #[test]
