@@ -47,6 +47,14 @@ pub struct StagedRuntime {
     java_path: PathBuf,
 }
 
+impl Drop for StagedRuntime {
+    fn drop(&mut self) {
+        // A staged runtime is private until `commit` renames it into the cache. Any error or
+        // panic on the way there must not leave extracted Java bytes behind.
+        let _ = fs::remove_dir_all(&self.staging);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RuntimeManifest {
     pub id: String,
@@ -285,7 +293,56 @@ impl ManagedRuntimeCache {
     }
 
     pub fn discard(&self, staged: StagedRuntime) {
-        let _ = fs::remove_dir_all(&staged.staging);
+        drop(staged);
+    }
+
+    /// Removes abandoned `.staging-*` directories and `.download-*` archives older than the
+    /// given age. Only FuryBuilder-owned names are touched, so unrelated cache files survive.
+    /// The age guard makes this safe to call before an install even if another process is
+    /// actively downloading.
+    pub fn cleanup_partial(&self, older_than: std::time::Duration) -> Result<u64, RuntimeError> {
+        if !self.root.exists() {
+            return Ok(0);
+        }
+        let mut removed = 0;
+        for entry in fs::read_dir(&self.root)
+            .map_err(|error| RuntimeError::Io(format!("{}: {error}", self.root.display())))?
+            .flatten()
+        {
+            let path = entry.path();
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
+            let is_partial = name.starts_with(".staging-") || name.starts_with(".download-");
+            if !is_partial {
+                continue;
+            }
+            let metadata = match fs::symlink_metadata(&path) {
+                Ok(metadata) => metadata,
+                Err(_) => continue,
+            };
+            if metadata.file_type().is_symlink() {
+                continue;
+            }
+            let old_enough = metadata
+                .modified()
+                .ok()
+                .and_then(|modified| modified.elapsed().ok())
+                .is_some_and(|age| age >= older_than);
+            if !old_enough {
+                continue;
+            }
+            let removed_entry = if metadata.is_dir() {
+                fs::remove_dir_all(&path)
+            } else {
+                fs::remove_file(&path)
+            };
+            if removed_entry.is_ok() {
+                removed += 1;
+            }
+        }
+        Ok(removed)
     }
 
     /// Removes only directories that carry a FuryBuilder runtime manifest. Nothing else in the

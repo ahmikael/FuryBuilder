@@ -1,7 +1,11 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+/// Abandoned downloads and staging directories older than this are swept before an install.
+/// The grace period keeps a concurrent FuryBuilder process from losing its active work.
+const PARTIAL_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 use crate::discovery;
 use crate::error::RuntimeError;
@@ -140,6 +144,8 @@ impl RuntimeManager {
         if cancel.load(Ordering::Relaxed) {
             return Err(RuntimeError::Cancelled);
         }
+        // Best-effort removal of leftovers from a previous crash; it never fails the install.
+        let _ = self.inner.cache.cleanup_partial(PARTIAL_MAX_AGE);
         progress(RuntimeProgress {
             phase: "metadata".to_owned(),
             downloaded: 0,
@@ -320,6 +326,8 @@ impl RuntimeManager {
             .try_lock()
             .map_err(|_| RuntimeError::Busy("a managed Java install is running".to_owned()))?;
         let selected = self.inner.settings.selected();
+        // An explicit cache clear may remove every partial entry, not only stale ones.
+        self.inner.cache.cleanup_partial(Duration::ZERO)?;
         let report = self.inner.cache.clear()?;
         if let Some(selected) = selected {
             if self.inner.cache.contains(&selected) || !selected.exists() {

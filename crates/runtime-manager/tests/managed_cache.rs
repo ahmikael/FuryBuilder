@@ -306,6 +306,76 @@ fn stages_commits_lists_and_clears_only_managed_runtimes() {
 }
 
 #[test]
+fn failed_commit_drops_the_staged_runtime() {
+    let dir = TempDir::new("commit-failure");
+    let cache = ManagedRuntimeCache::new(dir.path().join("components").join("java"));
+    let archive_root = "jdk-21.0.13+9-jre";
+    let java = java_entry(archive_root);
+    let archive = write_archive(
+        dir.path(),
+        "temurin.zip",
+        &[(java.as_str(), b"fake-java", 0)],
+    );
+    let staged = cache
+        .stage(
+            &archive,
+            &manifest(),
+            &std::sync::atomic::AtomicBool::new(false),
+            &|_| {},
+        )
+        .expect("stage archive");
+    let probe = furybuilder_runtime_manager::JavaProbe {
+        version: Some("21.0.13".to_owned()),
+        major: Some(21),
+        ..Default::default()
+    };
+    let unsupported = manifest_for(11, "temurin-21.0.13+9-windows-x64", "21.0.13+9");
+    let error = cache
+        .commit(staged, unsupported, &probe)
+        .expect_err("unsupported major must fail");
+    assert!(
+        matches!(error, RuntimeError::Unsupported { .. }),
+        "{error:?}"
+    );
+    assert!(cache.list().expect("list runtimes").runtimes.is_empty());
+    assert_eq!(staging_entries(cache.root()), 0);
+    assert!(!cache.root().join("11").exists());
+}
+
+#[test]
+fn cleanup_removes_only_furybuilder_partials() {
+    let dir = TempDir::new("partials");
+    let cache = ManagedRuntimeCache::new(dir.path().join("components").join("java"));
+    fs::create_dir_all(cache.root().join(".staging-1-1")).expect("staging");
+    fs::write(cache.root().join(".staging-1-1/raw.bin"), b"partial").expect("staging file");
+    fs::write(cache.root().join(".download-1-1.zip"), b"partial").expect("download file");
+    fs::create_dir_all(cache.root().join("21")).expect("major dir");
+    fs::write(cache.root().join("keep.txt"), b"not ours").expect("unrelated file");
+
+    assert_eq!(
+        cache
+            .cleanup_partial(std::time::Duration::ZERO)
+            .expect("cleanup"),
+        2
+    );
+    assert!(!cache.root().join(".staging-1-1").exists());
+    assert!(!cache.root().join(".download-1-1.zip").exists());
+    assert!(cache.root().join("21").is_dir());
+    assert!(cache.root().join("keep.txt").is_file());
+}
+
+fn staging_entries(root: &Path) -> usize {
+    if !root.exists() {
+        return 0;
+    }
+    fs::read_dir(root)
+        .expect("cache root")
+        .flatten()
+        .filter(|entry| entry.file_name().to_string_lossy().starts_with(".staging-"))
+        .count()
+}
+
+#[test]
 fn cancelled_staging_leaves_no_partial_runtime() {
     let dir = TempDir::new("cancelled");
     let cache = ManagedRuntimeCache::new(dir.path().join("runtimes"));
