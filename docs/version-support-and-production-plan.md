@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual закрыты; идут клиентские ассеты.
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual и client JAR download закрыты; идёт инспекция JAR и baseline-каталог.
 > Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -29,7 +29,7 @@
 | Структуры | Только Java `.nbt`; `.schem`, `.schematic`, `.litematic` не включены | `crates/world-io/src/structure.rs`, `java_structure.rs` |
 | Java | Менеджер скачивает только Temurin 21 | `crates/runtime-manager/src/types.rs` |
 | Сервер | Скачивается и проверяется только `server.jar` 1.21.4 | `crates/runtime-manager/src/server/` |
-| Текстуры | Только обнаружение локального клиента; **никогда не скачиваются** | `crates/asset-source/src/lib.rs` |
+| Текстуры | Managed client JAR скачивается по version JSON; локальный клиент по-прежнему обнаруживается | `crates/component-manager/src/client_jar.rs`, `crates/asset-source/src/lib.rs` |
 | Настройки | Содержат отдельные блоки Java, сервера и ассетов; мастер Vanilla World дублирует выбор Java/сервера | `SettingsDialog.tsx`, `JavaRuntimeSection.tsx`, `MinecraftServerSection.tsx`, `VanillaWorldWizard.tsx` |
 | Проект | `project.json` schema 2: `target` из `VersionProfile` + `components`; версия больше не глобальная | `crates/project-store/src/manifest.rs` |
 | Snapshot проекта | Формат `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode + world/dimensions | `crates/project-store/src/snapshot.rs` |
@@ -327,7 +327,7 @@ components_remove(kind, id)
 components_verify(kind, id)
 ```
 
-Facade реализован в `crates/component-manager`; чистые типы статусов — в `crates/component-model`. `status` сверяет компоненты с target проекта, `resolve` возвращает проверенный id/path/hash, `relink` не копирует и не редактирует пользовательский файл, `remove` удаляет только FuryBuilder-owned данные, а `install` отказывается от неизвестной версии/хэша. Java и server download умеют cooperative cancel с очисткой partial-файлов; assets download появится в P0-23.
+Facade реализован в `crates/component-manager`; чистые типы статусов — в `crates/component-model`. `status` сверяет компоненты с target проекта, `resolve` возвращает проверенный id/path/hash, `relink` не копирует и не редактирует пользовательский файл, `remove` удаляет только FuryBuilder-owned данные, а `install` отказывается от неизвестной версии/хэша. Java и server download умеют cooperative cancel с очисткой partial-файлов; client JAR download добавлен в P0-23.
 
 Типы:
 
@@ -362,6 +362,7 @@ Facade реализован в `crates/component-manager`; чистые типы
 - Скачивать **client JAR** выбранной версии из официального version JSON.
 - Проверять SHA-1 и размер.
 - Кэш: `<app-data>/components/assets/<version>/client.jar` + manifest.
+- Managed download реализован в `component-manager`: preview берётся из `version_manifest_v2` → version JSON, рядом с JAR сохраняется exact `client.json`, манифест фиксирует SHA-1/размер/DataVersion/pack formats; cached JAR перепроверяется и при повреждении скачивается заново.
 - Внутри JAR читать:
   - `version.json`;
   - `assets/minecraft/blockstates`;
@@ -1390,9 +1391,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-23` — Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest. Статус: P0 в работе.
+**Текущий фокус:** `P0-24` — Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-24`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-25`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1449,7 +1450,7 @@ UI:
 - [x] `P0-20` Java: подбор Temurin по major через Adoptium API, кэш `components/java/<major>/<release>`.
 - [x] `P0-21` Java: download/verify/install, SHA-256, progress, cancel, cleanup partial-файлов.
 - [x] `P0-22` Java manual: `java.exe`, `-version`, major/arch/vendor; новее — warning, старее — block.
-- [ ] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
+- [x] `P0-23` Assets: client JAR download по version JSON, SHA-1/размер, кэш + manifest.
 - [ ] `P0-24` Assets: инспекция JAR (`version.json`, blockstates, block/item models, item definitions, textures, lang, tags, atlas) и baseline-каталог 1.21.4.
 - [ ] `P0-25` Assets manual: `.minecraft` root / `versions/<id>/<id>.jar` / выбранный client.jar.
 - [ ] `P0-26` Assets placeholder: явный режим с предупреждением, не выдаётся за полноценные текстуры.
@@ -1672,6 +1673,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Managed client JAR | Preview и install берут exact client download из официального version JSON; потоковая загрузка проверяет announced SHA-1/размер, пишет в `<components/assets>/<version>/client.jar` + exact `client.json` + `.furybuilder-assets.json`, публикует atomic rename и удаляет staging при ошибке/cancel; уже установленный JAR проверяется по хэшу и перекачивается при повреждении; facade `install(assets)` сохраняет managed selection, status находит managed JAR без сохранённого указателя, `remove` удаляет только FuryBuilder-owned cache; `fetch_version_json_document` отдаёт exact version JSON | см. `git log` | 588 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java manual | Ручной `java.exe` проверяется запуском `-XshowSettings:properties -version`; major/arch/vendor сохраняются в отчёте, 32-bit/unreadable/старее target блокируются, новее target разрешается с warning; тот же policy применяется к facade relink и server generation, discovery считает и сортирует usable runtimes и больше не переписывает managed source на manual; Settings UI разрешает выбрать newer и показывает предупреждение; старый и новый Java покрыты тестами | см. `git log` | 578 Rust tests, 291 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java download pipeline | Скачивание Temurin уже проверяет announced size и потоковый SHA-256, пишет один temp-архив, распаковывает с traversal/symlink/лимитами, пробует Java и публикует atomic rename; добавлены self-cleaning `StagedRuntime` (staging удаляется на любом error/panic пути), очистка stale `.staging-*`/`.download-*` старше 24 часов перед install и при явном Clear, тесты на failed commit и безопасную очистку partial-файлов; mock HTTP остаётся в P0-31 | см. `git log` | 577 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Java by major | Adoptium выбирается по требуемому Java major профиля (8/16/17/21/25), а не 21; managed cache переехал на `components/java/<major>/<release-id>`, manifest schema 2 хранит major, удаление и проверка идут по logical id; probe/select/saved/facade target-aware, Java 17 не блокируется глобальным baseline; Tauri/TS/UI передают major | см. `git log` | 574 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |

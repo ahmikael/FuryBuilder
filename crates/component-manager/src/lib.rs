@@ -17,6 +17,15 @@
 //! The facade never downloads in the background, never edits a Minecraft
 //! installation and never treats a placeholder as a verified component.
 
+mod client_jar;
+mod net;
+
+pub use client_jar::{
+    ClientJarError, ClientJarManager, ClientJarProgress, ClientJarReleaseInfo, ManagedClientJar,
+    ManagedClientJarReport, ASSET_MANIFEST_SCHEMA_VERSION, MAX_CLIENT_JAR_BYTES,
+    MIN_CLIENT_JAR_BYTES,
+};
+
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -240,8 +249,6 @@ pub enum ComponentError {
     },
     #[error("component `{kind}` was not found: {id}")]
     NotFound { kind: &'static str, id: String },
-    #[error("component `{kind}` is not available yet: {detail}")]
-    Unavailable { kind: &'static str, detail: String },
     #[error("component `{kind}` operation is already running")]
     Busy { kind: &'static str },
     #[error("component `{kind}` was cancelled")]
@@ -262,6 +269,8 @@ pub enum ComponentError {
     Server(#[from] ServerError),
     #[error(transparent)]
     Assets(#[from] AssetSettingsError),
+    #[error(transparent)]
+    ClientJar(#[from] ClientJarError),
 }
 
 impl ComponentError {
@@ -272,7 +281,6 @@ impl ComponentError {
             ComponentError::NotRequired { .. } => "invalid_argument",
             ComponentError::NotReady { .. } => "not_ready",
             ComponentError::NotFound { .. } => "not_found",
-            ComponentError::Unavailable { .. } => "unsupported_version",
             ComponentError::Busy { .. } => "busy",
             ComponentError::Cancelled { .. } => "cancelled",
             ComponentError::ChecksumMismatch { .. } => "checksum_mismatch",
@@ -281,6 +289,7 @@ impl ComponentError {
             ComponentError::Runtime(error) => error.code(),
             ComponentError::Server(error) => error.code(),
             ComponentError::Assets(error) => error.code(),
+            ComponentError::ClientJar(error) => error.code(),
         }
     }
 }
@@ -288,6 +297,7 @@ impl ComponentError {
 struct ComponentManagerInner {
     java: RuntimeManager,
     assets: AssetSettingsStore,
+    client_jars: ClientJarManager,
     server: ServerManager,
     installs: Mutex<BTreeMap<ComponentKind, Arc<AtomicBool>>>,
 }
@@ -299,11 +309,17 @@ pub struct ComponentManager {
 }
 
 impl ComponentManager {
-    pub fn new(java: RuntimeManager, assets: AssetSettingsStore, server: ServerManager) -> Self {
+    pub fn new(
+        java: RuntimeManager,
+        assets: AssetSettingsStore,
+        client_jars: ClientJarManager,
+        server: ServerManager,
+    ) -> Self {
         Self {
             inner: Arc::new(ComponentManagerInner {
                 java,
                 assets,
+                client_jars,
                 server,
                 installs: Mutex::new(BTreeMap::new()),
             }),
@@ -315,14 +331,33 @@ impl ComponentManager {
         java_settings: impl Into<PathBuf>,
         java_root: impl Into<PathBuf>,
         assets_settings: impl Into<PathBuf>,
+        assets_root: impl Into<PathBuf>,
+        manifest_cache: impl Into<PathBuf>,
         server_settings: impl Into<PathBuf>,
         server_root: impl Into<PathBuf>,
     ) -> Self {
         Self::new(
             RuntimeManager::new(java_settings, java_root),
             AssetSettingsStore::new(assets_settings),
+            ClientJarManager::new(assets_root, manifest_cache),
             ServerManager::new(server_settings, server_root),
         )
+    }
+
+    /// Returns the official client JAR metadata for the target version. No bytes are
+    /// downloaded until [`Self::install`] is called.
+    pub fn assets_release(
+        &self,
+        target: &ComponentTarget,
+    ) -> Result<ClientJarReleaseInfo, ComponentError> {
+        target.validate()?;
+        self.ensure_managed_target(target)?;
+        Ok(self.inner.client_jars.release(&target.minecraft_version)?)
+    }
+
+    /// Lists FuryBuilder-owned client JARs for the Settings inventory.
+    pub fn assets_inventory(&self) -> Result<client_jar::ManagedClientJarReport, ComponentError> {
+        Ok(self.inner.client_jars.managed_list()?)
     }
 
     pub fn status(
@@ -490,7 +525,33 @@ impl ComponentManager {
                 }
             }
             ComponentKind::Assets => {
-                if id.starts_with("assets-") && self.inner.assets.saved_source().source.is_some() {
+                if let Some(version) = id.strip_prefix("assets-managed-") {
+                    let selected_managed = self
+                        .inner
+                        .assets
+                        .saved_source()
+                        .source
+                        .as_ref()
+                        .is_some_and(|source| {
+                            self.inner.client_jars.contains(Path::new(&source.path))
+                        });
+                    let version =
+                        version
+                            .parse::<VersionId>()
+                            .map_err(|_| ComponentError::NotFound {
+                                kind: ComponentKind::Assets.as_str(),
+                                id: id.to_owned(),
+                            })?;
+                    if self.inner.client_jars.remove(&version)? {
+                        removed_managed = true;
+                    }
+                    if selected_managed {
+                        self.inner.assets.clear()?;
+                        cleared_selection = true;
+                    }
+                } else if id.starts_with("assets-")
+                    && self.inner.assets.saved_source().source.is_some()
+                {
                     self.inner.assets.clear()?;
                     cleared_selection = true;
                 }
@@ -546,12 +607,54 @@ impl ComponentManager {
                 .map_err(|error| ComponentError::InvalidRequest(error.to_string()))?;
         }
         match request.kind {
-            ComponentKind::Assets => Err(ComponentError::Unavailable {
-                kind: ComponentKind::Assets.as_str(),
-                detail:
-                    "client JAR downloading is not enabled in this build; choose a local .minecraft root or client JAR"
-                        .to_owned(),
-            }),
+            ComponentKind::Assets => {
+                self.ensure_managed_target(&request.target)?;
+                let expected_version = request
+                    .expected_version
+                    .as_deref()
+                    .unwrap_or_else(|| request.target.minecraft_version.as_str());
+                if expected_version != request.target.minecraft_version.as_str() {
+                    return Err(ComponentError::InvalidRequest(format!(
+                        "the reviewed client JAR is for Minecraft {expected_version}, not {}; review the download again",
+                        request.target.minecraft_version
+                    )));
+                }
+                let guarded = self.begin_install(ComponentKind::Assets)?;
+                let cancel = guarded.token();
+                let release = self
+                    .inner
+                    .client_jars
+                    .release(&request.target.minecraft_version)?;
+                if let Some(expected) = &request.expected_hash {
+                    if !expected.matches(HashAlgorithm::Sha1, &release.sha1) {
+                        return Err(ComponentError::ChecksumMismatch {
+                            kind: ComponentKind::Assets.as_str(),
+                            expected: format!("sha1:{}", expected.value),
+                            actual: release.sha1.clone(),
+                        });
+                    }
+                }
+                let installed = self.inner.client_jars.install(
+                    &request.target.minecraft_version,
+                    Some(&release.sha1),
+                    Some(request.target.data_version),
+                    &cancel,
+                    &|update: ClientJarProgress| {
+                        progress(ComponentProgress {
+                            kind: ComponentKind::Assets,
+                            phase: update.phase,
+                            downloaded: update.downloaded,
+                            total: update.total,
+                        });
+                    },
+                )?;
+                self.inner.assets.save(AssetSourceSetting {
+                    kind: "client_jar".to_owned(),
+                    path: installed.jar_path,
+                })?;
+                let status = self.assets_status(&request.target, true, false);
+                resolved_from_status(status)
+            }
             ComponentKind::Java => {
                 self.ensure_java_major(&request.target)?;
                 let guarded = self.begin_install(ComponentKind::Java)?;
@@ -559,8 +662,7 @@ impl ComponentManager {
                 let release = self.inner.java.latest_temurin(request.target.java_major)?;
                 let expected_version = request.expected_version.as_deref().ok_or_else(|| {
                     ComponentError::InvalidRequest(
-                        "a Java install requires the reviewed Adoptium release version"
-                            .to_owned(),
+                        "a Java install requires the reviewed Adoptium release version".to_owned(),
                     )
                 })?;
                 if release.version != expected_version {
@@ -618,16 +720,18 @@ impl ComponentManager {
                         });
                     }
                 }
-                self.inner
-                    .server
-                    .install(expected_version, &cancel, &|update: ServerProgress| {
+                self.inner.server.install(
+                    expected_version,
+                    &cancel,
+                    &|update: ServerProgress| {
                         progress(ComponentProgress {
                             kind: ComponentKind::Server,
                             phase: update.phase,
                             downloaded: update.downloaded,
                             total: update.total,
                         });
-                    })?;
+                    },
+                )?;
                 let status = self.server_status(&request.target, true);
                 resolved_from_status(status)
             }
@@ -764,43 +868,75 @@ impl ComponentManager {
             return ComponentStatus::not_required(ComponentKind::Assets);
         }
         let saved = self.inner.assets.saved_source();
-        let Some(source) = saved.source else {
-            if placeholder {
-                let mut status =
-                    ComponentStatus::new(ComponentKind::Assets, ComponentState::Unverified);
-                status.mode = Some(ComponentMode::Placeholder);
-                status.notes.push(
-                    "placeholder textures are enabled; there is no client JAR catalog for this project"
-                        .to_owned(),
-                );
-                return finalize(status);
+        let managed_fallback = if saved.source.is_none() {
+            match self.inner.client_jars.find(&target.minecraft_version) {
+                Ok(found) => found,
+                Err(error) => {
+                    let mut status =
+                        ComponentStatus::new(ComponentKind::Assets, ComponentState::Error);
+                    status.error =
+                        Some(format!("managed assets inventory is unavailable: {error}"));
+                    return finalize(status);
+                }
             }
-            let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
-            status.notes.push(
-                "no Minecraft client assets are selected; choose a .minecraft root, version folder or client JAR"
-                    .to_owned(),
-            );
-            return finalize(status);
+        } else {
+            None
         };
-        let Some(report) = saved.report else {
-            let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Error);
-            status.mode = Some(ComponentMode::Manual);
-            status.path = Some(source.path);
-            status.error = Some("the selected asset source cannot be inspected".to_owned());
-            return finalize(status);
+        let (report, load_warning) = match saved.source {
+            Some(source) => {
+                let Some(report) = saved.report else {
+                    let mut status =
+                        ComponentStatus::new(ComponentKind::Assets, ComponentState::Error);
+                    status.mode = Some(ComponentMode::Manual);
+                    status.path = Some(source.path);
+                    status.error = Some("the selected asset source cannot be inspected".to_owned());
+                    return finalize(status);
+                };
+                (report, saved.load_warning)
+            }
+            None => match managed_fallback {
+                Some(client) => (
+                    asset_source::inspect_asset_path(&client.jar_path),
+                    saved.load_warning,
+                ),
+                None => {
+                    if placeholder {
+                        let mut status =
+                            ComponentStatus::new(ComponentKind::Assets, ComponentState::Unverified);
+                        status.mode = Some(ComponentMode::Placeholder);
+                        status.notes.push(
+                            "placeholder textures are enabled; there is no client JAR catalog for this project"
+                                .to_owned(),
+                        );
+                        return finalize(status);
+                    }
+                    let mut status =
+                        ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
+                    status.notes.push(
+                        "no Minecraft client assets are selected; download the client JAR or choose a .minecraft root, version folder or client JAR"
+                            .to_owned(),
+                    );
+                    return finalize(status);
+                }
+            },
         };
 
+        let managed = self.inner.client_jars.contains(Path::new(&report.path));
         let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
-        status.mode = Some(ComponentMode::Manual);
+        status.mode = Some(if managed {
+            ComponentMode::Managed
+        } else {
+            ComponentMode::Manual
+        });
         status.path = Some(report.path.clone());
         status.notes.extend(report.warnings.clone());
-        if let Some(warning) = saved.load_warning {
+        if let Some(warning) = load_warning {
             status.notes.push(warning);
         }
         let Some(version) = version_for_target(&report, target) else {
             status.state = ComponentState::Incompatible;
             if let Some(version) = report.version.as_ref() {
-                status.id = Some(format!("assets-{}", version.id));
+                status.id = Some(assets_id(managed, &version.id));
                 status.version = Some(version.id.clone());
             }
             status.error = Some(match report.kind {
@@ -816,7 +952,7 @@ impl ComponentManager {
             return finalize(status);
         };
 
-        status.id = Some(format!("assets-{}", version.id));
+        status.id = Some(assets_id(managed, &version.id));
         status.version = Some(version.id.clone());
         status.path = Some(version.jar_path.clone());
         status.bytes = version.jar_bytes;
@@ -1150,6 +1286,14 @@ fn server_id(report: &runtime_manager::ServerJarReport) -> String {
     )
 }
 
+fn assets_id(managed: bool, version: &str) -> String {
+    if managed {
+        format!("assets-managed-{version}")
+    } else {
+        format!("assets-{version}")
+    }
+}
+
 fn same_path(left: &str, right: &str) -> bool {
     let left = fs::canonicalize(left).unwrap_or_else(|_| PathBuf::from(left));
     let right = fs::canonicalize(right).unwrap_or_else(|_| PathBuf::from(right));
@@ -1184,6 +1328,7 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use runtime_manager::RuntimeStatus;
+    use std::io::Cursor;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     struct TempDir {
@@ -1217,6 +1362,8 @@ mod tests {
             root.path.join("runtime.json"),
             root.path.join("runtimes"),
             root.path.join("assets.json"),
+            root.path.join("components").join("assets"),
+            root.path.join("cache").join("version_manifest_v2.json"),
             root.path.join("server.json"),
             root.path.join("servers"),
         )
@@ -1414,6 +1561,87 @@ mod tests {
         match manager(&root).remove(ComponentKind::Java, "unknown") {
             Err(ComponentError::NotFound { kind, .. }) => assert_eq!(kind, "java"),
             other => panic!("expected not-found, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn managed_assets_are_ready_without_a_saved_pointer() {
+        let root = TempDir::new("managed-assets");
+        let manager = manager(&root);
+        let version: VersionId = "1.21.4".parse().expect("version");
+        let (release, document, jar) = client_jar::test_fixture("1.21.4", 4189);
+        manager
+            .inner
+            .client_jars
+            .install_reader(
+                &version,
+                &release,
+                &document,
+                Cursor::new(jar),
+                Some(4189),
+                &AtomicBool::new(false),
+                &|_| {},
+            )
+            .expect("seed managed client jar");
+
+        let report = manager
+            .status(&target(), &ComponentRequirements::EDITOR)
+            .expect("status");
+        let assets = report.status(ComponentKind::Assets).expect("assets");
+        assert_eq!(assets.mode, Some(ComponentMode::Managed));
+        assert_eq!(assets.id.as_deref(), Some("assets-managed-1.21.4"));
+        assert_eq!(assets.version.as_deref(), Some("1.21.4"));
+        assert_eq!(assets.state, ComponentState::Ready);
+        assert!(assets.hash.is_some());
+        let inventory = manager.assets_inventory().expect("inventory");
+        assert_eq!(
+            assets.path.as_deref(),
+            Some(inventory.clients[0].jar_path.as_str())
+        );
+
+        let resolved = manager
+            .resolve(
+                ComponentKind::Assets,
+                &target(),
+                &ComponentRequirements::EDITOR,
+            )
+            .expect("resolve");
+        assert_eq!(resolved.mode, ComponentMode::Managed);
+        assert_eq!(resolved.id, "assets-managed-1.21.4");
+        assert!(Path::new(&resolved.path).is_file());
+        assert_eq!(
+            resolved.hash.algorithm,
+            component_model::HashAlgorithm::Sha1
+        );
+
+        let removal = manager
+            .remove(ComponentKind::Assets, "assets-managed-1.21.4")
+            .expect("remove");
+        assert!(removal.removed_managed);
+        assert!(!removal.cleared_selection);
+        assert!(manager
+            .assets_inventory()
+            .expect("inventory")
+            .clients
+            .is_empty());
+    }
+
+    #[test]
+    fn assets_release_refuses_a_target_the_managed_cache_does_not_support() {
+        let root = TempDir::new("assets-release-target");
+        let manager = manager(&root);
+        let profile = minecraft_version::default_profile();
+        let target = ComponentTarget {
+            profile_id: "java-classic-1.20.6".to_owned(),
+            minecraft_version: "1.20.6".parse().expect("version"),
+            data_version: 3839,
+            ..ComponentTarget::from_profile(&profile)
+        };
+        match manager.assets_release(&target) {
+            Err(ComponentError::UnsupportedTarget {
+                minecraft_version, ..
+            }) => assert_eq!(minecraft_version, "1.20.6"),
+            other => panic!("expected an unsupported target, got {other:?}"),
         }
     }
 

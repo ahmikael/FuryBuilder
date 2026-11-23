@@ -11,8 +11,11 @@ name = "component_manager"
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+ureq = { version = "2.12", default-features = false, features = ["tls", "proxy-from-env"] }
 asset-source = { path = "../asset-source", package = "furybuilder-asset-source" }
 component-model = { path = "../component-model", package = "furybuilder-component-model" }
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
@@ -20,3 +23,4 @@ runtime-manager = { path = "../runtime-manager", package = "furybuilder-runtime-
 
 [dev-dependencies]
 serde_json = { workspace = true }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }

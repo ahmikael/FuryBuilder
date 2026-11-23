@@ -181,6 +181,14 @@ impl AssetIndex {
 
 /// Fetches, hash-verifies and parses the version JSON behind a manifest entry.
 pub fn fetch_version_json(entry: &ManifestEntry) -> Result<VersionJson, VersionJsonError> {
+    fetch_version_json_document(entry).map(|(version, _)| version)
+}
+
+/// Fetches the version JSON and also returns the exact verified bytes. The bytes are
+/// useful as launcher metadata next to a downloaded client JAR.
+pub fn fetch_version_json_document(
+    entry: &ManifestEntry,
+) -> Result<(VersionJson, Vec<u8>), VersionJsonError> {
     let bytes = fetch_bytes(&entry.url)?;
 
     if !entry.sha1.is_empty() {
@@ -194,7 +202,8 @@ pub fn fetch_version_json(entry: &ManifestEntry) -> Result<VersionJson, VersionJ
     }
 
     let json = std::str::from_utf8(&bytes)?;
-    VersionJson::from_json_for(json, &entry.id)
+    let version = VersionJson::from_json_for(json, &entry.id)?;
+    Ok((version, bytes))
 }
 
 fn fetch_bytes(url: &str) -> Result<Vec<u8>, VersionJsonError> {

@@ -26,8 +26,8 @@ pub use profiles::{
     profile_for_version, JAVA_CLASSIC_1_21_4_ID,
 };
 pub use version_json::{
-    fetch_version_json, AssetIndex, JavaVersion, VersionDownload, VersionDownloads, VersionJson,
-    VersionJsonError,
+    fetch_version_json, fetch_version_json_document, AssetIndex, JavaVersion, VersionDownload,
+    VersionDownloads, VersionJson, VersionJsonError,
 };
 
 use std::cmp::Ordering;
