@@ -343,11 +343,14 @@ describe("project manager", () => {
   it("lists checkpoints and restores one after confirmation", async () => {
     api.checkpoints.mockResolvedValue([
       {
+        checkpointSchemaVersion: 2,
+        profileId: "java-classic-1.21.4",
         revision: 9,
         checksum: "b".repeat(64),
         bytes: 4096,
         savedAtMs: Date.now(),
         reason: "before experiment",
+        editorState: { selectedDimension: "minecraft:overworld", loadRadius: 1 },
       },
     ]);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);

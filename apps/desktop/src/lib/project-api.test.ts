@@ -57,6 +57,7 @@ describe("project IPC contract", () => {
     await checkpointProject("before test");
     expect(invoke).toHaveBeenLastCalledWith("project_checkpoint", {
       reason: "before test",
+      label: null,
     });
 
     await fetchCheckpoints("Castle.furybuilder");

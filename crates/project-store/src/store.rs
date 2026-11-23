@@ -77,14 +77,77 @@ struct AutosaveMeta {
     saved_at_ms: u64,
 }
 
+/// Version of the checkpoint metadata document stored next to each checkpoint snapshot.
+pub const CHECKPOINT_SCHEMA_VERSION: u32 = 2;
+pub const MAX_CHECKPOINT_TEXT_CHARS: usize = 256;
+
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckpointMeta {
+    pub checkpoint_schema_version: u32,
+    pub profile_id: String,
     pub revision: u64,
     pub checksum: String,
     pub bytes: u64,
     pub saved_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub label: Option<String>,
     pub reason: String,
+    pub editor_state: EditorState,
+}
+
+impl CheckpointMeta {
+    fn validate(&self, expected_profile_id: &str) -> Result<(), ProjectError> {
+        if self.checkpoint_schema_version != CHECKPOINT_SCHEMA_VERSION {
+            return Err(ProjectError::UnsupportedSchema {
+                found: self.checkpoint_schema_version,
+                supported: CHECKPOINT_SCHEMA_VERSION,
+            });
+        }
+        if self.profile_id != expected_profile_id {
+            return Err(ProjectError::corrupt(format!(
+                "checkpoint profile `{}` does not match the project profile `{expected_profile_id}`",
+                self.profile_id
+            )));
+        }
+        if self.revision == 0 {
+            return Err(ProjectError::corrupt(
+                "checkpoint revision must be positive",
+            ));
+        }
+        if !is_hex_sha256(&self.checksum) {
+            return Err(ProjectError::corrupt(
+                "checkpoint checksum must be a lowercase SHA-256 hex string",
+            ));
+        }
+        if self.bytes == 0 {
+            return Err(ProjectError::corrupt("checkpoint size must be positive"));
+        }
+        if self.reason.trim().is_empty() || self.reason.chars().count() > MAX_CHECKPOINT_TEXT_CHARS
+        {
+            return Err(ProjectError::corrupt(
+                "checkpoint reason is empty or too long",
+            ));
+        }
+        if let Some(label) = &self.label {
+            if label.trim().is_empty() || label.chars().count() > MAX_CHECKPOINT_TEXT_CHARS {
+                return Err(ProjectError::corrupt(
+                    "checkpoint label is empty or too long",
+                ));
+            }
+        }
+        self.editor_state
+            .validate()
+            .map_err(|error| ProjectError::corrupt(format!("checkpoint editor state: {error}")))?;
+        Ok(())
+    }
+}
+
+/// A verified checkpoint snapshot together with the metadata captured beside it.
+#[derive(Debug)]
+pub struct OpenedCheckpoint {
+    pub world: World,
+    pub meta: CheckpointMeta,
 }
 
 /// Result of publishing an interchange file under `exports/`.
@@ -235,6 +298,43 @@ fn parse_snapshot_revision(name: &str) -> Option<u64> {
         .strip_suffix(".fwl")?
         .parse()
         .ok()
+}
+
+fn parse_checkpoint_revision(path: &Path) -> Option<u64> {
+    path.file_stem()?
+        .to_str()?
+        .strip_prefix("checkpoint-")?
+        .parse()
+        .ok()
+}
+
+/// Reads and validates one checkpoint metadata document against the project profile and
+/// the size of its sibling snapshot. A metadata file is never accepted by number alone.
+fn read_checkpoint_meta(
+    checkpoint_dir: &Path,
+    path: &Path,
+    expected_profile_id: &str,
+) -> Result<CheckpointMeta, ProjectError> {
+    let revision = parse_checkpoint_revision(path)
+        .ok_or_else(|| ProjectError::corrupt("checkpoint metadata file name is invalid"))?;
+    let meta: CheckpointMeta = read_json(path)?;
+    meta.validate(expected_profile_id)?;
+    if meta.revision != revision {
+        return Err(ProjectError::corrupt(format!(
+            "checkpoint metadata revision {} does not match file name {revision}",
+            meta.revision
+        )));
+    }
+    let snapshot = checkpoint_dir.join(format!("checkpoint-{revision:020}.fwl"));
+    let length = fs::metadata(&snapshot)
+        .map_err(|error| io_error(format!("reading {}", snapshot.display()), error))?
+        .len();
+    if length != meta.bytes {
+        return Err(ProjectError::corrupt(format!(
+            "checkpoint {revision} size does not match its metadata"
+        )));
+    }
+    Ok(meta)
 }
 
 /// Builds a deterministic flat base: a 33x33 stone platform at y=63..=64 around the
@@ -916,23 +1016,56 @@ impl ProjectStore {
         manifest.last_save_kind = SaveKind::Autosave;
         write_json(&dir.join(PROJECT_FILE), &manifest)?;
         if !reason.is_empty() {
-            self.checkpoint(folder, world, manifest.editor_state, reason)?;
+            self.checkpoint(folder, world, manifest.editor_state, None, reason)?;
         }
         Ok(world.revision())
     }
 
     /// Rolling checkpoints used for explicit recovery points. Bounded to `MAX_CHECKPOINTS`.
+    /// The metadata is schema v2 and binds the snapshot to the project's exact version
+    /// profile, label, reason and editor state.
     pub fn checkpoint(
         &self,
         folder: &str,
         world: &World,
         editor_state: EditorState,
+        label: Option<&str>,
         reason: &str,
     ) -> Result<String, ProjectError> {
         let dir = self.project_dir(folder)?;
         let manifest = self.manifest(&dir)?;
         manifest.validate()?;
         editor_state.validate()?;
+
+        let reason = reason.trim();
+        if reason.is_empty() || reason.chars().count() > MAX_CHECKPOINT_TEXT_CHARS {
+            return Err(ProjectError::InvalidCheckpoint(format!(
+                "reason must be 1..={MAX_CHECKPOINT_TEXT_CHARS} characters"
+            )));
+        }
+        let label = label
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
+        if let Some(label) = &label {
+            if label.chars().count() > MAX_CHECKPOINT_TEXT_CHARS {
+                return Err(ProjectError::InvalidCheckpoint(format!(
+                    "label must be at most {MAX_CHECKPOINT_TEXT_CHARS} characters"
+                )));
+            }
+        }
+        if world.version().minecraft_version() != manifest.target.minecraft_version.as_str()
+            || world.version().data_version() != manifest.target.data_version
+        {
+            return Err(ProjectError::InvalidCheckpoint(format!(
+                "world version {} (DataVersion {}) does not match the project target {} (DataVersion {})",
+                world.version().minecraft_version(),
+                world.version().data_version(),
+                manifest.target.minecraft_version,
+                manifest.target.data_version
+            )));
+        }
+
         let bytes = encode_world(world)?;
         verify_round_trip(&bytes)?;
         let checkpoint_dir = dir.join(CHECKPOINT_DIR);
@@ -941,12 +1074,17 @@ impl ProjectStore {
         let name = format!("checkpoint-{:020}.fwl", world.revision());
         write_atomic(&checkpoint_dir.join(&name), &bytes)?;
         let meta = CheckpointMeta {
+            checkpoint_schema_version: CHECKPOINT_SCHEMA_VERSION,
+            profile_id: manifest.target.profile_id.clone(),
             revision: world.revision(),
             checksum: sha256_hex(&bytes),
             bytes: bytes.len() as u64,
             saved_at_ms: now_ms(),
+            label,
             reason: reason.to_owned(),
+            editor_state,
         };
+        meta.validate(&manifest.target.profile_id)?;
         write_json(
             &checkpoint_dir.join(format!("checkpoint-{:020}.json", world.revision())),
             &meta,
@@ -968,9 +1106,12 @@ impl ProjectStore {
         Ok(name)
     }
 
-    /// Lists verified checkpoints, newest first. Corrupt entries are skipped.
+    /// Lists verified current-schema checkpoints, newest first. Metadata that is corrupt,
+    /// from another schema, or bound to a different profile is not listed.
     pub fn checkpoints(&self, folder: &str) -> Result<Vec<CheckpointMeta>, ProjectError> {
         let dir = self.project_dir(folder)?;
+        let manifest = self.manifest(&dir)?;
+        manifest.validate()?;
         let checkpoint_dir = dir.join(CHECKPOINT_DIR);
         if !checkpoint_dir.exists() {
             return Ok(Vec::new());
@@ -985,22 +1126,46 @@ impl ProjectStore {
         entries.reverse();
         Ok(entries
             .into_iter()
-            .filter_map(|path| read_json::<CheckpointMeta>(&path).ok())
+            .filter_map(|path| {
+                read_checkpoint_meta(&checkpoint_dir, &path, &manifest.target.profile_id).ok()
+            })
             .collect())
     }
 
-    /// Opens a checkpoint snapshot by revision. The current project is unaffected.
-    pub fn open_checkpoint(&self, folder: &str, revision: u64) -> Result<World, ProjectError> {
+    /// Opens and verifies a checkpoint snapshot by revision. The current project is
+    /// unaffected; the caller decides whether to install the returned world and editor state.
+    pub fn open_checkpoint(
+        &self,
+        folder: &str,
+        revision: u64,
+    ) -> Result<OpenedCheckpoint, ProjectError> {
         let dir = self.project_dir(folder)?;
-        let path = dir
-            .join(CHECKPOINT_DIR)
-            .join(format!("checkpoint-{revision:020}.fwl"));
-        if !path.exists() {
+        let manifest = self.manifest(&dir)?;
+        manifest.validate()?;
+        let checkpoint_dir = dir.join(CHECKPOINT_DIR);
+        let meta_path = checkpoint_dir.join(format!("checkpoint-{revision:020}.json"));
+        if !meta_path.exists() {
             return Err(ProjectError::NotFound(format!("checkpoint {revision}")));
         }
+        let meta = read_checkpoint_meta(&checkpoint_dir, &meta_path, &manifest.target.profile_id)?;
+        let path = checkpoint_dir.join(format!("checkpoint-{revision:020}.fwl"));
         let bytes = fs::read(&path)
             .map_err(|error| io_error(format!("reading {}", path.display()), error))?;
-        verify_round_trip(&bytes)
+        let actual = sha256_hex(&bytes);
+        if actual != meta.checksum {
+            return Err(ProjectError::ChecksumMismatch {
+                expected: meta.checksum.clone(),
+                actual,
+            });
+        }
+        let world = verify_round_trip(&bytes)?;
+        if world.revision() != revision {
+            return Err(ProjectError::corrupt(format!(
+                "checkpoint {revision} contains world revision {}",
+                world.revision()
+            )));
+        }
+        Ok(OpenedCheckpoint { world, meta })
     }
 
     fn prune_snapshots(&self, data_dir: &Path, keep: &str) -> Result<usize, ProjectError> {
@@ -1696,18 +1861,105 @@ mod tests {
             .expect("create");
         let folder = detail.summary.folder.clone();
         let (_, mut world, _) = store.open(&folder).unwrap();
+        let editor_state = EditorState {
+            selected_dimension: "minecraft:the_nether".to_owned(),
+            ..EditorState::default()
+        };
         for _ in 0..(MAX_CHECKPOINTS + 3) {
             world.bump_revision();
             store
-                .checkpoint(&folder, &world, EditorState::default(), "manual")
+                .checkpoint(
+                    &folder,
+                    &world,
+                    editor_state.clone(),
+                    Some("before fill"),
+                    "manual",
+                )
                 .unwrap();
         }
         let checkpoints = store.checkpoints(&folder).unwrap();
         assert_eq!(checkpoints.len(), MAX_CHECKPOINTS);
         let newest = checkpoints[0].revision;
-        let restored = store.open_checkpoint(&folder, newest).unwrap();
-        assert_eq!(restored.revision(), newest);
+        assert_eq!(newest, world.revision());
+        assert_eq!(
+            checkpoints[0].checkpoint_schema_version,
+            CHECKPOINT_SCHEMA_VERSION
+        );
+        assert_eq!(checkpoints[0].profile_id, "java-classic-1.21.4");
+        assert_eq!(checkpoints[0].label.as_deref(), Some("before fill"));
+        assert_eq!(checkpoints[0].reason, "manual");
+        assert_eq!(checkpoints[0].editor_state, editor_state);
+        assert_eq!(checkpoints[0].checksum.len(), 64);
+        assert!(checkpoints[0].bytes > 0);
+        let opened = store.open_checkpoint(&folder, newest).unwrap();
+        assert_eq!(opened.world.revision(), newest);
+        assert_eq!(opened.meta, checkpoints[0]);
         assert!(store.open_checkpoint(&folder, 1).is_err());
+    }
+
+    #[test]
+    fn checkpoint_metadata_is_current_schema_only_and_profile_bound() {
+        let root = temp_root("checkpoint-schema");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create(
+                "Checkpoint Schema",
+                CreationMode::Empty,
+                EditorState::default(),
+            )
+            .expect("create");
+        let folder = detail.summary.folder.clone();
+        let (_, world, _) = store.open(&folder).unwrap();
+        store
+            .checkpoint(
+                &folder,
+                &world,
+                EditorState::default(),
+                Some("before experiment"),
+                "manual",
+            )
+            .expect("checkpoint");
+        let revision = world.revision();
+        let meta_path = root
+            .join(&folder)
+            .join(CHECKPOINT_DIR)
+            .join(format!("checkpoint-{revision:020}.json"));
+        let original: serde_json::Value =
+            serde_json::from_slice(&fs::read(&meta_path).unwrap()).unwrap();
+
+        let mut legacy = original.clone();
+        legacy["checkpointSchemaVersion"] = serde_json::Value::from(1);
+        fs::write(&meta_path, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
+        assert!(store.checkpoints(&folder).unwrap().is_empty());
+        match store.open_checkpoint(&folder, revision) {
+            Err(ProjectError::UnsupportedSchema {
+                found: 1,
+                supported,
+            }) => {
+                assert_eq!(supported, CHECKPOINT_SCHEMA_VERSION);
+            }
+            other => panic!("expected schema v1 to be refused, got {other:?}"),
+        }
+
+        let mut wrong_profile = original.clone();
+        wrong_profile["profileId"] = serde_json::Value::from("java-classic-9.9.9");
+        fs::write(
+            &meta_path,
+            serde_json::to_vec_pretty(&wrong_profile).unwrap(),
+        )
+        .unwrap();
+        assert!(store.checkpoints(&folder).unwrap().is_empty());
+        match store.open_checkpoint(&folder, revision) {
+            Err(ProjectError::Corrupt(message)) => {
+                assert!(message.contains("does not match the project profile"));
+            }
+            other => panic!("expected a profile mismatch to be refused, got {other:?}"),
+        }
+
+        fs::write(&meta_path, serde_json::to_vec_pretty(&original).unwrap()).unwrap();
+        let listed = store.checkpoints(&folder).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].revision, revision);
     }
 
     #[test]

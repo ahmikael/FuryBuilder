@@ -49,8 +49,11 @@ export function autosaveProject(editorState: EditorState, reason = ""): Promise<
   return invokeCommand<number>("project_autosave", { editorState, reason });
 }
 
-export function checkpointProject(reason: string): Promise<CheckpointMeta[]> {
-  return invokeCommand<CheckpointMeta[]>("project_checkpoint", { reason });
+export function checkpointProject(reason: string, label?: string): Promise<CheckpointMeta[]> {
+  return invokeCommand<CheckpointMeta[]>("project_checkpoint", {
+    reason,
+    label: label ?? null,
+  });
 }
 
 export function fetchCheckpoints(folder?: string): Promise<CheckpointMeta[]> {

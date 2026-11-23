@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation и project data закрыты; `.fwl` читается только в v3, идёт checkpoint metadata v2.
-> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, version profiles).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation и project data закрыты; checkpoint metadata v2 готова, идёт project version reporting.
+> Дата: 2026-11-22; обновлено 2026-11-23 (project schema v2 only, snapshot v3 only, checkpoint metadata v2).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -33,7 +33,7 @@
 | Настройки | Содержат отдельные блоки Java, сервера и ассетов; мастер Vanilla World дублирует выбор Java/сервера | `SettingsDialog.tsx`, `JavaRuntimeSection.tsx`, `MinecraftServerSection.tsx`, `VanillaWorldWizard.tsx` |
 | Проект | `project.json` schema 2: `target` из `VersionProfile` + `components`; версия больше не глобальная | `crates/project-store/src/manifest.rs` |
 | Snapshot проекта | Формат `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode + world/dimensions | `crates/project-store/src/snapshot.rs` |
-| Чекпоинты | До 5 полных snapshot-ов мира, ручные | `crates/project-store/src/store.rs` |
+| Чекпоинты | Metadata v2 + полный snapshot: profileId, label, reason, editorState; до 5 | `crates/project-store/src/store.rs` |
 | Автосейв | Каждые 30 секунд, только для crash recovery | `ProjectManager.tsx`, `store.rs` |
 | Undo | До 100 транзакций в памяти | `crates/world-application/src/service.rs` |
 | Нижняя панель | 16 вкладок в одном горизонтальном списке | `features/workspace/BottomPanel.tsx`, `editor/layout.ts` |
@@ -914,12 +914,12 @@ Command palette умеет: переключить режим, открыть и
 
 ### 10.1. Как сейчас
 
-- Чекпоинт — **полный snapshot мира** на текущей ревизии, записанный в `changes/checkpoint-*.fwl` + JSON metadata.
+- Чекпоинт — **полный snapshot мира** на текущей ревизии, записанный в `changes/checkpoint-*.fwl`, плюс metadata v2 (`checkpointSchemaVersion`, `profileId`, `label`, `reason`, `editorState`).
 - Хранится до **5** последних чекпоинтов; старые удаляются.
 - Создаётся вручную (или при autosave с reason).
-- Восстановление заменяет открытый мир в памяти и помечает проект изменённым; чтобы закрепить, нужно сохранить проект.
+- Восстановление заменяет открытый мир и `editorState` (слои, scene, parametric) в памяти и помечает проект изменённым; чтобы закрепить, нужно сохранить проект.
 - Исходный мир/imported source не изменяется.
-- Восстанавливается только мир; `editorState` (слои, scene, parametric) в checkpoint metadata сейчас фактически не сохраняется как полноценный снимок.
+- Metadata привязана к `profileId` проекта; чекпоинт другой версии, схемы или с несовпадающим checksum не открывается.
 
 ### 10.2. Чем чекпоинт не является
 
@@ -1388,9 +1388,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-16` — checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; v1 не читается. Статус: P0 в работе.
+**Текущий фокус:** `P0-17` — `world_info`, project summary и MCP metadata возвращают версию проекта, а не глобальную константу. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-17`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-18`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1437,7 +1437,7 @@ UI:
 - [x] `P0-13` Удалить schema v1 целиком: reader/writer, миграцию, backup-путь и тесты старой схемы; `project.json` существует только в v2.
 - [x] `P0-14` Snapshot `.fwl` v3: `profileId`, `dataVersion`, layout, biome mode.
 - [x] `P0-15` Удалить snapshot v2 reader/writer и тесты v2; пересоздать `examples/furybuilder-demo.furybuilder` под schema v2 / `.fwl` v3 и обновить `demo_project` тест.
-- [ ] `P0-16` Checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; v1 не читается, compatibility-полей нет.
+- [x] `P0-16` Checkpoint metadata v2: `profileId`, `label`, `reason`, `editorState`; v1 не читается, compatibility-полей нет.
 - [ ] `P0-17` `world_info`, project summary и MCP metadata возвращают версию проекта, а не глобальную константу.
 
 #### C. Component manager
@@ -1670,6 +1670,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-23 | Checkpoint metadata v2 | Metadata пишет `checkpointSchemaVersion: 2`, `profileId`, label, reason и полный `editorState`; список и открытие проверяют схему, профиль, размер и SHA-256; restore применяет editor state; v1 не читается | см. `git log` | 551 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Snapshot v3 only | Удалены v1/v2 reader и их тесты: `.fwl` принимается только в v3; demo-тест проверяет profile target и номер формата снимка; docs описывают exact-match snapshot policy | см. `git log` | 550 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Snapshot v3 | `.fwl` пишет `profileId`, `dataVersion`, layout и biome mode; decoder сверяет заголовок с built-in профилем и восстанавливает версию мира; демо пересобрано на v3 с обновлённым checksum | см. `git log` | 551 Rust tests, 290 TS tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-23 | Project schema v1 removal | `project.json` читается только в v2: любой другой номер схемы отклоняется без миграции, backup-файла и перезаписи; старые migration-тесты заменены тестами текущего контракта; docs описывают exact-match schema policy | см. `git log` | 549 Rust tests, clippy, fmt, typecheck/lint/format |

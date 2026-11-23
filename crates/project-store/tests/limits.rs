@@ -43,7 +43,7 @@ fn snapshots_and_checkpoints_are_bounded_and_only_cache_is_cleared() {
     for _ in 0..(MAX_CHECKPOINTS + 3) {
         world.bump_revision();
         store
-            .checkpoint(&folder, &world, EditorState::default(), "limit test")
+            .checkpoint(&folder, &world, EditorState::default(), None, "limit test")
             .expect("checkpoint");
     }
     assert_eq!(

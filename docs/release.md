@@ -118,7 +118,7 @@ Protections:
 | Atomic save            | Temp file, fsync, decode/re-encode, rename; `project.json` is written only after the referenced snapshot is durable                    | One publish at a time |
 | Snapshot history       | Each save publishes `data/world-<revision>.fwl`                                                                                       | Newest 8              |
 | Per-save manifest copy | Previous manifest is copied to `project.json.bak-<previous revision>` before publish                                                  | Newest 5              |
-| Explicit checkpoints   | User-requested recovery points                                                                                                        | Newest 5              |
+| Explicit checkpoints   | Full snapshot + schema-v2 metadata (profile, label, reason, editor state)                                                              | Newest 5              |
 | Autosave               | Every 30 s while dirty, on window hide and on close; revision, byte count and SHA-256 are verified before adoption                     | One current autosave  |
 | Immutable source       | Imported files are copied under `source/files/` with SHA-256 and never edited by overlay operations                                   | Source tree           |
 | Diagnostics            | Rotating JSON Lines log, no world payloads or secrets                                                                                 | 2 MiB x 4 files       |

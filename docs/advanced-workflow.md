@@ -273,8 +273,9 @@ an edited world, and it does not compare biome cells.
   manifest. A failed save leaves the previous snapshot intact.
 - **Autosave** runs every 30 seconds while edits are unsaved and on window close. A hard crash
   can lose up to half a minute of edits.
-- **Checkpoints** are verified full snapshots, up to five per project. Restoring one replaces
-  the open world after confirmation.
+- **Checkpoints** are verified full snapshots with schema-v2 metadata (profile, label,
+  reason, editor state), up to five per project. Restoring one replaces the open world and
+  editor state after confirmation.
 - **Recovery.** On open, FuryBuilder validates the autosave metadata, checksum, round-trip and
   revision. A verified autosave is offered explicitly. A damaged autosave is reported and the
   last saved revision is opened with `available = false`; artifacts are kept for inspection.

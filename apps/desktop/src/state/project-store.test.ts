@@ -402,7 +402,16 @@ describe("close, checkpoints and rename", () => {
   it("creates checkpoints and exposes the refreshed list", async () => {
     useProjectStore.setState({ current: session(), projects: [summary] });
     api.checkpoint.mockResolvedValue([
-      { revision: 4, checksum: "c".repeat(64), bytes: 100, savedAtMs: 1, reason: "manual" },
+      {
+        checkpointSchemaVersion: 2,
+        profileId: "java-classic-1.21.4",
+        revision: 4,
+        checksum: "c".repeat(64),
+        bytes: 100,
+        savedAtMs: 1,
+        reason: "manual",
+        editorState: { selectedDimension: "minecraft:overworld", loadRadius: 1 },
+      },
     ]);
     const created = await useProjectStore.getState().createCheckpoint("manual");
     expect(created).toBe(true);

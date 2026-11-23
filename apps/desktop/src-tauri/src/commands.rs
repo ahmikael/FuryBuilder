@@ -738,6 +738,7 @@ pub fn project_autosave(
 pub fn project_checkpoint(
     state: State<'_, AppState>,
     reason: String,
+    label: Option<String>,
 ) -> Result<Vec<project_store::CheckpointMeta>, AppError> {
     let mut projects = state
         .projects
@@ -759,6 +760,7 @@ pub fn project_checkpoint(
             &current.folder,
             &world,
             current.editor_state.clone(),
+            label.as_deref(),
             &reason,
         )
         .map_err(project_error)?;
@@ -811,23 +813,18 @@ pub fn project_open_checkpoint(
         .ok_or_else(|| {
             AppError::new(world_application::ErrorCode::NotFound, "no project is open")
         })?;
-    let world = projects
+    let opened = projects
         .store
         .open_checkpoint(&folder, revision)
         .map_err(project_error)?;
-    let info = world.info();
+    let info = opened.world.info();
     state
         .jobs
         .cancel_all("the world was replaced by a checkpoint");
-    let editor_state = projects
-        .current
-        .as_ref()
-        .filter(|current| current.folder == folder)
-        .map(|current| current.editor_state.clone())
-        .unwrap_or_default();
-    install_world_service(&state, world, &editor_state)?;
+    install_world_service(&state, opened.world, &opened.meta.editor_state)?;
     if let Some(current) = projects.current.as_mut() {
         if current.folder == folder {
+            current.editor_state = opened.meta.editor_state;
             current.autosaved_revision = Some(revision);
         }
     }

@@ -32,6 +32,8 @@ pub enum ProjectError {
     ChecksumMismatch { expected: String, actual: String },
     #[error("project limit exceeded: {0}")]
     LimitExceeded(String),
+    #[error("invalid checkpoint: {0}")]
+    InvalidCheckpoint(String),
     #[error("unsafe source path: {0}")]
     UnsafeSource(String),
     #[error("project manifest is invalid: {0}")]
@@ -62,6 +64,7 @@ impl ProjectError {
             ProjectError::NotFound(_) => "not_found",
             ProjectError::AlreadyExists(_) => "conflict",
             ProjectError::InvalidName(_) | ProjectError::InvalidPath(_) => "invalid_argument",
+            ProjectError::InvalidCheckpoint(_) => "invalid_argument",
             ProjectError::UnsupportedSchema { .. } | ProjectError::UnsupportedWorldVersion(_) => {
                 "unsupported_version"
             }

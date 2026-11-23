@@ -204,11 +204,15 @@ export interface SaveOutcome {
 }
 
 export interface CheckpointMeta {
+  checkpointSchemaVersion: number;
+  profileId: string;
   revision: number;
   checksum: string;
   bytes: number;
   savedAtMs: number;
+  label?: string;
   reason: string;
+  editorState: EditorState;
 }
 
 export interface ImportDimensionAnalysis {
