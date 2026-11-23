@@ -1,10 +1,17 @@
 {
-  "projectSchemaVersion": 1,
+  "projectSchemaVersion": 2,
   "projectId": "84e0bcc6-e61b-48e8-850d-7db9d8e96096",
   "name": "FuryBuilder Demo",
   "creationMode": "empty",
-  "targetMinecraftVersion": "1.21.4",
-  "targetDataVersion": 4189,
+  "target": {
+    "minecraftVersion": "1.21.4",
+    "dataVersion": 4189,
+    "profileId": "java-classic-1.21.4",
+    "javaMajor": 21,
+    "resourcePackFormat": 46,
+    "datapackFormat": 61
+  },
+  "components": {},
   "worldRevision": 1,
   "worldFile": "data/world-00000000000000000001.fwl",
   "worldChecksum": "a07aead74b2a96cab86c5356dc95923e1ac0b4165462d661ba2c5a304645a85c",

@@ -1023,6 +1023,7 @@ dependencies = [
 name = "furybuilder-project-store"
 version = "0.2.0"
 dependencies = [
+ "furybuilder-minecraft-version",
  "furybuilder-scene-model",
  "furybuilder-workspace-model",
  "furybuilder-world-domain",

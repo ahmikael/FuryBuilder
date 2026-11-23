@@ -1,5 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use minecraft_version::{builtin_profiles, profile_for_version, VersionId, VersionProfile};
 use scene_model::{ParametricScene, Scene};
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
@@ -7,7 +8,8 @@ use world_domain::WorldVersion;
 
 use crate::error::ProjectError;
 
-pub const PROJECT_SCHEMA_VERSION: u32 = 1;
+/// The only project schema FuryBuilder reads or writes. Older drafts are not migrated.
+pub const PROJECT_SCHEMA_VERSION: u32 = 2;
 pub const PROJECT_EXTENSION: &str = "furybuilder";
 pub const PROJECT_FILE: &str = "project.json";
 pub const MAX_PROJECT_NAME_CHARS: usize = 64;
@@ -256,6 +258,349 @@ impl EditorState {
     }
 }
 
+/// Exact Minecraft target of a project. The profile id and all derived facts are fixed
+/// when the project is created, so a later catalog update can never silently retarget it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectTarget {
+    pub minecraft_version: VersionId,
+    pub data_version: i32,
+    pub profile_id: String,
+    pub java_major: u32,
+    pub resource_pack_format: Option<u32>,
+    pub datapack_format: Option<u32>,
+}
+
+impl ProjectTarget {
+    pub fn from_profile(profile: &VersionProfile) -> Self {
+        Self {
+            minecraft_version: profile.minecraft_version.clone(),
+            data_version: profile.data_version,
+            profile_id: profile.id.clone(),
+            java_major: profile.java.recommended_major,
+            resource_pack_format: profile.resource_pack_format,
+            datapack_format: profile.datapack_format,
+        }
+    }
+
+    /// Resolves the built-in profile for a world version. Unknown versions are refused:
+    /// a project target is never guessed or silently replaced by the default profile.
+    pub fn for_world_version(version: &WorldVersion) -> Result<Self, ProjectError> {
+        let version_id: VersionId = version.minecraft_version().parse().map_err(|error| {
+            ProjectError::invalid_manifest(format!("invalid target Minecraft version: {error}"))
+        })?;
+        let profile = profile_for_version(&version_id)
+            .filter(|profile| profile.data_version == version.data_version())
+            .ok_or_else(|| {
+                ProjectError::invalid_manifest(format!(
+                    "no built-in version profile matches Minecraft {} (DataVersion {})",
+                    version.minecraft_version(),
+                    version.data_version()
+                ))
+            })?;
+        Ok(Self::from_profile(&profile))
+    }
+
+    pub fn validate(&self) -> Result<(), ProjectError> {
+        let profile = builtin_profiles()
+            .into_iter()
+            .find(|profile| profile.id == self.profile_id)
+            .ok_or_else(|| {
+                ProjectError::invalid_manifest(format!(
+                    "target profile `{}` is not built into this FuryBuilder",
+                    self.profile_id
+                ))
+            })?;
+        if self.minecraft_version != profile.minecraft_version {
+            return Err(ProjectError::invalid_manifest(format!(
+                "target Minecraft version `{}` does not match profile `{}` ({})",
+                self.minecraft_version, profile.id, profile.minecraft_version
+            )));
+        }
+        if self.data_version != profile.data_version {
+            return Err(ProjectError::invalid_manifest(format!(
+                "target DataVersion {} does not match profile `{}` ({})",
+                self.data_version, profile.id, profile.data_version
+            )));
+        }
+        if self.java_major != profile.java.recommended_major {
+            return Err(ProjectError::invalid_manifest(format!(
+                "target Java major {} does not match profile `{}` ({})",
+                self.java_major, profile.id, profile.java.recommended_major
+            )));
+        }
+        if self.resource_pack_format != profile.resource_pack_format {
+            return Err(ProjectError::invalid_manifest(format!(
+                "target resource pack format {:?} does not match profile `{}` ({:?})",
+                self.resource_pack_format, profile.id, profile.resource_pack_format
+            )));
+        }
+        if self.datapack_format != profile.datapack_format {
+            return Err(ProjectError::invalid_manifest(format!(
+                "target datapack format {:?} does not match profile `{}` ({:?})",
+                self.datapack_format, profile.id, profile.datapack_format
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn world_version(&self) -> Result<WorldVersion, ProjectError> {
+        WorldVersion::new(self.minecraft_version.to_string(), self.data_version)
+            .map_err(|error| ProjectError::invalid_manifest(error.to_string()))
+    }
+}
+
+/// How a project refers to an installed component.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentMode {
+    Managed,
+    Manual,
+    Placeholder,
+}
+
+/// Logical reference to a Java runtime. The path is resolved from the global component
+/// cache; a project never stores an absolute path as its source of truth.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaComponent {
+    pub mode: ComponentMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+}
+
+/// One resource or data pack in the asset stack.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetsPack {
+    /// Logical path below the asset cache root. Never absolute and never a traversal path.
+    pub path: String,
+    pub sha1: String,
+}
+
+/// Logical reference to the client JAR and the derived block/item catalog used by a project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetsComponent {
+    pub mode: ComponentMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_jar_sha1: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub catalog_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pack_stack: Vec<AssetsPack>,
+}
+
+/// Logical reference to the official server JAR used for Vanilla World generation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerComponent {
+    pub mode: ComponentMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version: Option<VersionId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha1: Option<String>,
+}
+
+/// Components a project was created with. Empty until the component manager has resolved
+/// them; a placeholder is always explicit and never claims a verified identity.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectComponents {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub java: Option<JavaComponent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assets: Option<AssetsComponent>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub server: Option<ServerComponent>,
+}
+
+impl ProjectComponents {
+    pub fn validate(&self, target: &ProjectTarget) -> Result<(), ProjectError> {
+        if let Some(java) = &self.java {
+            java.validate()?;
+        }
+        if let Some(assets) = &self.assets {
+            assets.validate()?;
+        }
+        if let Some(server) = &self.server {
+            server.validate(target)?;
+        }
+        Ok(())
+    }
+}
+
+impl JavaComponent {
+    fn validate(&self) -> Result<(), ProjectError> {
+        match self.mode {
+            ComponentMode::Managed => {
+                let id = self.id.as_deref().ok_or_else(|| {
+                    invalid_component("managed Java component needs a logical id")
+                })?;
+                validate_component_id("java.id", id)?;
+                let sha256 = self
+                    .sha256
+                    .as_deref()
+                    .ok_or_else(|| invalid_component("managed Java component needs a SHA-256"))?;
+                validate_hex("java.sha256", sha256, 64)?;
+            }
+            ComponentMode::Manual => {
+                let id = self
+                    .id
+                    .as_deref()
+                    .ok_or_else(|| invalid_component("manual Java component needs a logical id"))?;
+                validate_component_id("java.id", id)?;
+                if let Some(sha256) = &self.sha256 {
+                    validate_hex("java.sha256", sha256, 64)?;
+                }
+            }
+            ComponentMode::Placeholder => {
+                if self.id.is_some() || self.sha256.is_some() {
+                    return Err(invalid_component(
+                        "placeholder Java component must not claim a verified identity",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl AssetsComponent {
+    fn validate(&self) -> Result<(), ProjectError> {
+        match self.mode {
+            ComponentMode::Managed | ComponentMode::Manual => {
+                let sha1 = self.client_jar_sha1.as_deref().ok_or_else(|| {
+                    invalid_component("an installed asset component needs the client JAR SHA-1")
+                })?;
+                validate_hex("assets.clientJarSha1", sha1, 40)?;
+                match (&self.catalog_id, &self.catalog_hash) {
+                    (Some(id), Some(hash)) => {
+                        validate_component_id("assets.catalogId", id)?;
+                        validate_hex("assets.catalogHash", hash, 64)?;
+                    }
+                    (None, None) if self.mode == ComponentMode::Manual => {}
+                    (None, None) => {
+                        return Err(invalid_component(
+                            "managed asset component needs a catalog id and hash",
+                        ))
+                    }
+                    _ => {
+                        return Err(invalid_component(
+                            "asset catalog id and hash must be stored together",
+                        ))
+                    }
+                }
+            }
+            ComponentMode::Placeholder => {
+                if self.client_jar_sha1.is_some()
+                    || self.catalog_id.is_some()
+                    || self.catalog_hash.is_some()
+                    || !self.pack_stack.is_empty()
+                {
+                    return Err(invalid_component(
+                        "placeholder asset component must not claim a verified identity",
+                    ));
+                }
+            }
+        }
+        if self.pack_stack.len() > 64 {
+            return Err(invalid_component(
+                "asset pack stack is limited to 64 entries",
+            ));
+        }
+        for pack in &self.pack_stack {
+            validate_logical_relative_path("assets.packStack.path", &pack.path)?;
+            validate_hex("assets.packStack.sha1", &pack.sha1, 40)?;
+        }
+        Ok(())
+    }
+}
+
+impl ServerComponent {
+    fn validate(&self, target: &ProjectTarget) -> Result<(), ProjectError> {
+        match self.mode {
+            ComponentMode::Managed | ComponentMode::Manual => {
+                let version = self.version.as_ref().ok_or_else(|| {
+                    invalid_component("an installed server component needs its version")
+                })?;
+                if version != &target.minecraft_version {
+                    return Err(invalid_component(format!(
+                        "server version `{version}` does not match the project target `{}`",
+                        target.minecraft_version
+                    )));
+                }
+                let sha1 = self.sha1.as_deref().ok_or_else(|| {
+                    invalid_component("an installed server component needs a SHA-1")
+                })?;
+                validate_hex("server.sha1", sha1, 40)?;
+            }
+            ComponentMode::Placeholder => {
+                if self.version.is_some() || self.sha1.is_some() {
+                    return Err(invalid_component(
+                        "placeholder server component must not claim a verified identity",
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn invalid_component(message: impl Into<String>) -> ProjectError {
+    ProjectError::invalid_manifest(format!("components: {}", message.into()))
+}
+
+fn validate_component_id(field: &str, value: &str) -> Result<(), ProjectError> {
+    if value.trim().is_empty()
+        || value.len() > 256
+        || value.chars().any(char::is_control)
+        || value.contains('/')
+        || value.contains('\\')
+        || value.contains(':')
+    {
+        return Err(invalid_component(format!(
+            "{field} must be a logical id, not a path"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_logical_relative_path(field: &str, value: &str) -> Result<(), ProjectError> {
+    let valid = !value.is_empty()
+        && value.len() <= 1024
+        && !value.starts_with('/')
+        && !value.contains('\\')
+        && !value.contains(':')
+        && !value.chars().any(char::is_control)
+        && value
+            .split('/')
+            .all(|component| !component.is_empty() && component != "." && component != "..");
+    if !valid {
+        return Err(invalid_component(format!(
+            "{field} must be a relative logical path"
+        )));
+    }
+    Ok(())
+}
+
+fn validate_hex(field: &str, value: &str, length: usize) -> Result<(), ProjectError> {
+    if value.len() != length
+        || !value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(invalid_component(format!(
+            "{field} must be {length} lowercase hexadecimal characters"
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectManifest {
@@ -263,8 +608,8 @@ pub struct ProjectManifest {
     pub project_id: String,
     pub name: String,
     pub creation_mode: CreationMode,
-    pub target_minecraft_version: String,
-    pub target_data_version: i32,
+    pub target: ProjectTarget,
+    pub components: ProjectComponents,
     pub world_revision: u64,
     /// Relative path below the project folder, always inside `data/`.
     pub world_file: String,
@@ -290,7 +635,7 @@ impl ProjectManifest {
         project_id: String,
         name: String,
         creation_mode: CreationMode,
-        version: WorldVersion,
+        target: ProjectTarget,
         revision: u64,
         now_ms: u64,
     ) -> Self {
@@ -299,8 +644,8 @@ impl ProjectManifest {
             project_id,
             name,
             creation_mode,
-            target_minecraft_version: version.minecraft_version().to_owned(),
-            target_data_version: version.data_version(),
+            target,
+            components: ProjectComponents::default(),
             world_revision: revision,
             world_file: String::new(),
             world_checksum: String::new(),
@@ -332,11 +677,9 @@ impl ProjectManifest {
         if self.name.trim().is_empty() || self.name.chars().count() > MAX_PROJECT_NAME_CHARS {
             return Err(ProjectError::invalid_manifest("name is empty or too long"));
         }
-        let target = WorldVersion::new(
-            self.target_minecraft_version.clone(),
-            self.target_data_version,
-        )
-        .map_err(|error| ProjectError::invalid_manifest(error.to_string()))?;
+        self.target.validate()?;
+        self.components.validate(&self.target)?;
+        let target_version = self.target.world_version()?;
         validate_relative_data_file(&self.world_file)?;
         if self.world_checksum.len() != 64
             || !self
@@ -358,7 +701,7 @@ impl ProjectManifest {
             let vanilla = self.vanilla.as_ref().ok_or_else(|| {
                 ProjectError::invalid_manifest("vanilla projects need generator provenance")
             })?;
-            vanilla.validate(&target)?;
+            vanilla.validate(&target_version)?;
         } else if self.vanilla.is_some() {
             return Err(ProjectError::invalid_manifest(
                 "generator provenance is only valid for vanilla projects",
@@ -400,8 +743,8 @@ impl ProjectSummary {
             project_id: manifest.project_id.clone(),
             name: manifest.name.clone(),
             creation_mode: manifest.creation_mode,
-            target_minecraft_version: manifest.target_minecraft_version.clone(),
-            target_data_version: manifest.target_data_version,
+            target_minecraft_version: manifest.target.minecraft_version.to_string(),
+            target_data_version: manifest.target.data_version,
             world_revision: manifest.world_revision,
             updated_at_ms: manifest.updated_at_ms,
             last_saved_at_ms: manifest.last_saved_at_ms,
@@ -417,6 +760,8 @@ impl ProjectSummary {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectDetail {
     pub summary: ProjectSummary,
+    pub target: ProjectTarget,
+    pub components: ProjectComponents,
     pub editor_state: EditorState,
     pub source: SourceInfo,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -578,4 +923,200 @@ pub fn is_hex_sha256(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_target() -> ProjectTarget {
+        ProjectTarget::from_profile(&minecraft_version::java_classic_1_21_4())
+    }
+
+    fn fixture_components() -> ProjectComponents {
+        ProjectComponents {
+            java: Some(JavaComponent {
+                mode: ComponentMode::Managed,
+                id: Some("temurin-21.0.5+11".to_owned()),
+                sha256: Some("a".repeat(64)),
+            }),
+            assets: Some(AssetsComponent {
+                mode: ComponentMode::Managed,
+                client_jar_sha1: Some("b".repeat(40)),
+                catalog_id: Some("java-1.21.4-deadbeef".to_owned()),
+                catalog_hash: Some("c".repeat(64)),
+                pack_stack: vec![AssetsPack {
+                    path: "resourcepacks/fury.zip".to_owned(),
+                    sha1: "d".repeat(40),
+                }],
+            }),
+            server: Some(ServerComponent {
+                mode: ComponentMode::Managed,
+                version: Some("1.21.4".parse().expect("version")),
+                sha1: Some("e".repeat(40)),
+            }),
+        }
+    }
+
+    fn fixture_manifest(components: ProjectComponents) -> ProjectManifest {
+        let mut manifest = ProjectManifest::new(
+            "project-1".to_owned(),
+            "Schema".to_owned(),
+            CreationMode::Empty,
+            fixture_target(),
+            1,
+            1,
+        );
+        manifest.components = components;
+        manifest.set_world_payload(
+            "data/world-00000000000000000001.fwl".to_owned(),
+            "f".repeat(64),
+            42,
+        );
+        manifest
+    }
+
+    #[test]
+    fn v2_manifest_persists_target_and_components() {
+        let manifest = fixture_manifest(fixture_components());
+        manifest.validate().expect("valid schema v2 manifest");
+
+        let value = serde_json::to_value(&manifest).expect("serialize");
+        assert_eq!(value["projectSchemaVersion"], 2);
+        assert_eq!(value["target"]["minecraftVersion"], "1.21.4");
+        assert_eq!(value["target"]["dataVersion"], 4189);
+        assert_eq!(value["target"]["profileId"], "java-classic-1.21.4");
+        assert_eq!(value["target"]["javaMajor"], 21);
+        assert_eq!(value["target"]["resourcePackFormat"], 46);
+        assert_eq!(value["target"]["datapackFormat"], 61);
+        assert_eq!(value["components"]["java"]["mode"], "managed");
+        assert_eq!(
+            value["components"]["assets"]["clientJarSha1"],
+            "b".repeat(40)
+        );
+        assert_eq!(
+            value["components"]["server"]["version"],
+            serde_json::Value::from("1.21.4")
+        );
+        assert!(value.get("targetMinecraftVersion").is_none());
+        assert!(value.get("targetDataVersion").is_none());
+
+        let parsed: ProjectManifest = serde_json::from_value(value).expect("deserialize");
+        assert_eq!(parsed, manifest);
+    }
+
+    #[test]
+    fn target_must_match_the_builtin_profile_exactly() {
+        let mut target = fixture_target();
+        target.profile_id = "java-classic-9.9.9".to_owned();
+        assert!(target
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("profile"));
+
+        let mut target = fixture_target();
+        target.data_version = 1234;
+        assert!(target
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("DataVersion"));
+
+        let mut target = fixture_target();
+        target.java_major = 17;
+        assert!(target
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("Java major"));
+
+        let mut target = fixture_target();
+        target.datapack_format = Some(62);
+        assert!(target
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("datapack format"));
+    }
+
+    #[test]
+    fn unknown_world_versions_are_not_retargeted_to_the_default_profile() {
+        let version = WorldVersion::new("1.20.6", 3839).expect("world version");
+        assert!(ProjectTarget::for_world_version(&version).is_err());
+    }
+
+    #[test]
+    fn managed_components_require_verified_identity() {
+        let mut java = fixture_components();
+        java.java.as_mut().expect("java").sha256 = None;
+        assert!(fixture_manifest(java)
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("SHA-256"));
+
+        let mut assets = fixture_components();
+        assets.assets.as_mut().expect("assets").client_jar_sha1 = None;
+        assert!(fixture_manifest(assets)
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("client JAR SHA-1"));
+
+        let mut server = fixture_components();
+        server.server.as_mut().expect("server").version = Some("1.21.3".parse().expect("version"));
+        assert!(fixture_manifest(server)
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("does not match the project target"));
+    }
+
+    #[test]
+    fn asset_pack_paths_are_logical_and_relative() {
+        for path in [
+            "/absolute.zip",
+            "../escape.zip",
+            "packs\\win.zip",
+            "C:/packs/x.zip",
+        ] {
+            let mut components = fixture_components();
+            components.assets.as_mut().expect("assets").pack_stack[0].path = path.to_owned();
+            assert!(
+                fixture_manifest(components).validate().is_err(),
+                "path `{path}` must be refused"
+            );
+        }
+    }
+
+    #[test]
+    fn placeholders_carry_no_verified_identity() {
+        let placeholder = ProjectComponents {
+            java: Some(JavaComponent {
+                mode: ComponentMode::Placeholder,
+                id: None,
+                sha256: None,
+            }),
+            assets: Some(AssetsComponent {
+                mode: ComponentMode::Placeholder,
+                client_jar_sha1: None,
+                catalog_id: None,
+                catalog_hash: None,
+                pack_stack: Vec::new(),
+            }),
+            server: Some(ServerComponent {
+                mode: ComponentMode::Placeholder,
+                version: None,
+                sha1: None,
+            }),
+        };
+        fixture_manifest(placeholder)
+            .validate()
+            .expect("an explicit placeholder is valid");
+
+        let mut claimed = fixture_components();
+        claimed.server.as_mut().expect("server").mode = ComponentMode::Placeholder;
+        assert!(fixture_manifest(claimed).validate().is_err());
+    }
 }

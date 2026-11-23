@@ -9,8 +9,8 @@ use world_domain::{BiomeSection, BiomeState, BlockPos, ChunkPos, World};
 use crate::error::ProjectError;
 use crate::manifest::{
     folder_component, is_hex_sha256, normalize_name, now_ms, validate_folder, CreationMode,
-    EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, RecoveryInfo,
-    SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaProvenance, PROJECT_FILE,
+    EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, ProjectTarget,
+    RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaProvenance, PROJECT_FILE,
     PROJECT_SCHEMA_VERSION,
 };
 use crate::snapshot::{decode_world, encode_world};
@@ -448,6 +448,8 @@ impl ProjectStore {
             dir.join(SESSION_MARKER).exists() || self.pending_autosave(&dir, &manifest)?;
         Ok(ProjectDetail {
             summary: ProjectSummary::from_manifest(folder, &manifest, recoverable),
+            target: manifest.target.clone(),
+            components: manifest.components.clone(),
             editor_state: manifest.editor_state.clone(),
             source: manifest.source.clone(),
             vanilla: manifest.vanilla.clone(),
@@ -585,11 +587,12 @@ impl ProjectStore {
 
         let now = now_ms();
         let project_id = uuid::Uuid::new_v4().to_string();
+        let target = ProjectTarget::for_world_version(world.version())?;
         let mut manifest = ProjectManifest::new(
             project_id,
             name.to_owned(),
             mode,
-            world.version().clone(),
+            target,
             world.revision(),
             now,
         );
