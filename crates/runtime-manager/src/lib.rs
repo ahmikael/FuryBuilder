@@ -27,7 +27,6 @@ mod discovery;
 mod error;
 mod managed;
 mod manager;
-mod net;
 mod probe;
 mod server;
 mod settings;

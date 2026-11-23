@@ -7,9 +7,10 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use download_pipeline::{Allowlist, DownloadClient, NetworkConfig, PipelineError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,12 +24,7 @@ pub const MANIFEST_CACHE_SCHEMA_VERSION: u32 = 1;
 /// How long a cached manifest is considered fresh.
 pub const DEFAULT_MANIFEST_TTL: Duration = Duration::from_secs(6 * 60 * 60);
 
-const ALLOWED_HOSTS: &[&str] = &[
-    "piston-meta.mojang.com",
-    "launchermeta.mojang.com",
-    "piston-data.mojang.com",
-    "launcher.mojang.com",
-];
+const MAX_MANIFEST_BYTES: u64 = 8 * 1024 * 1024;
 
 /// The official version manifest.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,11 +148,27 @@ impl VersionCatalog {
     /// A fresh cache is used without network access. A stale cache is refreshed
     /// when possible; if the fetch fails, the stale cache is served instead.
     pub fn load(cache_path: impl AsRef<Path>, ttl: Duration) -> Result<Self, CatalogError> {
-        Self::load_with(
-            cache_path.as_ref(),
-            ttl,
-            unix_now(),
-            fetch_official_manifest,
+        let client = DownloadClient::new(NetworkConfig::default());
+        Self::load_with_client(cache_path.as_ref(), ttl, &client)
+    }
+
+    /// Loads through a caller-owned client so proxy/offline policy is shared with the
+    /// component that requested the manifest.
+    pub fn load_with_client(
+        cache_path: &Path,
+        ttl: Duration,
+        client: &DownloadClient,
+    ) -> Result<Self, CatalogError> {
+        Self::load_with(cache_path, ttl, unix_now(), || fetch_manifest_with(client))
+    }
+
+    /// Reads the cache without any network request, regardless of its age.
+    pub fn load_offline(cache_path: impl AsRef<Path>) -> Result<Self, CatalogError> {
+        let cached = read_cache(cache_path.as_ref()).ok_or(CatalogError::Offline)?;
+        Self::from_manifest(
+            cached.manifest,
+            cached.fetched_at_unix,
+            CatalogSource::Cache,
         )
     }
 
@@ -243,38 +255,37 @@ impl VersionCatalog {
 
 /// Fetches the official manifest without touching the cache.
 pub fn fetch_official_manifest() -> Result<String, CatalogError> {
-    fetch_manifest_from(OFFICIAL_MANIFEST_URL)
+    let client = DownloadClient::new(NetworkConfig::default());
+    fetch_manifest_with(&client)
+}
+
+/// Fetches the official manifest through a caller-owned network policy.
+pub fn fetch_manifest_with(client: &DownloadClient) -> Result<String, CatalogError> {
+    let bytes = client
+        .get_bytes(
+            OFFICIAL_MANIFEST_URL,
+            &Allowlist::MOJANG,
+            MAX_MANIFEST_BYTES,
+        )
+        .map_err(catalog_pipeline_error)?;
+    String::from_utf8(bytes)
+        .map_err(|error| CatalogError::Http(format!("the manifest is not valid UTF-8: {error}")))
 }
 
 /// Returns whether a URL points at an allowed official download host.
 pub fn is_allowed_download_url(url: &str) -> bool {
-    host_of(url).is_some_and(|host| ALLOWED_HOSTS.contains(&host))
+    Allowlist::MOJANG.is_allowed(url)
 }
 
-fn fetch_manifest_from(url: &str) -> Result<String, CatalogError> {
-    if !is_allowed_download_url(url) {
-        return Err(CatalogError::DisallowedUrl(url.to_owned()));
+fn catalog_pipeline_error(error: PipelineError) -> CatalogError {
+    match error {
+        PipelineError::Offline => CatalogError::Offline,
+        PipelineError::DisallowedUrl(url) => CatalogError::DisallowedUrl(url),
+        PipelineError::InsufficientSpace { .. } => {
+            CatalogError::Io(std::io::Error::other(error.to_string()))
+        }
+        other => CatalogError::Http(other.to_string()),
     }
-
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_secs(30))
-        .build();
-    let response = agent
-        .get(url)
-        .call()
-        .map_err(|error| CatalogError::Http(error.to_string()))?;
-    response.into_string().map_err(CatalogError::Io)
-}
-
-fn host_of(url: &str) -> Option<&str> {
-    let rest = url.strip_prefix("https://")?;
-    let authority = rest.split('/').next()?;
-    if authority.is_empty() || authority.contains('@') {
-        return None;
-    }
-    let host = authority.split(':').next()?;
-    (!host.is_empty()).then_some(host)
 }
 
 fn unix_now() -> u64 {
@@ -316,17 +327,8 @@ fn write_cache(
         manifest: manifest.clone(),
     };
     let bytes = serde_json::to_vec_pretty(&cached)?;
-    let temporary = temporary_path(path);
-    fs::write(&temporary, bytes)?;
-    if path.exists() {
-        fs::remove_file(path)?;
-    }
-    fs::rename(&temporary, path)?;
+    download_pipeline::write_file(path, &bytes).map_err(catalog_pipeline_error)?;
     Ok(())
-}
-
-fn temporary_path(path: &Path) -> PathBuf {
-    path.with_extension(format!("tmp-{}", std::process::id()))
 }
 
 /// Errors from manifest loading, validation or caching.
@@ -334,6 +336,8 @@ fn temporary_path(path: &Path) -> PathBuf {
 pub enum CatalogError {
     #[error("failed to fetch the Minecraft version manifest: {0}")]
     Http(String),
+    #[error("network access is disabled and no cached Minecraft version manifest is available")]
+    Offline,
     #[error("manifest cache I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("invalid Minecraft version manifest: {0}")]
@@ -351,6 +355,7 @@ pub enum CatalogError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     const MANIFEST_JSON: &str = r#"{
       "latest": { "release": "1.21.4", "snapshot": "26.1-snapshot-3" },
@@ -522,6 +527,28 @@ mod tests {
             Err(CatalogError::Http("offline".to_owned()))
         });
         assert!(matches!(result, Err(CatalogError::Http(message)) if message == "offline"));
+    }
+
+    #[test]
+    fn explicit_offline_loading_uses_the_cache_regardless_of_age() {
+        let cache = temp_cache("explicit-offline");
+        assert!(matches!(
+            VersionCatalog::load_offline(&cache),
+            Err(CatalogError::Offline)
+        ));
+        VersionCatalog::load_with(&cache, Duration::from_secs(1), 1_000, || {
+            Ok(MANIFEST_JSON.to_owned())
+        })
+        .expect("initial fetch");
+
+        let offline = VersionCatalog::load_offline(&cache).expect("offline cache");
+        assert_eq!(offline.source(), CatalogSource::Cache);
+        assert_eq!(offline.fetched_at_unix(), 1_000);
+        assert_eq!(
+            offline.entry("1.21.4").expect("cached version").id.as_str(),
+            "1.21.4"
+        );
+        let _ = fs::remove_dir_all(cache.parent().expect("cache parent"));
     }
 
     #[test]

@@ -230,6 +230,24 @@ confidence, bounds, position count and the authoritative revision.
 
 ## 10. Assets, Java and vanilla generation
 
+### Managed downloads
+
+Every managed download — the Mojang version manifest, version JSON, client JAR, server JAR and
+the Temurin archive — goes through `crates/download-pipeline`:
+
+- the URL must be HTTPS and belong to an exact host allowlist before the request and after
+  every redirect; credentials and non-default ports are refused;
+- an explicit `FURYBUILDER_PROXY` or `FURYBUILDER_HTTPS_PROXY` is used when set, otherwise the
+  standard proxy environment is honored;
+- `FURYBUILDER_OFFLINE=1` refuses every request; the cached version manifest is still served,
+  including a stale cache, while uncached downloads fail with an `offline` error;
+- transport failures and HTTP 408/425/429/500/502/503/504 are retried with bounded backoff;
+  checksum, size, policy and disk-space failures are final;
+- free disk space is checked before writing, with a safety margin for temporary files;
+- bytes stream into a same-directory temporary file, are verified by size and SHA-1/SHA-256,
+  and only then replace the destination atomically. Cancellation and every error remove the
+  temporary file.
+
 ### Minecraft assets
 
 `Settings → Minecraft assets` discovers conventional launcher roots and launcher profiles,

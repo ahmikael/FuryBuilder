@@ -18,13 +18,13 @@
 //! installation and never treats a placeholder as a verified component.
 
 mod client_jar;
-mod net;
 
 pub use client_jar::{
     ClientJarError, ClientJarManager, ClientJarProgress, ClientJarReleaseInfo, ManagedClientJar,
     ManagedClientJarReport, ASSET_MANIFEST_SCHEMA_VERSION, MAX_CLIENT_JAR_BYTES,
     MIN_CLIENT_JAR_BYTES,
 };
+pub use download_pipeline::{DownloadClient, NetworkConfig};
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -337,12 +337,36 @@ impl ComponentManager {
         server_settings: impl Into<PathBuf>,
         server_root: impl Into<PathBuf>,
     ) -> Self {
+        Self::from_paths_with_client(
+            java_settings,
+            java_root,
+            assets_settings,
+            assets_root,
+            manifest_cache,
+            server_settings,
+            server_root,
+            DownloadClient::new(NetworkConfig::default()),
+        )
+    }
+
+    /// Composition root with one shared network policy for Java, assets and servers.
+    #[allow(clippy::too_many_arguments)]
+    pub fn from_paths_with_client(
+        java_settings: impl Into<PathBuf>,
+        java_root: impl Into<PathBuf>,
+        assets_settings: impl Into<PathBuf>,
+        assets_root: impl Into<PathBuf>,
+        manifest_cache: impl Into<PathBuf>,
+        server_settings: impl Into<PathBuf>,
+        server_root: impl Into<PathBuf>,
+        client: DownloadClient,
+    ) -> Self {
         let manifest_cache = manifest_cache.into();
         Self::new(
-            RuntimeManager::new(java_settings, java_root),
+            RuntimeManager::with_client(java_settings, java_root, client.clone()),
             AssetSettingsStore::new(assets_settings),
-            ClientJarManager::new(assets_root, manifest_cache.clone()),
-            ServerManager::new(server_settings, server_root, manifest_cache),
+            ClientJarManager::with_client(assets_root, manifest_cache.clone(), client.clone()),
+            ServerManager::with_client(server_settings, server_root, manifest_cache, client),
         )
     }
 

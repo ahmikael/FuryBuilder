@@ -965,6 +965,7 @@ version = "0.2.0"
 dependencies = [
  "furybuilder-asset-source",
  "furybuilder-component-model",
+ "furybuilder-download-pipeline",
  "furybuilder-minecraft-version",
  "furybuilder-runtime-manager",
  "serde",
@@ -972,7 +973,6 @@ dependencies = [
  "sha1",
  "sha2 0.10.9",
  "thiserror 2.0.21",
- "ureq",
  "zip",
 ]
 
@@ -1009,6 +1009,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "furybuilder-download-pipeline"
+version = "0.2.0"
+dependencies = [
+ "libc",
+ "sha1",
+ "sha2 0.10.9",
+ "thiserror 2.0.21",
+ "ureq",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "furybuilder-mcp-bridge"
 version = "0.2.0"
 dependencies = [
@@ -1027,11 +1039,11 @@ name = "furybuilder-minecraft-version"
 version = "0.2.0"
 dependencies = [
  "flate2",
+ "furybuilder-download-pipeline",
  "serde",
  "serde_json",
  "sha1",
  "thiserror 2.0.21",
- "ureq",
  "zip",
 ]
 
@@ -1067,6 +1079,7 @@ name = "furybuilder-runtime-manager"
 version = "0.2.0"
 dependencies = [
  "flate2",
+ "furybuilder-download-pipeline",
  "furybuilder-minecraft-version",
  "libc",
  "serde",
@@ -1074,7 +1087,6 @@ dependencies = [
  "sha1",
  "sha2 0.10.9",
  "thiserror 2.0.21",
- "ureq",
  "windows-sys 0.61.2",
  "zip",
 ]

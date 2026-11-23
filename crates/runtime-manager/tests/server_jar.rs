@@ -7,7 +7,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use furybuilder_runtime_manager::{
-    inspect_server_jar, sha1_file, target_data_version, ServerManager, ServerSource, ServerTarget,
+    inspect_server_jar, sha1_file, target_data_version, ServerError, ServerManager, ServerSource,
+    ServerTarget,
 };
 
 const MIN_SIZE: usize = 10 * 1024 * 1024;
@@ -384,4 +385,20 @@ fn missing_manual_jar_is_reported_not_hidden() {
     assert!(!report.ready);
     assert!(report.error.is_some());
     assert_eq!(report.source, ServerSource::Manual);
+}
+
+#[test]
+fn offline_server_resolution_is_refused_without_network() {
+    let dir = TempDir::new("offline");
+    let appdata = dir.path().join("appdata");
+    let manager = ServerManager::with_client(
+        appdata.join("server.json"),
+        dir.path().join("servers"),
+        appdata.join("version-manifest.json"),
+        download_pipeline::DownloadClient::new(download_pipeline::NetworkConfig::offline()),
+    );
+    let error = manager
+        .release(&target("1.21.4", 4189, 21))
+        .expect_err("offline");
+    assert!(matches!(error, ServerError::Offline), "{error:?}");
 }

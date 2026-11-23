@@ -110,26 +110,9 @@ fn load(path: &Path) -> Result<RuntimeSettingsFile, String> {
 }
 
 fn persist(path: &Path, settings: &RuntimeSettingsFile) -> Result<(), RuntimeError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| RuntimeError::Io(format!("{}: {error}", parent.display())))?;
-    }
     let bytes = serde_json::to_vec_pretty(settings)
         .map_err(|error| RuntimeError::Invalid(error.to_string()))?;
-    let temp = path.with_extension(format!("tmp-{}", std::process::id()));
-    fs::write(&temp, &bytes)
-        .map_err(|error| RuntimeError::Io(format!("{}: {error}", temp.display())))?;
-    if let Ok(file) = fs::File::open(&temp) {
-        let _ = file.sync_all();
-    }
-    if path.exists() {
-        fs::remove_file(path)
-            .map_err(|error| RuntimeError::Io(format!("{}: {error}", path.display())))?;
-    }
-    fs::rename(&temp, path).map_err(|error| {
-        let _ = fs::remove_file(&temp);
-        RuntimeError::Io(format!("{}: {error}", path.display()))
-    })
+    download_pipeline::write_file(path, &bytes).map_err(RuntimeError::from)
 }
 
 #[cfg(test)]

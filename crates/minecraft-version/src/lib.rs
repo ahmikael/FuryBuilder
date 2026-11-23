@@ -13,9 +13,9 @@ pub mod profiles;
 pub mod version_json;
 
 pub use catalog::{
-    fetch_official_manifest, is_allowed_download_url, CatalogError, CatalogSource, LatestVersions,
-    ManifestEntry, ManifestVersionType, VersionCatalog, VersionManifest, DEFAULT_MANIFEST_TTL,
-    MANIFEST_CACHE_SCHEMA_VERSION, OFFICIAL_MANIFEST_URL,
+    fetch_manifest_with, fetch_official_manifest, is_allowed_download_url, CatalogError,
+    CatalogSource, LatestVersions, ManifestEntry, ManifestVersionType, VersionCatalog,
+    VersionManifest, DEFAULT_MANIFEST_TTL, MANIFEST_CACHE_SCHEMA_VERSION, OFFICIAL_MANIFEST_URL,
 };
 pub use profile_builder::{
     build_profile_from_version_json, build_version_profile, read_client_jar_version_json,
@@ -26,8 +26,8 @@ pub use profiles::{
     profile_for_version, JAVA_CLASSIC_1_21_4_ID,
 };
 pub use version_json::{
-    fetch_version_json, fetch_version_json_document, AssetIndex, JavaVersion, VersionDownload,
-    VersionDownloads, VersionJson, VersionJsonError,
+    fetch_version_json, fetch_version_json_document, fetch_version_json_document_with, AssetIndex,
+    JavaVersion, VersionDownload, VersionDownloads, VersionJson, VersionJsonError,
 };
 
 use std::cmp::Ordering;

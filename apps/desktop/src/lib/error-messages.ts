@@ -25,6 +25,10 @@ const HINTS: Record<string, string> = {
     "The project changed since the action started. Refresh the preview and retry so nothing is overwritten blindly.",
   limit_exceeded:
     "The operation exceeds a documented size or count limit. Reduce the region, file size or number of items.",
+  disk_space:
+    "The destination volume does not have enough free space for this download and its temporary files. Free some space or choose another cache location.",
+  offline:
+    "Network access is disabled or unavailable. Cached metadata can still be used; reconnect or turn off offline mode, then retry.",
   not_found:
     "The requested project, revision, job or file no longer exists. Refresh the list and choose it again.",
   invalid_argument:

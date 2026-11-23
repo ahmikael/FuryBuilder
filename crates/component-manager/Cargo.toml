@@ -15,7 +15,7 @@ serde_json = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
-ureq = { version = "2.12", default-features = false, features = ["tls", "proxy-from-env"] }
+download-pipeline = { path = "../download-pipeline", package = "furybuilder-download-pipeline" }
 asset-source = { path = "../asset-source", package = "furybuilder-asset-source" }
 component-model = { path = "../component-model", package = "furybuilder-component-model" }
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }

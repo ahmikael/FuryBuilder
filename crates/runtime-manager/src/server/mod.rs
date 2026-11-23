@@ -87,6 +87,20 @@ impl ServerManager {
         managed_root: impl Into<PathBuf>,
         manifest_cache: impl Into<PathBuf>,
     ) -> Self {
+        Self::with_client(
+            settings_path,
+            managed_root,
+            manifest_cache,
+            download_pipeline::DownloadClient::new(download_pipeline::NetworkConfig::default()),
+        )
+    }
+
+    pub fn with_client(
+        settings_path: impl Into<PathBuf>,
+        managed_root: impl Into<PathBuf>,
+        manifest_cache: impl Into<PathBuf>,
+        client: download_pipeline::DownloadClient,
+    ) -> Self {
         let settings_path = settings_path.into();
         let runs_root = settings_path
             .parent()
@@ -97,7 +111,7 @@ impl ServerManager {
             inner: Arc::new(ServerManagerInner {
                 settings: ServerSettingsStore::new(settings_path),
                 cache: ServerCache::new(managed_root),
-                mojang: MojangClient::new(manifest_cache),
+                mojang: MojangClient::with_client(manifest_cache, client),
                 install_lock: Mutex::new(()),
                 generation_start_lock: Mutex::new(()),
                 generation: Mutex::new(GenerationState { active: None, last }),

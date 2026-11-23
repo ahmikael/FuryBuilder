@@ -524,3 +524,15 @@ fn probe_report_is_compatible_only_for_the_target_version() {
     assert!(report.is_compatible());
     assert_eq!(report.major, Some(21));
 }
+
+#[test]
+fn offline_runtime_metadata_is_refused_without_network() {
+    let dir = TempDir::new("offline");
+    let manager = RuntimeManager::with_client(
+        dir.path().join("runtime.json"),
+        dir.path().join("components"),
+        download_pipeline::DownloadClient::new(download_pipeline::NetworkConfig::offline()),
+    );
+    let error = manager.latest_temurin(21).expect_err("offline");
+    assert!(matches!(error, RuntimeError::Offline), "{error:?}");
+}

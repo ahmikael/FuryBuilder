@@ -5,14 +5,13 @@
 //! the manifest before any of those downloads are trusted.
 
 use std::fmt::Write as _;
-use std::io::Read;
-use std::time::Duration;
 
+use download_pipeline::{Allowlist, DownloadClient, NetworkConfig, PipelineError};
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
-use crate::catalog::{is_allowed_download_url, ManifestEntry, ManifestVersionType};
+use crate::catalog::{ManifestEntry, ManifestVersionType};
 use crate::VersionId;
 
 /// Upper bound for a version JSON document.
@@ -126,7 +125,7 @@ pub struct VersionDownload {
 
 impl VersionDownload {
     fn validate(&self, field: &'static str) -> Result<(), VersionJsonError> {
-        if !is_allowed_download_url(&self.url) {
+        if !Allowlist::MOJANG.is_allowed(&self.url) {
             return Err(VersionJsonError::DisallowedUrl {
                 field,
                 url: self.url.clone(),
@@ -158,7 +157,7 @@ pub struct AssetIndex {
 
 impl AssetIndex {
     fn validate(&self) -> Result<(), VersionJsonError> {
-        if !is_allowed_download_url(&self.url) {
+        if !Allowlist::MOJANG.is_allowed(&self.url) {
             return Err(VersionJsonError::DisallowedUrl {
                 field: "assetIndex",
                 url: self.url.clone(),
@@ -189,7 +188,16 @@ pub fn fetch_version_json(entry: &ManifestEntry) -> Result<VersionJson, VersionJ
 pub fn fetch_version_json_document(
     entry: &ManifestEntry,
 ) -> Result<(VersionJson, Vec<u8>), VersionJsonError> {
-    let bytes = fetch_bytes(&entry.url)?;
+    let client = DownloadClient::new(NetworkConfig::default());
+    fetch_version_json_document_with(entry, &client)
+}
+
+/// Fetches the version JSON through a caller-owned network policy.
+pub fn fetch_version_json_document_with(
+    entry: &ManifestEntry,
+    client: &DownloadClient,
+) -> Result<(VersionJson, Vec<u8>), VersionJsonError> {
+    let bytes = fetch_bytes(entry, client)?;
 
     if !entry.sha1.is_empty() {
         let actual = sha1_hex(&bytes);
@@ -206,40 +214,29 @@ pub fn fetch_version_json_document(
     Ok((version, bytes))
 }
 
-fn fetch_bytes(url: &str) -> Result<Vec<u8>, VersionJsonError> {
-    if !is_allowed_download_url(url) {
-        return Err(VersionJsonError::DisallowedUrl {
+fn fetch_bytes(
+    entry: &ManifestEntry,
+    client: &DownloadClient,
+) -> Result<Vec<u8>, VersionJsonError> {
+    client
+        .get_bytes(&entry.url, &Allowlist::MOJANG, MAX_VERSION_JSON_BYTES)
+        .map_err(version_pipeline_error)
+}
+
+fn version_pipeline_error(error: PipelineError) -> VersionJsonError {
+    let message = error.to_string();
+    match error {
+        PipelineError::Offline => VersionJsonError::Offline,
+        PipelineError::DisallowedUrl(url) => VersionJsonError::DisallowedUrl {
             field: "versionJson",
-            url: url.to_owned(),
-        });
+            url,
+        },
+        PipelineError::Limit(_) | PipelineError::Size { .. } => VersionJsonError::TooLarge,
+        PipelineError::InsufficientSpace { .. } | PipelineError::Io(_) => {
+            VersionJsonError::Io(std::io::Error::other(message))
+        }
+        other => VersionJsonError::Http(other.to_string()),
     }
-
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_secs(15))
-        .timeout_read(Duration::from_secs(30))
-        .build();
-    let response = agent
-        .get(url)
-        .call()
-        .map_err(|error| VersionJsonError::Http(error.to_string()))?;
-
-    if !is_allowed_download_url(response.get_url()) {
-        return Err(VersionJsonError::DisallowedUrl {
-            field: "versionJson",
-            url: response.get_url().to_owned(),
-        });
-    }
-
-    let mut bytes = Vec::new();
-    response
-        .into_reader()
-        .take(MAX_VERSION_JSON_BYTES + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() as u64 > MAX_VERSION_JSON_BYTES {
-        return Err(VersionJsonError::TooLarge);
-    }
-
-    Ok(bytes)
 }
 
 fn sha1_hex(bytes: &[u8]) -> String {
@@ -260,6 +257,8 @@ fn is_sha1_hex(value: &str) -> bool {
 pub enum VersionJsonError {
     #[error("failed to fetch the Minecraft version JSON: {0}")]
     Http(String),
+    #[error("network access is disabled (offline mode)")]
+    Offline,
     #[error("version JSON I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("invalid version JSON: {0}")]
@@ -373,6 +372,23 @@ mod tests {
     }
 
     #[test]
+    fn offline_mode_refuses_version_json_before_any_request() {
+        let entry = ManifestEntry {
+            id: version("1.21.4"),
+            version_type: ManifestVersionType::Release,
+            url: "https://piston-meta.mojang.com/v1/packages/aaa/1.21.4.json".to_owned(),
+            time: "2024-12-03T10:12:57+00:00".to_owned(),
+            release_time: "2024-12-03T10:12:57+00:00".to_owned(),
+            sha1: "a".repeat(40),
+            compliance_level: Some(1),
+        };
+        let client = DownloadClient::new(NetworkConfig::offline());
+        let error = fetch_version_json_document_with(&entry, &client)
+            .expect_err("offline mode must refuse the request");
+        assert!(matches!(error, VersionJsonError::Offline));
+    }
+
+    #[test]
     fn rejects_download_urls_outside_the_allowlist() {
         let bad_url = VERSION_JSON.replace(
             "https://piston-data.mojang.com/v1/objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/client.jar",
@@ -430,18 +446,16 @@ mod tests {
 
     #[test]
     fn allows_official_download_hosts() {
-        assert!(is_allowed_download_url(
-            "https://piston-data.mojang.com/v1/objects/aaa/client.jar"
-        ));
-        assert!(is_allowed_download_url(
-            "https://launcher.mojang.com/v1/objects/aaa/server.jar"
-        ));
-        assert!(is_allowed_download_url(
-            "https://piston-meta.mojang.com/v1/packages/aaa/1.21.4.json"
-        ));
-        assert!(!is_allowed_download_url(
-            "https://piston-data.mojang.com.evil.example/client.jar"
-        ));
+        assert!(Allowlist::MOJANG
+            .is_allowed("https://piston-data.mojang.com/v1/objects/aaa/client.jar"));
+        assert!(
+            Allowlist::MOJANG.is_allowed("https://launcher.mojang.com/v1/objects/aaa/server.jar")
+        );
+        assert!(Allowlist::MOJANG
+            .is_allowed("https://piston-meta.mojang.com/v1/packages/aaa/1.21.4.json"));
+        assert!(
+            !Allowlist::MOJANG.is_allowed("https://piston-data.mojang.com.evil.example/client.jar")
+        );
     }
 
     #[test]

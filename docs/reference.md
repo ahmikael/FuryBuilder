@@ -38,6 +38,10 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 JAR SHA-1 and Minecraft version, then confirm each local run separately. FuryBuilder never
 accepts it automatically and never bundles Java or the server JAR.
 
+Managed downloads honor `FURYBUILDER_PROXY` / `FURYBUILDER_HTTPS_PROXY` and the standard
+proxy environment. `FURYBUILDER_OFFLINE=1` disables network access; cached version metadata
+remains available, while uncached component downloads fail with an `offline` error.
+
 ### Tested reference machine
 
 | Item              | Recorded value                                                                                                                 |

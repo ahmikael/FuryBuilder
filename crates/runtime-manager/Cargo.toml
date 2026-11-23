@@ -12,8 +12,8 @@ serde_json = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+download-pipeline = { path = "../download-pipeline", package = "furybuilder-download-pipeline" }
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
-ureq = { version = "2.12", default-features = false, features = ["tls", "proxy-from-env"] }
 flate2 = { workspace = true }
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 

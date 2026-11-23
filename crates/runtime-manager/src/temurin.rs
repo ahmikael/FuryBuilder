@@ -1,26 +1,18 @@
-use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::fs;
 use std::path::Path;
 
+use download_pipeline::{
+    Allowlist, Checksum, DownloadClient, DownloadProgress, DownloadSpec, NetworkConfig,
+};
 use serde::Deserialize;
-use sha2::{Digest, Sha256};
 
 use crate::error::RuntimeError;
-use crate::managed::hex;
-use crate::net;
 use crate::types::{RuntimeProgress, RuntimeReleaseInfo};
 
 const API_BASE: &str = "https://api.adoptium.net/v3";
 const MAX_METADATA_BYTES: u64 = 1024 * 1024;
 const MAX_DOWNLOAD_BYTES: u64 = 200 * 1024 * 1024;
 const MIN_DOWNLOAD_BYTES: u64 = 10 * 1024 * 1024;
-
-const DOWNLOAD_HOSTS: &[&str] = &[
-    "github.com",
-    "objects.githubusercontent.com",
-    "release-assets.githubusercontent.com",
-    "github-releases.githubusercontent.com",
-];
 
 #[derive(Debug, Deserialize)]
 struct AdoptiumRelease {
@@ -55,7 +47,7 @@ struct AdoptiumPackage {
 /// Client for the official Adoptium API. Only metadata and the package URL announced by
 /// that API are accepted; the download host is allowlisted separately.
 pub struct AdoptiumClient {
-    agent: ureq::Agent,
+    client: DownloadClient,
 }
 
 impl Default for AdoptiumClient {
@@ -66,8 +58,11 @@ impl Default for AdoptiumClient {
 
 impl AdoptiumClient {
     pub fn new() -> Self {
-        let agent = net::agent();
-        Self { agent }
+        Self::with_client(DownloadClient::new(NetworkConfig::default()))
+    }
+
+    pub fn with_client(client: DownloadClient) -> Self {
+        Self { client }
     }
 
     pub fn latest_jre(&self, major: u32) -> Result<RuntimeReleaseInfo, RuntimeError> {
@@ -76,31 +71,14 @@ impl AdoptiumClient {
         let url = format!(
             "{API_BASE}/assets/latest/{major}/hotspot?architecture={architecture}&image_type=jre&os={os}&vendor=eclipse&project=jdk"
         );
-        let response = self.agent.get(&url).call().map_err(map_http_error)?;
-        if response.status() != 200 {
-            return Err(RuntimeError::Network(format!(
-                "Adoptium API returned HTTP {}",
-                response.status()
-            )));
-        }
-        let mut body = Vec::new();
-        response
-            .into_reader()
-            .take(MAX_METADATA_BYTES + 1)
-            .read_to_end(&mut body)
-            .map_err(|error| {
-                RuntimeError::Network(format!("cannot read Adoptium response: {error}"))
-            })?;
-        if body.len() as u64 > MAX_METADATA_BYTES {
-            return Err(RuntimeError::Limit(
-                "Adoptium response is larger than 1 MiB".to_owned(),
-            ));
-        }
+        let body = self
+            .client
+            .get_bytes(&url, &Allowlist::ADOPTIUM, MAX_METADATA_BYTES)?;
         parse_latest_release(&body, &os, &architecture, major)
     }
 
-    /// Downloads with manual redirect validation, a hard size limit and streaming SHA-256.
-    /// The destination is written exactly once; the caller supplies a new temporary path.
+    /// Streams the announced archive with a hard size cap and SHA-256 verification. The
+    /// destination is replaced atomically after the checksum matches.
     pub fn download(
         &self,
         release: &RuntimeReleaseInfo,
@@ -108,88 +86,24 @@ impl AdoptiumClient {
         cancel: &std::sync::atomic::AtomicBool,
         progress: &dyn Fn(RuntimeProgress),
     ) -> Result<(), RuntimeError> {
-        use std::sync::atomic::Ordering;
-        if cancel.load(Ordering::Relaxed) {
-            return Err(RuntimeError::Cancelled);
-        }
-        require_download_url(&release.download_url)?;
-        let response = net::open(&self.agent, &release.download_url, DOWNLOAD_HOSTS)
-            .map_err(RuntimeError::Network)?;
-        if response.status() != 200 {
-            return Err(RuntimeError::Network(format!(
-                "download returned HTTP {}",
-                response.status()
-            )));
-        }
-        if let Some(length) = response.header("content-length") {
-            if let Ok(length) = length.parse::<u64>() {
-                if length != release.size {
-                    return Err(RuntimeError::Checksum(format!(
-                        "announced size {} does not match response size {length}",
-                        release.size
-                    )));
-                }
-            }
-        }
-        let mut reader = response.into_reader();
-        let mut file = File::create(destination).map_err(|error| {
-            RuntimeError::Io(format!("cannot create {}: {error}", destination.display()))
-        })?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0u8; 64 * 1024];
-        let mut downloaded = 0u64;
-        let mut last_report = 0u64;
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                return Err(RuntimeError::Cancelled);
-            }
-            let read = reader
-                .read(&mut buffer)
-                .map_err(|error| RuntimeError::Network(format!("download interrupted: {error}")))?;
-            if read == 0 {
-                break;
-            }
-            downloaded = downloaded.saturating_add(read as u64);
-            if downloaded > MAX_DOWNLOAD_BYTES {
-                return Err(RuntimeError::Limit(format!(
-                    "download exceeds {MAX_DOWNLOAD_BYTES} bytes"
-                )));
-            }
-            hasher.update(&buffer[..read]);
-            file.write_all(&buffer[..read])
-                .map_err(|error| RuntimeError::Io(format!("cannot write download: {error}")))?;
-            if downloaded - last_report >= 512 * 1024 || downloaded == release.size {
-                last_report = downloaded;
+        self.client.download(
+            &DownloadSpec {
+                url: &release.download_url,
+                allowlist: &Allowlist::GITHUB_RELEASES,
+                destination,
+                expected_size: release.size,
+                checksum: Checksum::Sha256(&release.sha256),
+                max_size: MAX_DOWNLOAD_BYTES,
+            },
+            cancel,
+            &|event: DownloadProgress| {
                 progress(RuntimeProgress {
-                    phase: "downloading".to_owned(),
-                    downloaded,
-                    total: release.size,
+                    phase: event.phase.as_str().to_owned(),
+                    downloaded: event.downloaded,
+                    total: event.total,
                 });
-            }
-        }
-        file.sync_all()
-            .map_err(|error| RuntimeError::Io(format!("cannot flush download: {error}")))?;
-        if downloaded != release.size {
-            return Err(RuntimeError::Checksum(format!(
-                "received {downloaded} bytes, expected {}",
-                release.size
-            )));
-        }
-        if cancel.load(Ordering::Relaxed) {
-            return Err(RuntimeError::Cancelled);
-        }
-        let actual = hex(&hasher.finalize());
-        if !actual.eq_ignore_ascii_case(&release.sha256) {
-            return Err(RuntimeError::Checksum(format!(
-                "SHA-256 mismatch: announced {}, received {actual}",
-                release.sha256
-            )));
-        }
-        progress(RuntimeProgress {
-            phase: "verified".to_owned(),
-            downloaded,
-            total: release.size,
-        });
+            },
+        )?;
         Ok(())
     }
 }
@@ -306,11 +220,9 @@ pub fn parse_latest_release(
 }
 
 fn require_download_url(url: &str) -> Result<(), RuntimeError> {
-    net::check_url(url, DOWNLOAD_HOSTS).map_err(RuntimeError::Network)
-}
-
-fn map_http_error(error: ureq::Error) -> RuntimeError {
-    RuntimeError::Network(net::http_error(error))
+    Allowlist::GITHUB_RELEASES
+        .check(url)
+        .map_err(RuntimeError::from)
 }
 
 /// Removes a partially downloaded archive after a failed install.

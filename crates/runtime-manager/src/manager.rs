@@ -3,6 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use download_pipeline::{DownloadClient, NetworkConfig};
+
 /// Abandoned downloads and staging directories older than this are swept before an install.
 /// The grace period keeps a concurrent FuryBuilder process from losing its active work.
 const PARTIAL_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
@@ -34,11 +36,23 @@ pub struct RuntimeManager {
 
 impl RuntimeManager {
     pub fn new(settings_path: impl Into<PathBuf>, managed_root: impl Into<PathBuf>) -> Self {
+        Self::with_client(
+            settings_path,
+            managed_root,
+            DownloadClient::new(NetworkConfig::default()),
+        )
+    }
+
+    pub fn with_client(
+        settings_path: impl Into<PathBuf>,
+        managed_root: impl Into<PathBuf>,
+        client: DownloadClient,
+    ) -> Self {
         Self {
             inner: Arc::new(RuntimeManagerInner {
                 settings: RuntimeSettingsStore::new(settings_path),
                 cache: ManagedRuntimeCache::new(managed_root),
-                adoptium: AdoptiumClient::new(),
+                adoptium: AdoptiumClient::with_client(client),
                 install_lock: Mutex::new(()),
             }),
         }
@@ -255,6 +269,9 @@ impl RuntimeManager {
         self.inner
             .adoptium
             .download(release, archive, cancel, progress)?;
+        // The archive is already on disk; extraction needs room for the unpacked JRE too.
+        download_pipeline::ensure_space(self.inner.cache.root(), release.size.saturating_mul(2))
+            .map_err(RuntimeError::from)?;
         let staged = self
             .inner
             .cache

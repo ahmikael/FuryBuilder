@@ -18,22 +18,24 @@
 //! second metadata format.
 
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use download_pipeline::{
+    Allowlist, Checksum, DownloadClient, DownloadProgress, DownloadSpec, NetworkConfig,
+    PipelineError,
+};
 use minecraft_version::{
-    fetch_version_json_document, read_client_jar_version_json, CatalogError, ManifestEntry,
+    fetch_version_json_document_with, read_client_jar_version_json, CatalogError, ManifestEntry,
     ManifestVersionType, ProfileBuildError, VersionCatalog, VersionId, VersionJson,
     VersionJsonError, DEFAULT_MANIFEST_TTL,
 };
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
 use thiserror::Error;
-
-use crate::net;
 
 /// Version of the cache manifest stored next to a managed client JAR. This is internal
 /// cache metadata, not a user project format; only the current schema is read.
@@ -47,15 +49,7 @@ const MANIFEST_NAME: &str = ".furybuilder-assets.json";
 const CLIENT_JAR_NAME: &str = "client.jar";
 const VERSION_METADATA_NAME: &str = "client.json";
 const MAX_CACHE_ENTRIES: usize = 128;
-const PROGRESS_INTERVAL: u64 = 512 * 1024;
 const PARTIAL_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
-
-const MOJANG_HOSTS: &[&str] = &[
-    "piston-meta.mojang.com",
-    "launchermeta.mojang.com",
-    "piston-data.mojang.com",
-    "launcher.mojang.com",
-];
 
 /// Download metadata shown before any client JAR bytes are requested.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -125,8 +119,12 @@ pub enum ClientJarError {
     Metadata(#[from] ProfileBuildError),
     #[error("client JAR download failed: {0}")]
     Network(String),
+    #[error("network access is disabled (offline mode)")]
+    Offline,
     #[error("client JAR I/O error: {0}")]
     Io(String),
+    #[error("not enough free disk space: {0}")]
+    DiskSpace(String),
     #[error("client JAR checksum mismatch: expected {expected}, got {actual}")]
     Checksum { expected: String, actual: String },
     #[error("client JAR size mismatch: expected {expected} bytes, got {actual}")]
@@ -147,7 +145,9 @@ impl ClientJarError {
             ClientJarError::Catalog(_) | ClientJarError::VersionJson(_) => "network_error",
             ClientJarError::Metadata(_) | ClientJarError::Invalid(_) => "invalid_argument",
             ClientJarError::Network(_) => "network_error",
+            ClientJarError::Offline => "offline",
             ClientJarError::Io(_) => "io_error",
+            ClientJarError::DiskSpace(_) => "disk_space",
             ClientJarError::Checksum { .. } => "checksum_mismatch",
             ClientJarError::Size { .. } | ClientJarError::Limit(_) => "checksum_mismatch",
             ClientJarError::Cancelled => "cancelled",
@@ -156,20 +156,53 @@ impl ClientJarError {
     }
 }
 
+impl From<PipelineError> for ClientJarError {
+    fn from(error: PipelineError) -> Self {
+        let message = error.to_string();
+        match error {
+            PipelineError::Offline => ClientJarError::Offline,
+            PipelineError::Cancelled => ClientJarError::Cancelled,
+            PipelineError::Checksum { expected, actual } => {
+                ClientJarError::Checksum { expected, actual }
+            }
+            PipelineError::Size { expected, actual } => ClientJarError::Size { expected, actual },
+            PipelineError::Limit(_) => ClientJarError::Limit(message),
+            PipelineError::InsufficientSpace { .. } => ClientJarError::DiskSpace(message),
+            PipelineError::Io(_) => ClientJarError::Io(message),
+            PipelineError::DisallowedUrl(_)
+            | PipelineError::Proxy(_)
+            | PipelineError::Http { .. }
+            | PipelineError::Transport(_) => ClientJarError::Network(message),
+        }
+    }
+}
+
 /// Resolves and installs official Minecraft client JARs.
 pub struct ClientJarManager {
     cache: ManagedClientJarCache,
     manifest_cache: PathBuf,
-    agent: ureq::Agent,
+    client: DownloadClient,
     install_lock: Mutex<()>,
 }
 
 impl ClientJarManager {
     pub fn new(root: impl Into<PathBuf>, manifest_cache: impl Into<PathBuf>) -> Self {
+        Self::with_client(
+            root,
+            manifest_cache,
+            DownloadClient::new(NetworkConfig::default()),
+        )
+    }
+
+    pub fn with_client(
+        root: impl Into<PathBuf>,
+        manifest_cache: impl Into<PathBuf>,
+        client: DownloadClient,
+    ) -> Self {
         Self {
             cache: ManagedClientJarCache::new(root),
             manifest_cache: manifest_cache.into(),
-            agent: net::agent(),
+            client,
             install_lock: Mutex::new(()),
         }
     }
@@ -255,34 +288,32 @@ impl ClientJarManager {
             downloaded: 0,
             total: resolved.info.size,
         });
-        net::check_url(&resolved.info.download_url, MOJANG_HOSTS)
-            .map_err(ClientJarError::Network)?;
-        let response = net::open(&self.agent, &resolved.info.download_url, MOJANG_HOSTS)
-            .map_err(ClientJarError::Network)?;
-        if response.status() != 200 {
-            return Err(ClientJarError::Network(format!(
-                "client JAR download returned HTTP {}",
-                response.status()
-            )));
-        }
-        if let Some(length) = response.header("content-length") {
-            if let Ok(length) = length.parse::<u64>() {
-                if length != resolved.info.size {
-                    return Err(ClientJarError::Size {
-                        expected: resolved.info.size,
-                        actual: length,
-                    });
-                }
-            }
-        }
-        self.install_reader(
+        let staged = self.cache.create_staging()?;
+        self.client.download(
+            &DownloadSpec {
+                url: &resolved.info.download_url,
+                allowlist: &Allowlist::MOJANG,
+                destination: &staged.jar_path(),
+                expected_size: resolved.info.size,
+                checksum: Checksum::Sha1(&resolved.info.sha1),
+                max_size: MAX_CLIENT_JAR_BYTES,
+            },
+            cancel,
+            &|event: DownloadProgress| {
+                progress(ClientJarProgress {
+                    phase: event.phase.as_str().to_owned(),
+                    downloaded: event.downloaded,
+                    total: event.total,
+                });
+            },
+        )?;
+        self.finish_staged(
             version,
             &resolved.info,
             &resolved.version_json,
-            response.into_reader(),
+            staged,
             expected_data_version,
             cancel,
-            progress,
         )
     }
 
@@ -298,13 +329,20 @@ impl ClientJarManager {
     }
 
     fn resolve(&self, version: &VersionId) -> Result<ResolvedClientJarRelease, ClientJarError> {
-        let catalog = VersionCatalog::load(&self.manifest_cache, DEFAULT_MANIFEST_TTL)?;
+        let catalog = VersionCatalog::load_with_client(
+            &self.manifest_cache,
+            DEFAULT_MANIFEST_TTL,
+            &self.client,
+        )
+        .map_err(client_catalog_error)?;
         let entry = catalog.entry(version.as_str()).ok_or_else(|| {
             ClientJarError::Unavailable(format!(
                 "Minecraft {version} is not present in the Mojang version manifest"
             ))
         })?;
-        let (version_json, version_json_bytes) = fetch_version_json_document(entry)?;
+        let (version_json, version_json_bytes) =
+            fetch_version_json_document_with(entry, &self.client)
+                .map_err(client_version_json_error)?;
         let info = release_from_document(entry, &version_json)?;
         Ok(ResolvedClientJarRelease {
             info,
@@ -312,6 +350,7 @@ impl ClientJarManager {
         })
     }
 
+    #[cfg(test)]
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn install_reader(
         &self,
@@ -332,6 +371,25 @@ impl ClientJarManager {
             cancel,
             progress,
         )?;
+        self.finish_staged(
+            version,
+            release,
+            version_json,
+            staged,
+            expected_data_version,
+            cancel,
+        )
+    }
+
+    fn finish_staged(
+        &self,
+        version: &VersionId,
+        release: &ClientJarReleaseInfo,
+        version_json: &[u8],
+        staged: StagedClientJar,
+        expected_data_version: Option<i32>,
+        cancel: &AtomicBool,
+    ) -> Result<ManagedClientJar, ClientJarError> {
         if cancel.load(Ordering::Relaxed) {
             return Err(ClientJarError::Cancelled);
         }
@@ -371,6 +429,20 @@ struct ResolvedClientJarRelease {
     version_json: Vec<u8>,
 }
 
+fn client_catalog_error(error: CatalogError) -> ClientJarError {
+    match error {
+        CatalogError::Offline => ClientJarError::Offline,
+        other => ClientJarError::Catalog(other),
+    }
+}
+
+fn client_version_json_error(error: VersionJsonError) -> ClientJarError {
+    match error {
+        VersionJsonError::Offline => ClientJarError::Offline,
+        other => ClientJarError::VersionJson(other),
+    }
+}
+
 /// Builds the preview from an already verified version JSON document.
 fn release_from_document(
     entry: &ManifestEntry,
@@ -400,8 +472,12 @@ fn release_from_document(
             client.size
         )));
     }
-    net::check_url(&client.url, MOJANG_HOSTS).map_err(ClientJarError::Network)?;
-    net::check_url(&entry.url, MOJANG_HOSTS).map_err(ClientJarError::Network)?;
+    Allowlist::MOJANG
+        .check(&client.url)
+        .map_err(ClientJarError::from)?;
+    Allowlist::MOJANG
+        .check(&entry.url)
+        .map_err(ClientJarError::from)?;
     Ok(ClientJarReleaseInfo {
         minecraft_version: entry.id.to_string(),
         version_type: entry.version_type,
@@ -458,6 +534,7 @@ fn sha1_file(path: &Path) -> Result<String, ClientJarError> {
 }
 
 /// Streams one response into `destination`, enforcing the announced size and SHA-1.
+#[cfg(test)]
 fn copy_verified(
     reader: &mut impl Read,
     destination: &Path,
@@ -466,72 +543,21 @@ fn copy_verified(
     cancel: &AtomicBool,
     progress: &dyn Fn(ClientJarProgress),
 ) -> Result<(), ClientJarError> {
-    if cancel.load(Ordering::Relaxed) {
-        return Err(ClientJarError::Cancelled);
-    }
-    if expected_size > MAX_CLIENT_JAR_BYTES {
-        return Err(ClientJarError::Limit(format!(
-            "announced size {expected_size} exceeds {MAX_CLIENT_JAR_BYTES} bytes"
-        )));
-    }
-    let mut file = File::create(destination).map_err(|error| {
-        ClientJarError::Io(format!("cannot create {}: {error}", destination.display()))
-    })?;
-    let mut hasher = Sha1::new();
-    let mut buffer = [0u8; 64 * 1024];
-    let mut downloaded = 0u64;
-    let mut last_report = 0u64;
-    loop {
-        if cancel.load(Ordering::Relaxed) {
-            return Err(ClientJarError::Cancelled);
-        }
-        let read = reader.read(&mut buffer).map_err(|error| {
-            ClientJarError::Network(format!("client JAR download interrupted: {error}"))
-        })?;
-        if read == 0 {
-            break;
-        }
-        downloaded = downloaded.saturating_add(read as u64);
-        if downloaded > expected_size || downloaded > MAX_CLIENT_JAR_BYTES {
-            return Err(ClientJarError::Limit(format!(
-                "received at least {downloaded} bytes, expected {expected_size}"
-            )));
-        }
-        hasher.update(&buffer[..read]);
-        file.write_all(&buffer[..read])
-            .map_err(|error| ClientJarError::Io(format!("cannot write download: {error}")))?;
-        if downloaded - last_report >= PROGRESS_INTERVAL || downloaded == expected_size {
-            last_report = downloaded;
+    download_pipeline::write_verified(
+        reader,
+        destination,
+        expected_size,
+        Checksum::Sha1(expected_sha1),
+        MAX_CLIENT_JAR_BYTES,
+        cancel,
+        &|event: DownloadProgress| {
             progress(ClientJarProgress {
-                phase: "downloading".to_owned(),
-                downloaded,
-                total: expected_size,
+                phase: event.phase.as_str().to_owned(),
+                downloaded: event.downloaded,
+                total: event.total,
             });
-        }
-    }
-    file.sync_all()
-        .map_err(|error| ClientJarError::Io(format!("cannot flush download: {error}")))?;
-    if downloaded != expected_size {
-        return Err(ClientJarError::Size {
-            expected: expected_size,
-            actual: downloaded,
-        });
-    }
-    if cancel.load(Ordering::Relaxed) {
-        return Err(ClientJarError::Cancelled);
-    }
-    let actual = hex(&hasher.finalize());
-    if !actual.eq_ignore_ascii_case(expected_sha1) {
-        return Err(ClientJarError::Checksum {
-            expected: expected_sha1.to_owned(),
-            actual,
-        });
-    }
-    progress(ClientJarProgress {
-        phase: "verified".to_owned(),
-        downloaded,
-        total: expected_size,
-    });
+        },
+    )?;
     Ok(())
 }
 
@@ -815,12 +841,8 @@ impl ManagedClientJarCache {
         fs::write(staged.directory().join(MANIFEST_NAME), bytes).map_err(|error| {
             ClientJarError::Io(format!("cannot write the assets manifest: {error}"))
         })?;
-        if let Err(error) = fs::rename(staged.directory(), &destination) {
-            return Err(ClientJarError::Io(format!(
-                "cannot publish managed assets {}: {error}",
-                destination.display()
-            )));
-        }
+        download_pipeline::publish_directory(staged.directory(), &destination)
+            .map_err(ClientJarError::from)?;
         Ok(ManagedClientJar {
             id: format!("assets-managed-{}", stored.version),
             version: stored.version,
@@ -976,7 +998,7 @@ pub(crate) fn test_fixture(
     version: &str,
     data_version: i32,
 ) -> (ClientJarReleaseInfo, Vec<u8>, Vec<u8>) {
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
 
     let mut buffer = Cursor::new(Vec::new());
@@ -1031,7 +1053,7 @@ pub(crate) fn test_fixture(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
 
     struct TempDir {
@@ -1351,6 +1373,20 @@ mod tests {
         assert_eq!(preview.sha1, expected.sha1);
         assert_eq!(preview.size, expected.size);
         assert_eq!(preview.version_json_sha1, "a".repeat(40));
+    }
+
+    #[test]
+    fn offline_client_jar_resolution_is_refused_without_network() {
+        let dir = TempDir::new("offline");
+        let manager = ClientJarManager::with_client(
+            dir.path.join("components").join("assets"),
+            dir.path.join("cache").join("version_manifest_v2.json"),
+            DownloadClient::new(NetworkConfig::offline()),
+        );
+        let version: VersionId = "1.21.4".parse().expect("version");
+        let error = manager.release(&version).expect_err("offline");
+        assert!(matches!(error, ClientJarError::Offline), "{error:?}");
+        assert_eq!(error.code(), "offline");
     }
 
     fn staging_entries(root: &Path) -> usize {

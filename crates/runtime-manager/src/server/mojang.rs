@@ -1,16 +1,13 @@
-use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::fs;
 use std::path::{Path, PathBuf};
 
+use download_pipeline::{Allowlist, Checksum, DownloadClient, DownloadProgress, DownloadSpec};
 use minecraft_version::{
-    fetch_version_json_document, is_allowed_download_url, CatalogError, ManifestEntry,
+    fetch_version_json_document_with, is_allowed_download_url, CatalogError, ManifestEntry,
     ManifestVersionType, VersionCatalog, VersionJson, VersionJsonError, DEFAULT_MANIFEST_TTL,
 };
-use sha1::{Digest, Sha1};
 
 use crate::error::ServerError;
-use crate::managed::hex;
-use crate::net;
 
 use super::jar::is_sha1;
 use super::types::{
@@ -18,22 +15,16 @@ use super::types::{
 };
 
 pub const VERSION_MANIFEST_URL: &str = minecraft_version::OFFICIAL_MANIFEST_URL;
-const MOJANG_HOSTS: &[&str] = &[
-    "piston-meta.mojang.com",
-    "launchermeta.mojang.com",
-    "piston-data.mojang.com",
-    "launcher.mojang.com",
-];
 
 pub struct MojangClient {
-    agent: ureq::Agent,
+    client: DownloadClient,
     manifest_cache: PathBuf,
 }
 
 impl MojangClient {
-    pub fn new(manifest_cache: impl Into<PathBuf>) -> Self {
+    pub fn with_client(manifest_cache: impl Into<PathBuf>, client: DownloadClient) -> Self {
         Self {
-            agent: net::agent(),
+            client,
             manifest_cache: manifest_cache.into(),
         }
     }
@@ -42,8 +33,12 @@ impl MojangClient {
     /// version's JSON. The version JSON body is checked against the manifest's SHA-1 before
     /// it is parsed. A snapshot or a version without a server download is refused.
     pub fn release(&self, target: &ServerTarget) -> Result<ServerReleaseInfo, ServerError> {
-        let catalog = VersionCatalog::load(&self.manifest_cache, DEFAULT_MANIFEST_TTL)
-            .map_err(catalog_error)?;
+        let catalog = VersionCatalog::load_with_client(
+            &self.manifest_cache,
+            DEFAULT_MANIFEST_TTL,
+            &self.client,
+        )
+        .map_err(catalog_error)?;
         let entry = catalog
             .entry(target.minecraft_version.as_str())
             .ok_or_else(|| {
@@ -55,12 +50,13 @@ impl MojangClient {
                     ),
                 )
             })?;
-        let (version_json, _) = fetch_version_json_document(entry).map_err(version_json_error)?;
+        let (version_json, _) =
+            fetch_version_json_document_with(entry, &self.client).map_err(version_json_error)?;
         release_from_version_json(entry, &version_json, target)
     }
 
-    /// Downloads the announced server JAR with a hard size cap and streaming SHA-1. The file
-    /// is written once to the caller's temporary path; it is not published here.
+    /// Downloads the announced server JAR with a hard size cap and streaming SHA-1. The
+    /// destination is replaced atomically only after the checksum matches.
     pub fn download(
         &self,
         release: &ServerReleaseInfo,
@@ -68,88 +64,24 @@ impl MojangClient {
         cancel: &std::sync::atomic::AtomicBool,
         progress: &dyn Fn(ServerProgress),
     ) -> Result<(), ServerError> {
-        use std::sync::atomic::Ordering;
-        if cancel.load(Ordering::Relaxed) {
-            return Err(ServerError::Cancelled);
-        }
-        net::check_url(&release.download_url, MOJANG_HOSTS).map_err(ServerError::Network)?;
-        let response = net::open(&self.agent, &release.download_url, MOJANG_HOSTS)
-            .map_err(ServerError::Network)?;
-        if response.status() != 200 {
-            return Err(ServerError::Network(format!(
-                "server JAR download returned HTTP {}",
-                response.status()
-            )));
-        }
-        if let Some(length) = response.header("content-length") {
-            if let Ok(length) = length.parse::<u64>() {
-                if length != release.size {
-                    return Err(ServerError::Checksum(format!(
-                        "announced size {} does not match response size {length}",
-                        release.size
-                    )));
-                }
-            }
-        }
-        let mut reader = response.into_reader();
-        let mut file = File::create(destination).map_err(|error| {
-            ServerError::Io(format!("cannot create {}: {error}", destination.display()))
-        })?;
-        let mut hasher = Sha1::new();
-        let mut buffer = [0u8; 64 * 1024];
-        let mut downloaded = 0u64;
-        let mut last_report = 0u64;
-        loop {
-            if cancel.load(Ordering::Relaxed) {
-                return Err(ServerError::Cancelled);
-            }
-            let read = reader.read(&mut buffer).map_err(|error| {
-                ServerError::Network(format!("server JAR download interrupted: {error}"))
-            })?;
-            if read == 0 {
-                break;
-            }
-            downloaded = downloaded.saturating_add(read as u64);
-            if downloaded > MAX_SERVER_JAR_BYTES {
-                return Err(ServerError::Limit(format!(
-                    "server JAR download exceeds {MAX_SERVER_JAR_BYTES} bytes"
-                )));
-            }
-            hasher.update(&buffer[..read]);
-            file.write_all(&buffer[..read])
-                .map_err(|error| ServerError::Io(format!("cannot write download: {error}")))?;
-            if downloaded - last_report >= 512 * 1024 || downloaded == release.size {
-                last_report = downloaded;
+        self.client.download(
+            &DownloadSpec {
+                url: &release.download_url,
+                allowlist: &Allowlist::MOJANG,
+                destination,
+                expected_size: release.size,
+                checksum: Checksum::Sha1(&release.sha1),
+                max_size: MAX_SERVER_JAR_BYTES,
+            },
+            cancel,
+            &|event: DownloadProgress| {
                 progress(ServerProgress {
-                    phase: "downloading".to_owned(),
-                    downloaded,
-                    total: release.size,
+                    phase: event.phase.as_str().to_owned(),
+                    downloaded: event.downloaded,
+                    total: event.total,
                 });
-            }
-        }
-        file.sync_all()
-            .map_err(|error| ServerError::Io(format!("cannot flush download: {error}")))?;
-        if downloaded != release.size {
-            return Err(ServerError::Checksum(format!(
-                "received {downloaded} bytes, expected {}",
-                release.size
-            )));
-        }
-        if cancel.load(Ordering::Relaxed) {
-            return Err(ServerError::Cancelled);
-        }
-        let actual = hex(&hasher.finalize());
-        if !actual.eq_ignore_ascii_case(&release.sha1) {
-            return Err(ServerError::Checksum(format!(
-                "server JAR SHA-1 mismatch: Mojang announced {}, received {actual}",
-                release.sha1
-            )));
-        }
-        progress(ServerProgress {
-            phase: "verified".to_owned(),
-            downloaded,
-            total: release.size,
-        });
+            },
+        )?;
         Ok(())
     }
 }
@@ -251,11 +183,15 @@ fn unsupported_server(target: &ServerTarget, detail: impl Into<String>) -> Serve
 }
 
 fn catalog_error(error: CatalogError) -> ServerError {
-    ServerError::Network(format!("Mojang version manifest: {error}"))
+    match error {
+        CatalogError::Offline => ServerError::Offline,
+        other => ServerError::Network(format!("Mojang version manifest: {other}")),
+    }
 }
 
 fn version_json_error(error: VersionJsonError) -> ServerError {
     match error {
+        VersionJsonError::Offline => ServerError::Offline,
         VersionJsonError::Sha1Mismatch { .. }
         | VersionJsonError::InvalidSha1 { .. }
         | VersionJsonError::InvalidSize { .. } => ServerError::Checksum(error.to_string()),
