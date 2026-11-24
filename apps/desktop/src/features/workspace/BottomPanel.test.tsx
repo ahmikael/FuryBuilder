@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type * as IpcModule from "@/lib/ipc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BlockDefinition } from "@/editor/types";
+import { BOTTOM_PANEL_TABS } from "@/editor/layout";
 import { BottomPanel } from "@/features/workspace/BottomPanel";
 import { useEditorStore } from "@/state/editor-store";
 import { useToolStore } from "@/state/tool-store";
@@ -128,6 +129,13 @@ describe("block palette", () => {
     expect(screen.getByRole("tab", { name: /Console/ })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: /History/ })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: /Observation/ })).not.toBeInTheDocument();
+  });
+
+  it("renders exactly the shared bottom-panel tabs", () => {
+    render(<BottomPanel backend={backend} />);
+
+    const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent?.trim());
+    expect(tabs).toEqual(BOTTOM_PANEL_TABS.map((tab) => tab.label));
   });
 
   it("does not fake a catalog in browser preview", () => {
