@@ -8,24 +8,23 @@
 //! First adapter (ADR-007): Java structure `.nbt` for the verified classic profile.
 //! Sponge `.schem` v3 is the planned second adapter.
 
-pub mod anvil;
+mod classic_anvil;
 pub mod derived;
 pub mod exchange;
-pub mod java_chunk;
 pub mod java_structure;
 pub mod nbt;
-pub mod overlay;
 pub mod parity;
 pub mod passthrough;
-pub mod region_write;
 pub mod structure;
 pub mod support_matrix;
 pub mod version_support;
 mod world_codec;
-pub mod world_export;
-pub mod world_import;
 pub mod world_selection;
 pub mod world_source;
+
+pub use classic_anvil::{
+    chunk as java_chunk, overlay, reader as anvil, region_write, world_export, world_import,
+};
 
 pub use anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LevelDat,

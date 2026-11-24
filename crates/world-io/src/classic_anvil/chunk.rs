@@ -1,6 +1,6 @@
 //! Decoding of modern Minecraft Java chunk sections.
 //!
-//! Region containers are decoded in [`crate::anvil`]. This module turns the NBT inside a
+//! Region containers are decoded by the classic reader. This module turns the NBT inside a
 //! chunk into real [`Section`] values and bounded biome data. It rejects any layout it
 //! cannot prove instead of treating a malformed palette as air.
 //!
@@ -9,16 +9,17 @@
 //! - biomes use `ceil(log2(palette_len))` bits and 64 cells of 4×4×4 blocks.
 //!
 //! The decoded block indices are re-packed by `Section::from_palette_indices` into the
-//! canonical internal layout. Unknown NBT remains on the original [`crate::anvil::RegionChunk`].
+//! canonical internal layout. Unknown NBT remains on the original [`RegionChunk`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 
-use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::version_support;
 use crate::world_codec::world_codec;
+
+use super::reader::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
 pub const BIOME_SECTION_VOLUME: usize = 64;
@@ -195,7 +196,7 @@ impl JavaWorld {
     }
 }
 
-pub(crate) fn decode_chunk(
+pub(super) fn decode_chunk(
     nbt: &NbtFile,
     x: i32,
     z: i32,

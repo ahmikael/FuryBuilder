@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11 и внутренний интерфейс `WorldCodec`; запись по-прежнему проверена только для 1.21.4. Следующий шаг — выделить `ClassicAnvilCodec` и зафиксировать golden-тесты; прогресс и проверки в §21.
+> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, внутренний интерфейс `WorldCodec` и реализация `ClassicAnvilCodec` с golden-тестами; запись по-прежнему проверена только для 1.21.4. Следующий шаг — параметризовать формат чанков 1.18+; прогресс и проверки в §21.
 > Дата: 2026-11-22; обновлено 2026-11-25 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -24,8 +24,8 @@
 | Область | Текущее состояние | Файлы |
 | --- | --- | --- |
 | Версия мира | `VersionProfile` в проекте; baseline 1.21.4 / DataVersion 4189 write-verified; глобальные `TARGET_*` удалены | `crates/minecraft-version/`, `crates/project-store/src/manifest.rs` |
-| Импорт | Только classic Anvil 1.21.4; остальные версии определяются и отклоняются | `crates/world-io/src/anvil.rs`, `world_import.rs` |
-| Экспорт мира | Backend умеет экспортировать полную папку, но one-click UI нет | `crates/world-io/src/world_export.rs` |
+| Импорт | Только classic Anvil 1.21.4; остальные версии определяются и отклоняются | `crates/world-io/src/classic_anvil/reader.rs`, `world_import.rs` |
+| Экспорт мира | Backend умеет экспортировать полную папку, но one-click UI нет | `crates/world-io/src/classic_anvil/world_export.rs` |
 | Структуры | Только Java `.nbt`; `.schem`, `.schematic`, `.litematic` не включены | `crates/world-io/src/structure.rs`, `java_structure.rs` |
 | Java | Менеджер скачивает только Temurin 21 | `crates/runtime-manager/src/types.rs` |
 | Сервер | Provisioning принимает точную версию/DataVersion/Java major, кэш по версии; desktop-настройки и генерация пока baseline | `crates/runtime-manager/src/server/` |
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P1-03` — Выделить `ClassicAnvilCodec` для 1.21.4 и закрепить поведение golden-тестами. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P1-04` — Параметризовать section layout, palette, heightmaps и light для 1.18+. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P1-04`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P1-05`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1534,7 +1534,7 @@ UI:
 
 - [x] `P1-01` Профили 1.18–1.21.x: exact DataVersion, Java, pack/datapack, dimensions, height.
 - [x] `P1-02` Ввести `WorldCodec` trait/interfaces (§5.2), не меняя поведение 1.21.4.
-- [ ] `P1-03` `ClassicAnvilCodec`: вынести 1.21.4 в реализацию + golden-тесты без diff.
+- [x] `P1-03` `ClassicAnvilCodec`: вынести 1.21.4 в реализацию + golden-тесты без diff.
 - [ ] `P1-04` Параметризовать section layout, palette, heightmaps и light для 1.18+.
 - [ ] `P1-05` Section biomes 1.15–1.17 + column biomes 1.13–1.14 и conversion.
 - [ ] `P1-06` Version-aware chunk NBT: секции, палитры, block entities preserve.
@@ -1690,6 +1690,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | ClassicAnvilCodec | Reader, chunk codec, overlay, запись регионов, импорт и экспорт собраны в `classic_anvil`; прежний адаптер заменён без изменения алгоритмов, форматов и допуска версий. SHA-256 golden-манифесты полного экспорта сняты до переноса с `9706fe1` и совпали после переноса для `Preserve` и `VanillaRebuild`. Исключён только timestamp изменённого чанка; исходный мир проверяется побайтово | см. `git log` | Оба golden-теста до и после переноса; 703 Rust tests (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Интерфейс WorldCodec | В `world-io` единый внутренний интерфейс для анализа, загрузки мира и overlay, чтения и кодирования чанков, записи регионов и экспорта. Публичные точки входа ведут в тот же Anvil-код; форматы и ограничения не менялись. Тест полного экспорта теперь повторно импортирует все три измерения, проверяет изменённый блок и биом, неизменность источника и побайтовое сохранение нетронутых файлов. Граница описана в `docs/architecture.md` | см. `git log` | Сверены тела всех 7 операций с предыдущим коммитом; 701 Rust test (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Профили classic Anvil | Добавлены точные метаданные 27 релизов 1.18–1.21.11: DataVersion, Java major, форматы пакетов (включая minor с 1.21.9), границы и папки измерений. Java сверена с Mojang launcher JSON, DataVersion и pack formats — с `version.json` из client JAR, размеры измерений — с vanilla dimension types. Новые профили вне baseline помечены `unverified`: мастер, world I/O и сохранение проектов их не разблокируют. Обновлён `docs/formats.md` | см. `git log` | 27 сверенных профилей; 701 Rust tests (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | P0 закрыт | Финальный прогон после документации: Rust workspace, clippy, fmt, TS typecheck/lint/format/test. Коммит закрывает P0, после него рабочее дерево чистое; следующий фокус — `P1-01`. Push не выполнялся | см. `git log` | 695 Rust tests (71 suites), 373 TS tests + 1 skipped (374), clippy `-D warnings`, fmt, typecheck/lint/format |

@@ -34,15 +34,16 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::anvil::{
+use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
+use crate::version_support;
+use crate::world_codec::world_codec;
+
+use super::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
+use super::reader::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, RegionChunk, RegionEntry,
     RegionFile, ANVIL_HEADER_BYTES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_SECTOR_BYTES,
     MAX_REGION_FILE_BYTES,
 };
-use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
-use crate::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
-use crate::version_support;
-use crate::world_codec::world_codec;
 
 pub const VERIFIED_WRITE_LAYOUT: &str = "classic_anvil";
 /// The complete set of chunk fields this writer fills from the overlay.
@@ -246,7 +247,7 @@ pub fn write_verified_region_with_policy(
     )
 }
 
-pub(crate) fn write_anvil_region(
+pub(super) fn write_region(
     world: &JavaWorld,
     dimension_id: &str,
     region_x: i32,

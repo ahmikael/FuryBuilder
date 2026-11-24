@@ -25,15 +25,16 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::anvil::{region_file_name, AnvilError, JavaWorld};
-use crate::overlay::{OverlayError, WorldOverlay};
 use crate::passthrough::{
     passthrough_java_world_with_options, PassthroughError, PassthroughOptions, PassthroughReport,
 };
-use crate::region_write::{
+use crate::world_codec::world_codec;
+
+use super::overlay::{OverlayError, WorldOverlay};
+use super::reader::{region_file_name, AnvilError, JavaWorld, ANVIL_REGION_AXIS_CHUNKS};
+use super::region_write::{
     write_region_from_overlay_with_policy, DerivedDataPolicy, RegionWriteError,
 };
-use crate::world_codec::world_codec;
 
 pub const MAX_EXPORT_REGIONS: usize = 4_096;
 const HASH_BUFFER_BYTES: usize = 64 * 1024;
@@ -160,7 +161,7 @@ pub fn export_java_world_with_options(
     world_codec().export_world(overlay, destination.as_ref(), options)
 }
 
-pub(crate) fn export_anvil_world(
+pub(super) fn export_world(
     overlay: &WorldOverlay,
     destination: &Path,
     options: WorldExportOptions,
@@ -330,8 +331,8 @@ fn dirty_regions(
 ) -> Result<BTreeMap<(String, i32, i32), usize>, WorldExportError> {
     let mut regions = BTreeMap::new();
     for key in overlay.dirty_chunks() {
-        let region_x = key.x.div_euclid(crate::anvil::ANVIL_REGION_AXIS_CHUNKS);
-        let region_z = key.z.div_euclid(crate::anvil::ANVIL_REGION_AXIS_CHUNKS);
+        let region_x = key.x.div_euclid(ANVIL_REGION_AXIS_CHUNKS);
+        let region_z = key.z.div_euclid(ANVIL_REGION_AXIS_CHUNKS);
         *regions
             .entry((key.dimension.clone(), region_x, region_z))
             .or_insert(0usize) += 1;

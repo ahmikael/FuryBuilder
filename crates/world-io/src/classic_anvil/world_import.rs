@@ -20,13 +20,14 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{ChunkPos, DimensionKind, World};
 
-use crate::anvil::{AnvilError, JavaWorld, LevelDat};
 use crate::passthrough::PassthroughError;
 use crate::support_matrix::{support_matrix, SupportMatrix};
 use crate::version_support;
 use crate::world_codec::world_codec;
 use crate::world_selection::{classify_world_selection, WorldSelectionKind};
 use crate::world_source::{ArchiveReport, WorldSourceKind};
+
+use super::reader::{AnvilError, JavaWorld, LevelDat};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
 pub const MAX_IMPORT_CHUNKS: usize = 20_000;
@@ -153,7 +154,7 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
     world_codec().inspect(root.as_ref())
 }
 
-pub(crate) fn inspect_anvil_world(root: &Path) -> JavaWorldAnalysis {
+pub(super) fn inspect_root(root: &Path) -> JavaWorldAnalysis {
     let selection = classify_world_selection(root);
     let mut analysis = JavaWorldAnalysis {
         root: root.display().to_string(),
@@ -373,7 +374,7 @@ pub fn load_java_world_with_options(
     world_codec().load_world(root.as_ref(), options)
 }
 
-pub(crate) fn load_anvil_world(
+pub(super) fn load_world(
     root: &Path,
     options: WorldImportOptions,
 ) -> Result<(World, JavaWorldLoadReport), WorldImportError> {

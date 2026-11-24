@@ -26,13 +26,16 @@ use world_domain::{
     CHUNK_SIZE, MAX_BIOME_PALETTE, SECTION_SIZE,
 };
 
-use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, ANVIL_REGION_AXIS_CHUNKS};
-use crate::java_chunk::{
+use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
+use crate::world_codec::world_codec;
+
+use super::chunk::{
     BiomeSection as JavaBiomeSection, DecodedChunk, DecodedSection, BLOCK_SECTION_VOLUME,
     MAX_BLOCK_PALETTE,
 };
-use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
-use crate::world_codec::world_codec;
+use super::reader::{
+    AnvilError, JavaWorld, JavaWorldDimension, RegionFile, ANVIL_REGION_AXIS_CHUNKS,
+};
 
 /// Overlay schema 2 adds editable biome cells. Schema 1 documents remain readable.
 pub const OVERLAY_SCHEMA_VERSION: u32 = 2;
@@ -245,7 +248,7 @@ impl WorldOverlay {
         world_codec().load_overlay(root.as_ref())
     }
 
-    pub(crate) fn open_anvil(root: &Path) -> Result<Self, OverlayError> {
+    pub(super) fn open_classic(root: &Path) -> Result<Self, OverlayError> {
         Ok(Self {
             world: JavaWorld::open(root)?,
             chunks: BTreeMap::new(),
@@ -849,7 +852,7 @@ impl WorldOverlay {
         world_codec().encode_chunk(self, dimension_id, ChunkPos::new(x, z))
     }
 
-    pub(crate) fn encode_anvil_chunk(
+    pub(super) fn encode_chunk(
         &self,
         dimension_id: &str,
         x: i32,
@@ -1314,12 +1317,7 @@ impl WorldOverlay {
         Ok(())
     }
 
-    fn region(
-        &self,
-        dimension_id: &str,
-        x: i32,
-        z: i32,
-    ) -> Result<crate::anvil::RegionFile, OverlayError> {
+    fn region(&self, dimension_id: &str, x: i32, z: i32) -> Result<RegionFile, OverlayError> {
         let region_x = x.div_euclid(ANVIL_REGION_AXIS_CHUNKS);
         let region_z = z.div_euclid(ANVIL_REGION_AXIS_CHUNKS);
         self.world
@@ -1543,7 +1541,7 @@ fn biome_bits(palette_len: usize) -> u8 {
     bits.max(1)
 }
 
-pub(crate) fn verify_preserved_fields(
+pub(super) fn verify_preserved_fields(
     source: &NbtFile,
     patched: &NbtFile,
 ) -> Result<(), OverlayError> {

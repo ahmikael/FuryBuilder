@@ -298,11 +298,13 @@ from the stock shadcn `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`, `Button
 
 `world-io` routes inspection, bounded world and overlay loading, chunk decode and
 materialization, verified region writes, and full-world export through its internal
-`WorldCodec` interface. Existing world I/O entry points still use the same classic Anvil
-readers, writers, and error checks for Minecraft Java 1.21.4. The interface does not
-enable any additional layout or version. A loaded overlay carries the verified source
-profile; encoding starts with that source's original NBT, and untouched chunk records
-never need to be re-encoded.
+`WorldCodec` interface. `ClassicAnvilCodec` owns the reader, chunk codec, overlay,
+region writer, import, and export for Minecraft Java 1.21.4. It remains the only
+wired implementation; the extraction does not enable other layouts or versions.
+A loaded overlay carries the verified source profile; encoding starts with that
+source's original NBT, and untouched chunk records never need to be re-encoded.
+Export golden tests compare the full file tree against pre-extraction output for
+both derived-data policies, masking only the edited chunk's write timestamp.
 
 ## Security boundaries
 

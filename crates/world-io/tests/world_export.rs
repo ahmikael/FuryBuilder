@@ -11,12 +11,13 @@ use std::path::{Path, PathBuf};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use sha2::{Digest, Sha256};
 use world_domain::{BiomeState, BlockPos, BlockState};
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::{
     analyze_java_world, export_java_world, export_java_world_with_options, load_java_world,
     region_file_name, DerivedDataPolicy, JavaWorld, WorldExportError, WorldExportOptions,
-    WorldOverlay,
+    WorldOverlay, ANVIL_SECTOR_BYTES,
 };
 
 const TARGET: i32 = 4189;
@@ -330,6 +331,81 @@ fn staging_directories(parent: &Path) -> Vec<PathBuf> {
                 .then_some(path)
         })
         .collect()
+}
+
+fn classic_anvil_export_manifest(policy: DerivedDataPolicy) -> String {
+    let dir = TempDir::new("classic-anvil-golden");
+    let root = dir.path().join("world");
+    write_world(&root, "minecraft:full");
+    let before = read_tree(&root);
+    let mut overlay = WorldOverlay::open(&root).expect("open fixture");
+    overlay
+        .set_block(
+            OVERWORLD,
+            0,
+            -64,
+            0,
+            &"minecraft:gold_block".parse().unwrap(),
+        )
+        .expect("edit block");
+    overlay
+        .set_biome(OVERWORLD, 0, -64, 0, &"minecraft:desert".parse().unwrap())
+        .expect("edit biome");
+    let destination = output_path(dir.path());
+    let report = export_java_world_with_options(
+        &overlay,
+        &destination,
+        WorldExportOptions {
+            derived_data_policy: policy,
+            ..WorldExportOptions::default()
+        },
+    )
+    .expect("export fixture");
+    assert_eq!((report.replaced_regions, report.replaced_chunks), (1, 1));
+    assert!(report.output_revalidated);
+    assert_eq!(read_tree(&root), before, "source bytes changed");
+
+    let mut files = BTreeMap::new();
+    for (relative, mut bytes) in read_tree(&destination) {
+        if relative == Path::new("region/r.0.0.mca") {
+            // The writer timestamps the edited chunk (0, 0). Hash every other
+            // byte, including the original timestamp of the untouched chunk.
+            let offset = ANVIL_SECTOR_BYTES as usize;
+            let timestamp = &mut bytes[offset..offset + 4];
+            assert!(i32::from_be_bytes(timestamp.try_into().unwrap()) > 0);
+            timestamp.fill(0);
+        }
+        let name = relative
+            .iter()
+            .map(|part| part.to_str().expect("fixture path is UTF-8"))
+            .collect::<Vec<_>>()
+            .join("/");
+        files.insert(name, format!("{:x}", Sha256::digest(&bytes)));
+    }
+    files
+        .iter()
+        .map(|(name, hash)| format!("{hash}  {name}\n"))
+        .collect()
+}
+
+#[test]
+fn golden_classic_anvil_preserve() {
+    let actual = classic_anvil_export_manifest(DerivedDataPolicy::Preserve);
+    assert_eq!(
+        actual,
+        include_str!("goldens/classic-anvil-1.21.4-preserve.sha256").replace("\r\n", "\n"),
+        "classic Anvil preserve export differs from the baseline:\n{actual}"
+    );
+}
+
+#[test]
+fn golden_classic_anvil_vanilla_rebuild() {
+    let actual = classic_anvil_export_manifest(DerivedDataPolicy::VanillaRebuild);
+    assert_eq!(
+        actual,
+        include_str!("goldens/classic-anvil-1.21.4-rebuild.sha256").replace("\r\n", "\n"),
+        "classic Anvil rebuild export differs from the baseline:\n{actual}"
+    );
 }
 
 #[test]
