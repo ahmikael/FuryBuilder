@@ -1,9 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CatalogSnapshot } from "@/assets/types";
 import type {
   ComponentInventory,
+  ComponentProgress,
   ComponentReport,
   ComponentStatus,
   ComponentTarget,
@@ -489,6 +490,99 @@ describe("project components step", () => {
       expect(lastState(onStateChange)).toMatchObject({ checking: false, ready: true }),
     );
     expect(await screen.findByText("1234 blocks · 567 items")).toBeInTheDocument();
+  });
+
+  it("keeps a failed download visible and retries the install", async () => {
+    api.status.mockResolvedValueOnce(editorMissing).mockResolvedValue(editorReady);
+    api.install
+      .mockRejectedValueOnce({ code: "checksum", message: "client JAR checksum mismatch" })
+      .mockResolvedValue(readyAssets);
+    const user = userEvent.setup();
+    const { onStateChange } = renderStep();
+
+    await user.click(await screen.findByRole("button", { name: "Download Minecraft client JAR" }));
+    expect(await screen.findByText("Component action failed")).toBeInTheDocument();
+    expect(screen.getByText("client JAR checksum mismatch")).toBeInTheDocument();
+    expect(lastState(onStateChange).ready).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Download Minecraft client JAR" }));
+    await waitFor(() => expect(api.install).toHaveBeenCalledTimes(2));
+    expect(await screen.findByText("1234 blocks · 567 items")).toBeInTheDocument();
+    await waitFor(() => expect(lastState(onStateChange).ready).toBe(true));
+  });
+
+  it("retries a failed release preview", async () => {
+    api.status.mockResolvedValue(editorMissing);
+    api.assetsRelease
+      .mockRejectedValueOnce({ code: "offline", message: "preview is offline" })
+      .mockResolvedValue(assetsRelease);
+    const user = userEvent.setup();
+    renderStep();
+
+    expect(await screen.findByText("Download preview unavailable")).toBeInTheDocument();
+    expect(screen.getByText("preview is offline")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry preview" }));
+    expect(
+      await screen.findByRole("button", { name: "Download Minecraft client JAR" }),
+    ).toBeInTheDocument();
+    expect(api.assetsRelease).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a failed catalog build", async () => {
+    api.status.mockResolvedValue(editorReady);
+    api.catalog
+      .mockRejectedValueOnce({ code: "internal", message: "the catalog cannot be built" })
+      .mockResolvedValue(catalog);
+    const user = userEvent.setup();
+    renderStep();
+
+    expect(await screen.findByText("Catalog unavailable")).toBeInTheDocument();
+    expect(screen.getByText("the catalog cannot be built")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry catalog" }));
+    expect(await screen.findByText("1234 blocks · 567 items")).toBeInTheDocument();
+    expect(api.catalog).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows download progress and cancels the active install", async () => {
+    api.status.mockResolvedValueOnce(editorMissing).mockResolvedValue(editorReady);
+    let emitProgress: ((progress: ComponentProgress) => void) | null = null;
+    api.listenProgress.mockImplementation(
+      async (handler: (progress: ComponentProgress) => void) => {
+        emitProgress = handler;
+        return () => undefined;
+      },
+    );
+    let resolveInstall: ((status: ComponentStatus) => void) | null = null;
+    api.install.mockReturnValue(
+      new Promise<ComponentStatus>((resolve) => {
+        resolveInstall = resolve;
+      }),
+    );
+    const user = userEvent.setup();
+    const { onStateChange } = renderStep();
+
+    await waitFor(() => expect(emitProgress).not.toBeNull());
+    await user.click(await screen.findByRole("button", { name: "Download Minecraft client JAR" }));
+    act(() =>
+      emitProgress?.({
+        kind: "assets",
+        phase: "Downloading client JAR",
+        downloaded: 25_000_000,
+        total: 100_000_000,
+      }),
+    );
+
+    expect(await screen.findByText("Downloading client JAR")).toBeInTheDocument();
+    expect(
+      screen.getByRole("progressbar", { name: "Component download progress" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel download" }));
+    expect(api.cancel).toHaveBeenCalledWith("assets");
+
+    await act(async () => resolveInstall?.(readyAssets));
+    await waitFor(() => expect(lastState(onStateChange).ready).toBe(true));
   });
 
   it("keeps a manual source selection inside the card that owns it", async () => {
