@@ -57,6 +57,31 @@ import type { ServerReleaseInfo } from "@/runtime/server-types";
 import type { RuntimeReleaseInfo } from "@/runtime/types";
 import { cn } from "@/lib/utils";
 
+/** One resolved component as the Review step should present it. */
+export interface ComponentStepItem {
+  kind: ComponentKind;
+  mode: ComponentMode | null;
+  state: ComponentState;
+  version: string | null;
+  bytes: number | null;
+  hash: string | null;
+  path: string | null;
+}
+
+/** The verified component facts captured by the Components step for the Review summary. */
+export interface ComponentStepSummary {
+  java: ComponentStepItem | null;
+  assets: ComponentStepItem | null;
+  server: ComponentStepItem | null;
+  catalog: {
+    id: string;
+    hash: string;
+    blocks: number;
+    items: number;
+  } | null;
+  totalBytes: number;
+}
+
 /** The state the wizard needs to validate the step without reaching into its children. */
 export interface ComponentStepState {
   targetKey: string;
@@ -64,6 +89,7 @@ export interface ComponentStepState {
   ready: boolean;
   errors: string[];
   warnings: string[];
+  summary: ComponentStepSummary | null;
 }
 
 type ProvisionMode = "auto" | "existing" | "manual";
@@ -710,10 +736,6 @@ export function ProjectComponentsStep({
   const checking = desktop && profile !== null && (loading || (!report && !loadError));
   const ready = errors.length === 0;
 
-  useEffect(() => {
-    onStateChange({ targetKey, checking, ready, errors, warnings });
-  }, [targetKey, checking, ready, errors, warnings, onStateChange]);
-
   const locked = disabled || action !== null;
 
   const retryLoad = (): void => {
@@ -869,6 +891,44 @@ export function ProjectComponentsStep({
       catalog.clientJarSha1 === assetsStatus.hash.value)
       ? catalog
       : null;
+
+  const summary = useMemo<ComponentStepSummary | null>(() => {
+    if (!report) return null;
+    const item = (kind: ComponentKind): ComponentStepItem | null => {
+      const status = findStatus(report, kind);
+      if (!status) return null;
+      return {
+        kind,
+        mode: status.mode ?? null,
+        state: status.state,
+        version: status.version ?? null,
+        bytes: status.bytes ?? null,
+        hash: status.hash?.value ?? null,
+        path: status.path ?? null,
+      };
+    };
+    const components = [javaStatus, assetsStatus, serverStatus].filter(
+      (status): status is ComponentStatus => status !== null,
+    );
+    return {
+      java: item("java"),
+      assets: item("assets"),
+      server: item("server"),
+      catalog: catalogForTarget
+        ? {
+            id: catalogForTarget.catalogId,
+            hash: catalogForTarget.catalogHash,
+            blocks: catalogForTarget.counts.blocks,
+            items: catalogForTarget.counts.items,
+          }
+        : null,
+      totalBytes: components.reduce((total, status) => total + (status.bytes ?? 0), 0),
+    };
+  }, [assetsStatus, catalogForTarget, javaStatus, report, serverStatus]);
+
+  useEffect(() => {
+    onStateChange({ targetKey, checking, ready, errors, warnings, summary });
+  }, [targetKey, checking, ready, errors, warnings, summary, onStateChange]);
 
   const javaSummary: ReleaseSummary | null = javaRelease
     ? {

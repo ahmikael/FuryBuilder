@@ -27,6 +27,7 @@ import {
   ProjectComponentsStep,
   type ComponentStepState,
 } from "@/features/project/ProjectComponentsStep";
+import { ProjectReviewStep } from "@/features/project/ProjectReviewStep";
 import { EmptySourceStep, FlatSourceStep } from "@/features/project/ProjectSourceStep";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { presentError, type ErrorPresentation } from "@/lib/error-messages";
@@ -35,10 +36,7 @@ import { fetchProjectDefaults, type CreateProjectOptions } from "@/lib/project-a
 import { fetchVersionCatalog } from "@/lib/version-api";
 import {
   CREATION_MODES,
-  creationModeLabel,
-  flatTopY,
   formatBytes,
-  formatResourceId,
   type CreationMode,
   type FlatDefaults,
   type FlatPreset,
@@ -680,121 +678,6 @@ function ImportSourceStep({
   );
 }
 
-function ReviewStep({
-  name,
-  mode,
-  version,
-  folder,
-  projectFolder,
-  folderSuffix,
-  projectsRoot,
-  analysis,
-  flat,
-  importStrategy,
-}: {
-  name: string;
-  mode: CreationMode;
-  version: string;
-  folder: string;
-  projectFolder: string;
-  folderSuffix: string;
-  projectsRoot: string | null;
-  analysis: JavaWorldAnalysis | null;
-  flat: FlatPreset | null;
-  importStrategy: ImportStrategy;
-}) {
-  const destination = projectFolderName(projectFolder, folderSuffix);
-  const flatSource =
-    mode === "flat"
-      ? flat
-        ? `Flat platform · ${flat.layers.length} layer(s) · Y ${flat.baseY}..=${flatTopY(flat)}`
-        : "Flat starting platform"
-      : null;
-  const layerSummary = flat?.layers
-    .map((layer) => `${formatResourceId(layer.block)} ×${layer.thickness}`)
-    .join(" → ");
-  return (
-    <div className="space-y-4">
-      <Card className="gap-0 py-0">
-        <CardContent className="p-0">
-          <dl className="divide-y">
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <dt className="w-28 text-sm text-muted-foreground">Name</dt>
-              <dd className="min-w-0 flex-1 truncate text-sm font-medium">
-                {name.trim() || "Named by the generated world"}
-              </dd>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <dt className="w-28 text-sm text-muted-foreground">Mode</dt>
-              <dd className="text-sm">{creationModeLabel(mode)}</dd>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <dt className="w-28 text-sm text-muted-foreground">Version</dt>
-              <dd className="font-mono text-sm">{version || "Unknown"}</dd>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <dt className="w-28 text-sm text-muted-foreground">Folder</dt>
-              <dd className="min-w-0 flex-1 truncate font-mono text-xs">
-                {destination || "Named after the project"}
-              </dd>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <dt className="w-28 text-sm text-muted-foreground">Location</dt>
-              <dd className="min-w-0 flex-1 break-all font-mono text-xs">
-                {projectsRoot ?? "Default library folder"}
-              </dd>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-              <dt className="w-28 text-sm text-muted-foreground">Source</dt>
-              <dd className="min-w-0 flex-1 truncate font-mono text-xs">
-                {mode === "import"
-                  ? `${analysis?.sourceKind === "archive" ? "World archive" : "World folder"} · ${folder}`
-                  : mode === "flat"
-                    ? flatSource
-                    : "Empty world"}
-              </dd>
-            </div>
-            {mode === "import" ? (
-              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <dt className="w-28 text-sm text-muted-foreground">Strategy</dt>
-                <dd className="text-sm">
-                  {importStrategy === "importAsIs" ? "Import as-is" : "Convert"}
-                </dd>
-              </div>
-            ) : null}
-            {mode === "flat" && flat && layerSummary ? (
-              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <dt className="w-28 text-sm text-muted-foreground">Layers</dt>
-                <dd className="min-w-0 flex-1 break-words text-xs">{layerSummary}</dd>
-              </div>
-            ) : null}
-            {mode === "flat" && flat ? (
-              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <dt className="w-28 text-sm text-muted-foreground">Biome</dt>
-                <dd className="font-mono text-xs">{flat.biome}</dd>
-              </div>
-            ) : null}
-            {analysis ? (
-              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <dt className="w-28 text-sm text-muted-foreground">Detected</dt>
-                <dd className="font-mono text-xs">
-                  {analysis.versionName ?? "unknown version"} · DataVersion{" "}
-                  {analysis.dataVersion ?? "unknown"} · {analysis.chunks} chunk(s)
-                </dd>
-              </div>
-            ) : null}
-          </dl>
-        </CardContent>
-      </Card>
-      <p className="text-sm leading-relaxed text-muted-foreground">
-        {mode === "import"
-          ? "The source is copied byte for byte and stays read-only. Edits live in the project overlay; the version is never downgraded."
-          : "The project is saved with the current project schema and the supported target profile."}
-      </p>
-    </div>
-  );
-}
-
 function FailurePanel({
   message,
   hint,
@@ -1211,17 +1094,18 @@ export function ProjectWizard() {
               ) : null}
 
               {step.id === "review" ? (
-                <ReviewStep
+                <ProjectReviewStep
                   name={name}
                   mode={mode}
                   version={effectiveVersion}
-                  folder={importSource}
-                  projectFolder={projectFolder}
-                  folderSuffix={folderSuffix}
+                  destination={projectFolderName(projectFolder, folderSuffix)}
                   projectsRoot={projectsRoot}
                   analysis={analysis}
                   flat={flatPreset}
+                  flatFootprint={flatDefaults?.limits.footprint ?? 33}
                   importStrategy={importStrategy}
+                  profile={selectedProfile}
+                  components={componentStep}
                 />
               ) : null}
 

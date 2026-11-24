@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
 import { ProjectManager } from "@/features/project/ProjectManager";
+import type { ComponentStepState } from "@/features/project/ProjectComponentsStep";
 import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
 import type { VersionCatalogReport } from "@/project/version-types";
 import { defaultWorkspacePolicy } from "@/project/types";
@@ -69,13 +70,7 @@ vi.mock("@/features/project/ProjectComponentsStep", async () => {
       onStateChange,
     }: {
       targetKey: string;
-      onStateChange: (state: {
-        targetKey: string;
-        checking: boolean;
-        ready: boolean;
-        errors: string[];
-        warnings: string[];
-      }) => void;
+      onStateChange: (state: ComponentStepState) => void;
     }) => {
       React.useEffect(() => {
         onStateChange({
@@ -84,6 +79,34 @@ vi.mock("@/features/project/ProjectComponentsStep", async () => {
           ready: true,
           errors: [],
           warnings: [],
+          summary: {
+            java: {
+              kind: "java",
+              mode: "managed",
+              state: "ready",
+              version: "21.0.5",
+              bytes: 120_000_000,
+              hash: "a".repeat(64),
+              path: "C:\\cache\\java\\bin\\java.exe",
+            },
+            assets: {
+              kind: "assets",
+              mode: "managed",
+              state: "ready",
+              version: "1.21.4",
+              bytes: 54_200_000,
+              hash: "b".repeat(40),
+              path: "C:\\cache\\assets\\1.21.4\\client.jar",
+            },
+            server: null,
+            catalog: {
+              id: "java-1.21.4-test",
+              hash: "e".repeat(64),
+              blocks: 1234,
+              items: 567,
+            },
+            totalBytes: 174_200_000,
+          },
         });
       }, [targetKey, onStateChange]);
       return React.createElement("p", null, "Components step ready");
@@ -153,6 +176,7 @@ const worldAnalysis: JavaWorldAnalysis = {
   chunks: 841,
   blockEntities: 3,
   entities: 2,
+  sourceBytes: 48_000_000,
   sourcePath: "C:\\saves\\World",
   sourceKind: "folder",
   archive: null,
@@ -719,6 +743,10 @@ describe("project wizard", () => {
     expect(screen.getByText("Flat base")).toBeInTheDocument();
     expect(screen.getByText("Custom Flat.furybuilder")).toBeInTheDocument();
     expect(screen.getByText("1.21.4")).toBeInTheDocument();
+    expect(screen.getByText("3,267 blocks · about 216.0 KiB")).toBeInTheDocument();
+    expect(screen.getByText("Under a second")).toBeInTheDocument();
+    expect(screen.getByText("1234 blocks · 567 items")).toBeInTheDocument();
+    expect(screen.getByText("21.0.5 · 114.4 MiB · aaaaaaaaaaaa…")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
@@ -928,6 +956,9 @@ describe("project wizard", () => {
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByText(/World archive · C:\\downloads\\Wizard.zip/)).toBeInTheDocument();
     expect(screen.getByText("Import as-is")).toBeInTheDocument();
+    expect(screen.getByText(/45\.8 MiB source \+ about 19\.7 MiB overlay/)).toBeInTheDocument();
+    expect(screen.getByText(/841 chunk\(s\) from 4 region file\(s\)/)).toBeInTheDocument();
+    expect(screen.getByText(/3 block entities and 2 entities stay/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>

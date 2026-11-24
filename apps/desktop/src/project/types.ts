@@ -338,6 +338,7 @@ export interface JavaWorldAnalysis {
   chunks: number;
   blockEntities: number;
   entities: number;
+  sourceBytes: number;
   sourcePath: string;
   sourceKind: ImportSourceKind;
   archive: WorldArchiveReport | null;

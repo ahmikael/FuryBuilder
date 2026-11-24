@@ -199,7 +199,11 @@ a warning, and never claim a client JAR, checksum or block/item catalog. Once a 
 JAR is ready, the step loads the exact-version catalog and shows its block/item counts and id.
 The captured step state is keyed by profile and mode, so changing either discards the previous
 result and requires a new check. `Review` repeats the name, folder, library location, mode,
-version, flat layers, import source/strategy and source before creation. Every step returns its
+version, flat layers, import source/strategy and source; it also shows the resolved Java,
+client-asset and server modes and versions, the verified catalog counts, a conservative
+expected size and an honest time expectation. It aggregates the profile, source and component
+warnings (read-only/convert support, downgrade policy, preserved entities and placeholder
+limitations) before creation. Every step returns its
 own validation errors; `Next` refuses to advance, shows the reason, and the step buttons only
 reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only

@@ -13,6 +13,7 @@
 //! [`crate::passthrough`], and the analysis reports them as limitations instead of dropping
 //! them silently.
 
+use std::fs;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,8 @@ pub struct JavaWorldAnalysis {
     pub chunks: usize,
     pub block_entities: usize,
     pub entities: usize,
+    /// Total size of the selected world folder or extracted archive staging folder.
+    pub source_bytes: u64,
     /// The original selection path, preserved for archive sources whose
     /// analyzed folder is a temporary extraction.
     pub source_path: String,
@@ -164,6 +167,7 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
         chunks: 0,
         block_entities: 0,
         entities: 0,
+        source_bytes: source_size(root),
         source_path: root.display().to_string(),
         source_kind: WorldSourceKind::Folder,
         archive: None,
@@ -246,6 +250,43 @@ fn push_unique(blockers: &mut Vec<String>, blocker: String) {
     if !blockers.contains(&blocker) {
         blockers.push(blocker);
     }
+}
+
+/// Sums regular files below a world folder without following symlinks. This is a size hint
+/// for the Review step, not a validation pass; unreadable entries are skipped.
+fn source_size(path: &Path) -> u64 {
+    let Ok(metadata) = fs::symlink_metadata(path) else {
+        return 0;
+    };
+    if metadata.is_file() {
+        return metadata.len();
+    }
+    if !metadata.is_dir() {
+        return 0;
+    }
+    let mut total = 0u64;
+    let mut stack = vec![path.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                stack.push(entry.path());
+            } else if file_type.is_file() {
+                if let Ok(metadata) = entry.metadata() {
+                    total = total.saturating_add(metadata.len());
+                }
+            }
+        }
+    }
+    total
 }
 
 fn finish_analysis(analysis: &mut JavaWorldAnalysis) {

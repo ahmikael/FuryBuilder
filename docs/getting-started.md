@@ -76,7 +76,8 @@ cargo test --workspace
    biome. Layers are written bottom-up, each 1–16 blocks thick up to the backend limit, and the
    whole source must stay inside the selected version's overworld height. Invalid layers are
    refused before the project is written.
-6. Review the source and summary, then click **Create project** (or **Import world**). A flat
+6. Review the source, the resolved components and catalog, the conservative size/time estimate
+   and every aggregated warning, then click **Create project** (or **Import world**). A flat
    project is ready in a few seconds.
 
 Vanilla World uses `Basics → Version → Components → Source` and has no review step: creation

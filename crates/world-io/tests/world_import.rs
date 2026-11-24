@@ -292,6 +292,7 @@ fn analysis_reports_supported_world_and_never_writes() {
     assert_eq!(analysis.dimensions[0].chunks, 2);
     assert_eq!(analysis.source_kind, WorldSourceKind::Folder);
     assert_eq!(analysis.source_path, root.display().to_string());
+    assert!(analysis.source_bytes > 0);
     assert!(analysis.archive.is_none());
     assert!(analysis
         .warnings
@@ -321,6 +322,7 @@ fn archive_analysis_extracts_a_nested_world_without_writing_the_archive() {
     assert_eq!(analysis.source_path, archive.display().to_string());
     assert_eq!(analysis.root, archive.display().to_string());
     assert_eq!(analysis.chunks, 2);
+    assert!(analysis.source_bytes > 0);
     assert_eq!(
         analysis.archive.as_ref().map(|archive| archive.entries),
         Some(4)

@@ -347,6 +347,11 @@ describe("project components step", () => {
     );
     expect(await screen.findByText("1234 blocks · 567 items")).toBeInTheDocument();
     expect(screen.getByText("java-test-version-abc123")).toBeInTheDocument();
+    expect(lastState(onStateChange).summary).toMatchObject({
+      java: { kind: "java", mode: null, state: "missing", version: null },
+      assets: { kind: "assets", mode: "managed", state: "ready" },
+      catalog: { id: "java-test-version-abc123", blocks: 1234, items: 567 },
+    });
     expect(screen.getAllByText("Minecraft client assets").length).toBeGreaterThan(0);
     expect(screen.queryByText("Official server JAR")).not.toBeInTheDocument();
     expect(api.catalog).toHaveBeenCalledTimes(1);
