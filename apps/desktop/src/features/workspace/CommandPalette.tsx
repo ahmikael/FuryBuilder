@@ -94,6 +94,7 @@ export function buildPaletteCommands(context: {
   setBottomPanelTab: (tab: BottomPanelTabId) => void;
   resetLayout: () => void;
   setManagerOpen: (open: boolean) => void;
+  projectOpen: boolean;
   saveProject: () => void;
 }): PaletteCommand[] {
   const commands: PaletteCommand[] = [];
@@ -156,21 +157,27 @@ export function buildPaletteCommands(context: {
     });
   }
 
-  commands.push(
-    {
-      id: "focus-origin",
-      group: "World",
-      label: "Focus world origin",
-      keywords: "camera view navigate position spawn",
-      run: () => focusViewportPosition({ x: 0, y: 64, z: 0 }),
-    },
-    {
+  commands.push({
+    id: "focus-origin",
+    group: "World",
+    label: "Focus world origin",
+    keywords: "camera view navigate position spawn",
+    run: () => focusViewportPosition({ x: 0, y: 64, z: 0 }),
+  });
+
+  // The project dialog only exists while a project is open; the welcome screen owns the
+  // no-project entry points.
+  if (context.projectOpen) {
+    commands.push({
       id: "project-manager",
       group: "Project",
       label: "Open project manager",
       keywords: "project open create rename checkpoint",
       run: () => context.setManagerOpen(true),
-    },
+    });
+  }
+
+  commands.push(
     {
       id: "save-project",
       group: "Project",
@@ -228,6 +235,7 @@ export function CommandPalette() {
   const resetLayout = useEditorStore((state) => state.resetLayout);
   const activeTool = useToolStore((state) => state.tool);
   const setManagerOpen = useProjectStore((state) => state.setManagerOpen);
+  const projectOpen = useProjectStore((state) => Boolean(state.current?.folder));
   const saveProject = useProjectStore((state) => state.save);
   const [query, setQuery] = useState("");
 
@@ -243,6 +251,7 @@ export function CommandPalette() {
         setBottomPanelTab,
         resetLayout,
         setManagerOpen,
+        projectOpen,
         saveProject: () => void saveProject(),
       }),
     [
@@ -257,6 +266,7 @@ export function CommandPalette() {
       setBottomPanelTab,
       resetLayout,
       setManagerOpen,
+      projectOpen,
       saveProject,
     ],
   );

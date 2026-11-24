@@ -167,7 +167,12 @@ export function WelcomeScreen({ backend }: { backend: BackendState }) {
 
   const pickProject = async (): Promise<void> => {
     if (!desktop) {
-      openManager("projects");
+      pushToast({
+        kind: "info",
+        title: "Desktop core required",
+        description:
+          "The browser preview cannot open project folders. Run the desktop build to browse local projects.",
+      });
       return;
     }
     setPicking(true);

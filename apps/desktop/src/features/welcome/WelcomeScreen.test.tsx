@@ -5,6 +5,7 @@ import { WelcomeScreen } from "@/features/welcome/WelcomeScreen";
 import type { BackendState } from "@/hooks/use-backend";
 import type { ProjectSummary } from "@/project/types";
 import { useProjectStore } from "@/state/project-store";
+import { clearToasts, getToasts } from "@/test-utils/toast-log";
 
 const online: BackendState = {
   status: "online",
@@ -62,6 +63,7 @@ function mockResume() {
 }
 
 beforeEach(() => {
+  clearToasts();
   useProjectStore.getState().reset();
 });
 
@@ -100,6 +102,17 @@ describe("welcome screen", () => {
       managerTab: "create",
       managerCreateMode: "import",
     });
+  });
+
+  it("explains that opening a folder needs the desktop core instead of opening a dialog", async () => {
+    seed();
+    const user = userEvent.setup();
+    render(<WelcomeScreen backend={online} />);
+
+    await user.click(screen.getByRole("button", { name: "Open project" }));
+
+    expect(useProjectStore.getState().managerOpen).toBe(false);
+    expect(getToasts().at(-1)?.title).toBe("Desktop core required");
   });
 
   it("opens a recent project by its folder", async () => {

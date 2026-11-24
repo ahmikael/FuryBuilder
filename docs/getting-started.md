@@ -49,7 +49,9 @@ cargo test --workspace
 ## 3. Create your first project
 
 1. Click **New project** on the welcome screen. The project creation wizard is full-screen,
-   not a dialog over an empty scene.
+   not a dialog over an empty scene. While no project is open, the welcome screen is the project
+   hub: the Projects dialog is reserved for an open project, where it switches projects and
+   exposes checkpoints and import/export.
 2. Enter a project name, an optional project folder and choose a mode.
 
 | Mode            | What you get                                                                                                                   |
@@ -111,7 +113,9 @@ files while the app is running.
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Toolbar.** `Project` manages projects, checkpoints and import/export. `View` toggles
+- **Toolbar.** `Project` opens the project dialog while a project is open, where it switches
+  projects and exposes checkpoints and import/export. On the welcome screen it is disabled
+  because the welcome screen and full-screen wizard own opening and creation. `View` toggles
   panels. `AI / MCP` sets agent access. Undo/redo, save, the project-state chip, the command
   palette and Settings are on the right. `Tools` and `Export` are placeholders; their real
   actions live in the viewport toolbar, bottom panel and Project dialog.

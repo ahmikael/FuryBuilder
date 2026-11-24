@@ -194,9 +194,10 @@ export function ProjectManager() {
   const targetVersion = currentProject?.targetMinecraftVersion;
   const targetDataVersion = currentProject?.targetDataVersion;
 
-  // A new project starts from a full-screen wizard, not a dialog over the empty shell.
-  if (open && tab === "create" && !current) {
-    return <ProjectWizard />;
+  // Without an open project, the welcome screen owns opening and the full-screen wizard
+  // owns creation. The project dialog must never cover the empty shell.
+  if (!current?.folder) {
+    return open && tab === "create" ? <ProjectWizard /> : null;
   }
 
   const requestOpen = (folder: string, projectName: string): void => {
@@ -221,13 +222,18 @@ export function ProjectManager() {
     if (action.kind === "open") {
       await useProjectStore.getState().open(action.folder, { discardCurrent: true });
     } else if (action.kind === "close") {
-      await useProjectStore.getState().close(false);
+      if (!(await useProjectStore.getState().close(false))) return;
+      setOpen(false);
       setTab("projects");
     } else if (action.kind === "create") {
-      await useProjectStore.getState().close(false);
+      if (!(await useProjectStore.getState().close(false))) return;
       setTab("create");
     }
     setPending(null);
+  };
+
+  const closeProject = async (): Promise<void> => {
+    if (await useProjectStore.getState().close(false)) setOpen(false);
   };
 
   const submitImport = async (): Promise<void> => {
@@ -410,58 +416,43 @@ export function ProjectManager() {
               </TabsList>
 
               <TabsContent value="projects" className="m-0 space-y-4 pt-4">
-                {current ? (
-                  <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
-                    <HardDrive className="size-4 text-primary" />
-                    <span className="text-sm font-medium">{current.name}</span>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      rev {current.savedRevision}
-                      {current.autosavedRevision !== null
-                        ? ` · autosave r${current.autosavedRevision}`
-                        : ""}
-                    </span>
-                    <Badge variant={dirty ? "secondary" : "default"}>
-                      {dirty ? "Unsaved" : "Saved"}
-                    </Badge>
-                    <span className="ml-auto flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={loading || !dirty}
-                        onClick={() => void useProjectStore.getState().save()}
-                      >
-                        {loading ? (
-                          <Loader2 data-icon="inline-start" className="animate-spin" />
-                        ) : (
-                          <Save data-icon="inline-start" />
-                        )}
-                        Save
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          dirty
-                            ? setPending({ kind: "close" })
-                            : void useProjectStore.getState().close(false)
-                        }
-                      >
-                        <X data-icon="inline-start" />
-                        Close
-                      </Button>
-                    </span>
-                  </div>
-                ) : (
-                  <Empty className="border p-6">
-                    <EmptyHeader>
-                      <EmptyMedia variant="icon">
-                        <FolderOpen />
-                      </EmptyMedia>
-                      <EmptyTitle>No project is open</EmptyTitle>
-                      <EmptyDescription>Pick one below or create a new project.</EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                )}
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
+                  <HardDrive className="size-4 text-primary" />
+                  <span className="text-sm font-medium">{current.name}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    rev {current.savedRevision}
+                    {current.autosavedRevision !== null
+                      ? ` · autosave r${current.autosavedRevision}`
+                      : ""}
+                  </span>
+                  <Badge variant={dirty ? "secondary" : "default"}>
+                    {dirty ? "Unsaved" : "Saved"}
+                  </Badge>
+                  <span className="ml-auto flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={loading || !dirty}
+                      onClick={() => void useProjectStore.getState().save()}
+                    >
+                      {loading ? (
+                        <Loader2 data-icon="inline-start" className="animate-spin" />
+                      ) : (
+                        <Save data-icon="inline-start" />
+                      )}
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Close project"
+                      onClick={() => (dirty ? setPending({ kind: "close" }) : void closeProject())}
+                    >
+                      <X data-icon="inline-start" />
+                      Close
+                    </Button>
+                  </span>
+                </div>
 
                 {current?.folder && currentProject?.creationMode === "vanilla" ? (
                   <VanillaParityPanel folder={current.folder} />

@@ -113,6 +113,12 @@ export function Toolbar({
               <Button
                 variant="ghost"
                 className={cn("text-muted-foreground", projectOpen && "text-foreground")}
+                disabled={!projectOpen}
+                title={
+                  projectOpen
+                    ? undefined
+                    : "Open or create a project from the welcome screen first."
+                }
                 onClick={() => setManagerOpen(true)}
               />
             }
@@ -121,7 +127,9 @@ export function Toolbar({
             Project
           </TooltipTrigger>
           <TooltipContent>
-            Project manager — list, create, open, rename and checkpoints. Ctrl+S saves.
+            {projectOpen
+              ? "Project manager — list, create, open, rename and checkpoints. Ctrl+S saves."
+              : "Open or create a project from the welcome screen first."}
           </TooltipContent>
         </Tooltip>
         <ViewMenu />

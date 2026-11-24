@@ -464,6 +464,31 @@ beforeEach(() => {
 });
 
 describe("project manager", () => {
+  it("does not render the project dialog without an open project", () => {
+    useProjectStore.setState({
+      managerOpen: true,
+      managerTab: "projects",
+      current: null,
+      phase: "closed",
+    });
+    render(<ProjectManager />);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByText("No project is open")).not.toBeInTheDocument();
+  });
+
+  it("closes the manager after closing the open project", async () => {
+    const user = userEvent.setup();
+    render(<ProjectManager />);
+
+    await act(async () => {
+      await user.click(screen.getByRole("button", { name: "Close project" }));
+    });
+    await waitFor(() => expect(useProjectStore.getState().current).toBeNull());
+    expect(useProjectStore.getState().managerOpen).toBe(false);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("lists projects with all creation modes available", async () => {
     render(<ProjectManager />);
     expect((await screen.findAllByText("First Castle")).length).toBeGreaterThan(0);
@@ -664,6 +689,7 @@ describe("project wizard", () => {
     render(<ProjectManager />);
 
     expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getAllByText("Step 1 of 5").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("progressbar", { name: "Project creation progress" }),

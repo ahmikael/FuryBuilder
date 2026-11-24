@@ -244,9 +244,16 @@ The welcome screen shows the brand, up to six recent projects sorted by last sav
 three entry points: `New project`, `Open project`, and `Import world`. Recent rows show the
 creation mode, project version/DataVersion, size, relative save time, recoverability, and
 honest schema warnings. `New project` and `Import world` open the full-screen project wizard on
-the matching creation mode; `Open project` uses the desktop folder picker and falls back to the
-project list in a browser preview. A desktop-offline alert explains why project actions
-cannot work, and an unreadable library shows the backend error with a retry action.
+the matching creation mode; `Open project` uses the desktop folder picker, and a browser preview
+explains that local folders need the desktop core instead of opening a dialog. A desktop-offline
+alert explains why project actions cannot work, and an unreadable library shows the backend
+error with a retry action.
+
+The Projects dialog exists only while a project is open. It switches projects, shows the
+current session, and exposes checkpoints and import/export; closing the project also closes the
+dialog. Without a project, the welcome screen is the project hub and the full-screen wizard owns
+creation and import. The toolbar's Project action is disabled in that state with the reason, and
+the command palette does not offer the project manager command.
 
 Recoverable projects carry a `Recoverable` badge, a short explanation, and a `Recover`
 action instead of `Open`; the card also summarises how many recent projects have a verified

@@ -25,6 +25,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Open project" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import world" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "3D viewport" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Project" })).toBeDisabled();
     expect(screen.getByText("Desktop core required")).toBeInTheDocument();
 
     const status = await screen.findByRole("status", { name: "Core status" });
@@ -62,6 +63,7 @@ describe("App", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: "3D viewport" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Project" })).toBeEnabled();
     expect(screen.queryByRole("heading", { name: "FuryBuilder" })).not.toBeInTheDocument();
   });
 
