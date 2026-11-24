@@ -606,6 +606,7 @@ describe("project manager", () => {
         "Imported World",
         "C:\\saves\\World",
         "importAsIs",
+        { minecraftVersion: "1.21.4", dataVersion: 4189 },
         {
           selectedDimension: "minecraft:overworld",
           loadRadius: 1,
@@ -938,6 +939,7 @@ describe("project wizard", () => {
         "Imported Wizard",
         "C:\\saves\\Wizard",
         "importAsIs",
+        { minecraftVersion: "1.21.4", dataVersion: 4189 },
         {
           selectedDimension: "minecraft:overworld",
           loadRadius: 1,
@@ -994,10 +996,41 @@ describe("project wizard", () => {
         "Archived Wizard",
         "C:\\downloads\\Wizard.zip",
         "importAsIs",
+        { minecraftVersion: "1.21.4", dataVersion: 4189 },
         expect.any(Object),
         undefined,
       ),
     );
+  });
+
+  it("requires fresh confirmation after reanalyzing an import source", async () => {
+    const preview = { ...worldAnalysis, sourcePath: "C:\\saves\\Wizard" };
+    api.analyze
+      .mockResolvedValueOnce(preview)
+      .mockResolvedValueOnce({ ...preview, dataVersion: 4325, versionId: 4325 });
+    const user = userEvent.setup();
+    openWizard("import");
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Changed source");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByLabelText("Java world folder"), preview.sourcePath);
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByText(/DataVersion 4189/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Detected from the world")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Source" }));
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    expect(await screen.findByText(/DataVersion 4325/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText(/The source DataVersion does not match/)).toBeInTheDocument();
+    expect(api.importWorld).not.toHaveBeenCalled();
   });
 
   it("keeps the folder available but hides the name for vanilla generation", async () => {

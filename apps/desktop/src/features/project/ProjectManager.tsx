@@ -72,6 +72,7 @@ import {
   creationModeLabel,
   formatBytes,
   formatRelativeTime,
+  importVersionForSource,
   projectSummaryWarnings,
 } from "@/project/types";
 import { cn } from "@/lib/utils";
@@ -174,8 +175,8 @@ export function ProjectManager() {
   const [pending, setPending] = useState<PendingAction>(null);
   const [checkpointReason, setCheckpointReason] = useState("manual checkpoint");
   const dirty = projectIsDirty(current, worldRevision);
-  const importReady =
-    mode !== "import" || (worldAnalysis?.supported === true && worldFolder.trim().length > 0);
+  const confirmedImportVersion = importVersionForSource(worldAnalysis, worldFolder);
+  const importReady = mode !== "import" || confirmedImportVersion !== null;
   const activeFolder = current?.folder ?? null;
   const desktop = isTauriRuntime();
 
@@ -230,7 +231,10 @@ export function ProjectManager() {
   };
 
   const submitImport = async (): Promise<void> => {
-    const imported = await useProjectStore.getState().importWorld(name, worldFolder, "importAsIs");
+    if (!confirmedImportVersion) return;
+    const imported = await useProjectStore
+      .getState()
+      .importWorld(name, worldFolder, "importAsIs", confirmedImportVersion);
     if (imported) {
       setName("");
       setWorldFolder("");

@@ -317,6 +317,27 @@ export type ImportSourceKind = "folder" | "archive";
  */
 export type ImportStrategy = "importAsIs" | "convert";
 
+export interface ConfirmedImportVersion {
+  minecraftVersion: string;
+  dataVersion: number;
+}
+
+/** Never confirm stale analysis from a different source or an incomplete version. */
+export function importVersionForSource(
+  analysis: JavaWorldAnalysis | null,
+  source: string,
+): ConfirmedImportVersion | null {
+  if (
+    !analysis?.supported ||
+    analysis.sourcePath !== source.trim() ||
+    !analysis.versionName?.trim() ||
+    analysis.dataVersion === null
+  ) {
+    return null;
+  }
+  return { minecraftVersion: analysis.versionName, dataVersion: analysis.dataVersion };
+}
+
 export interface WorldArchiveReport {
   entries: number;
   bytes: number;

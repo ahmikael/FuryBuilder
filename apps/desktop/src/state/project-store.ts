@@ -27,6 +27,7 @@ import {
 import { fetchWorldInfo as fetchProjectWorldInfo } from "@/lib/world-api";
 import type {
   CheckpointMeta,
+  ConfirmedImportVersion,
   CreationMode,
   EditorState,
   ImportStrategy,
@@ -159,6 +160,7 @@ interface ProjectUiState {
     name: string,
     source: string,
     strategy: ImportStrategy,
+    confirmedVersion: ConfirmedImportVersion,
     projectFolder?: string,
   ) => Promise<boolean>;
   importGeneratedWorld: (name: string, runId: string, projectFolder?: string) => Promise<boolean>;
@@ -529,7 +531,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   clearWorldAnalysis: () => set({ worldAnalysis: null }),
 
-  importWorld: async (name, source, strategy, projectFolder) => {
+  importWorld: async (name, source, strategy, confirmedVersion, projectFolder) => {
     const trimmed = source.trim();
     if (!trimmed) return false;
     const analysis = get().worldAnalysis;
@@ -541,6 +543,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
         name.trim(),
         trimmed,
         strategy,
+        confirmedVersion,
         currentEditorState(),
         projectFolder?.trim() || undefined,
       );

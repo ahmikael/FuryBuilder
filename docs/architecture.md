@@ -173,7 +173,11 @@ paths, symlinks, reserved names and duplicates, then analyzes the discovered wor
 read-only; preview removes the staging folder, while import keeps it only until the
 byte-preserving source copy is complete. The step shows the source kind, dimensions,
 region/chunk counts, blockers and warnings, and requires the `Import as-is` strategy; conversion
-is an explicit disabled choice because no verified converter ships in this build. Vanilla keeps
+is an explicit disabled choice because no verified converter ships in this build. Reanalyzing
+the source sends the user through the locked Version step again. `project_import_world` requires
+the confirmed Minecraft version and DataVersion; both must match the fresh analysis, the profile
+of the decoded world, and the copied `level.dat` before the project can open. A changed source
+must be analyzed and confirmed again; import never retargets it. Vanilla keeps
 the existing generation panel but receives the selected version and refuses to generate when it
 differs from the verified server target. The step owns the seed, preset, radius/center,
 structures toggle, time limit and validated local data packs, and requires an explicit EULA

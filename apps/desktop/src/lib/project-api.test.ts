@@ -93,11 +93,13 @@ describe("project IPC contract", () => {
       source: "C:\\saves\\Castle.zip",
     });
 
+    const confirmedVersion = { minecraftVersion: "1.21.4", dataVersion: 4189 };
     await importJavaWorld(
       "job-4",
       "Castle",
       "C:\\saves\\Castle",
       "importAsIs",
+      confirmedVersion,
       editorState,
       "Imported.furybuilder",
     );
@@ -106,6 +108,7 @@ describe("project IPC contract", () => {
       name: "Castle",
       source: "C:\\saves\\Castle",
       strategy: "importAsIs",
+      confirmedVersion,
       editorState,
       folder: "Imported.furybuilder",
     });

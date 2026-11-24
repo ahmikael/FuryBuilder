@@ -75,16 +75,12 @@ struct PrepareProgress {
     total: u64,
 }
 
-struct PrepareReporter {
-    app: AppHandle,
-    job_id: String,
+struct PrepareReporter<'a> {
+    sink: &'a dyn Fn(PrepareProgress),
+    job_id: &'a str,
 }
 
-impl PrepareReporter {
-    fn new(app: AppHandle, job_id: String) -> Self {
-        Self { app, job_id }
-    }
-
+impl PrepareReporter<'_> {
     fn emit(
         &self,
         stage: &str,
@@ -93,17 +89,14 @@ impl PrepareReporter {
         completed: u64,
         total: u64,
     ) {
-        let _ = self.app.emit(
-            PREPARE_EVENT,
-            PrepareProgress {
-                job_id: self.job_id.clone(),
-                stage: stage.to_owned(),
-                state: state.to_owned(),
-                message: message.into(),
-                completed,
-                total,
-            },
-        );
+        (self.sink)(PrepareProgress {
+            job_id: self.job_id.to_owned(),
+            stage: stage.to_owned(),
+            state: state.to_owned(),
+            message: message.into(),
+            completed,
+            total,
+        });
     }
 
     fn running(&self, stage: &str, message: impl Into<String>) {
@@ -116,7 +109,7 @@ impl PrepareReporter {
 }
 
 struct PrepareCopyObserver<'a> {
-    reporter: &'a PrepareReporter,
+    reporter: &'a PrepareReporter<'a>,
     attempt: &'a PrepareAttempt,
     last_emitted: Cell<Option<Instant>>,
 }
@@ -157,22 +150,35 @@ fn ensure_not_cancelled(attempt: &PrepareAttempt) -> Result<(), AppError> {
     }
 }
 
+struct PrepareContext<'a> {
+    state: &'a AppState,
+    components: &'a ComponentManager,
+    catalog: &'a AssetCatalogService,
+    reporter: &'a PrepareReporter<'a>,
+    attempt: &'a PrepareAttempt,
+}
+
 async fn run_preparation(
     app: AppHandle,
     job_id: String,
-    run: impl FnOnce(
-            &AppState,
-            &PrepareReporter,
-            &PrepareAttempt,
-        ) -> Result<OpenedProjectPayload, AppError>
-        + Send
-        + 'static,
+    run: impl FnOnce(PrepareContext<'_>) -> Result<OpenedProjectPayload, AppError> + Send + 'static,
 ) -> Result<OpenedProjectPayload, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
         let lease = state.prepare.start(&job_id)?;
-        let reporter = PrepareReporter::new(app.clone(), job_id.clone());
-        let result = run(state.inner(), &reporter, &lease.attempt);
+        let sink = |event| {
+            let _ = app.emit(PREPARE_EVENT, event);
+        };
+        let result = run(PrepareContext {
+            state: state.inner(),
+            components: &app.state::<ComponentManager>(),
+            catalog: &app.state::<AssetCatalogService>(),
+            reporter: &PrepareReporter {
+                sink: &sink,
+                job_id: &job_id,
+            },
+            attempt: &lease.attempt,
+        });
         ensure_not_cancelled(&lease.attempt)?;
         result
     })
@@ -832,8 +838,8 @@ pub async fn project_create(
     job_id: String,
     request: CreateProjectArgs,
 ) -> Result<OpenedProjectPayload, AppError> {
-    run_preparation(app, job_id, move |state, reporter, attempt| {
-        create_project_inner(state, reporter, attempt, request)
+    run_preparation(app, job_id, move |context| {
+        create_project_inner(context, request)
     })
     .await
 }
@@ -989,11 +995,16 @@ fn ready_component_pin(
 }
 
 fn create_project_inner(
-    state: &AppState,
-    reporter: &PrepareReporter,
-    attempt: &PrepareAttempt,
+    context: PrepareContext<'_>,
     args: CreateProjectArgs,
 ) -> Result<OpenedProjectPayload, AppError> {
+    let PrepareContext {
+        state,
+        components: manager,
+        catalog,
+        reporter,
+        attempt,
+    } = context;
     ensure_not_cancelled(attempt)?;
     reporter.running("metadata", "Verifying project component identities");
     let profile = match args.profile_id.as_deref() {
@@ -1006,12 +1017,7 @@ fn create_project_inner(
         None => default_profile(),
     };
     let target = project_store::ProjectTarget::from_profile(&profile);
-    let components = resolve_project_components(
-        &reporter.app.state::<ComponentManager>(),
-        &reporter.app.state::<AssetCatalogService>(),
-        &target,
-        None,
-    )?;
+    let components = resolve_project_components(manager, catalog, &target, None)?;
     ensure_not_cancelled(attempt)?;
     reporter.running(
         "metadata",
@@ -1455,25 +1461,59 @@ pub fn project_defaults(state: State<'_, AppState>) -> Result<ProjectDefaults, A
     })
 }
 
+/// Exact version reviewed by the user, not an instruction to retarget the world.
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfirmedImportVersion {
+    minecraft_version: String,
+    data_version: i32,
+}
+
+impl ConfirmedImportVersion {
+    fn ensure_matches(
+        &self,
+        name: Option<&str>,
+        data_version: Option<i32>,
+    ) -> Result<(), AppError> {
+        if name == Some(self.minecraft_version.as_str()) && data_version == Some(self.data_version)
+        {
+            return Ok(());
+        }
+        let found = name.unwrap_or("unknown");
+        let found_data = data_version.map_or_else(|| "unknown".to_owned(), |v| v.to_string());
+        Err(AppError::new(
+            ErrorCode::UnsupportedVersion,
+            format!(
+                "the import version does not match the confirmed Minecraft {} (DataVersion {}): \
+                 found {found} (DataVersion {found_data}). Go back to Source, analyze the world \
+                 again and confirm a supported version",
+                self.minecraft_version, self.data_version
+            ),
+        ))
+    }
+}
+
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn project_import_world(
     app: AppHandle,
     job_id: String,
     name: String,
     source: String,
     strategy: world_io::ImportStrategy,
+    confirmed_version: ConfirmedImportVersion,
     editor_state: project_store::EditorState,
     folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    run_preparation(app, job_id, move |state, reporter, attempt| {
+    run_preparation(app, job_id, move |context| {
         if strategy != world_io::ImportStrategy::ImportAsIs {
             return Err(AppError::new(
                 ErrorCode::UnsupportedVersion,
                 "conversion is not available for this source; choose Import as-is",
             ));
         }
-        ensure_not_cancelled(attempt)?;
-        reporter.running(
+        ensure_not_cancelled(context.attempt)?;
+        context.reporter.running(
             "source",
             "Opening the world folder or extracting the archive",
         );
@@ -1481,13 +1521,12 @@ pub async fn project_import_world(
         let prepared =
             world_io::prepare_world_source(source, staging.path()).map_err(world_source_error)?;
         import_world_project(
-            state,
-            reporter,
-            attempt,
+            context,
             ImportWorldRequest {
                 name,
                 world_root: prepared.root(),
                 analysis: None,
+                confirmed_version: Some(confirmed_version),
                 editor_state,
                 vanilla: None,
                 folder,
@@ -1503,44 +1542,35 @@ pub async fn project_import_world(
 #[tauri::command]
 pub async fn project_import_generated_world(
     app: AppHandle,
-    components: State<'_, ComponentManager>,
     job_id: String,
     name: String,
     run_id: String,
     editor_state: project_store::EditorState,
     folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    let components = components.inner().clone();
-    run_preparation(app, job_id, move |state, reporter, attempt| {
-        ensure_not_cancelled(attempt)?;
-        reporter.running("source", "Verifying the completed official-server run");
-        let generated = components
+    run_preparation(app, job_id, move |context| {
+        ensure_not_cancelled(context.attempt)?;
+        context
+            .reporter
+            .running("source", "Verifying the completed official-server run");
+        let generated = context
+            .components
             .server()
             .generated_world(&run_id)
             .map_err(server_error)?;
-        import_generated_inner(
-            state,
-            reporter,
-            attempt,
-            generated,
-            name,
-            editor_state,
-            folder,
-        )
+        import_generated_inner(context, generated, name, editor_state, folder)
     })
     .await
 }
 
 fn import_generated_inner(
-    state: &AppState,
-    reporter: &PrepareReporter,
-    attempt: &PrepareAttempt,
+    context: PrepareContext<'_>,
     generated: GeneratedWorld,
     name: String,
     editor_state: project_store::EditorState,
     folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    ensure_not_cancelled(attempt)?;
+    ensure_not_cancelled(context.attempt)?;
     let generated_version = world_io::analyze_java_world(&generated.world_dir);
     let minecraft_version = generated_version
         .version_name
@@ -1591,13 +1621,12 @@ fn import_generated_inner(
         name
     };
     import_world_project(
-        state,
-        reporter,
-        attempt,
+        context,
         ImportWorldRequest {
             name,
             world_root: Path::new(&generated.world_dir),
             analysis: Some(generated_version),
+            confirmed_version: None,
             editor_state,
             vanilla: Some(provenance),
             folder,
@@ -1609,21 +1638,28 @@ struct ImportWorldRequest<'a> {
     name: String,
     world_root: &'a Path,
     analysis: Option<JavaWorldAnalysis>,
+    confirmed_version: Option<ConfirmedImportVersion>,
     editor_state: project_store::EditorState,
     vanilla: Option<project_store::VanillaProvenance>,
     folder: Option<String>,
 }
 
 fn import_world_project(
-    state: &AppState,
-    reporter: &PrepareReporter,
-    attempt: &PrepareAttempt,
+    context: PrepareContext<'_>,
     request: ImportWorldRequest<'_>,
 ) -> Result<OpenedProjectPayload, AppError> {
+    let PrepareContext {
+        state,
+        components: manager,
+        catalog,
+        reporter,
+        attempt,
+    } = context;
     let ImportWorldRequest {
         name,
         world_root,
         analysis,
+        confirmed_version,
         mut editor_state,
         vanilla,
         folder,
@@ -1649,6 +1685,9 @@ fn import_world_project(
             ),
         ));
     }
+    if let Some(confirmed) = &confirmed_version {
+        confirmed.ensure_matches(analysis.version_name.as_deref(), analysis.data_version)?;
+    }
     reporter.done(
         "source",
         format!(
@@ -1660,6 +1699,12 @@ fn import_world_project(
     reporter.running("world", "Reading editable blocks and biomes");
     let (mut world, _load_report) =
         world_io::load_java_world(world_root).map_err(world_import_error)?;
+    if let Some(confirmed) = &confirmed_version {
+        confirmed.ensure_matches(
+            Some(world.version().minecraft_version()),
+            Some(world.version().data_version()),
+        )?;
+    }
     world.bump_revision();
     if !world
         .dimensions()
@@ -1679,12 +1724,7 @@ fn import_world_project(
     reporter.running("metadata", "Verifying project component identities");
     let target =
         project_store::ProjectTarget::for_world_version(world.version()).map_err(project_error)?;
-    let components = resolve_project_components(
-        &reporter.app.state::<ComponentManager>(),
-        &reporter.app.state::<AssetCatalogService>(),
-        &target,
-        vanilla.as_ref(),
-    )?;
+    let components = resolve_project_components(manager, catalog, &target, vanilla.as_ref())?;
     ensure_not_cancelled(attempt)?;
     reporter.running("metadata", "Creating the project manifest and snapshot");
     let mut projects = state
@@ -1743,6 +1783,13 @@ fn import_world_project(
             "verify",
             "Recording and verifying the immutable source copy",
         );
+        // A live folder can change even after decoding. Never publish a source copy
+        // whose level.dat disagrees with the version of the editable snapshot.
+        if let Some(confirmed) = &confirmed_version {
+            let level = world_io::LevelDat::read(source_world.join("level.dat"))
+                .map_err(|error| world_import_error(error.into()))?;
+            confirmed.ensure_matches(level.version_name.as_deref(), Some(level.data_version))?;
+        }
         let files = copy
             .files
             .iter()
@@ -4925,6 +4972,225 @@ mod component_command_tests {
             root.join("server.json"),
             root.join("servers"),
         )
+    }
+
+    fn import_source(root: &Path, archive: bool, name: &str, data_version: i32) -> PathBuf {
+        use world_io::{NbtFile, NbtValue as Nbt};
+
+        let level = world_io::nbt::write_gzip(&NbtFile {
+            root_name: String::new(),
+            root: Nbt::compound([(
+                "Data",
+                Nbt::compound([
+                    ("DataVersion", Nbt::Int(data_version)),
+                    (
+                        "Version",
+                        Nbt::compound([
+                            ("Name", Nbt::String(name.to_owned())),
+                            ("Id", Nbt::Int(data_version)),
+                        ]),
+                    ),
+                ]),
+            )]),
+        })
+        .unwrap();
+        if archive {
+            std::fs::create_dir_all(root).unwrap();
+            let path = root.join("world.zip");
+            let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+            let options = zip::write::SimpleFileOptions::default();
+            zip.add_directory("world/region/", options).unwrap();
+            zip.start_file("world/level.dat", options).unwrap();
+            zip.write_all(&level).unwrap();
+            zip.finish().unwrap();
+            path
+        } else {
+            let path = root.join("world");
+            std::fs::create_dir_all(path.join("region")).unwrap();
+            std::fs::write(path.join("level.dat"), level).unwrap();
+            path
+        }
+    }
+
+    fn prepare_import_for_test(
+        root: &Path,
+        source: &Path,
+        confirmed_version: ConfirmedImportVersion,
+        on_progress: impl Fn(PrepareProgress),
+    ) -> (AppState, Result<OpenedProjectPayload, AppError>) {
+        let manager = component_test_manager(root);
+        manager
+            .use_placeholder_assets(&ComponentTarget::from_profile(&default_profile()))
+            .unwrap();
+        let state = AppState::new(root.join("projects"));
+        let staging = ImportStaging::new();
+        let prepared = world_io::prepare_world_source(source, staging.path()).unwrap();
+        let lease = state.prepare.start("test-import").unwrap();
+        let result = import_world_project(
+            PrepareContext {
+                state: &state,
+                components: &manager,
+                catalog: &AssetCatalogService::new(),
+                reporter: &PrepareReporter {
+                    sink: &on_progress,
+                    job_id: "test-import",
+                },
+                attempt: &lease.attempt,
+            },
+            ImportWorldRequest {
+                name: "Imported".to_owned(),
+                world_root: prepared.root(),
+                analysis: None,
+                confirmed_version: Some(confirmed_version),
+                editor_state: project_store::EditorState::default(),
+                vanilla: None,
+                folder: Some("Imported.furybuilder".to_owned()),
+            },
+        );
+        drop(lease);
+        (state, result)
+    }
+
+    #[test]
+    fn folder_and_archive_import_pin_the_confirmed_profile_in_the_manifest() {
+        let profile = default_profile();
+        let expected = project_store::ProjectTarget::from_profile(&profile);
+        for archive in [false, true] {
+            let root = ImportStaging::new();
+            let source = import_source(
+                root.path(),
+                archive,
+                profile.minecraft_version.as_str(),
+                profile.data_version,
+            );
+            let preview = world_import_preview(source.display().to_string());
+            assert!(preview.supported, "{:?}", preview.blockers);
+            let (state, result) = prepare_import_for_test(
+                root.path(),
+                &source,
+                ConfirmedImportVersion {
+                    minecraft_version: preview.version_name.unwrap(),
+                    data_version: preview.data_version.unwrap(),
+                },
+                |_| {},
+            );
+            let payload = result.expect("import confirmed world");
+            assert_eq!(payload.detail.target, expected);
+            let projects = state.projects.lock().unwrap();
+            let (reopened, world, _) = projects.store.open(&payload.detail.summary.folder).unwrap();
+            assert_eq!(reopened.target, expected);
+            assert_eq!(world.version().data_version(), expected.data_version);
+            let level = world_io::LevelDat::read(
+                projects
+                    .store
+                    .root()
+                    .join(&reopened.summary.folder)
+                    .join(project_store::SOURCE_DIR)
+                    .join("world/level.dat"),
+            )
+            .unwrap();
+            assert_eq!(
+                level.version_name.as_deref(),
+                Some(expected.minecraft_version.as_str())
+            );
+            assert_eq!(level.data_version, expected.data_version);
+        }
+    }
+
+    #[test]
+    fn import_rejects_replaced_sources_and_unverified_version_pairs_without_publishing() {
+        let profile = default_profile();
+        for archive in [false, true] {
+            let root = ImportStaging::new();
+            let source = import_source(
+                root.path(),
+                archive,
+                profile.minecraft_version.as_str(),
+                profile.data_version,
+            );
+            let preview = world_import_preview(source.display().to_string());
+            assert!(preview.supported, "{:?}", preview.blockers);
+            let other_name = "other-version";
+            let unsupported_data_version = i32::MAX;
+            for (found_name, found_data, confirmed_name, confirmed_data, message) in [
+                (
+                    profile.minecraft_version.as_str(),
+                    profile.data_version,
+                    profile.minecraft_version.as_str(),
+                    unsupported_data_version,
+                    "does not match the confirmed",
+                ),
+                (
+                    other_name,
+                    profile.data_version,
+                    preview.version_name.as_deref().unwrap(),
+                    preview.data_version.unwrap(),
+                    "does not match the confirmed",
+                ),
+                (
+                    other_name,
+                    profile.data_version,
+                    other_name,
+                    profile.data_version,
+                    "does not match the confirmed",
+                ),
+                (
+                    other_name,
+                    unsupported_data_version,
+                    other_name,
+                    unsupported_data_version,
+                    "is not supported",
+                ),
+            ] {
+                import_source(root.path(), archive, found_name, found_data);
+                let (state, result) = prepare_import_for_test(
+                    root.path(),
+                    &source,
+                    ConfirmedImportVersion {
+                        minecraft_version: confirmed_name.to_owned(),
+                        data_version: confirmed_data,
+                    },
+                    |_| {},
+                );
+                let error = result.expect_err("reject unverified import");
+                assert_eq!(error.code, ErrorCode::UnsupportedVersion);
+                assert!(error.message.contains(message), "{}", error.message);
+                let projects = state.projects.lock().unwrap();
+                assert!(projects.current.is_none());
+                assert!(projects.store.list().projects.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn import_cleans_up_if_the_folder_version_changes_after_decoding() {
+        let profile = default_profile();
+        let root = ImportStaging::new();
+        let source = import_source(
+            root.path(),
+            false,
+            profile.minecraft_version.as_str(),
+            profile.data_version,
+        );
+        let (state, result) = prepare_import_for_test(
+            root.path(),
+            &source,
+            ConfirmedImportVersion {
+                minecraft_version: profile.minecraft_version.to_string(),
+                data_version: profile.data_version,
+            },
+            |event| {
+                if event.stage == "world" && event.state == "done" {
+                    import_source(root.path(), false, "other-version", profile.data_version);
+                }
+            },
+        );
+        let error = result.expect_err("the immutable copy must match the confirmed version");
+        assert_eq!(error.code, ErrorCode::UnsupportedVersion);
+        assert!(error.message.contains("found other-version"));
+        let projects = state.projects.lock().unwrap();
+        assert!(projects.current.is_none());
+        assert!(!projects.store.root().join("Imported.furybuilder").exists());
     }
 
     #[test]

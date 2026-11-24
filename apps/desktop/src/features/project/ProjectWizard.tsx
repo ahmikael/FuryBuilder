@@ -42,6 +42,7 @@ import { fetchVersionCatalog } from "@/lib/version-api";
 import {
   CREATION_MODES,
   formatBytes,
+  importVersionForSource,
   type CreationMode,
   type FlatDefaults,
   type FlatPreset,
@@ -150,7 +151,9 @@ function versionErrors({
   if (!catalog) return ["Load the version catalog before continuing."];
   if (mode === "import") {
     if (!analysis) return ["Analyze the world to detect its version."];
-    if (!analysis.versionName) return ["The world does not declare a Minecraft version."];
+    if (!analysis.versionName?.trim() || analysis.dataVersion === null) {
+      return ["The world does not declare a Minecraft version and DataVersion."];
+    }
   }
   if (selected.length === 0) return ["Choose a Minecraft version."];
   const entry = catalog.versions.find((version) => version.id === selected);
@@ -158,6 +161,11 @@ function versionErrors({
   if (!entry.profile) {
     return [
       `This build has no verified profile for Minecraft ${selected}. Choose a supported version.`,
+    ];
+  }
+  if (mode === "import" && entry.profile.dataVersion !== analysis?.dataVersion) {
+    return [
+      `The source DataVersion does not match the verified profile for Minecraft ${selected}.`,
     ];
   }
   return [];
@@ -804,6 +812,7 @@ export function ProjectWizard() {
   const projectsRoot = defaults?.projectsRoot ?? null;
   const destination = projectFolderName(projectFolder, folderSuffix) || undefined;
   const effectiveVersion = mode === "import" ? (analysis?.versionName ?? "") : selectedVersion;
+  const confirmedImportVersion = importVersionForSource(analysis, importSource);
   const selectedProfile =
     catalog?.versions.find((version) => version.id === effectiveVersion)?.profile ?? null;
   const componentTargetKey = selectedProfile ? `${selectedProfile.id}|${mode}` : null;
@@ -877,11 +886,15 @@ export function ProjectWizard() {
       setAttempted(true);
       return;
     }
-    setSubmitted(true);
     if (mode === "import") {
-      await useProjectStore.getState().importWorld(name, importSource, importStrategy, destination);
+      if (!confirmedImportVersion) return;
+      setSubmitted(true);
+      await useProjectStore
+        .getState()
+        .importWorld(name, importSource, importStrategy, confirmedImportVersion, destination);
       return;
     }
+    setSubmitted(true);
     const options: CreateProjectOptions = {};
     if (selectedProfile) options.profileId = selectedProfile.id;
     if (mode === "flat" && flatPreset) options.flat = flatPreset;
@@ -931,19 +944,21 @@ export function ProjectWizard() {
     setGeneratedRequest(null);
   };
 
-  const changeImportSource = (value: string): void => {
-    setImportSource(value);
-    setImportStrategy("importAsIs");
+  const resetImportReview = (): void => {
+    setFurthestStep(activeStep);
     setComponentStep(null);
     useProjectStore.getState().clearWorldAnalysis();
   };
 
+  const changeImportSource = (value: string): void => {
+    setImportSource(value);
+    setImportStrategy("importAsIs");
+    resetImportReview();
+  };
+
   const changeImportSourceKind = (value: ImportSourceKind): void => {
     setImportSourceKind(value);
-    setImportSource("");
-    setImportStrategy("importAsIs");
-    setComponentStep(null);
-    useProjectStore.getState().clearWorldAnalysis();
+    changeImportSource("");
   };
 
   const browseImportSource = async (): Promise<void> => {
@@ -1080,7 +1095,10 @@ export function ProjectWizard() {
                     onSourceKind={changeImportSourceKind}
                     onSource={changeImportSource}
                     onBrowse={() => void browseImportSource()}
-                    onAnalyze={() => void useProjectStore.getState().analyzeWorld(importSource)}
+                    onAnalyze={() => {
+                      resetImportReview();
+                      void useProjectStore.getState().analyzeWorld(importSource);
+                    }}
                     onStrategy={setImportStrategy}
                   />
                 ) : mode === "vanilla" ? (

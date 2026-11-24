@@ -66,7 +66,10 @@ legacy `.schematic` are not implemented. `.mcstructure` is Bedrock and out of sc
 ## Project manifest (`project.json`, schema 2)
 
 Desktop world creation stores the verified target profile and component identities in the
-first manifest. An installed Java runtime is recorded by mode, logical id and executable
+first manifest. For an as-is import, that target must match the Minecraft version and DataVersion
+confirmed after previewing the source. The editable snapshot and the immutable copy of `level.dat`
+must agree with it; unsupported or inconsistent version metadata is refused without opening a project.
+An installed Java runtime is recorded by mode, logical id and executable
 SHA-256; it is optional for editing-only projects. The client is recorded by mode, client
 JAR SHA-1 and the catalog id and SHA-256 derived from that exact JAR. An explicit
 placeholder records only its mode. Vanilla projects also record the server version and

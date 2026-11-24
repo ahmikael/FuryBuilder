@@ -2,6 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invokeCommand } from "@/lib/ipc";
 import type {
   CheckpointMeta,
+  ConfirmedImportVersion,
   CreationMode,
   EditorState,
   FlatPreset,
@@ -127,6 +128,7 @@ export function importJavaWorld(
   name: string,
   source: string,
   strategy: ImportStrategy,
+  confirmedVersion: ConfirmedImportVersion,
   editorState: EditorState,
   folder?: string,
 ): Promise<OpenedProjectPayload> {
@@ -135,6 +137,7 @@ export function importJavaWorld(
     name,
     source,
     strategy,
+    confirmedVersion,
     editorState,
     folder: folder ?? null,
   });
