@@ -270,12 +270,13 @@ semantic theme variables only.
 
 ## Settings
 
-Settings is a five-tab dialog: `Appearance` (theme and UI scale), `Components` (shared Java
-runtime, Minecraft assets, official server JAR and Vanilla readiness), `Updates`, `Diagnostics`,
-and `Advanced` (backend status). Project creation and first-time provisioning stay in the
-full-screen wizard; the Settings tabs describe and maintain the shared local state for the
-whole application. The dialog is composed from the stock shadcn `Dialog`, `Tabs`, `Card`,
-`Slider`, and `ToggleGroup` primitives with semantic theme variables only.
+Settings is a five-tab dialog: `Appearance` (theme and UI scale), `Components` (a read-only
+inventory of FuryBuilder-owned Java runtimes, client JARs and server JARs with versions, sizes
+and paths), `Updates`, `Diagnostics`, and `Advanced` (backend status). Project creation owns
+first-time provisioning: downloads, manual paths, placeholder textures, EULA acceptance and
+Vanilla generation stay in the full-screen wizard. Settings never starts a component download,
+accepts an EULA or generates a world. The dialog is composed from the stock shadcn `Dialog`, `Tabs`,
+`Card`, `Slider`, and `ToggleGroup` primitives with semantic theme variables only.
 
 ## Security boundaries
 

@@ -252,30 +252,27 @@ data rather than recalculated.
 This is the only mode that claims to use the original Minecraft generator, and it has real
 prerequisites.
 
-1. Open **Settings → Components** and check the read-only **Vanilla World** readiness card.
-   It lists Java, server JAR and EULA blockers without downloading anything.
-2. If needed, use the explicit buttons to download the managed Java 21 runtime and the
-   official 1.21.4 server JAR. Both downloads show source, size and verification; nothing is
-   installed globally.
-3. Read and accept the Minecraft EULA for that exact server JAR and Minecraft version.
-   FuryBuilder never accepts it for you, and another JAR or version needs its own acceptance.
-4. Open `Project → Create → Vanilla World`. The wizard shows the verified generation target;
-   a project that selects another version is refused instead of producing a mixed-version
-   world. Its **Components** step repeats the Java and server readiness for this exact version
-   and offers the same managed downloads and manual paths.
-5. In the Source step choose a seed, preset, radius/center, structures, time limit and optional
+1. Open **New project** (or `Project → Create`) and choose `Vanilla World`. The wizard shows
+   the verified generation target; a project that selects another version is refused instead
+   of producing a mixed-version world.
+2. Continue to **Version** and confirm the exact Minecraft version.
+3. On **Components**, prepare the client assets, Java runtime and official server JAR for that
+   version. Each card offers a managed download, an already-installed component or a manual
+   file that is validated in place. Downloads show source, size and checksum; nothing is
+   installed globally and nothing starts until the step is ready.
+4. In the Source step choose a seed, preset, radius/center, structures, time limit and optional
    local data packs. Before anything starts, the step shows the expected chunk count, a
    conservative world-size estimate, the free space on the run volume and the bounded time
    limit. Generation is disabled when the estimate does not fit; the backend repeats the same
    disk preflight before it creates a run directory.
-6. Read and accept the Minecraft EULA for that exact server JAR and Minecraft version in the
+5. Read and accept the Minecraft EULA for that exact server JAR and Minecraft version in the
    same step, then explicitly confirm the run. FuryBuilder never accepts the EULA for you, and
    another JAR or version needs its own acceptance.
-7. Wait for the isolated server to generate the requested area. It runs without a game
+6. Wait for the isolated server to generate the requested area. It runs without a game
    window, listens on loopback only and is terminated on cancel, failure or the time limit.
-8. Click **Open as project** on the completed run. The generated folder becomes an immutable
+7. Click **Open as project** on the completed run. The generated folder becomes an immutable
    source copy with its seed, preset, data packs and Java/server identity recorded.
-9. For a vanilla project, the project dialog can compare the saved generated base with the
+8. For a vanilla project, the project dialog can compare the saved generated base with the
    original generator's reference chunks. The check is bounded, applies only to an untouched
    revision-1 base and reports differences with coordinates. It is not a general guarantee
    that every edited configuration reproduces Minecraft.
@@ -285,16 +282,14 @@ prerequisites.
 ## 11. Settings essentials
 
 - **Appearance** — theme (dark/light/system) and UI scale.
-- **Backend** — application and target version information.
-- **Minecraft assets** — automatic launcher discovery, a manual `.minecraft` folder,
-  `versions/<id>` folder, `client.jar` or resource pack, an explicit placeholder mode, the
-  ordered resource-pack stack, internal version/DataVersion validation with declared SHA-1
-  verification when launcher metadata is present, and a button that clears only the derived
-  asset cache.
-- **Java & World Generation** — readiness, Java runtime discovery/manual selection, the
-  official server JAR, and explicit downloads.
+- **Components** — a read-only inventory of FuryBuilder-owned Java runtimes, client JARs and
+  official server JARs, with version, size and cache path for each artifact. Downloads,
+  manual paths and placeholder choices are made in the project wizard, not here; Settings
+  never provisions a project.
+- **Updates** — manual check and verified install of a newer FuryBuilder build.
 - **Diagnostics** — a bounded, path-redacted JSON Lines log with open-folder, refresh and
   clear actions. Clearing affects only `furybuilder*.log`.
+- **Advanced** — backend status, application name and version.
 
 Placeholder textures are an explicit mode, not an error and not a hidden fallback. The
 viewport labels them, the palette stays on curated quick picks instead of the version catalog,
@@ -307,8 +302,8 @@ and block data is never changed. Selecting a client source replaces placeholder 
 | Editing and saving are disabled         | You are in browser preview (`pnpm dev`). Start `pnpm tauri:dev` and open a project.               |
 | “No project open”                       | Create or open a project from **Project**.                                                        |
 | `Core offline`                          | The Rust backend did not start; check the terminal running `pnpm tauri:dev`.                      |
-| Textures are checkerboards              | Configure a verified 1.21.4 source in **Settings → Minecraft assets**.                            |
-| Vanilla World is blocked                | The readiness card names the missing Java, server JAR or EULA step.                               |
+| Textures are checkerboards              | Choose a verified client source in the project wizard's **Components** step.                     |
+| Vanilla World is blocked                | The wizard's **Components** or **Source** step names the missing Java, server JAR or EULA step.    |
 | Import is rejected                      | Only classic 1.21.4 world folders or `.zip` archives containing `level.dat` are supported.         |
 | Structure export is blocked             | The `.nbt` adapter refuses entities, block entities or unknown tags instead of dropping them.     |
 | A large paste only shows a pink preview | That is the staged path for pastes of 65,536+ non-air blocks. Press `Ctrl+V` again or confirm it. |

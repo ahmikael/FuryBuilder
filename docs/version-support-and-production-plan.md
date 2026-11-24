@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components, Review, Preparing, запись компонентов в v2 manifest, подтверждение версии при импорте, Project Manager только для открытого проекта, UI-тесты всех веток wizard и Settings на пять вкладок закрыты; следующий шаг — убрать дублирующие setup-блоки из Settings.
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components, Review, Preparing, запись компонентов в v2 manifest, подтверждение версии при импорте, Project Manager только для открытого проекта, UI-тесты всех веток wizard, Settings на пять вкладок и read-only inventory компонентов без setup-дублей закрыты; следующий шаг — действия inventory (verify/remove/open folder).
 > Дата: 2026-11-22; обновлено 2026-11-24 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-53` — удалить `Java & World Generation`, `DependencyReadiness`, дубли server/assets setup. Статус: P0 в работе.
+**Текущий фокус:** `P0-54` — Components inventory: размер, путь, verify, remove, open folder. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-54`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-55`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1506,7 +1506,7 @@ UI:
 #### F. Settings без дублей
 
 - [x] `P0-52` Settings: Appearance / Components / Updates / Diagnostics / Advanced.
-- [ ] `P0-53` Удалить `Java & World Generation`, `DependencyReadiness`, дубли server/assets setup.
+- [x] `P0-53` Удалить `Java & World Generation`, `DependencyReadiness`, дубли server/assets setup.
 - [ ] `P0-54` Components inventory: размер, путь, verify, remove, open folder.
 - [ ] `P0-55` Общие `ComponentCard`/`Picker`/`Status` для wizard и Settings.
 - [ ] `P0-56` VanillaWorldWizard больше не спрашивает Java/server отдельно — использует шаг Components.
@@ -1690,6 +1690,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-24 | Settings inventory | Из Settings удалены `Java & World Generation`, `DependencyReadiness`, `ServerGenerationPanel` и setup-блоки assets/Java/server: настройки больше не скачивают, не выбирают manual/placeholder, не принимают EULA и не запускают генерацию. Вкладка Components стала read-only inventory управляемых Java runtimes, client JAR и server JAR с версией, размером и путём; список обновляется по `furybuilder-component-changed`. Старые section-файлы и их тесты удалены, добавлен `ComponentInventorySection.test.tsx`, docs обновлены; shadcn: штатные `Card`, `Badge`, `Button`, `Alert`, стили не менялись | см. `git log` | 691 Rust tests, 349 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit, browser QA вкладки Components без console errors |
 | 2026-11-24 | Settings tabs | `SettingsDialog` стал пятью вкладками `Appearance` / `Components` / `Updates` / `Diagnostics` / `Advanced`: тема и UI scale остались в Appearance, Java/assets/server и Vanilla readiness сгруппированы в Components, backend переехал в Advanced; добавлен `SettingsDialog.test.tsx` на состав вкладок, переключение и закрытие, обновлены App test и docs; shadcn: штатные `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`, стили не менялись | см. `git log` | 691 Rust tests, 373 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit, browser QA пяти вкладок без console errors |
 | 2026-11-24 | UI-тесты wizard | Добавлен `ProjectWizard.test.tsx`: auto download client assets, manual `.minecraft`, explicit placeholder, ошибка/retry проверки компонентов и ошибка/retry каталога версий; `ProjectComponentsStep.test.tsx` расширен на ошибку/retry установки, ошибку/retry preview, ошибку/retry сборки каталога и прогресс/cancel загрузки. UI и shadcn-примитивы не менялись | см. `git log` | 691 Rust tests, 371 TS tests (1 skipped), clippy, fmt, typecheck/lint/format |
 | 2026-11-24 | Project manager без проекта | `ProjectManager` больше не рендерит dialog без открытого проекта: Welcome остаётся хабом, полный экран — только wizard; закрытие проекта из dialog закрывает и сам dialog; кнопка `Project` в toolbar disabled с причиной, команда project manager отсутствует в command palette, а browser preview объясняет необходимость desktop core вместо открытия списка. Тесты: отсутствие dialog без проекта и в full-screen wizard, закрытие dialog вместе с проектом, disabled/enabled Project, browser fallback; docs обновлены; shadcn: штатные `Dialog`/`Tabs`/`Empty`, стили не менялись | см. `git log` | 691 Rust tests, 362 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit |

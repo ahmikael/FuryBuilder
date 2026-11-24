@@ -1,24 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SettingsDialog } from "@/features/settings/SettingsDialog";
 import type { BackendState } from "@/hooks/use-backend";
 import { useEditorStore } from "@/state/editor-store";
 
-vi.mock("@/features/settings/MinecraftAssetsSection", () => ({
-  MinecraftAssetsSection: () => <h3>Minecraft assets</h3>,
-}));
-
-vi.mock("@/features/settings/JavaRuntimeSection", () => ({
-  JavaRuntimeSection: () => <h3>Java runtime</h3>,
-}));
-
-vi.mock("@/features/settings/MinecraftServerSection", () => ({
-  MinecraftServerSection: () => <h3>Minecraft server JAR</h3>,
-}));
-
-vi.mock("@/features/settings/DependencyReadiness", () => ({
-  DependencyReadiness: () => <h3>Vanilla readiness</h3>,
+vi.mock("@/features/settings/ComponentInventorySection", () => ({
+  ComponentInventorySection: () => <h3>Installed components</h3>,
 }));
 
 vi.mock("@/features/settings/UpdatesSection", () => ({
@@ -65,11 +53,17 @@ describe("settings dialog", () => {
     expect(screen.getByRole("button", { name: "Dark" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Components" }));
-    expect(screen.getByRole("heading", { name: "Components" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Minecraft assets" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Java runtime" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Minecraft server JAR" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Vanilla readiness" })).toBeInTheDocument();
+    const components = screen.getByRole("tabpanel", { name: "Components" });
+    expect(within(components).getByRole("heading", { name: "Components" })).toBeInTheDocument();
+    expect(
+      within(components).getByRole("heading", { name: "Installed components" }),
+    ).toBeInTheDocument();
+    expect(within(components).queryByRole("button", { name: /download/i })).not.toBeInTheDocument();
+    expect(within(components).queryByRole("button", { name: /choose/i })).not.toBeInTheDocument();
+    expect(
+      within(components).queryByRole("button", { name: /placeholder/i }),
+    ).not.toBeInTheDocument();
+    expect(within(components).queryByText(/Vanilla World readiness/i)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Updates" }));
     expect(screen.getByRole("heading", { name: "Updates" })).toBeInTheDocument();

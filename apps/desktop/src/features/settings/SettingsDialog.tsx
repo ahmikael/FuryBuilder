@@ -13,10 +13,7 @@ import {
 import { Slider } from "@/components/ui/slider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { MinecraftAssetsSection } from "@/features/settings/MinecraftAssetsSection";
-import { JavaRuntimeSection } from "@/features/settings/JavaRuntimeSection";
-import { MinecraftServerSection } from "@/features/settings/MinecraftServerSection";
-import { DependencyReadiness } from "@/features/settings/DependencyReadiness";
+import { ComponentInventorySection } from "@/features/settings/ComponentInventorySection";
 import { DiagnosticsSection } from "@/features/settings/DiagnosticsSection";
 import { UpdatesSection } from "@/features/settings/UpdatesSection";
 import type { BackendState } from "@/hooks/use-backend";
@@ -116,14 +113,11 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
             <section className="space-y-1.5">
               <h3 className="text-base font-semibold">Components</h3>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                Shared Java runtimes, client assets and official server JARs. Every section reports
-                what is installed for this machine and verifies it locally.
+                The shared local component cache. Downloads, manual paths and placeholder textures
+                are chosen in the project wizard; this tab only lists what is installed.
               </p>
             </section>
-            <MinecraftAssetsSection />
-            <JavaRuntimeSection />
-            <MinecraftServerSection />
-            <DependencyReadiness />
+            <ComponentInventorySection />
           </TabsContent>
 
           <TabsContent value="updates" className="m-0 pt-4">

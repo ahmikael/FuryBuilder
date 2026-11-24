@@ -250,28 +250,33 @@ the Temurin archive — goes through `crates/download-pipeline`:
 
 ### Minecraft assets
 
-`Settings → Minecraft assets` discovers conventional launcher roots and launcher profiles,
-or accepts a manual `.minecraft` folder, a `versions/<id>` folder, a `client.jar` or a resource
-pack. A 1.21.4 client is accepted after its internal `version.json` and `DataVersion` 4189
-agree. When launcher metadata is present, the declared SHA-1 and size are checked too; a
-declared mismatch is refused, while a correct JAR without metadata is used with a warning.
+The project wizard's **Components** step discovers conventional launcher roots and launcher
+profiles, or accepts a manual `.minecraft` folder, a `versions/<id>` folder, a `client.jar` or
+a resource pack. A 1.21.4 client is accepted after its internal `version.json` and
+`DataVersion` 4189 agree. When launcher metadata is present, the declared SHA-1 and size are
+checked too; a declared mismatch is refused, while a correct JAR without metadata is used with
+a warning.
 
 Configured resource packs are applied in a saved priority order (up to 16). Blockstates,
 parent models and PNG textures are resolved into a cached atlas. A missing asset shows a
-clearly marked checker and never changes block data. Clearing the derived cache is a separate
-explicit action and does not touch projects or user resource packs.
+clearly marked checker and never changes block data. The wizard offers a separate explicit
+action that clears only the derived cache; it does not touch projects or user resource packs.
 
 Placeholder textures are an explicit mode, not a silent fallback. Placeholder mode has no
 client JAR, so no block/item catalog or resource-pack stack is available: the viewport shows
 original FuryBuilder textures and labels them, while the palette stays on the curated quick
 picks. Selecting a client source replaces placeholder mode.
 
+Settings only lists the managed client JARs in its **Components** tab: version, DataVersion,
+size and cache path. It never changes the asset source, the pack stack or placeholder mode.
+
 ### Java and the official server
 
-`Settings → Java & World Generation` is optional for `Empty Project`. It provides:
+The project wizard's **Components** step is where Java and the server JAR are selected. It
+provides:
 
-- a read-only readiness card with Java/JAR/EULA blockers;
-- discovery and manual selection of a Java 21 runtime;
+- Java discovery and manual selection, with newer-than-target allowed and older/32-bit
+  runtimes blocked;
 - an opt-in Adoptium Temurin download into a managed, clearable cache;
 - exact-version `server.jar` resolution through Mojang metadata with SHA-1/size and internal
   `version.json`/DataVersion/Java checks;
@@ -279,9 +284,9 @@ picks. Selecting a client source replaces placeholder mode.
   Minecraft version;
 - manual JAR selection with the same exact-version checks.
 
-The backend accepts any exact server target and never substitutes another version. The
-Settings page and isolated generation still operate on the write-verified baseline until the
-project-aware component UI lands.
+The backend accepts any exact server target and never substitutes another version. Settings
+only lists the managed Java runtimes and server JARs with version, size and cache path; it
+never downloads, selects a manual file, accepts an EULA or starts a server.
 
 Nothing is installed globally, no `PATH` is changed, and no EULA is accepted automatically.
 Each acceptance is stored for the exact server JAR SHA-1 and Minecraft version; another JAR

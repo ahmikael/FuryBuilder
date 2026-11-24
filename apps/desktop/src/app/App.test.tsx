@@ -45,7 +45,9 @@ describe("App", () => {
     expect(useEditorStore.getState().theme).toBe("light");
 
     await user.click(screen.getByRole("tab", { name: "Components" }));
-    expect(await screen.findByRole("heading", { name: "Minecraft assets" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Installed components" }),
+    ).toBeInTheDocument();
   });
 
   it("mounts the editor only after a project is ready", () => {
