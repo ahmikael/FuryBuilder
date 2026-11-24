@@ -49,11 +49,11 @@ impl VersionJson {
     }
 
     /// Parses a version JSON and verifies that it describes the expected id.
-    pub fn from_json_for(json: &str, expected: &VersionId) -> Result<Self, VersionJsonError> {
+    pub fn from_json_for(json: &str, expected: &str) -> Result<Self, VersionJsonError> {
         let version = Self::from_json(json)?;
-        if version.id != *expected {
+        if version.id.as_str() != expected {
             return Err(VersionJsonError::IdMismatch {
-                expected: expected.to_string(),
+                expected: expected.to_owned(),
                 actual: version.id.to_string(),
             });
         }
@@ -326,10 +326,6 @@ mod tests {
       "downloads": {}
     }"#;
 
-    fn version(value: &str) -> VersionId {
-        value.parse().expect("valid version id")
-    }
-
     #[test]
     fn parses_java_and_verified_downloads() {
         let json = VersionJson::from_json(VERSION_JSON).expect("valid version json");
@@ -351,7 +347,7 @@ mod tests {
     #[test]
     fn verifies_the_expected_version_id() {
         let mismatched = VERSION_JSON.replace("\"id\": \"1.21.4\"", "\"id\": \"1.21.5\"");
-        let result = VersionJson::from_json_for(&mismatched, &version("1.21.4"));
+        let result = VersionJson::from_json_for(&mismatched, "1.21.4");
         assert!(matches!(
             result,
             Err(VersionJsonError::IdMismatch { expected, actual })
@@ -374,7 +370,7 @@ mod tests {
     #[test]
     fn offline_mode_refuses_version_json_before_any_request() {
         let entry = ManifestEntry {
-            id: version("1.21.4"),
+            id: "1.21.4".to_owned(),
             version_type: ManifestVersionType::Release,
             url: "https://piston-meta.mojang.com/v1/packages/aaa/1.21.4.json".to_owned(),
             time: "2024-12-03T10:12:57+00:00".to_owned(),
@@ -476,6 +472,6 @@ mod tests {
         .expect("manifest");
         let entry = &manifest.versions[0];
         let parsed = VersionJson::from_json_for(VERSION_JSON, &entry.id).expect("version json");
-        assert_eq!(parsed.id, entry.id);
+        assert_eq!(parsed.id.as_str(), entry.id);
     }
 }

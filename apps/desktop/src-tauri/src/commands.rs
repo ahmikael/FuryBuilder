@@ -658,7 +658,7 @@ fn build_version_catalog_report(catalog: &VersionCatalog) -> VersionCatalogRepor
         .map(|entry| {
             let profile = profiles
                 .iter()
-                .find(|profile| profile.minecraft_version == entry.id)
+                .find(|profile| profile.minecraft_version.as_str() == entry.id)
                 .cloned();
             let version_id = entry.id.to_string();
             let unavailable_reason = profile.is_none().then(|| {

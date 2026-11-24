@@ -220,7 +220,7 @@ mod tests {
 
     fn entry(raw: &str, kind: ManifestVersionType) -> ManifestEntry {
         ManifestEntry {
-            id: raw.parse().expect("version"),
+            id: raw.to_owned(),
             version_type: kind,
             url: format!("https://piston-meta.mojang.com/v1/packages/{raw}.json"),
             time: "2024-12-03T10:12:57+00:00".to_owned(),

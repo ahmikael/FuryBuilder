@@ -169,12 +169,14 @@ impl FromStr for VersionId {
                             .ok_or_else(|| VersionIdError::InvalidFormat(value.to_owned()))?,
                     }
                 } else if let Some(ordinal) = suffix.strip_prefix("pre") {
+                    let ordinal = ordinal.strip_prefix('-').unwrap_or(ordinal);
                     VersionKind::PreRelease {
                         numbers,
                         ordinal: parse_ordinal(ordinal)
                             .ok_or_else(|| VersionIdError::InvalidFormat(value.to_owned()))?,
                     }
                 } else if let Some(ordinal) = suffix.strip_prefix("rc") {
+                    let ordinal = ordinal.strip_prefix('-').unwrap_or(ordinal);
                     VersionKind::ReleaseCandidate {
                         numbers,
                         ordinal: parse_ordinal(ordinal)
@@ -669,9 +671,18 @@ mod tests {
             ReleaseType::PreRelease
         );
         assert_eq!(
+            version("26.4-pre-1").release_type(),
+            ReleaseType::PreRelease
+        );
+        assert_eq!(
             version("1.21.4-rc1").release_type(),
             ReleaseType::ReleaseCandidate
         );
+        assert_eq!(
+            version("26.3-rc-3").release_type(),
+            ReleaseType::ReleaseCandidate
+        );
+        assert_eq!(version("26.4-pre-1").family(), VersionFamily::Split);
         assert_eq!(version("b1.7.3").release_type(), ReleaseType::OldBeta);
         assert_eq!(version("a1.2.6").release_type(), ReleaseType::OldAlpha);
         assert_eq!(version("b1.7.3").family(), VersionFamily::Legacy);
@@ -714,10 +725,11 @@ mod tests {
     fn orders_snapshots_and_pre_releases_before_their_release() {
         let mut versions = [
             "26.1",
-            "26.1-rc1",
+            "26.1-rc-1",
+            "26.1-pre-2",
             "26.1-pre2",
-            "26.1-snapshot-10",
             "26.1-snapshot-3",
+            "26.1-snapshot-10",
         ]
         .map(version)
         .to_vec();
@@ -729,8 +741,9 @@ mod tests {
             [
                 "26.1-snapshot-3",
                 "26.1-snapshot-10",
+                "26.1-pre-2",
                 "26.1-pre2",
-                "26.1-rc1",
+                "26.1-rc-1",
                 "26.1"
             ]
         );

@@ -455,7 +455,7 @@ fn release_from_document(
     entry: &ManifestEntry,
     version_json: &VersionJson,
 ) -> Result<ClientJarReleaseInfo, ClientJarError> {
-    if version_json.id != entry.id {
+    if version_json.id.as_str() != entry.id {
         return Err(ClientJarError::Invalid(format!(
             "version JSON describes {}, not {}",
             version_json.id, entry.id
@@ -1147,7 +1147,7 @@ mod tests {
 
     fn manifest_entry(version: &str) -> ManifestEntry {
         ManifestEntry {
-            id: version.parse().expect("version id"),
+            id: version.to_owned(),
             version_type: ManifestVersionType::Release,
             url: "https://piston-meta.mojang.com/v1/packages/aaa/1.21.4.json".to_owned(),
             time: "2024-12-03T10:12:57+00:00".to_owned(),

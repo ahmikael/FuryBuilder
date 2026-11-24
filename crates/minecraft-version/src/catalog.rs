@@ -14,8 +14,6 @@ use download_pipeline::{Allowlist, DownloadClient, NetworkConfig, PipelineError}
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::VersionId;
-
 /// Official Mojang version manifest used by the launcher and FuryBuilder.
 pub const OFFICIAL_MANIFEST_URL: &str =
     "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
@@ -51,7 +49,7 @@ impl VersionManifest {
         let mut ids = HashSet::new();
         for entry in &self.versions {
             if !ids.insert(entry.id.as_str()) {
-                return Err(CatalogError::DuplicateVersionId(entry.id.to_string()));
+                return Err(CatalogError::DuplicateVersionId(entry.id.clone()));
             }
         }
 
@@ -79,18 +77,27 @@ impl VersionManifest {
 }
 
 /// The newest release and snapshot ids advertised by Mojang.
+///
+/// These stay as raw strings: the official manifest also lists legacy and
+/// special ids that are not valid [`VersionId`] values. A catalog entry only
+/// becomes selectable after its id parses and a verified profile exists.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LatestVersions {
-    pub release: VersionId,
-    pub snapshot: VersionId,
+    pub release: String,
+    pub snapshot: String,
 }
 
 /// One version in the official manifest.
+///
+/// The id is kept verbatim because Mojang publishes legacy and special ids
+/// such as `1.14.2 Pre-Release 4` or `25w14craftmine` that are not valid
+/// [`VersionId`] values. Catalog consumers parse the id when they need a
+/// typed version and otherwise show the entry as unsupported.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManifestEntry {
-    pub id: VersionId,
+    pub id: String,
     #[serde(rename = "type")]
     pub version_type: ManifestVersionType,
     /// Absolute URL of the version JSON; validated against the host allowlist.
@@ -431,6 +438,54 @@ mod tests {
                 .id
                 .as_str(),
             "1.21.4"
+        );
+    }
+
+    #[test]
+    fn keeps_legacy_and_special_manifest_ids_as_opaque_entries() {
+        let manifest = r#"{
+          "latest": { "release": "26.3", "snapshot": "25w14craftmine" },
+          "versions": [
+            {
+              "id": "26.3",
+              "type": "release",
+              "url": "https://piston-meta.mojang.com/v1/packages/aaa/26.3.json",
+              "time": "2026-09-15T11:23:02+00:00",
+              "releaseTime": "2026-09-15T11:23:02+00:00",
+              "sha1": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            {
+              "id": "1.14.2 Pre-Release 4",
+              "type": "snapshot",
+              "url": "https://piston-meta.mojang.com/v1/packages/bbb/1.14.2.json",
+              "time": "2019-05-16T00:00:00+00:00",
+              "releaseTime": "2019-05-16T00:00:00+00:00",
+              "sha1": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            },
+            {
+              "id": "25w14craftmine",
+              "type": "snapshot",
+              "url": "https://piston-meta.mojang.com/v1/packages/ccc/25w14craftmine.json",
+              "time": "2025-04-01T00:00:00+00:00",
+              "releaseTime": "2025-04-01T00:00:00+00:00",
+              "sha1": "cccccccccccccccccccccccccccccccccccccccc"
+            }
+          ]
+        }"#;
+
+        let manifest = VersionManifest::from_json(manifest).expect("opaque ids are accepted");
+        assert_eq!(manifest.latest.snapshot, "25w14craftmine");
+        assert!(manifest
+            .versions
+            .iter()
+            .any(|entry| entry.id == "1.14.2 Pre-Release 4"));
+
+        let catalog =
+            VersionCatalog::from_manifest(manifest, 100, CatalogSource::Network).expect("catalog");
+        assert_eq!(catalog.snapshots().count(), 2);
+        assert_eq!(
+            catalog.latest_snapshot().expect("latest snapshot").id,
+            "25w14craftmine"
         );
     }
 
