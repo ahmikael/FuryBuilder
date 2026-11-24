@@ -4,8 +4,7 @@
  * same tab ids and shortcut labels.
  */
 export const BOTTOM_PANEL_TABS = [
-  { id: "palette", label: "Palette" },
-  { id: "tools", label: "Tools" },
+  { id: "blocks", label: "Blocks" },
   { id: "terrain", label: "Terrain" },
   { id: "heightmap", label: "Heightmap" },
   { id: "biomes", label: "Biomes" },
@@ -15,16 +14,13 @@ export const BOTTOM_PANEL_TABS = [
   { id: "objects", label: "Objects" },
   { id: "parametric", label: "Parametric" },
   { id: "dsl", label: "Build DSL" },
-  { id: "observation", label: "Observation" },
-  { id: "validation", label: "Validation" },
-  { id: "console", label: "Console" },
-  { id: "history", label: "History" },
-  { id: "warnings", label: "Warnings" },
+  { id: "analysis", label: "Analysis" },
+  { id: "activity", label: "Activity" },
 ] as const;
 
 export type BottomPanelTabId = (typeof BOTTOM_PANEL_TABS)[number]["id"];
 
-export const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTabId = "palette";
+export const DEFAULT_BOTTOM_PANEL_TAB: BottomPanelTabId = "blocks";
 
 const BOTTOM_PANEL_TAB_IDS = new Set<string>(BOTTOM_PANEL_TABS.map((tab) => tab.id));
 

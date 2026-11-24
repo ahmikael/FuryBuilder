@@ -16,7 +16,7 @@ const defaultStore = {
   leftPanelOpen: true,
   rightPanelOpen: true,
   bottomPanelOpen: true,
-  bottomPanelTab: "palette" as const,
+  bottomPanelTab: "blocks" as const,
 };
 
 function resetUi() {
@@ -115,18 +115,18 @@ describe("editor UX scenarios", { timeout: 15_000 }, () => {
     useEditorStore.setState({ bottomPanelOpen: false });
     render(<App />);
 
-    expect(screen.queryByRole("tab", { name: /History/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Activity/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Open command palette" }));
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
     await user.type(
       within(dialog).getByRole("combobox", { name: "Search commands" }),
-      "open history",
+      "open activity",
     );
-    await user.click(within(dialog).getByRole("option", { name: /Open History/ }));
+    await user.click(within(dialog).getByRole("option", { name: /Open Activity/ }));
 
-    expect(useEditorStore.getState().bottomPanelTab).toBe("history");
+    expect(useEditorStore.getState().bottomPanelTab).toBe("activity");
     expect(useEditorStore.getState().bottomPanelOpen).toBe(true);
-    expect(screen.getByRole("tab", { name: /History/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /Activity/ })).toHaveAttribute("aria-selected", "true");
   });
 
   it("filters the world tree instead of showing a dead search field", async () => {

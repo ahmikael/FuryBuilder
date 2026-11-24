@@ -101,13 +101,13 @@ files while the app is running.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│ FuryBuilder  Project  View  Tools  AI / MCP  Export   …  Save  ⚙     │
+│ FuryBuilder  Project  View  AI / MCP    project · saved   Save  Search  ⚙ │
 ├──────────────┬───────────────────────────────────┬───────────────────┤
 │ World panel  │          3D viewport              │ Inspector         │
 │ dimensions   │  selection / ghost / grid         │ block + selection │
 │ filter       │                                   │ project + paste   │
 ├──────────────┴───────────────────────────────────┴───────────────────┤
-│ Palette | Tools | Terrain | … | History | Warnings                   │
+│ Blocks | Terrain | Heightmap | … | Analysis | Activity                   │
 ├──────────────────────────────────────────────────────────────────────┤
 │ Core | project | dimension | job | rev | chunks | blocks | fps | DV  │
 └──────────────────────────────────────────────────────────────────────┘
@@ -118,19 +118,19 @@ files while the app is running.
   because the welcome screen and full-screen wizard own opening and creation. `View` toggles
   panels. `AI / MCP` sets agent access. Undo/redo, save, the project-state chip, the command
   palette and Settings are on the right. The top bar does not repeat the active palette block:
-  the current block lives in the Inspector and palette. Core status lives only in the status
-  bar. `Tools` and `Export` are placeholders; their real actions live in the viewport toolbar,
-  bottom panel and Project dialog.
+  the current block lives in the Inspector and Blocks tab. Core status lives only in the status
+  bar. Save lives in the toolbar chip; the viewport performance panel reports rendering metrics
+  and the last operation only.
 - **World panel.** Switch the displayed dimension and filter the tree. The current alpha
   loads the overworld; the Nether and End are listed but not streamed yet.
 - **Viewport.** The 3D scene, selection box, chunk borders, grid and the bottom input hint.
   Camera and editing controls are in section 5.
 - **Inspector.** Shows the picked block and its properties, the current box selection, copy
   and paste controls, replace source, and project/runtime details.
-- **Bottom panel.** Sixteen tabs: `Palette`, `Tools`, `Terrain`, `Heightmap`, `Biomes`,
-  `Generators`, `Layers`, `Templates`, `Objects`, `Parametric`, `Build DSL`, `Observation`,
-  `Validation`, `Console`, `History`, `Warnings`. Your active tab and panel visibility are
-  remembered between launches.
+- **Bottom panel.** Twelve tabs: `Blocks`, `Terrain`, `Heightmap`, `Biomes`, `Generators`,
+  `Layers`, `Templates`, `Objects`, `Parametric`, `Build DSL`, `Analysis`, `Activity`.
+  `Analysis` groups `Observation` and `Validation`; `Activity` groups `Console` and `History`.
+  Your active tab and panel visibility are remembered between launches.
 - **Status bar.** Backend state, project, dimension, active job or tool, revision, chunk and
   block counts, load radius, FPS/draw calls, target Minecraft version and `DataVersion`.
 
@@ -163,7 +163,7 @@ Tools use the number row (`1`–`8`):
 
 Tips:
 
-- Choose the block in the **Palette** tab first. `Alt`-click picks an existing world block as
+- Choose the block in the **Blocks** tab first. `Alt`-click picks an existing world block as
   the current block.
 - A selection is inclusive and may use negative coordinates. Volumes above 1,000,000 blocks
   are rejected before an operation is built.

@@ -336,7 +336,7 @@ clicks **Approve and apply**.
 
 ## Activity and audit
 
-The **MCP activity** section in the bottom panel lists recent calls with request ID, client
+The **MCP activity** section in `Activity → History` lists recent calls with request ID, client
 ID, method, status, project, requested revision, operation ID and changed blocks. The
 in-memory journal keeps the most recent 1 000 entries. Use it to answer “what did the agent
 do?” after a session. It is not a permanent audit log; it is intentionally bounded.

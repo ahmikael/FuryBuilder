@@ -213,7 +213,7 @@ bounds, scale, legend, completeness, warnings, notes and the exact `worldRevisio
 - Revision diff needs retained section history. If the requested revision can no longer be
   reconstructed, the core returns `no_history` rather than drawing a misleading diff.
 - Maps are summaries. Coordinate-level decisions still use exact `get_block`/region reads.
-- The `Observation` tab is read-only; it never bumps a revision or creates history.
+- The `Analysis → Observation` view is read-only; it never bumps a revision or creates history.
 
 ### Validation
 

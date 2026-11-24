@@ -4,6 +4,7 @@ import type * as IpcModule from "@/lib/ipc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { BlockDefinition } from "@/editor/types";
 import { BottomPanel } from "@/features/workspace/BottomPanel";
+import { useEditorStore } from "@/state/editor-store";
 import { useToolStore } from "@/state/tool-store";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
@@ -45,6 +46,7 @@ beforeEach(() => {
   runtime.tauri = true;
   catalogApi.fetch.mockReset();
   catalogApi.fetch.mockResolvedValue(catalog);
+  useEditorStore.setState({ bottomPanelTab: "blocks", bottomPanelOpen: true });
   useToolStore.setState({
     selectedBlock: { name: "minecraft:stone", properties: {} },
     replaceFrom: null,
@@ -97,6 +99,35 @@ describe("block palette", () => {
       name: "minecraft:oak_slab",
       properties: { type: "bottom", waterlogged: "false" },
     });
+  });
+
+  it("groups observation and validation under Analysis", async () => {
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+
+    expect(screen.getByRole("tab", { name: /Blocks/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("tab", { name: /Tools/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Warnings/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /Analysis/ }));
+
+    expect(screen.getByRole("tab", { name: /Observation/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByRole("tab", { name: /Validation/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Console/ })).not.toBeInTheDocument();
+  });
+
+  it("groups console and history under Activity", async () => {
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+
+    await user.click(screen.getByRole("tab", { name: /Activity/ }));
+
+    expect(screen.getByRole("tab", { name: /Console/ })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: /History/ })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /Observation/ })).not.toBeInTheDocument();
   });
 
   it("does not fake a catalog in browser preview", () => {

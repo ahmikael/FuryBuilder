@@ -21,7 +21,6 @@ import {
   ShieldCheck,
   Terminal,
   Undo2,
-  Wrench,
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -35,7 +34,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import {
   Table,
   TableBody,
@@ -48,8 +46,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BackendState } from "@/hooks/use-backend";
 import type { BlockDefinition } from "@/editor/types";
 import { BOTTOM_PANEL_TABS, isBottomPanelTabId, type BottomPanelTabId } from "@/editor/layout";
-import { TOOL_LABELS, TOOL_SHORTCUTS } from "@/editor/session";
-import { applyActiveTool, deleteSelection, redoWorld, undoWorld } from "@/editor/commands";
+import { redoWorld, undoWorld } from "@/editor/commands";
 import { TerrainPanel } from "@/features/workspace/TerrainPanel";
 import { HeightmapPanel } from "@/features/workspace/HeightmapPanel";
 import { BiomePanel } from "@/features/workspace/BiomePanel";
@@ -65,7 +62,6 @@ import { isTauriRuntime } from "@/lib/ipc";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
 import { blockColor } from "@/renderer/assets";
-import type { EditorTool } from "@/editor/types";
 import { useHistoryStore } from "@/state/history-store";
 import { useEditorStore } from "@/state/editor-store";
 import { useProjectStore } from "@/state/project-store";
@@ -73,18 +69,7 @@ import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
 
-const TOOLS: EditorTool[] = [
-  "select",
-  "place",
-  "remove",
-  "brush",
-  "box",
-  "fill",
-  "line",
-  "replace",
-];
-
-function PalettePanel() {
+function BlocksPanel() {
   const [catalog, setCatalog] = useState<BlockDefinition[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -126,7 +111,7 @@ function PalettePanel() {
             <Blocks />
           </EmptyMedia>
           <EmptyTitle>Desktop core required</EmptyTitle>
-          <EmptyDescription>The block palette requires the desktop app.</EmptyDescription>
+          <EmptyDescription>The block catalog requires the desktop app.</EmptyDescription>
         </EmptyHeader>
       </Empty>
     );
@@ -300,113 +285,6 @@ function PalettePanel() {
               Unknown property values are rejected by the Rust registry, never silently coerced.
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function ToolsPanel() {
-  const tool = useToolStore((state) => state.tool);
-  const setTool = useToolStore((state) => state.setTool);
-  const brushRadius = useToolStore((state) => state.brushRadius);
-  const setBrushRadius = useToolStore((state) => state.setBrushRadius);
-  const selection = useToolStore((state) => state.selection);
-  const setSelection = useToolStore((state) => state.setSelection);
-  const lastOperation = useToolStore((state) => state.lastOperation);
-  const job = useToolStore((state) => state.job);
-  const editing = isTauriRuntime();
-
-  return (
-    <div className="flex flex-wrap gap-4">
-      <div className="flex max-w-md flex-wrap content-start gap-2">
-        {TOOLS.map((entry) => (
-          <Button
-            key={entry}
-            size="sm"
-            variant={tool === entry ? "default" : "outline"}
-            disabled={!editing}
-            onClick={() => setTool(entry)}
-          >
-            {TOOL_LABELS[entry]}
-            <span className="ml-1 font-mono text-xs opacity-60">
-              {Object.entries(TOOL_SHORTCUTS)
-                .find(([, value]) => value === entry)?.[0]
-                ?.replace("Digit", "")}
-            </span>
-          </Button>
-        ))}
-      </div>
-
-      <Card className="w-80 shrink-0 gap-0 py-0">
-        <CardContent className="space-y-4 p-4 text-sm">
-          <div className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-muted-foreground">Brush radius</span>
-              <Badge variant="secondary" className="font-mono">
-                {brushRadius}
-              </Badge>
-            </div>
-            <Slider
-              min={1}
-              max={4}
-              step={1}
-              value={[brushRadius]}
-              disabled={!editing}
-              aria-label="Brush radius slider"
-              onValueChange={(value) => {
-                const next = Array.isArray(value) ? value[0] : value;
-                if (typeof next === "number") setBrushRadius(next);
-              }}
-            />
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-muted-foreground">Selection</span>
-            <span className="font-mono text-xs">
-              {selection
-                ? `${selection.max.x - selection.min.x + 1}×${selection.max.y - selection.min.y + 1}×${selection.max.z - selection.min.z + 1}`
-                : "—"}
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              disabled={!editing || !selection || Boolean(job)}
-              onClick={() => void applyActiveTool("fill")}
-            >
-              Fill
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!editing || !selection || Boolean(job)}
-              onClick={() => void applyActiveTool("replace")}
-            >
-              Replace
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={!editing || !selection || Boolean(job)}
-              onClick={() => void deleteSelection()}
-            >
-              Delete
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={!selection}
-              onClick={() => setSelection(null)}
-            >
-              Clear selection
-            </Button>
-          </div>
-          <p className="truncate text-xs text-muted-foreground">
-            Last operation:{" "}
-            {lastOperation
-              ? `${lastOperation.changedBlocks} blocks · rev ${lastOperation.revision}`
-              : "none"}
-          </p>
         </CardContent>
       </Card>
     </div>
@@ -632,43 +510,50 @@ function ConsolePanel({ backend }: { backend: BackendState }) {
   );
 }
 
-function WarningsPanel() {
-  const lastOperation = useToolStore((state) => state.lastOperation);
-  const warnings = lastOperation?.warnings ?? [];
-  if (warnings.length === 0) {
-    return (
-      <Empty className="h-full border-0">
-        <EmptyHeader>
-          <EmptyMedia variant="icon">
-            <ShieldCheck />
-          </EmptyMedia>
-          <EmptyTitle>No operation warnings</EmptyTitle>
-          <EmptyDescription>Committed edits and validation issues appear here.</EmptyDescription>
-        </EmptyHeader>
-      </Empty>
-    );
-  }
+function AnalysisPanel() {
   return (
-    <div className="space-y-2 text-sm">
-      <div className="flex items-center gap-2 text-muted-foreground">
-        <AlertTriangle className="size-4" />
-        {warnings.length} warning(s)
-      </div>
-      {warnings.map((warning) => (
-        <div
-          key={warning}
-          className="rounded border border-status-warn/30 bg-status-warn/5 px-2 py-1 text-xs"
-        >
-          {warning}
-        </div>
-      ))}
-    </div>
+    <Tabs defaultValue="observation" className="min-h-0 flex-1 gap-2">
+      <TabsList className="w-fit shrink-0">
+        <TabsTrigger value="observation">
+          <Map className="size-3" /> Observation
+        </TabsTrigger>
+        <TabsTrigger value="validation">
+          <ShieldCheck className="size-3" /> Validation
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="observation" className="m-0 flex min-h-0 flex-1 flex-col">
+        <ObservationPanel />
+      </TabsContent>
+      <TabsContent value="validation" className="m-0 flex min-h-0 flex-1 flex-col">
+        <ValidationPanel />
+      </TabsContent>
+    </Tabs>
+  );
+}
+
+function ActivityPanel({ backend }: { backend: BackendState }) {
+  return (
+    <Tabs defaultValue="console" className="min-h-0 flex-1 gap-2">
+      <TabsList className="w-fit shrink-0">
+        <TabsTrigger value="console">
+          <Terminal className="size-3" /> Console
+        </TabsTrigger>
+        <TabsTrigger value="history">
+          <History className="size-3" /> History
+        </TabsTrigger>
+      </TabsList>
+      <TabsContent value="console" className="m-0 flex min-h-0 flex-1 flex-col">
+        <ConsolePanel backend={backend} />
+      </TabsContent>
+      <TabsContent value="history" className="m-0 flex min-h-0 flex-1 flex-col">
+        <HistoryPanel />
+      </TabsContent>
+    </Tabs>
   );
 }
 
 const TAB_ICONS: Record<BottomPanelTabId, ReactNode> = {
-  palette: <Blocks className="size-3" />,
-  tools: <Wrench className="size-3" />,
+  blocks: <Blocks className="size-3" />,
   terrain: <Mountain className="size-3" />,
   heightmap: <Grid3X3 className="size-3" />,
   biomes: <Leaf className="size-3" />,
@@ -678,11 +563,8 @@ const TAB_ICONS: Record<BottomPanelTabId, ReactNode> = {
   objects: <Shapes className="size-3" />,
   parametric: <Boxes className="size-3" />,
   dsl: <Braces className="size-3" />,
-  observation: <Map className="size-3" />,
-  validation: <ShieldCheck className="size-3" />,
-  console: <Terminal className="size-3" />,
-  history: <History className="size-3" />,
-  warnings: <AlertTriangle className="size-3" />,
+  analysis: <Map className="size-3" />,
+  activity: <Terminal className="size-3" />,
 };
 
 export function BottomPanel({ backend }: { backend: BackendState }) {
@@ -720,12 +602,8 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
           </Button>
         </div>
 
-        <TabsContent value="palette" className="m-0 flex min-h-0 flex-col p-4">
-          <PalettePanel />
-        </TabsContent>
-
-        <TabsContent value="tools" className="m-0 p-4">
-          <ToolsPanel />
+        <TabsContent value="blocks" className="m-0 flex min-h-0 flex-col p-4">
+          <BlocksPanel />
         </TabsContent>
 
         <TabsContent value="terrain" className="m-0 p-4">
@@ -764,24 +642,12 @@ export function BottomPanel({ backend }: { backend: BackendState }) {
           <BuildDslPanel />
         </TabsContent>
 
-        <TabsContent value="observation" className="m-0 flex min-h-0 flex-col p-2">
-          <ObservationPanel />
+        <TabsContent value="analysis" className="m-0 flex min-h-0 flex-col p-2">
+          <AnalysisPanel />
         </TabsContent>
 
-        <TabsContent value="validation" className="m-0 flex min-h-0 flex-col p-2">
-          <ValidationPanel />
-        </TabsContent>
-
-        <TabsContent value="console" className="m-0 p-2">
-          <ConsolePanel backend={backend} />
-        </TabsContent>
-
-        <TabsContent value="history" className="m-0 p-2">
-          <HistoryPanel />
-        </TabsContent>
-
-        <TabsContent value="warnings" className="m-0 p-2">
-          <WarningsPanel />
+        <TabsContent value="activity" className="m-0 flex min-h-0 flex-col p-2">
+          <ActivityPanel backend={backend} />
         </TabsContent>
       </Tabs>
     </section>
