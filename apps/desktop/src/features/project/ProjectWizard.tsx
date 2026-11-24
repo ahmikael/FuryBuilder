@@ -1104,6 +1104,7 @@ export function ProjectWizard() {
                 ) : mode === "vanilla" ? (
                   <VanillaWorldWizard
                     version={effectiveVersion}
+                    components={componentStep?.summary ?? null}
                     onOpenWorld={(runId, projectName) => {
                       setGeneratedRequest({ runId, name: projectName });
                       setSubmitted(true);

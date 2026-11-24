@@ -185,22 +185,24 @@ the source sends the user through the locked Version step again. `project_import
 the confirmed Minecraft version and DataVersion; both must match the fresh analysis, the profile
 of the decoded world, and the copied `level.dat` before the project can open. A changed source
 must be analyzed and confirmed again; import never retargets it. Vanilla keeps
-the existing generation panel but receives the selected version and refuses to generate when it
-differs from the verified server target. The step owns the seed, preset, radius/center,
-structures toggle, time limit and validated local data packs, and requires an explicit EULA
-acceptance for the selected JAR plus a separate per-run consent. It shows the backend-owned
-generation limits, expected chunk count, a conservative world-size estimate and the free space
-on the run volume; `server_generation_estimate` is a read-only preflight, and
+the existing generation panel but receives the selected version and the verified component
+summary from Components; the Source step never asks for Java or the server JAR again. It refuses
+to generate when the version differs from the verified server target. The step owns the seed,
+preset, radius/center, structures toggle, time limit and validated local data packs, and requires
+an explicit EULA acceptance for the selected JAR plus a separate per-run consent. It shows the
+backend-owned generation limits, expected chunk count, a conservative world-size estimate and the
+free space on the run volume; `server_generation_estimate` is a read-only preflight, and
 `server_start_generation` repeats the disk check before it creates a run directory. A run stops
 at the requested time limit even when the area is incomplete.
 
 `Components` resolves the exact runtime and client assets for the selected profile and mode
 through the single `component-manager` facade. Client assets are required before the step can
 pass; Java is required for Vanilla World and remains a recommended, warned-about addition for
-editing-only projects. The server card appears only for Vanilla. The generation panel still
-repeats its own readiness controls until the remaining setup is consolidated into the wizard.
-Every card offers the managed download, an already-installed component from the inventory, or a
-manual file that is validated in place.
+editing-only projects. The server card appears only for Vanilla. The Vanilla Source step consumes
+the verified component summary captured here and never repeats the Java or server choice; its
+generation controls only start the already selected runtime and JAR. Every card offers the
+managed download, an already-installed component from the inventory, or a manual file that is
+validated in place.
 Nothing is downloaded until the user presses a download button, and the managed preview only
 reads release metadata. Each card shows the resolved version, size, source host, checksum and
 status; installs stream progress with Cancel, and stable backend codes (offline, checksum

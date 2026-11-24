@@ -261,7 +261,8 @@ prerequisites.
    file that is validated in place. Downloads show source, size and checksum; nothing is
    installed globally and nothing starts until the step is ready.
 4. In the Source step choose a seed, preset, radius/center, structures, time limit and optional
-   local data packs. Before anything starts, the step shows the expected chunk count, a
+   local data packs. The step reuses the Java runtime and server JAR verified in Components and
+   never asks for them again. Before anything starts, the step shows the expected chunk count, a
    conservative world-size estimate, the free space on the run volume and the bounded time
    limit. Generation is disabled when the estimate does not fit; the backend repeats the same
    disk preflight before it creates a run directory.

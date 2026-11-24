@@ -5,26 +5,19 @@ import type {
   GenerationEstimate,
   GenerationReport,
   GenerationSnapshot,
-  ServerDiscoveryReport,
   VanillaSetupReport,
 } from "@/runtime/server-types";
-import type { JavaRuntimeReport, RuntimeDiscoveryReport } from "@/runtime/types";
-import type * as RuntimeApi from "@/lib/runtime-api";
+import type { JavaRuntimeReport } from "@/runtime/types";
+import type { ComponentStepSummary } from "@/features/project/ProjectComponentsStep";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 
 const api = vi.hoisted(() => ({
   setup: vi.fn(),
   status: vi.fn(),
-  discoverServers: vi.fn(),
-  discoverJava: vi.fn(),
-  selectJava: vi.fn(),
-  selectJar: vi.fn(),
   inspect: vi.fn(),
   start: vi.fn(),
   cancel: vi.fn(),
   acceptEula: vi.fn(),
-  install: vi.fn(),
-  latest: vi.fn(),
   estimate: vi.fn(),
 }));
 
@@ -33,25 +26,12 @@ const dialog = vi.hoisted(() => ({ open: vi.fn() }));
 vi.mock("@/lib/server-api", () => ({
   vanillaSetupCheck: api.setup,
   serverGenerationStatus: api.status,
-  discoverMinecraftServers: api.discoverServers,
   inspectServerDatapacks: api.inspect,
   startServerGeneration: api.start,
   cancelServerGeneration: api.cancel,
   acceptServerEula: api.acceptEula,
-  installMinecraftServer: api.install,
-  latestMinecraftServerRelease: api.latest,
-  selectMinecraftServerJar: api.selectJar,
   serverGenerationEstimate: api.estimate,
 }));
-
-vi.mock("@/lib/runtime-api", async (importOriginal) => {
-  const actual = await importOriginal<typeof RuntimeApi>();
-  return {
-    ...actual,
-    discoverJavaRuntimes: api.discoverJava,
-    selectJavaRuntime: api.selectJava,
-  };
-});
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: dialog.open }));
 
@@ -126,35 +106,28 @@ const readyEstimate: GenerationEstimate = {
   fitsOnDisk: true,
 };
 
-const runtimeDiscovery: RuntimeDiscoveryReport = {
-  targetJavaMajor: 21,
-  targetMinecraftVersion: "1.21.4",
-  candidates: [java],
-  saved: java,
-  managedRoot: "C:\\app\\runtimes",
-  managed: [],
-  managedBytes: 0,
-  problems: [],
-  manualHint: "",
-};
-
-const serverDiscovery: ServerDiscoveryReport = {
-  targetMinecraftVersion: "1.21.4",
-  targetDataVersion: 4189,
-  targetJavaMajor: 21,
-  selected: server,
-  eula: {
-    acceptedAt: 1_763_500_000,
-    minecraftVersion: "1.21.4",
-    jarSha1: sha1,
-    eulaUrl: "https://aka.ms/MinecraftEULA",
+const preparedComponents: ComponentStepSummary = {
+  java: {
+    kind: "java",
+    mode: "managed",
+    state: "ready",
+    version: "21.0.12",
+    bytes: 123_456_789,
+    hash: "a".repeat(64),
+    path: "C:\\cache\\java\\bin\\java.exe",
   },
-  eulaMatchesSelected: true,
-  managedRoot: "C:\\app\\servers",
-  managed: [],
-  managedBytes: 0,
-  problems: [],
-  manualHint: "",
+  assets: null,
+  server: {
+    kind: "server",
+    mode: "managed",
+    state: "ready",
+    version: "1.21.4",
+    bytes: 56_880_250,
+    hash: sha1,
+    path: "C:\\cache\\servers\\1.21.4\\server.jar",
+  },
+  catalog: null,
+  totalBytes: 180_337_039,
 };
 
 const running: GenerationSnapshot = {
@@ -220,9 +193,6 @@ describe("VanillaWorldWizard", () => {
     dialog.open.mockReset();
     api.setup.mockResolvedValue(readySetup);
     api.status.mockResolvedValue({ active: null, last: null });
-    api.discoverServers.mockResolvedValue(serverDiscovery);
-    api.discoverJava.mockResolvedValue(runtimeDiscovery);
-    api.selectJava.mockResolvedValue(java);
     api.start.mockResolvedValue(running);
     api.cancel.mockResolvedValue(true);
     api.inspect.mockResolvedValue([]);
@@ -250,7 +220,32 @@ describe("VanillaWorldWizard", () => {
     expect(await screen.findByText("Setup is incomplete")).toBeInTheDocument();
     expect(screen.getByText(/Select a compatible Java 21 runtime/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: "Choose Java executable" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download official Minecraft server JAR" }),
+    ).not.toBeInTheDocument();
     expect(api.start).not.toHaveBeenCalled();
+  });
+
+  it("shows the Java and server prepared in the Components step without a second setup", async () => {
+    render(<VanillaWorldWizard version="1.21.4" components={preparedComponents} />);
+
+    expect(await screen.findByText("Ready to generate")).toBeInTheDocument();
+    expect(screen.getByText("21.0.12")).toBeInTheDocument();
+    expect(screen.getAllByText("1.21.4").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText(/Prepared and verified in the Components step/).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.queryByRole("button", { name: "Choose Java executable" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Download official Minecraft server JAR" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Choose server JAR" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
   });
 
   it("shows the bounded area, time limit and disk estimate", async () => {
@@ -303,8 +298,8 @@ describe("VanillaWorldWizard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/The selected project version is/)).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Download official Minecraft server JAR" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Download official Minecraft server JAR" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
   });
 

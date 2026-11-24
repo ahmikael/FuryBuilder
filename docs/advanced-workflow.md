@@ -286,7 +286,9 @@ provides:
   Minecraft version;
 - manual JAR selection with the same exact-version checks.
 
-The backend accepts any exact server target and never substitutes another version. Settings
+The Vanilla Source step consumes these verified choices from Components and does not ask for
+Java or the server JAR again; it only adds the EULA acceptance and generation settings. The
+backend accepts any exact server target and never substitutes another version. Settings
 lists the managed Java runtimes and server JARs with version, size and cache path and can
 re-probe Java, re-inspect a server JAR, remove a FuryBuilder-owned copy or open a known cache
 folder. It never downloads, selects a manual file, accepts an EULA or starts a server.

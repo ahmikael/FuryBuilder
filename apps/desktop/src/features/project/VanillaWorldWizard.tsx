@@ -2,10 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import {
   Ban,
   CheckCircle2,
-  Download,
+  Coffee,
   FolderOpen,
   Gauge,
-  HardDriveDownload,
   Loader2,
   Play,
   RefreshCw,
@@ -28,27 +27,23 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  discoverJavaRuntimes,
-  displayRuntimePath,
-  formatBytes,
-  selectJavaRuntime,
-} from "@/lib/runtime-api";
+import { ComponentCard } from "@/features/components";
+import { displayRuntimePath, formatBytes } from "@/lib/runtime-api";
 import {
   acceptServerEula,
   cancelServerGeneration,
-  discoverMinecraftServers,
   inspectServerDatapacks,
-  installMinecraftServer,
-  latestMinecraftServerRelease,
-  selectMinecraftServerJar,
   serverGenerationEstimate,
   serverGenerationStatus,
   startServerGeneration,
   vanillaSetupCheck,
 } from "@/lib/server-api";
 import { cn } from "@/lib/utils";
-import type { RuntimeDiscoveryReport } from "@/runtime/types";
+import type { ComponentMode, ComponentState, ComponentStatus } from "@/lib/component-types";
+import type {
+  ComponentStepItem,
+  ComponentStepSummary,
+} from "@/features/project/ProjectComponentsStep";
 import type {
   DatapackInspection,
   GenerationEstimate,
@@ -56,7 +51,6 @@ import type {
   GenerationRequest,
   GenerationSnapshot,
   GenerationStatusReport,
-  ServerDiscoveryReport,
   VanillaSetupReport,
   WorldPreset,
 } from "@/runtime/server-types";
@@ -70,22 +64,74 @@ const WORLD_PRESETS: { value: WorldPreset; label: string }[] = [
   { value: "amplified", label: "amplified" },
 ];
 
-type Busy =
-  | "load"
-  | "eula"
-  | "java"
-  | "server-select"
-  | "server-download"
-  | "datapacks"
-  | "start"
-  | "cancel"
-  | "import"
-  | null;
+type Busy = "load" | "eula" | "datapacks" | "start" | "cancel" | "import" | null;
 
 interface VanillaWorldWizardProps {
   /** Version selected in the wizard; generation is refused when it differs from the verified target. */
   version?: string;
+  /** Verified Java/assets/server facts from the Components step. Display only. */
+  components?: ComponentStepSummary | null;
   onOpenWorld?: (runId: string, name: string) => Promise<boolean>;
+}
+
+function summaryStatus(item: ComponentStepItem, kind: "java" | "server"): ComponentStatus {
+  return {
+    kind,
+    required: true,
+    ...(item.mode ? { mode: item.mode } : {}),
+    state: item.state,
+    ...(item.version ? { version: item.version } : {}),
+    ...(item.bytes !== null ? { bytes: item.bytes } : {}),
+    ...(item.hash
+      ? { hash: { algorithm: kind === "java" ? "sha256" : "sha1", value: item.hash } }
+      : {}),
+    ...(item.path ? { path: item.path } : {}),
+  };
+}
+
+function runtimeState(ready: boolean, status: string): ComponentState {
+  if (ready) return "ready";
+  switch (status) {
+    case "unsupported_arch":
+    case "not_java":
+    case "outdated":
+      return "incompatible";
+    case "unreadable":
+      return "error";
+    default:
+      return "unverified";
+  }
+}
+
+function setupJavaStatus(setup: VanillaSetupReport | null): ComponentStatus {
+  if (!setup?.java) return { kind: "java", required: true, state: "missing" };
+  const mode: ComponentMode = setup.java.managed ? "managed" : "manual";
+  return {
+    kind: "java",
+    required: true,
+    mode,
+    state: runtimeState(setup.javaReady, setup.java.status),
+    ...(setup.java.version ? { version: setup.java.version } : {}),
+    path: setup.java.path,
+    ...(setup.java.error ? { error: setup.java.error } : {}),
+    ...(setup.java.warnings.length ? { notes: setup.java.warnings } : {}),
+  };
+}
+
+function setupServerStatus(setup: VanillaSetupReport | null): ComponentStatus {
+  if (!setup?.server) return { kind: "server", required: true, state: "missing" };
+  return {
+    kind: "server",
+    required: true,
+    mode: setup.server.managed ? "managed" : "manual",
+    state: setup.serverReady ? "ready" : "incompatible",
+    ...(setup.server.version ? { version: setup.server.version } : {}),
+    path: setup.server.path,
+    ...(setup.server.sha1 ? { hash: { algorithm: "sha1", value: setup.server.sha1 } } : {}),
+    ...(setup.server.size !== null ? { bytes: setup.server.size } : {}),
+    ...(setup.server.error ? { error: setup.server.error } : {}),
+    ...(setup.server.warnings.length ? { notes: setup.server.warnings } : {}),
+  };
 }
 
 function stopReasonLabel(report: GenerationReport): string {
@@ -119,10 +165,12 @@ function statusTone(ready: boolean): string {
     : "border-status-warn/40 bg-status-warn/5 text-status-warn";
 }
 
-export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardProps) {
+export function VanillaWorldWizard({
+  version,
+  components = null,
+  onOpenWorld,
+}: VanillaWorldWizardProps) {
   const [setup, setSetup] = useState<VanillaSetupReport | null>(null);
-  const [runtimes, setRuntimes] = useState<RuntimeDiscoveryReport | null>(null);
-  const [servers, setServers] = useState<ServerDiscoveryReport | null>(null);
   const [status, setStatus] = useState<GenerationStatusReport | null>(null);
   const [estimate, setEstimate] = useState<GenerationEstimate | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
@@ -131,7 +179,6 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
   const [notice, setNotice] = useState<string | null>(null);
   const [eulaChecked, setEulaChecked] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
-  const [javaChoice, setJavaChoice] = useState("");
   const [seed, setSeed] = useState("FuryBuilder");
   const [preset, setPreset] = useState<WorldPreset>("normal");
   const [generateStructures, setGenerateStructures] = useState(true);
@@ -144,30 +191,20 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
   const [cpuThreads, setCpuThreads] = useState("2");
   const [datapacks, setDatapacks] = useState<DatapackInspection[]>([]);
 
-  const refresh = useCallback(async (discoverCandidates: boolean) => {
-    const [nextSetup, nextStatus, nextRuntimes, nextServers] = await Promise.all([
+  const refresh = useCallback(async () => {
+    const [nextSetup, nextStatus] = await Promise.all([
       vanillaSetupCheck(),
       serverGenerationStatus(),
-      discoverCandidates ? discoverJavaRuntimes() : Promise.resolve(null),
-      discoverMinecraftServers(),
     ]);
     setSetup(nextSetup);
     setStatus(nextStatus);
-    if (nextRuntimes) {
-      setRuntimes(nextRuntimes);
-      const firstCompatible = nextRuntimes.candidates.find(
-        (candidate) => candidate.status === "compatible",
-      );
-      setJavaChoice((current) => current || firstCompatible?.path || "");
-    }
-    setServers(nextServers);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        await refresh(true);
+        await refresh();
       } catch (cause) {
         if (!cancelled) {
           setError(cause instanceof Error ? cause.message : String(cause));
@@ -218,7 +255,6 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
   const active: GenerationSnapshot | null = status?.active ?? null;
   const last = status?.last ?? null;
   const running = Boolean(active?.running);
-  const selectedJava = setup?.java ?? null;
   const limits = setup?.generationLimits ?? null;
   const versionMismatch =
     Boolean(version) &&
@@ -233,8 +269,14 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
       : null;
   const diskBlocked = currentEstimate !== null && !currentEstimate.fitsOnDisk;
   const setupLocked = busy !== null || versionMismatch;
-  const compatibleCandidates =
-    runtimes?.candidates.filter((candidate) => candidate.status === "compatible") ?? [];
+  const javaStatus = components?.java
+    ? summaryStatus(components.java, "java")
+    : setupJavaStatus(setup);
+  const serverStatus = components?.server
+    ? summaryStatus(components.server, "server")
+    : setupServerStatus(setup);
+  const javaLabel = components?.java?.version ?? setup?.java?.version ?? "not selected";
+  const serverLabel = components?.server?.version ?? setup?.server?.version ?? "not selected";
   const validDatapacks = datapacks.filter((datapack) => datapack.valid);
   const invalidDatapacks = datapacks.filter((datapack) => !datapack.valid);
   const progress =
@@ -257,70 +299,7 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
 
   async function reloadSetup() {
     await runBusy("load", async () => {
-      await refresh(false);
-    });
-  }
-
-  async function chooseJava() {
-    await runBusy("java", async () => {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const path = await open({
-        title: `Choose a Java ${setup?.targetJavaMajor ?? ""} executable`,
-        multiple: false,
-        directory: false,
-        filters: [{ name: "Java executable", extensions: ["exe"] }],
-      });
-      if (typeof path !== "string") return;
-      const report = await selectJavaRuntime(path);
-      if (report.status !== "compatible") {
-        throw new Error(
-          `Java ${report.version ?? "unknown"} is not compatible: ${report.warnings.join("; ")}`,
-        );
-      }
-      setNotice(`Java ${report.version ?? "21"} selected and probed.`);
-      await refresh(false);
-    });
-  }
-
-  async function applyCandidate() {
-    if (!javaChoice) return;
-    await runBusy("java", async () => {
-      const report = await selectJavaRuntime(javaChoice);
-      if (report.status !== "compatible") {
-        throw new Error(`The selected candidate is not compatible: ${report.warnings.join("; ")}`);
-      }
-      setNotice(`Java ${report.version ?? "21"} selected and probed.`);
-      await refresh(false);
-    });
-  }
-
-  async function selectServer() {
-    await runBusy("server-select", async () => {
-      const { open } = await import("@tauri-apps/plugin-dialog");
-      const path = await open({
-        title: "Choose the official Minecraft server.jar",
-        multiple: false,
-        directory: false,
-        filters: [{ name: "Minecraft server JAR", extensions: ["jar"] }],
-      });
-      if (typeof path !== "string") return;
-      const report = await selectMinecraftServerJar(path);
-      if (!report.ready) {
-        throw new Error(report.error ?? "The selected server JAR did not pass verification.");
-      }
-      setNotice(`Official ${report.version ?? "Minecraft"} server JAR selected and verified.`);
-      await refresh(false);
-    });
-  }
-
-  async function downloadServer() {
-    await runBusy("server-download", async () => {
-      const release = await latestMinecraftServerRelease();
-      const installed = await installMinecraftServer(release.minecraftVersion);
-      setNotice(
-        `Minecraft ${installed.server.version} server JAR downloaded from Mojang, SHA-1 verified and selected (${formatBytes(installed.server.size)}).`,
-      );
-      await refresh(false);
+      await refresh();
     });
   }
 
@@ -332,7 +311,7 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
       setNotice(
         `EULA accepted for Minecraft ${eula.minecraftVersion} (${eula.jarSha1.slice(0, 12)}…).`,
       );
-      await refresh(false);
+      await refresh();
     });
   }
 
@@ -425,7 +404,7 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
           ? "Cancellation requested. The whole Java process tree will be terminated."
           : "No active generation run.",
       );
-      await refresh(false);
+      await refresh();
     });
   }
 
@@ -492,171 +471,66 @@ export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardP
               {setup?.ready ? "Ready to generate" : "Setup is incomplete"}
             </span>
             <span className="text-muted-foreground">
-              Java {selectedJava?.version ?? "not selected"} · JAR{" "}
-              {setup?.server?.version ?? "not selected"} ·{" "}
+              Java {javaLabel} · JAR {serverLabel} ·{" "}
               {setup?.eulaMatchesSelected ? "EULA accepted" : "EULA required"}
             </span>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <HardDriveDownload className="size-4" /> Java {setup?.targetJavaMajor ?? ""}
-              </div>
-              {setup?.javaReady ? (
-                <div className="font-mono text-xs break-all text-muted-foreground">
-                  {selectedJava?.version} · {displayRuntimePath(selectedJava?.path ?? "")}
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <Select
-                    items={[
-                      {
-                        value: "",
-                        label:
-                          compatibleCandidates.length === 0
-                            ? "No compatible Java candidate"
-                            : `Choose Java ${setup?.targetJavaMajor ?? ""} candidate`,
-                      },
-                      ...compatibleCandidates.map((candidate) => ({
-                        value: candidate.path,
-                        label: `${candidate.version} · ${displayRuntimePath(candidate.path)}`,
-                      })),
-                    ]}
-                    value={javaChoice}
-                    onValueChange={(value) => setJavaChoice(value ?? "")}
-                    disabled={setupLocked || compatibleCandidates.length === 0}
-                  >
-                    <SelectTrigger
-                      className="w-full font-mono"
-                      aria-label="Compatible Java candidate"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">
-                        {compatibleCandidates.length === 0
-                          ? "No compatible Java candidate"
-                          : `Choose Java ${setup?.targetJavaMajor ?? ""} candidate`}
-                      </SelectItem>
-                      {compatibleCandidates.map((candidate) => (
-                        <SelectItem key={candidate.path} value={candidate.path}>
-                          {candidate.version} · {displayRuntimePath(candidate.path)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void applyCandidate()}
-                      disabled={!javaChoice || setupLocked}
-                      aria-label="Use selected Java candidate"
-                    >
-                      Use
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => void chooseJava()}
-                      disabled={setupLocked}
-                      aria-label="Choose Java executable"
-                    >
-                      <FolderOpen /> Choose
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <ComponentCard
+              icon={<Coffee className="size-4" />}
+              title={`Java ${setup?.targetJavaMajor ?? ""}`}
+              description="Prepared and verified in the Components step. Go back there to change the runtime; generation never selects a different Java."
+              status={javaStatus}
+            />
+            <ComponentCard
+              icon={<Server className="size-4" />}
+              title="Official server JAR"
+              description="Prepared and verified in the Components step. Go back there to change the JAR; generation only runs the selected exact-version server."
+              status={serverStatus}
+            />
+          </div>
 
-            <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Server className="size-4" /> Loader JAR
-              </div>
-              {setup?.serverReady ? (
-                <div className="space-y-0.5 font-mono text-xs text-muted-foreground">
-                  <div>
-                    {setup.server?.version} ·{" "}
-                    {setup.server?.size ? formatBytes(setup.server.size) : "?"}
-                  </div>
-                  <div className="truncate" title={setup.server?.sha1 ?? undefined}>
-                    SHA-1 {setup.server?.sha1?.slice(0, 12)}…
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void downloadServer()}
-                    disabled={setupLocked}
-                    aria-label="Download official Minecraft server JAR"
-                  >
-                    {busy === "server-download" ? (
-                      <Loader2 className="animate-spin" />
-                    ) : (
-                      <Download />
-                    )}
-                    Official
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void selectServer()}
-                    disabled={setupLocked}
-                    aria-label="Choose server JAR"
-                  >
-                    <FolderOpen /> Choose
-                  </Button>
-                </div>
-              )}
-              {servers?.selected?.error ? (
-                <div className="text-xs text-status-warn">{servers.selected.error}</div>
-              ) : null}
+          <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <ShieldCheck className="size-4" /> Minecraft EULA
             </div>
-
-            <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <ShieldCheck className="size-4" /> Minecraft EULA
+            {setup?.eulaMatchesSelected ? (
+              <div className="text-xs text-status-ok">
+                Accepted for this exact server JAR and Minecraft version.
               </div>
-              {setup?.eulaMatchesSelected ? (
-                <div className="text-xs text-status-ok">
-                  Accepted for this exact server JAR and Minecraft version.
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <a
-                    className="text-sm underline underline-offset-2"
-                    href={EULA_URL}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Read the official EULA
-                  </a>
-                  <label className="flex items-start gap-2 text-sm">
-                    <Checkbox
-                      className="mt-0.5"
-                      checked={eulaChecked}
-                      onCheckedChange={(checked) => setEulaChecked(checked === true)}
-                      disabled={setupLocked}
-                      aria-label="I have read and accept the Minecraft EULA"
-                    />
-                    <span>I accept the Minecraft EULA for this JAR and version.</span>
-                  </label>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => void acceptEula()}
-                    disabled={!eulaChecked || setupLocked || !setup?.serverReady}
-                    aria-label="Accept EULA"
-                  >
-                    {busy === "eula" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
-                    Accept
-                  </Button>
-                </div>
-              )}
-            </div>
+            ) : (
+              <div className="space-y-1">
+                <a
+                  className="text-sm underline underline-offset-2"
+                  href={EULA_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Read the official EULA
+                </a>
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={eulaChecked}
+                    onCheckedChange={(checked) => setEulaChecked(checked === true)}
+                    disabled={setupLocked}
+                    aria-label="I have read and accept the Minecraft EULA"
+                  />
+                  <span>I accept the Minecraft EULA for this JAR and version.</span>
+                </label>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void acceptEula()}
+                  disabled={!eulaChecked || setupLocked || !setup?.serverReady}
+                  aria-label="Accept EULA"
+                >
+                  {busy === "eula" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
+                  Accept
+                </Button>
+              </div>
+            )}
           </div>
 
           {setup?.blockers.length ? (

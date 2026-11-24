@@ -4205,7 +4205,7 @@ pub async fn vanilla_setup_check(
     let mut blockers = Vec::new();
     match java.as_ref() {
         None => blockers.push(format!(
-            "Select a compatible Java {} runtime (Settings → Java runtime or this wizard).",
+            "Select a compatible Java {} runtime in the project's Components step.",
             profile.java.recommended_major
         )),
         Some(_) if !java_ready => blockers.push(format!(
@@ -4216,7 +4216,7 @@ pub async fn vanilla_setup_check(
     }
     match discovery.selected.as_ref() {
         None => blockers.push(format!(
-            "Select or download the official Minecraft {} server.jar.",
+            "Select or download the official Minecraft {} server.jar in the project's Components step.",
             profile.minecraft_version
         )),
         Some(server) if !server.ready => blockers.push(format!(
@@ -4230,7 +4230,7 @@ pub async fn vanilla_setup_check(
     }
     if !eula_matches_selected {
         blockers.push(
-            "Read and accept the Minecraft EULA for the selected server.jar in this wizard."
+            "Read and accept the Minecraft EULA for the selected server.jar in the Source step."
                 .to_owned(),
         );
     }
