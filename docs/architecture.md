@@ -167,10 +167,17 @@ Flat reads backend-owned defaults, limits and quick choices, then lets the user 
 stack (block, thickness, order), bottom Y and biome. The wizard validates the same limits before
 `Next`, and `project_create` carries the verified `profileId` plus the flat preset so the store
 re-validates every block, the biome and the profile's Y range before it writes a single block.
-Import shows read-only analysis with blockers and warnings, and Vanilla keeps the existing
-generation panel. `Review` repeats the name, folder, library location, mode, version, flat layers
-and source before creation. Every step returns its own validation errors; `Next` refuses to
-advance, shows the reason, and the step buttons only reach steps that were already unlocked.
+Import accepts a world folder or a `.zip` archive. The backend extracts archives into a
+caller-owned staging folder with bounded entry counts and sizes, refuses traversal, absolute
+paths, symlinks, reserved names and duplicates, then analyzes the discovered world root
+read-only; preview removes the staging folder, while import keeps it only until the
+byte-preserving source copy is complete. The step shows the source kind, dimensions,
+region/chunk counts, blockers and warnings, and requires the `Import as-is` strategy; conversion
+is an explicit disabled choice because no verified converter ships in this build. Vanilla keeps
+the existing generation panel. `Review` repeats the name, folder, library location, mode,
+version, flat layers, import source/strategy and source before creation. Every step returns its
+own validation errors; `Next` refuses to advance, shows the reason, and the step buttons only
+reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only
 progress indicators.
 
@@ -216,12 +223,16 @@ Imported files and MCP clients are untrusted input. The desktop process is autho
 - World import accepts classic Anvil 1.21.4 only: bounded `level.dat`, region files and
   chunk counts; external `.mcc`, LZ4 and custom compression are refused; offsets and
   sector lengths are validated.
+- World `.zip` archives are extracted into a unique temporary staging folder and removed
+  after analysis or import. Entry counts and uncompressed sizes are bounded; traversal,
+  absolute paths, NUL/control characters, Windows reserved names, symlinks, special files
+  and duplicate entries are refused, and files are created with `create_new`.
 - Passthrough and export refuse symlinks, junctions and reparse points; the destination
   must be new and outside the source; copied bytes are hashed and re-read.
 - NBT has hard limits on compressed/decompressed size, depth, collection length and name
   length; lengths are checked against remaining bytes before allocation.
-- Archives (JAR/ZIP/resource packs/datapacks) are parsed in memory, never extracted, and
-  reject traversal, absolute paths, NUL bytes, symlinks and oversized entries.
+- JAR/resource-pack/datapack archives are parsed in memory, never extracted, and reject
+  traversal, absolute paths, NUL bytes, symlinks and oversized entries.
 - MCP writes default to read-only, enforce block/batch limits, require a desktop
   confirmation unless disabled, and re-check policy and revision after approval.
 - The local OS account and the MCP client's own stdin memory are outside the threat model.

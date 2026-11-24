@@ -27,6 +27,7 @@ import type {
   CheckpointMeta,
   CreationMode,
   EditorState,
+  ImportStrategy,
   JavaWorldAnalysis,
   OpenedProjectPayload,
   ProjectSummary,
@@ -145,9 +146,14 @@ interface ProjectUiState {
     folder?: string,
     options?: CreateProjectOptions,
   ) => Promise<boolean>;
-  analyzeWorld: (folder: string) => Promise<JavaWorldAnalysis | null>;
+  analyzeWorld: (source: string) => Promise<JavaWorldAnalysis | null>;
   clearWorldAnalysis: () => void;
-  importWorld: (name: string, folder: string, projectFolder?: string) => Promise<boolean>;
+  importWorld: (
+    name: string,
+    source: string,
+    strategy: ImportStrategy,
+    projectFolder?: string,
+  ) => Promise<boolean>;
   importGeneratedWorld: (name: string, runId: string, projectFolder?: string) => Promise<boolean>;
   importStructure: (args: StructureImportProjectArgs) => Promise<boolean>;
   insertStructure: (args: StructureInsertArgs) => Promise<boolean>;
@@ -414,13 +420,13 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     }
   },
 
-  analyzeWorld: async (folder) => {
-    const trimmed = folder.trim();
+  analyzeWorld: async (source) => {
+    const trimmed = source.trim();
     if (!trimmed) {
       pushToast({
         kind: "info",
-        title: "Select a world folder",
-        description: "Choose the folder that contains level.dat and region/.",
+        title: "Select a world source",
+        description: "Choose a world folder or .zip archive that contains level.dat.",
       });
       return null;
     }
@@ -445,8 +451,8 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   clearWorldAnalysis: () => set({ worldAnalysis: null }),
 
-  importWorld: async (name, folder, projectFolder) => {
-    const trimmed = folder.trim();
+  importWorld: async (name, source, strategy, projectFolder) => {
+    const trimmed = source.trim();
     if (!trimmed) return false;
     const analysis = get().worldAnalysis;
     set(preparingState("Importing the world…"));
@@ -454,6 +460,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       const payload = await importJavaWorld(
         name.trim(),
         trimmed,
+        strategy,
         currentEditorState(),
         projectFolder?.trim() || undefined,
       );

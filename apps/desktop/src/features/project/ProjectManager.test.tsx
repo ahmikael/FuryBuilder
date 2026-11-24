@@ -123,6 +123,9 @@ const worldAnalysis: JavaWorldAnalysis = {
   chunks: 841,
   blockEntities: 3,
   entities: 2,
+  sourcePath: "C:\\saves\\World",
+  sourceKind: "folder",
+  archive: null,
   warnings: [
     "the selected world is opened read-only and is never modified",
     "only block states become editable in this milestone",
@@ -524,6 +527,7 @@ describe("project manager", () => {
       expect(api.importWorld).toHaveBeenCalledWith(
         "Imported World",
         "C:\\saves\\World",
+        "importAsIs",
         {
           selectedDimension: "minecraft:overworld",
           loadRadius: 1,
@@ -804,7 +808,7 @@ describe("project wizard", () => {
   });
 
   it("blocks import until the world is analyzed and then imports it", async () => {
-    api.analyze.mockResolvedValue(worldAnalysis);
+    api.analyze.mockResolvedValue({ ...worldAnalysis, sourcePath: "C:\\saves\\Wizard" });
     const importedSummary: ProjectSummary = {
       ...first,
       folder: "Imported Wizard.furybuilder",
@@ -821,7 +825,7 @@ describe("project wizard", () => {
     expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(screen.getByText("Choose a Java world folder.")).toBeInTheDocument();
+    expect(screen.getByText("Choose a Java world folder or .zip archive.")).toBeInTheDocument();
     expect(screen.getByText("Analyze the world before continuing.")).toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Java world folder"), "C:\\saves\\Wizard");
@@ -840,6 +844,7 @@ describe("project wizard", () => {
       expect(api.importWorld).toHaveBeenCalledWith(
         "Imported Wizard",
         "C:\\saves\\Wizard",
+        "importAsIs",
         {
           selectedDimension: "minecraft:overworld",
           loadRadius: 1,
@@ -850,6 +855,50 @@ describe("project wizard", () => {
       ),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("analyzes a world archive and keeps conversion unavailable", async () => {
+    const archiveAnalysis: JavaWorldAnalysis = {
+      ...worldAnalysis,
+      sourcePath: "C:\\downloads\\Wizard.zip",
+      sourceKind: "archive",
+      selectionKind: "world_archive",
+      archive: { entries: 4, bytes: 4096 },
+    };
+    api.analyze.mockResolvedValue(archiveAnalysis);
+    api.importWorld.mockResolvedValue(opened({ ...first, creationMode: "import" }));
+    const user = userEvent.setup();
+    openWizard("import");
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Archived Wizard");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: ".zip archive" }));
+    await user.type(screen.getByLabelText("World archive (.zip)"), "C:\\downloads\\Wizard.zip");
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+    await waitFor(() => expect(api.analyze).toHaveBeenCalledWith("C:\\downloads\\Wizard.zip"));
+    expect(await screen.findByText(/Archive: 4 file\(s\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Convert/ })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(screen.getByText(/World archive · C:\\downloads\\Wizard.zip/)).toBeInTheDocument();
+    expect(screen.getByText("Import as-is")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+    await waitFor(() =>
+      expect(api.importWorld).toHaveBeenCalledWith(
+        "Archived Wizard",
+        "C:\\downloads\\Wizard.zip",
+        "importAsIs",
+        expect.any(Object),
+        undefined,
+      ),
+    );
   });
 
   it("keeps the folder available but hides the name for vanilla generation", async () => {

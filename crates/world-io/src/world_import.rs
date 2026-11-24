@@ -24,6 +24,7 @@ use crate::passthrough::PassthroughError;
 use crate::support_matrix::{support_matrix, SupportMatrix};
 use crate::version_support;
 use crate::world_selection::{classify_world_selection, WorldSelectionKind};
+use crate::world_source::{ArchiveReport, WorldSourceKind};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
 pub const MAX_IMPORT_CHUNKS: usize = 20_000;
@@ -49,6 +50,7 @@ pub struct ImportDimensionAnalysis {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaWorldAnalysis {
+    /// The path the user selected (a folder or a `.zip` archive).
     pub root: String,
     pub layout: String,
     pub selection_kind: String,
@@ -64,6 +66,11 @@ pub struct JavaWorldAnalysis {
     pub chunks: usize,
     pub block_entities: usize,
     pub entities: usize,
+    /// The original selection path, preserved for archive sources whose
+    /// analyzed folder is a temporary extraction.
+    pub source_path: String,
+    pub source_kind: WorldSourceKind,
+    pub archive: Option<ArchiveReport>,
     pub warnings: Vec<String>,
     pub blockers: Vec<String>,
     pub support_matrix: SupportMatrix,
@@ -157,6 +164,9 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
         chunks: 0,
         block_entities: 0,
         entities: 0,
+        source_path: root.display().to_string(),
+        source_kind: WorldSourceKind::Folder,
+        archive: None,
         warnings: selection.warnings.clone(),
         blockers: Vec::new(),
         support_matrix: support_matrix(),

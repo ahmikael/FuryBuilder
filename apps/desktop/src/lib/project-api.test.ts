@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invokeCommand } from "@/lib/ipc";
 import {
+  analyzeJavaWorld,
   autosaveProject,
   checkpointProject,
   closeProject,
@@ -77,10 +78,22 @@ describe("project IPC contract", () => {
       flat,
     });
 
-    await importJavaWorld("Castle", "C:\\saves\\Castle", editorState, "Imported.furybuilder");
+    await analyzeJavaWorld("C:\\saves\\Castle.zip");
+    expect(invoke).toHaveBeenLastCalledWith("world_import_preview", {
+      source: "C:\\saves\\Castle.zip",
+    });
+
+    await importJavaWorld(
+      "Castle",
+      "C:\\saves\\Castle",
+      "importAsIs",
+      editorState,
+      "Imported.furybuilder",
+    );
     expect(invoke).toHaveBeenLastCalledWith("project_import_world", {
       name: "Castle",
-      worldFolder: "C:\\saves\\Castle",
+      source: "C:\\saves\\Castle",
+      strategy: "importAsIs",
       editorState,
       folder: "Imported.furybuilder",
     });

@@ -1,6 +1,8 @@
 //! Typed Tauri IPC commands. Each command validates its own input and delegates to the
 //! application facade, returning structured `AppError` values.
 
+use std::path::{Path, PathBuf};
+
 use asset_source::{
     AssetBundle, AssetBundleService, AssetCatalogService, AssetDiscoveryReport, AssetPathReport,
     AssetSelectionKind, AssetSettingsStore, AssetSourceSetting, BlockStateRequest, CatalogSnapshot,
@@ -402,6 +404,19 @@ fn world_import_error(error: world_io::WorldImportError) -> AppError {
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
         "unsupported_format" | "verification_failed" => ErrorCode::UnsupportedFormat,
+        _ => ErrorCode::Internal,
+    };
+    AppError::new(code, error.to_string())
+}
+
+fn world_source_error(error: world_io::WorldSourceError) -> AppError {
+    use world_application::ErrorCode;
+    let code = match error.code() {
+        "invalid_argument" | "unsafe_archive_entry" => ErrorCode::InvalidArgument,
+        "not_found" => ErrorCode::NotFound,
+        "limit_exceeded" => ErrorCode::LimitExceeded,
+        "unsupported_version" => ErrorCode::UnsupportedVersion,
+        "invalid_archive" | "unsupported_format" => ErrorCode::UnsupportedFormat,
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
@@ -1046,9 +1061,34 @@ pub fn project_rename(
 // receives a byte-preserving immutable source copy plus an editable block snapshot.
 // ---------------------------------------------------------------------------------------
 
+/// Temporary extraction directory for a `.zip` world archive. It is removed when the
+/// command that owns it finishes, whether the analysis/import succeeded or failed.
+struct ImportStaging {
+    path: PathBuf,
+}
+
+impl ImportStaging {
+    fn new() -> Self {
+        Self {
+            path: std::env::temp_dir().join(format!("furybuilder-import-{}", uuid::Uuid::new_v4())),
+        }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for ImportStaging {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.path);
+    }
+}
+
 #[tauri::command]
-pub fn world_import_preview(folder: String) -> JavaWorldAnalysis {
-    world_io::analyze_java_world(&folder)
+pub fn world_import_preview(source: String) -> JavaWorldAnalysis {
+    let staging = ImportStaging::new();
+    world_io::analyze_world_source(&source, staging.path())
 }
 
 #[tauri::command]
@@ -1068,14 +1108,24 @@ pub fn project_defaults(state: State<'_, AppState>) -> Result<ProjectDefaults, A
 pub fn project_import_world(
     state: State<'_, AppState>,
     name: String,
-    world_folder: String,
+    source: String,
+    strategy: world_io::ImportStrategy,
     editor_state: project_store::EditorState,
     folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
+    if strategy != world_io::ImportStrategy::ImportAsIs {
+        return Err(AppError::new(
+            ErrorCode::UnsupportedVersion,
+            "conversion is not available for this source; choose Import as-is",
+        ));
+    }
+    let staging = ImportStaging::new();
+    let prepared =
+        world_io::prepare_world_source(&source, staging.path()).map_err(world_source_error)?;
     import_world_project(
         state.inner(),
         name,
-        world_folder,
+        prepared.root(),
         editor_state,
         None,
         folder.as_deref(),
@@ -1150,7 +1200,7 @@ pub fn project_import_generated_world(
     import_world_project(
         state.inner(),
         name,
-        generated.world_dir,
+        Path::new(&generated.world_dir),
         editor_state,
         Some(provenance),
         folder.as_deref(),
@@ -1160,12 +1210,12 @@ pub fn project_import_generated_world(
 fn import_world_project(
     state: &AppState,
     name: String,
-    world_folder: String,
+    world_root: &Path,
     mut editor_state: project_store::EditorState,
     vanilla: Option<project_store::VanillaProvenance>,
     folder: Option<&str>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    let analysis = world_io::analyze_java_world(&world_folder);
+    let analysis = world_io::analyze_java_world(world_root);
     if !analysis.supported {
         let code = if analysis
             .blockers
@@ -1185,7 +1235,7 @@ fn import_world_project(
         ));
     }
     let (mut world, _load_report) =
-        world_io::load_java_world(&world_folder).map_err(world_import_error)?;
+        world_io::load_java_world(world_root).map_err(world_import_error)?;
     world.bump_revision();
     if !world
         .dimensions()
@@ -1223,7 +1273,7 @@ fn import_world_project(
     let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");
 
     let built = (|| -> Result<project_store::ProjectDetail, AppError> {
-        let copy = world_io::passthrough_java_world(&world_folder, &source_world)
+        let copy = world_io::passthrough_java_world(world_root, &source_world)
             .map_err(passthrough_error)?;
         let files = copy
             .files

@@ -4,6 +4,7 @@ import type {
   CreationMode,
   EditorState,
   FlatPreset,
+  ImportStrategy,
   JavaWorldAnalysis,
   OpenedProjectPayload,
   ProjectDefaults,
@@ -98,19 +99,21 @@ export function renameProject(folder: string, name: string): Promise<ProjectDeta
   return invokeCommand<ProjectDetail>("project_rename", { folder, name });
 }
 
-export function analyzeJavaWorld(folder: string): Promise<JavaWorldAnalysis> {
-  return invokeCommand<JavaWorldAnalysis>("world_import_preview", { folder });
+export function analyzeJavaWorld(source: string): Promise<JavaWorldAnalysis> {
+  return invokeCommand<JavaWorldAnalysis>("world_import_preview", { source });
 }
 
 export function importJavaWorld(
   name: string,
-  worldFolder: string,
+  source: string,
+  strategy: ImportStrategy,
   editorState: EditorState,
   folder?: string,
 ): Promise<OpenedProjectPayload> {
   return invokeCommand<OpenedProjectPayload>("project_import_world", {
     name,
-    worldFolder,
+    source,
+    strategy,
     editorState,
     folder: folder ?? null,
   });

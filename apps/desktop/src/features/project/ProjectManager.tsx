@@ -230,7 +230,7 @@ export function ProjectManager() {
   };
 
   const submitImport = async (): Promise<void> => {
-    const imported = await useProjectStore.getState().importWorld(name, worldFolder);
+    const imported = await useProjectStore.getState().importWorld(name, worldFolder, "importAsIs");
     if (imported) {
       setName("");
       setWorldFolder("");

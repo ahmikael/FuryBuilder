@@ -308,6 +308,20 @@ export interface SupportMatrix {
   categories: SupportCategory[];
 }
 
+/** A world source is either a folder or a `.zip` world archive. */
+export type ImportSourceKind = "folder" | "archive";
+
+/**
+ * Import policy. Conversion needs a verified converter, which this build does
+ * not ship yet; the wizard exposes it as an explicit unavailable choice.
+ */
+export type ImportStrategy = "importAsIs" | "convert";
+
+export interface WorldArchiveReport {
+  entries: number;
+  bytes: number;
+}
+
 export interface JavaWorldAnalysis {
   root: string;
   layout: string;
@@ -324,6 +338,9 @@ export interface JavaWorldAnalysis {
   chunks: number;
   blockEntities: number;
   entities: number;
+  sourcePath: string;
+  sourceKind: ImportSourceKind;
+  archive: WorldArchiveReport | null;
   warnings: string[];
   blockers: string[];
   supportMatrix: SupportMatrix;
@@ -376,7 +393,7 @@ export const CREATION_MODES: Array<{
     description:
       "Open a supported Java world read-only, keep a byte-for-byte source copy and edit its blocks through the project overlay.",
     requirements: [
-      "A complete Java world folder with level.dat and region data.",
+      "A complete Java world folder or .zip world archive with level.dat and region data.",
       "Read-only analysis must pass before the project can be created.",
       "A project name and folder; the source is copied byte for byte and never written.",
     ],

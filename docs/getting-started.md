@@ -206,17 +206,23 @@ data quietly.
 
 ## 9. Import an existing Java world
 
-1. Open `Project → Create`, choose **Import World**, and select the **world folder** (the
-   folder that contains `level.dat`).
-2. Click **Analyze**. The wizard reports the version, layout and a read/edit/write/
-   passthrough support matrix, plus blockers.
-3. Click **Import world**. FuryBuilder copies the source byte for byte, keeps it immutable and
+1. Open `Project → Create`, choose **Import World**, then pick **World folder** or
+   **.zip archive**. A folder must contain `level.dat`; an archive may contain the world at
+   its root or inside one wrapper folder.
+2. Click **Analyze**. The wizard reports the version, layout, dimensions, region/chunk counts
+   and a read/edit/write/passthrough support matrix, plus blockers. An archive is extracted
+   to a temporary folder for the read-only check and removed afterwards.
+3. Choose **Import as-is**. Conversion is shown as unavailable until a verified converter and
+   target profile ship; the detected version is never silently changed or downgraded.
+4. Click **Import world**. FuryBuilder copies the source byte for byte, keeps it immutable and
    opens an editable overlay.
 
 Only classic Java 1.21.4 world layouts are supported. A single `.mca` file or a bare
-`region/` directory is not a complete world and is refused. Edits are stored in the project
-overlay; the source folder is never written. Untouched chunk data, entities, block entities,
-heightmaps, light and POI are preserved as raw source data rather than recalculated.
+`region/` directory is not a complete world and is refused. Archive entries are bounded and
+traversal, absolute paths, symlinks, duplicate names and oversized entries are refused. Edits
+are stored in the project overlay; the source folder or archive is never written. Untouched
+chunk data, entities, block entities, heightmaps, light and POI are preserved as raw source
+data rather than recalculated.
 
 ## 10. Generate a Vanilla World
 
@@ -270,7 +276,7 @@ and block data is never changed. Selecting a client source replaces placeholder 
 | `Core offline`                          | The Rust backend did not start; check the terminal running `pnpm tauri:dev`.                      |
 | Textures are checkerboards              | Configure a verified 1.21.4 source in **Settings → Minecraft assets**.                            |
 | Vanilla World is blocked                | The readiness card names the missing Java, server JAR or EULA step.                               |
-| Import is rejected                      | Only classic 1.21.4 world folders containing `level.dat` are supported.                           |
+| Import is rejected                      | Only classic 1.21.4 world folders or `.zip` archives containing `level.dat` are supported.         |
 | Structure export is blocked             | The `.nbt` adapter refuses entities, block entities or unknown tags instead of dropping them.     |
 | A large paste only shows a pink preview | That is the staged path for pastes of 65,536+ non-air blocks. Press `Ctrl+V` again or confirm it. |
 | Recovery banner after a crash           | Read the reason and choose whether to keep the verified autosave or discard it.                   |

@@ -12,6 +12,8 @@ use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::world_import::{
     analyze_java_world, load_java_world, load_java_world_with_options, WorldImportOptions,
 };
+use world_io::world_source::{analyze_world_source, WorldSourceKind};
+use zip::write::SimpleFileOptions;
 
 const TARGET: i32 = 4189;
 const OVERWORLD: &str = "minecraft:overworld";
@@ -217,6 +219,37 @@ fn write_world(root: &Path, data_version: i32) {
     fs::write(root.join("custom-unknown.dat"), b"keep me").expect("write unknown file");
 }
 
+fn add_zip_directory(
+    zip: &mut zip::ZipWriter<fs::File>,
+    root: &Path,
+    relative: &Path,
+    prefix: &str,
+    options: SimpleFileOptions,
+) {
+    for entry in fs::read_dir(root.join(relative)).expect("read archive source directory") {
+        let entry = entry.expect("archive source entry");
+        let child = relative.join(entry.file_name());
+        let metadata = fs::symlink_metadata(entry.path()).expect("archive source metadata");
+        if metadata.is_dir() {
+            add_zip_directory(zip, root, &child, prefix, options);
+        } else {
+            let name = child.to_string_lossy().replace('\\', "/");
+            zip.start_file(format!("{prefix}/{name}"), options)
+                .expect("start archive entry");
+            zip.write_all(&fs::read(entry.path()).expect("read archive source file"))
+                .expect("write archive entry");
+        }
+    }
+}
+
+fn zip_world(world: &Path, prefix: &str, archive: &Path) {
+    let file = fs::File::create(archive).expect("create archive");
+    let mut zip = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    add_zip_directory(&mut zip, world, Path::new(""), prefix, options);
+    zip.finish().expect("finish archive");
+}
+
 fn snapshot(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
     let mut files = BTreeMap::new();
     let mut stack = vec![PathBuf::new()];
@@ -257,6 +290,9 @@ fn analysis_reports_supported_world_and_never_writes() {
     assert_eq!(analysis.dimensions[0].id, OVERWORLD);
     assert_eq!(analysis.dimensions[0].region_files, 1);
     assert_eq!(analysis.dimensions[0].chunks, 2);
+    assert_eq!(analysis.source_kind, WorldSourceKind::Folder);
+    assert_eq!(analysis.source_path, root.display().to_string());
+    assert!(analysis.archive.is_none());
     assert!(analysis
         .warnings
         .iter()
@@ -266,6 +302,35 @@ fn analysis_reports_supported_world_and_never_writes() {
         .iter()
         .any(|warning| warning.contains("biome cells become editable")));
     assert_eq!(snapshot(&root), before, "analysis must be read-only");
+}
+
+#[test]
+fn archive_analysis_extracts_a_nested_world_without_writing_the_archive() {
+    let dir = TempDir::new("archive");
+    let root = dir.path().join("world");
+    write_world(&root, TARGET);
+    let archive = dir.path().join("My World.zip");
+    zip_world(&root, "My World", &archive);
+    let before = fs::read(&archive).expect("read archive");
+    let staging = dir.path().join("staging");
+
+    let analysis = analyze_world_source(&archive, &staging);
+    assert!(analysis.supported, "blockers: {:?}", analysis.blockers);
+    assert_eq!(analysis.source_kind, WorldSourceKind::Archive);
+    assert_eq!(analysis.selection_kind, "world_archive");
+    assert_eq!(analysis.source_path, archive.display().to_string());
+    assert_eq!(analysis.root, archive.display().to_string());
+    assert_eq!(analysis.chunks, 2);
+    assert_eq!(
+        analysis.archive.as_ref().map(|archive| archive.entries),
+        Some(4)
+    );
+    assert!(analysis
+        .warnings
+        .iter()
+        .any(|warning| warning.contains("temporary folder")));
+    assert_eq!(fs::read(&archive).expect("read archive"), before);
+    assert!(!staging.exists(), "preview staging must be removed");
 }
 
 #[test]

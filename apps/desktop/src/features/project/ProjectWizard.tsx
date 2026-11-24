@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  FileArchive,
   FolderOpen,
   Info,
   Loader2,
@@ -32,10 +33,13 @@ import {
   CREATION_MODES,
   creationModeLabel,
   flatTopY,
+  formatBytes,
   formatResourceId,
   type CreationMode,
   type FlatDefaults,
   type FlatPreset,
+  type ImportSourceKind,
+  type ImportStrategy,
   type JavaWorldAnalysis,
   type ProjectDefaults,
 } from "@/project/types";
@@ -219,6 +223,7 @@ function stepErrors(
     flat: FlatPreset | null;
     flatDefaults: FlatDefaults | null;
     profile: VersionProfile | null;
+    importStrategy: ImportStrategy;
   },
 ): string[] {
   if (step.id === "basics") {
@@ -241,10 +246,19 @@ function stepErrors(
   }
   if (step.id === "source" && mode === "import") {
     const errors: string[] = [];
-    if (folder.trim().length === 0) errors.push("Choose a Java world folder.");
+    if (folder.trim().length === 0) {
+      errors.push("Choose a Java world folder or .zip archive.");
+    }
     if (!analysis) errors.push("Analyze the world before continuing.");
-    if (analysis && !analysis.supported)
+    if (analysis && !analysis.supported) {
       errors.push("This world has blockers and cannot be imported.");
+    }
+    if (analysis && analysis.sourcePath !== folder.trim()) {
+      errors.push("Analyze the selected source again.");
+    }
+    if (source.importStrategy !== "importAsIs") {
+      errors.push("Choose Import as-is; conversion is not available in this build.");
+    }
     return errors;
   }
   if (step.id === "source" && mode === "flat") {
@@ -406,44 +420,86 @@ function BasicsStep({
 }
 
 function ImportSourceStep({
-  folder,
+  sourceKind,
+  source,
   analysis,
   analysisLoading,
+  strategy,
   disabled,
-  onFolder,
+  onSourceKind,
+  onSource,
   onBrowse,
   onAnalyze,
+  onStrategy,
 }: {
-  folder: string;
+  sourceKind: ImportSourceKind;
+  source: string;
   analysis: JavaWorldAnalysis | null;
   analysisLoading: boolean;
+  strategy: ImportStrategy;
   disabled: boolean;
-  onFolder: (value: string) => void;
+  onSourceKind: (value: ImportSourceKind) => void;
+  onSource: (value: string) => void;
   onBrowse: () => void;
   onAnalyze: () => void;
+  onStrategy: (value: ImportStrategy) => void;
 }) {
+  const archive = sourceKind === "archive";
   return (
     <div className="space-y-4">
       <Field>
-        <FieldLabel htmlFor="wizard-world-folder">Java world folder</FieldLabel>
+        <FieldLabel>Source type</FieldLabel>
+        <ToggleGroup
+          variant="outline"
+          size="sm"
+          value={[sourceKind]}
+          disabled={disabled}
+          onValueChange={(value) => {
+            const next = value[0];
+            if (next === "folder" || next === "archive") onSourceKind(next);
+          }}
+        >
+          <ToggleGroupItem value="folder">
+            <FolderOpen data-icon="inline-start" />
+            World folder
+          </ToggleGroupItem>
+          <ToggleGroupItem value="archive">
+            <FileArchive data-icon="inline-start" />
+            .zip archive
+          </ToggleGroupItem>
+        </ToggleGroup>
+        <FieldDescription>
+          Import a complete Java world folder or a .zip archive that contains one. The original
+          source is never written.
+        </FieldDescription>
+      </Field>
+
+      <Field>
+        <FieldLabel htmlFor="wizard-import-source">
+          {archive ? "World archive (.zip)" : "Java world folder"}
+        </FieldLabel>
         <div className="flex flex-wrap items-center gap-2">
           <Input
-            id="wizard-world-folder"
+            id="wizard-import-source"
             className="min-w-56 flex-1 font-mono text-xs"
-            value={folder}
-            placeholder="…/.minecraft/saves/My World"
+            value={source}
+            placeholder={archive ? "…/downloads/My World.zip" : "…/.minecraft/saves/My World"}
             disabled={disabled}
-            onChange={(event) => onFolder(event.target.value)}
+            onChange={(event) => onSource(event.target.value)}
           />
           <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={onBrowse}>
-            <FolderOpen data-icon="inline-start" />
+            {archive ? (
+              <FileArchive data-icon="inline-start" />
+            ) : (
+              <FolderOpen data-icon="inline-start" />
+            )}
             Browse
           </Button>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            disabled={disabled || analysisLoading || folder.trim().length === 0}
+            disabled={disabled || analysisLoading || source.trim().length === 0}
             onClick={onAnalyze}
           >
             {analysisLoading ? (
@@ -455,8 +511,8 @@ function ImportSourceStep({
           </Button>
         </div>
         <FieldDescription>
-          Read-only analysis validates level.dat, the layout and every chunk before import. The
-          source folder is never written.
+          Read-only analysis validates level.dat, the layout and every chunk before import. Archive
+          contents are extracted to a temporary folder and removed after analysis.
         </FieldDescription>
       </Field>
 
@@ -471,15 +527,54 @@ function ImportSourceStep({
               {analysis.versionName ? ` · ${analysis.versionName}` : ""}
             </span>
             <span className="text-muted-foreground">{analysis.layout}</span>
+            <Badge variant="outline">{analysis.sourceKind === "archive" ? ".zip" : "folder"}</Badge>
             <span className="ml-auto font-mono text-xs text-muted-foreground">
               {analysis.regions} region(s) · {analysis.chunks} chunk(s)
             </span>
           </div>
-          {analysis.levelName ? (
-            <p className="text-sm text-muted-foreground">
-              Level: <span className="font-medium text-foreground">{analysis.levelName}</span>
+
+          <div className="grid gap-2 text-sm sm:grid-cols-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Level</p>
+              <p className="font-medium">{analysis.levelName ?? "Not declared"}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Block entities</p>
+              <p className="font-medium tabular-nums">{analysis.blockEntities}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Entities</p>
+              <p className="font-medium tabular-nums">{analysis.entities}</p>
+            </div>
+          </div>
+
+          {analysis.archive ? (
+            <p className="text-xs text-muted-foreground">
+              Archive: {analysis.archive.entries} file(s) · {formatBytes(analysis.archive.bytes)}{" "}
+              extracted for analysis.
             </p>
           ) : null}
+
+          {analysis.dimensions.length > 0 ? (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Dimensions</h4>
+              {analysis.dimensions.map((dimension) => (
+                <div
+                  key={dimension.id}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border bg-background px-3 py-2 font-mono text-xs"
+                >
+                  <span className="truncate">{dimension.id}</span>
+                  <span className="text-muted-foreground">
+                    Y {dimension.minY}..{dimension.minY + dimension.height - 1}
+                  </span>
+                  <span className="ml-auto text-muted-foreground">
+                    {dimension.regionFiles} region(s) · {dimension.chunks} chunk(s)
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
           {analysis.blockers.length > 0 ? (
             <Alert variant="destructive">
               <TriangleAlert />
@@ -504,14 +599,57 @@ function ImportSourceStep({
               </AlertDescription>
             </Alert>
           ) : null}
+
+          <Field>
+            <FieldLabel>Import strategy</FieldLabel>
+            <ToggleGroup
+              variant="outline"
+              value={[strategy]}
+              disabled={disabled}
+              className="grid w-full gap-2 sm:grid-cols-2"
+              onValueChange={(value) => {
+                const next = value[0];
+                if (next === "importAsIs" || next === "convert") {
+                  onStrategy(next);
+                }
+              }}
+            >
+              <ToggleGroupItem
+                value="importAsIs"
+                className="h-auto flex-col items-start gap-1 whitespace-normal p-4 text-left"
+              >
+                <span className="text-sm font-medium">Import as-is</span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  Keep the detected version and edit decoded blocks over an immutable source copy.
+                </span>
+              </ToggleGroupItem>
+              <ToggleGroupItem
+                value="convert"
+                disabled
+                className="h-auto flex-col items-start gap-1 whitespace-normal p-4 text-left"
+              >
+                <span className="flex items-center gap-2 text-sm font-medium">
+                  Convert
+                  <Badge variant="outline">Unavailable</Badge>
+                </span>
+                <span className="text-xs font-normal text-muted-foreground">
+                  No verified converter ships in this build. Import a supported world as-is.
+                </span>
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <FieldDescription>
+              Import as-is keeps the source version and never downgrades it. Conversion stays
+              disabled until a verified converter and target profile are available.
+            </FieldDescription>
+          </Field>
         </div>
       ) : (
         <Card className="gap-0 py-0">
           <CardContent className="flex items-start gap-3 p-4 text-sm text-muted-foreground">
             <Sparkles className="mt-0.5 size-4 shrink-0 text-primary" />
             <p>
-              Pick a world folder and analyze it. Import stays disabled until the version, layout
-              and chunks pass verification.
+              Pick a world folder or .zip archive and analyze it. Import stays disabled until the
+              version, layout and chunks pass verification.
             </p>
           </CardContent>
         </Card>
@@ -530,6 +668,7 @@ function ReviewStep({
   projectsRoot,
   analysis,
   flat,
+  importStrategy,
 }: {
   name: string;
   mode: CreationMode;
@@ -540,6 +679,7 @@ function ReviewStep({
   projectsRoot: string | null;
   analysis: JavaWorldAnalysis | null;
   flat: FlatPreset | null;
+  importStrategy: ImportStrategy;
 }) {
   const destination = projectFolderName(projectFolder, folderSuffix);
   const flatSource =
@@ -585,9 +725,21 @@ function ReviewStep({
             <div className="flex flex-wrap items-center gap-3 px-4 py-3">
               <dt className="w-28 text-sm text-muted-foreground">Source</dt>
               <dd className="min-w-0 flex-1 truncate font-mono text-xs">
-                {mode === "import" ? folder : mode === "flat" ? flatSource : "Empty world"}
+                {mode === "import"
+                  ? `${analysis?.sourceKind === "archive" ? "World archive" : "World folder"} · ${folder}`
+                  : mode === "flat"
+                    ? flatSource
+                    : "Empty world"}
               </dd>
             </div>
+            {mode === "import" ? (
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <dt className="w-28 text-sm text-muted-foreground">Strategy</dt>
+                <dd className="text-sm">
+                  {importStrategy === "importAsIs" ? "Import as-is" : "Convert"}
+                </dd>
+              </div>
+            ) : null}
             {mode === "flat" && flat && layerSummary ? (
               <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <dt className="w-28 text-sm text-muted-foreground">Layers</dt>
@@ -614,7 +766,7 @@ function ReviewStep({
       </Card>
       <p className="text-sm leading-relaxed text-muted-foreground">
         {mode === "import"
-          ? "The source folder is copied byte for byte and stays read-only. Edits live in the project overlay."
+          ? "The source is copied byte for byte and stays read-only. Edits live in the project overlay; the version is never downgraded."
           : "The project is saved with the current project schema and the supported target profile."}
       </p>
     </div>
@@ -701,7 +853,9 @@ export function ProjectWizard() {
   const [name, setName] = useState("");
   const [projectFolder, setProjectFolder] = useState("");
   const [defaults, setDefaults] = useState<ProjectDefaults | null>(null);
-  const [worldFolder, setWorldFolder] = useState("");
+  const [importSource, setImportSource] = useState("");
+  const [importSourceKind, setImportSourceKind] = useState<ImportSourceKind>("folder");
+  const [importStrategy, setImportStrategy] = useState<ImportStrategy>("importAsIs");
   const [catalog, setCatalog] = useState<VersionCatalogReport | null>(null);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<ErrorPresentation | null>(null);
@@ -752,7 +906,7 @@ export function ProjectWizard() {
       name,
       mode,
       analysis,
-      worldFolder,
+      importSource,
       projectFolder,
       folderSuffix,
       {
@@ -762,7 +916,12 @@ export function ProjectWizard() {
         selected: effectiveVersion,
         desktop,
       },
-      { flat: flatPreset, flatDefaults, profile: selectedProfile },
+      {
+        flat: flatPreset,
+        flatDefaults,
+        profile: selectedProfile,
+        importStrategy,
+      },
     );
   const errors = errorsForStep(step);
   const progress = ((activeStep + 1) / steps.length) * 100;
@@ -771,7 +930,9 @@ export function ProjectWizard() {
       ? "Choose the project folder and review what world generation needs."
       : step.id === "version" && mode === "import"
         ? "The source world decides its version; review the verified profile before continuing."
-        : step.description;
+        : step.id === "source" && mode === "import"
+          ? "Choose a world folder or .zip archive, analyze it read-only, then choose how to import."
+          : step.description;
 
   const loadVersions = async (): Promise<void> => {
     if (!desktop) return;
@@ -805,7 +966,7 @@ export function ProjectWizard() {
     }
     setSubmitted(true);
     if (mode === "import") {
-      await useProjectStore.getState().importWorld(name, worldFolder, destination);
+      await useProjectStore.getState().importWorld(name, importSource, importStrategy, destination);
       return;
     }
     const options: CreateProjectOptions = {};
@@ -844,26 +1005,40 @@ export function ProjectWizard() {
     setAttempted(false);
   };
 
-  const changeFolder = (value: string): void => {
-    setWorldFolder(value);
+  const changeImportSource = (value: string): void => {
+    setImportSource(value);
+    setImportStrategy("importAsIs");
     useProjectStore.getState().clearWorldAnalysis();
   };
 
-  const browseWorldFolder = async (): Promise<void> => {
+  const changeImportSourceKind = (value: ImportSourceKind): void => {
+    setImportSourceKind(value);
+    setImportSource("");
+    setImportStrategy("importAsIs");
+    useProjectStore.getState().clearWorldAnalysis();
+  };
+
+  const browseImportSource = async (): Promise<void> => {
     try {
-      const { open: openFolder } = await import("@tauri-apps/plugin-dialog");
-      const selected = await openFolder({
-        directory: true,
+      const { open: openSource } = await import("@tauri-apps/plugin-dialog");
+      const selected = await openSource({
+        directory: importSourceKind === "folder",
         multiple: false,
-        title: "Select a Java world folder",
+        title:
+          importSourceKind === "archive"
+            ? "Select a Java world archive"
+            : "Select a Java world folder",
+        ...(importSourceKind === "archive"
+          ? { filters: [{ name: "World archive", extensions: ["zip"] }] }
+          : {}),
       });
       if (typeof selected === "string" && selected.length > 0) {
-        changeFolder(selected);
+        changeImportSource(selected);
       }
     } catch (pickerError) {
       pushToast({
         kind: "error",
-        title: "Folder picker unavailable",
+        title: "Source picker unavailable",
         description: String(pickerError),
       });
     }
@@ -956,13 +1131,17 @@ export function ProjectWizard() {
               {step.id === "source" ? (
                 mode === "import" ? (
                   <ImportSourceStep
-                    folder={worldFolder}
+                    sourceKind={importSourceKind}
+                    source={importSource}
                     analysis={analysis}
                     analysisLoading={analysisLoading}
+                    strategy={importStrategy}
                     disabled={busy}
-                    onFolder={changeFolder}
-                    onBrowse={() => void browseWorldFolder()}
-                    onAnalyze={() => void useProjectStore.getState().analyzeWorld(worldFolder)}
+                    onSourceKind={changeImportSourceKind}
+                    onSource={changeImportSource}
+                    onBrowse={() => void browseImportSource()}
+                    onAnalyze={() => void useProjectStore.getState().analyzeWorld(importSource)}
+                    onStrategy={setImportStrategy}
                   />
                 ) : mode === "vanilla" ? (
                   <VanillaWorldWizard
@@ -989,12 +1168,13 @@ export function ProjectWizard() {
                   name={name}
                   mode={mode}
                   version={effectiveVersion}
-                  folder={worldFolder}
+                  folder={importSource}
                   projectFolder={projectFolder}
                   folderSuffix={folderSuffix}
                   projectsRoot={projectsRoot}
                   analysis={analysis}
                   flat={flatPreset}
+                  importStrategy={importStrategy}
                 />
               ) : null}
 
