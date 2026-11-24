@@ -57,6 +57,26 @@ Only a version with a verified profile can be selected for a new project.
 The machine-readable source is `crates/world-io/src/support_matrix.rs`; the same data is
 returned by `analyze_java_world` and shown in the Import World wizard.
 
+## Flattened biome conversion (1.13–1.17)
+
+The flattened releases store biomes in `Level.Biomes`, outside the block-section palettes:
+256 block-column entries in 1.13–1.14 and 1024 YZX cells (16 sections of 4×4×4 cells) in
+1.15–1.17. `minecraft-version` carries the numeric registry for each exact release. ID 8 is
+`minecraft:nether` through 1.15 and `minecraft:nether_wastes` from 1.16. These worlds are
+not admitted by the region reader, project wizard or exporter yet; the converter operates on
+one chunk's NBT so the P2 adapter and version conversion can share one mapping.
+
+- Decoding produces the normalized 4×4×4 `BiomeSection` grid used by 1.18+.
+- Every source ID must exist in that exact release. An unknown ID stops conversion and is
+  never replaced by a default biome.
+- A 1.13–1.14 4×4 footprint may contain 16 different columns. `RequireUniform` (the default)
+  refuses that footprint. `SampleCenter` samples `(4x+2, 4z+2)`, matching the vanilla 1.15
+  upgrade, and reports how many footprints were reduced.
+- Patching a column chunk requires the edited section grid to be vertically uniform. A
+  changed mixed footprint is written only under `SampleCenter` and replaces all 16 columns;
+  an unchanged footprint keeps its original columns.
+- A biome that does not exist in the source release cannot be patched into it.
+
 ## Structure `.nbt`
 
 Java structure `.nbt` is the first interchange format. It stores a bounded block region

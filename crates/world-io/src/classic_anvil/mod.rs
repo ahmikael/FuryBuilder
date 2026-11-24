@@ -3,6 +3,7 @@
 //! enable additional versions.
 
 pub mod chunk;
+pub(super) mod flattened_biomes;
 pub(crate) mod format;
 pub mod overlay;
 pub mod reader;

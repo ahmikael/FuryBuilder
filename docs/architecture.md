@@ -311,6 +311,13 @@ both derived-data policies, masking only the edited chunk's write timestamp.
 Light-only records one section below or above the terrain remain in raw NBT;
 they never enter the editable block or biome model.
 
+Biome conversion for 1.13–1.17 sits beside the codec in
+`classic_anvil/flattened_biomes.rs`. It reads and patches only one chunk's `Level.Biomes`
+array: 256 columns before 1.15 and 1024 YZX cells from 1.15, mapped through the exact
+release's numeric registry. It produces the same normalized 4×4×4 sections as the modern
+decoder and never rewrites other NBT. This is not an I/O admission path: the region reader,
+wizard and exporter still refuse these releases until the P2 adapter verifies them.
+
 ## Security boundaries
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.

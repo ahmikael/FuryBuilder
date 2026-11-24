@@ -8,6 +8,7 @@
 #![forbid(unsafe_code)]
 
 pub mod catalog;
+pub mod flattened_biomes;
 pub mod profile_builder;
 pub mod profiles;
 pub mod version_json;
@@ -345,7 +346,7 @@ pub enum BiomeFormat {
     Palette4x4x4,
     /// One biome per X/Z column, repeated across Y.
     Column,
-    /// Per-section biome palettes.
+    /// Chunk-wide numeric array on a 4×4×4 grid (1.15–1.17).
     Section,
     Unknown,
 }

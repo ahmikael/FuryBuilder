@@ -22,6 +22,10 @@ mod world_codec;
 pub mod world_selection;
 pub mod world_source;
 
+pub use classic_anvil::flattened_biomes::{
+    decode_flattened_chunk_biomes, patch_flattened_chunk_biomes, ColumnBiomePolicy,
+    FlattenedBiomeError, FlattenedBiomeProjection,
+};
 pub use classic_anvil::{
     chunk as java_chunk, overlay, reader as anvil, region_write, world_export, world_import,
 };

@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами и общим описанием формата чанков 1.18+. Запись по-прежнему проверена только для 1.21.4. Следующий шаг — форматы биомов до 1.18; прогресс и проверки в §21.
+> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами и общим описанием формата чанков 1.18+. Запись по-прежнему проверена только для 1.21.4. Добавлена конвертация биомов 1.13–1.17 в нормализованные секции без допуска этих версий к world I/O. Следующий шаг — version-aware chunk NBT; прогресс и проверки в §21.
 > Дата: 2026-11-22; обновлено 2026-11-25 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P1-05` — Section biomes 1.15–1.17, column biomes 1.13–1.14 и conversion. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P1-06` — Version-aware chunk NBT: секции, палитры, block entities preserve. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P1-06`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P1-07`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1536,7 +1536,7 @@ UI:
 - [x] `P1-02` Ввести `WorldCodec` trait/interfaces (§5.2), не меняя поведение 1.21.4.
 - [x] `P1-03` `ClassicAnvilCodec`: вынести 1.21.4 в реализацию + golden-тесты без diff.
 - [x] `P1-04` Параметризовать section layout, palette, heightmaps и light для 1.18+.
-- [ ] `P1-05` Section biomes 1.15–1.17 + column biomes 1.13–1.14 и conversion.
+- [x] `P1-05` Section biomes 1.15–1.17 + column biomes 1.13–1.14 и conversion.
 - [ ] `P1-06` Version-aware chunk NBT: секции, палитры, block entities preserve.
 - [ ] `P1-07` Minor adapters 1.18/1.19/1.20/1.21 (отличия полей и registry).
 - [ ] `P1-08` Split layout 26.1–26.3: `dimensions/`, `players/`, split region (если готово).
@@ -1690,6 +1690,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | Биомы 1.13–1.17 | Добавлен точный numeric registry для 1.13–1.17: 73/75/75/79/81 биомов, ID 8 — `minecraft:nether` до 1.16 и `minecraft:nether_wastes` с 1.16; неизвестные ID не подменяются. Chunk-level конвертер читает `Level.Biomes` (256 колонок в 1.13–1.14, 1024 YZX-ячейки в 1.15–1.17) в нормализованные 16 секций и патчит только этот массив, сохраняя остальной NBT. Смешанные 4×4 footprints требуют явного `SampleCenter` с выбором `(4x+2, 4z+2)`; `RequireUniform` отказывает, неизменённые footprints сохраняют исходные колонки. Проверяются несовпадение версии/длины, вертикальная вариация и невыразимые биомы. Версии не допущены к region reader, wizard или экспорту; граница описана в `docs/formats.md` и `docs/architecture.md` | см. `git log` | 5 integration + 1 unit тест конвертации; 713 Rust tests (72 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Формат modern classic Anvil | `ClassicChunkFormat` выбирается по семейству профиля; единое описание секций, палитр, карт высот и света используется при чтении, записи и диагностике. Границы Y берутся из профиля измерения, палитры используют общую упаковку без перехода через границу `long`. Световые записи за границами рельефа не импортируются как блоки или биомы; экспорт сохраняет их либо очищает свет по выбранной политике. Неожиданная длина карты высот отмечается предупреждением, пересчёта в Rust нет. Остальные версии остаются закрыты для world I/O | см. `git log` | Layout-тест по 27 профилям, round-trip 24 секций рельефа + 2 световых для обеих политик, оба golden-эталона без изменений; 707 Rust tests (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | ClassicAnvilCodec | Reader, chunk codec, overlay, запись регионов, импорт и экспорт собраны в `classic_anvil`; прежний адаптер заменён без изменения алгоритмов, форматов и допуска версий. SHA-256 golden-манифесты полного экспорта сняты до переноса с `9706fe1` и совпали после переноса для `Preserve` и `VanillaRebuild`. Исключён только timestamp изменённого чанка; исходный мир проверяется побайтово | см. `git log` | Оба golden-теста до и после переноса; 703 Rust tests (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Интерфейс WorldCodec | В `world-io` единый внутренний интерфейс для анализа, загрузки мира и overlay, чтения и кодирования чанков, записи регионов и экспорта. Публичные точки входа ведут в тот же Anvil-код; форматы и ограничения не менялись. Тест полного экспорта теперь повторно импортирует все три измерения, проверяет изменённый блок и биом, неизменность источника и побайтовое сохранение нетронутых файлов. Граница описана в `docs/architecture.md` | см. `git log` | Сверены тела всех 7 операций с предыдущим коммитом; 701 Rust test (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
