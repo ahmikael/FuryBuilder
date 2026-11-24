@@ -39,10 +39,13 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Settings" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Minecraft assets" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Appearance" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Light" }));
     expect(useEditorStore.getState().theme).toBe("light");
+
+    await user.click(screen.getByRole("tab", { name: "Components" }));
+    expect(await screen.findByRole("heading", { name: "Minecraft assets" })).toBeInTheDocument();
   });
 
   it("mounts the editor only after a project is ready", () => {

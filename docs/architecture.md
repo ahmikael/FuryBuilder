@@ -268,6 +268,15 @@ Dismiss; the viewport is never opened halfway. The screen is built from the stoc
 `Button`, `Card`, `Alert`, `Badge`, `Empty`, `ScrollArea`, and `Separator` components with
 semantic theme variables only.
 
+## Settings
+
+Settings is a five-tab dialog: `Appearance` (theme and UI scale), `Components` (shared Java
+runtime, Minecraft assets, official server JAR and Vanilla readiness), `Updates`, `Diagnostics`,
+and `Advanced` (backend status). Project creation and first-time provisioning stay in the
+full-screen wizard; the Settings tabs describe and maintain the shared local state for the
+whole application. The dialog is composed from the stock shadcn `Dialog`, `Tabs`, `Card`,
+`Slider`, and `ToggleGroup` primitives with semantic theme variables only.
+
 ## Security boundaries
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.

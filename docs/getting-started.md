@@ -252,8 +252,8 @@ data rather than recalculated.
 This is the only mode that claims to use the original Minecraft generator, and it has real
 prerequisites.
 
-1. Open **Settings → Java & World Generation** and check the read-only **Vanilla World**
-   readiness card. It lists Java, server JAR and EULA blockers without downloading anything.
+1. Open **Settings → Components** and check the read-only **Vanilla World** readiness card.
+   It lists Java, server JAR and EULA blockers without downloading anything.
 2. If needed, use the explicit buttons to download the managed Java 21 runtime and the
    official 1.21.4 server JAR. Both downloads show source, size and verification; nothing is
    installed globally.

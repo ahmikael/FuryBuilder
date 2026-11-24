@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components, Review, Preparing, запись компонентов в v2 manifest, подтверждение версии при импорте, Project Manager только для открытого проекта и UI-тесты всех веток wizard закрыты; следующий шаг — Settings без дублей.
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components, Review, Preparing, запись компонентов в v2 manifest, подтверждение версии при импорте, Project Manager только для открытого проекта, UI-тесты всех веток wizard и Settings на пять вкладок закрыты; следующий шаг — убрать дублирующие setup-блоки из Settings.
 > Дата: 2026-11-22; обновлено 2026-11-24 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-52` — Settings: Appearance / Components / Updates / Diagnostics / Advanced. Статус: P0 в работе.
+**Текущий фокус:** `P0-53` — удалить `Java & World Generation`, `DependencyReadiness`, дубли server/assets setup. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-53`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-54`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1505,7 +1505,7 @@ UI:
 
 #### F. Settings без дублей
 
-- [ ] `P0-52` Settings: Appearance / Components / Updates / Diagnostics / Advanced.
+- [x] `P0-52` Settings: Appearance / Components / Updates / Diagnostics / Advanced.
 - [ ] `P0-53` Удалить `Java & World Generation`, `DependencyReadiness`, дубли server/assets setup.
 - [ ] `P0-54` Components inventory: размер, путь, verify, remove, open folder.
 - [ ] `P0-55` Общие `ComponentCard`/`Picker`/`Status` для wizard и Settings.
@@ -1690,6 +1690,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-24 | Settings tabs | `SettingsDialog` стал пятью вкладками `Appearance` / `Components` / `Updates` / `Diagnostics` / `Advanced`: тема и UI scale остались в Appearance, Java/assets/server и Vanilla readiness сгруппированы в Components, backend переехал в Advanced; добавлен `SettingsDialog.test.tsx` на состав вкладок, переключение и закрытие, обновлены App test и docs; shadcn: штатные `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`, стили не менялись | см. `git log` | 691 Rust tests, 373 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit, browser QA пяти вкладок без console errors |
 | 2026-11-24 | UI-тесты wizard | Добавлен `ProjectWizard.test.tsx`: auto download client assets, manual `.minecraft`, explicit placeholder, ошибка/retry проверки компонентов и ошибка/retry каталога версий; `ProjectComponentsStep.test.tsx` расширен на ошибку/retry установки, ошибку/retry preview, ошибку/retry сборки каталога и прогресс/cancel загрузки. UI и shadcn-примитивы не менялись | см. `git log` | 691 Rust tests, 371 TS tests (1 skipped), clippy, fmt, typecheck/lint/format |
 | 2026-11-24 | Project manager без проекта | `ProjectManager` больше не рендерит dialog без открытого проекта: Welcome остаётся хабом, полный экран — только wizard; закрытие проекта из dialog закрывает и сам dialog; кнопка `Project` в toolbar disabled с причиной, команда project manager отсутствует в command palette, а browser preview объясняет необходимость desktop core вместо открытия списка. Тесты: отсутствие dialog без проекта и в full-screen wizard, закрытие dialog вместе с проектом, disabled/enabled Project, browser fallback; docs обновлены; shadcn: штатные `Dialog`/`Tabs`/`Empty`, стили не менялись | см. `git log` | 691 Rust tests, 362 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit |
 | 2026-11-24 | Подтверждение версии импорта | Мастер сверяет DataVersion с точным профилем и требует повторного подтверждения после нового анализа. `project_import_world` получает подтверждённую пару, сверяет её со свежим анализом, профилем декодированного мира и копией `level.dat`; при несовпадении проект не открывается, незавершённые данные удаляются. Тесты покрывают папки и архивы, манифест после повторного открытия, подмену источника и изменение папки между декодированием и копированием | см. `git log` | 691 Rust tests, 359 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit: штатные `Button`/`Alert`, примитивы и тема без изменений |
