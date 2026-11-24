@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-62` — Финальный прогон `cargo test`/clippy/fmt и `pnpm typecheck`/lint/format/test. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P0-63` — Ручной smoke: 1.21.4 создать auto и manual, открыть, сохранить, переоткрыть. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-63`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-64`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1521,7 +1521,7 @@ UI:
 
 #### H. Закрытие P0
 
-- [ ] `P0-62` `cargo test`/clippy/fmt + `pnpm typecheck`/lint/format/test — зелёные.
+- [x] `P0-62` `cargo test`/clippy/fmt + `pnpm typecheck`/lint/format/test — зелёные.
 - [ ] `P0-63` Ручной smoke: 1.21.4 создать auto и manual, открыть, сохранить, переоткрыть.
 - [ ] `P0-64` Обновить docs: getting-started, reference, formats, changelog (P0).
 - [ ] `P0-65` Коммит P0; push — только после отдельного разрешения.
@@ -1690,6 +1690,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | Финальные проверки P0 | Полный прогон перед ручным smoke: Rust workspace и все TS-тесты, clippy, rustfmt, typecheck, oxlint и oxfmt. Изменений в коде нет | см. `git log` | 694 Rust tests (71 suites), 373 TS tests + 1 skipped (374), clippy `-D warnings`, fmt, typecheck, lint, format |
 | 2026-11-25 | Тесты нижней панели и toolbar | Добавлены `layout.test.ts` (ровно 12 вкладок, `Blocks` по умолчанию, удалённые id `palette`/`tools`/`warnings`/`observation`/`validation`/`console`/`history` не считаются вкладками и сбрасываются к `Blocks`) и `CommandPalette.test.ts` (палитра предлагает только актуальные вкладки, помечает активную и переключает на `Activity`). `BottomPanel.test.tsx` сверяет отрисованный список с `BOTTOM_PANEL_TABS`; существующие тесты уже проверяли отсутствие Tools/Warnings, группировку Analysis/Activity и toolbar без активного блока. UI и shadcn-примитивы не менялись | см. `git log` | 373 TS tests (1 skipped), 694 Rust tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-25 | Версия layout | Сохранённый layout получил `layoutVersion = 2`: панели, выбранная вкладка и dimension из записи другой версии игнорируются и заменяются текущими дефолтами, а тема и UI scale остаются пользовательскими настройками и читаются всегда. `resetLayout` записывает актуальную версию, неизвестный id вкладки нормализуется к `blocks`. Добавлен `editor-store.test.ts` на сброс старого layout и на восстановление текущего с заменой удалённой вкладки; getting-started объясняет однократный сброс | см. `git log` | 367 TS tests (1 skipped), 694 Rust tests, clippy, fmt, typecheck/lint/format |
 | 2026-11-25 | Нижняя панель: Blocks и группы | `Palette` переименован в `Blocks` (id `blocks`, поиск и карточка состояния без изменений). Удалены вкладки и панели `Tools` и `Warnings`. `Observation` и `Validation` стали подвкладками `Analysis`, `Console` и `History` — подвкладками `Activity`; `BOTTOM_PANEL_TABS` сокращён до 12 актуальных вкладок, command palette автоматически следует за ним. Добавлены тесты группировки, обновлён UX-сценарий открытия Activity; docs/getting-started, advanced-workflow, mcp-setup и факты плана обновлены; shadcn: штатные `Tabs`, `Card`, `Empty`, `Table`, стили не менялись | см. `git log` | 365 TS tests (1 skipped), 694 Rust tests (без изменений в Rust), typecheck/lint/format, browser QA: 12 вкладок, Blocks выбран, Analysis=Observation/Validation, Activity=Console/History, Tools/Warnings отсутствуют, console errors отсутствуют |
