@@ -223,6 +223,12 @@ primitives (`Button`, `Card`, `Alert`, `Badge`,
 semantic theme variables only. Later steps are added to the shell as their backend data becomes
 available, so no step shows a dead control.
 
+During preparation, the desktop backend resolves component identities for the target profile
+before writing `project.json`. It verifies that the catalog was built from the same client JAR
+identified by the component manager and that a Vanilla server pin matches the completed run.
+The project store writes these path-free records together with the first v2 manifest, not in a
+follow-up save. No component download is started by project creation.
+
 ## Welcome screen
 
 The top bar and status bar are always present; the content area switches between the

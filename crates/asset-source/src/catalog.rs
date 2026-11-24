@@ -177,8 +177,8 @@ struct CatalogCacheEntry {
 }
 
 /// Bounded process-local catalog cache. The key includes the JAR identity, so replacing a
-/// JAR with another build of the same version rebuilds the catalog. A persistent cache keyed
-/// by `version + jarSha1 + catalogSchema` is added together with the project catalog pin.
+/// JAR with another build of the same version rebuilds the catalog. The project records
+/// the catalog id and hash independently of this cache.
 #[derive(Default)]
 pub struct AssetCatalogService {
     cache: Mutex<VecDeque<CatalogCacheEntry>>,
@@ -306,10 +306,11 @@ fn cache_key(resolved: &ResolvedClientJar) -> Result<String, CatalogError> {
         .map(|duration| duration.as_nanos())
         .unwrap_or(0);
     Ok(format!(
-        "{}|{}|{}|{}",
+        "{}|{}|{}|{}|{}",
         resolved.jar_path.display(),
         metadata.len(),
         modified,
+        resolved.sha1.as_deref().unwrap_or_default(),
         CATALOG_SCHEMA_VERSION
     ))
 }
@@ -1536,6 +1537,23 @@ mod tests {
         drop(file);
         let third = service.catalog(&source(&path)).expect("third");
         assert!(!third.cache_hit);
+
+        // A replacement can preserve both the byte length and the timestamp. It still
+        // needs a different catalog identity, since its source checksum changed.
+        let modified = fs::metadata(&path).unwrap().modified().unwrap();
+        let mut bytes = fs::read(&path).unwrap();
+        *bytes.last_mut().unwrap() = b'!';
+        fs::write(&path, bytes).unwrap();
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        let fourth = service.catalog(&source(&path)).expect("fourth");
+        assert!(!fourth.cache_hit);
+        assert_ne!(third.client_jar_sha1, fourth.client_jar_sha1);
+        assert_ne!(third.catalog_hash, fourth.catalog_hash);
     }
 
     #[test]

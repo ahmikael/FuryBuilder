@@ -1,5 +1,6 @@
 use project_store::{
-    checksum, CreationMode, EditorState, ProjectStore, SourceFile, SourceKind, SOURCE_DIR,
+    checksum, AssetsComponent, CreationMode, EditorState, ImportOptions, ProjectComponents,
+    ProjectStore, SourceFile, SourceKind, SOURCE_DIR,
 };
 use world_domain::{BlockPos, World};
 
@@ -65,13 +66,26 @@ fn imported_project_records_a_verified_immutable_world_tree() {
         "the generic creator must not pretend to import a world"
     );
 
+    let components = ProjectComponents {
+        assets: Some(AssetsComponent {
+            mode: component_model::ComponentMode::Managed,
+            client_jar_sha1: Some("a".repeat(40)),
+            catalog_id: Some("java-test-catalog".into()),
+            catalog_hash: Some("b".repeat(64)),
+            pack_stack: Vec::new(),
+        }),
+        ..Default::default()
+    };
     let detail = store
         .create_imported(
             "Imported World",
             EditorState::default(),
             &world,
             "world",
-            None,
+            ImportOptions {
+                components: components.clone(),
+                ..Default::default()
+            },
         )
         .expect("create imported project");
     assert_eq!(detail.summary.creation_mode, CreationMode::Import);
@@ -113,7 +127,8 @@ fn imported_project_records_a_verified_immutable_world_tree() {
     assert!(manifest.immutable);
     assert_eq!(manifest.files[0].relative_path, "world/level.dat");
 
-    let (_, reopened, _) = store.open(&folder).expect("reopen imported project");
+    let (reopened_detail, reopened, _) = store.open(&folder).expect("reopen imported project");
+    assert_eq!(reopened_detail.components, components);
     assert_eq!(
         reopened
             .get_block("minecraft:overworld", BlockPos::new(3, 70, -4))

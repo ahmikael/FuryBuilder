@@ -39,8 +39,9 @@ pub use source::{SourceFile, SourceManifest};
 pub use store::TEMPLATES_DIR;
 pub use store::{
     build_world, checksum, is_safe_file_name, snapshot_bytes, CheckpointMeta, CreateOptions,
-    ExportOutcome, OpenedCheckpoint, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR,
-    CHECKPOINT_SCHEMA_VERSION, DATA_DIR, EXPORTS_DIR, MAX_CHECKPOINTS, MAX_CHECKPOINT_TEXT_CHARS,
-    MAX_MANIFEST_BACKUPS, MAX_SNAPSHOTS, MAX_SOURCE_FILES, SESSION_MARKER, SOURCE_DIR,
+    ExportOutcome, ImportOptions, OpenedCheckpoint, ProjectStore, AUTOSAVE_FILE, CACHE_DIR,
+    CHECKPOINT_DIR, CHECKPOINT_SCHEMA_VERSION, DATA_DIR, EXPORTS_DIR, MAX_CHECKPOINTS,
+    MAX_CHECKPOINT_TEXT_CHARS, MAX_MANIFEST_BACKUPS, MAX_SNAPSHOTS, MAX_SOURCE_FILES,
+    SESSION_MARKER, SOURCE_DIR,
 };
 pub use workspace_model::WorkspacePolicy;

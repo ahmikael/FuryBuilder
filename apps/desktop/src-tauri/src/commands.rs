@@ -14,12 +14,13 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use component_manager::{
     CancelOutcome, ClientJarReleaseInfo, ComponentError, ComponentInstallRequest,
-    ComponentInventory, ComponentKind, ComponentManager, ComponentProgress, ComponentRemoval,
-    ComponentReport, ComponentRequirements, ComponentStatus, ComponentTarget,
-    ComponentVerification, ResolvedComponent,
+    ComponentInventory, ComponentKind, ComponentManager, ComponentMode, ComponentProgress,
+    ComponentRemoval, ComponentReport, ComponentRequirements, ComponentStatus, ComponentTarget,
+    ComponentVerification, HashAlgorithm, ResolvedComponent,
 };
 use minecraft_version::{
-    builtin_profiles, default_profile, ManifestVersionType, VersionCatalog, VersionProfile,
+    builtin_profiles, default_profile, profile_for_id, ManifestVersionType, VersionCatalog,
+    VersionProfile,
 };
 use runtime_manager::{
     DatapackInspection, GeneratedWorld, GenerationEstimate, GenerationLimits, GenerationRequest,
@@ -837,12 +838,180 @@ pub async fn project_create(
     .await
 }
 
+/// Resolve fresh, local component identities. IPC callers cannot supply the records that
+/// are written to the manifest. Catalog building never installs or downloads anything.
+fn resolve_project_components(
+    manager: &ComponentManager,
+    catalog: &AssetCatalogService,
+    target: &project_store::ProjectTarget,
+    generated: Option<&project_store::VanillaProvenance>,
+) -> Result<project_store::ProjectComponents, AppError> {
+    let component_target = ComponentTarget {
+        profile_id: target.profile_id.clone(),
+        minecraft_version: target.minecraft_version.clone(),
+        data_version: target.data_version,
+        java_major: target.java_major,
+    };
+    let report = manager
+        .status(
+            &component_target,
+            &ComponentRequirements {
+                java: true, // Pin a ready runtime when available, even if it is optional.
+                server: generated.is_some(),
+                ..ComponentRequirements::EDITOR
+            },
+        )
+        .map_err(component_error)?;
+    project_component_pins(target, &report, generated, |path| {
+        catalog
+            .catalog(&AssetSourceSetting {
+                kind: AssetSelectionKind::ClientJar.as_str().to_owned(),
+                path: path.to_owned(),
+            })
+            .map_err(asset_catalog_error)
+    })
+}
+
+fn project_component_pins(
+    target: &project_store::ProjectTarget,
+    report: &ComponentReport,
+    generated: Option<&project_store::VanillaProvenance>,
+    load_catalog: impl FnOnce(&str) -> Result<CatalogSnapshot, AppError>,
+) -> Result<project_store::ProjectComponents, AppError> {
+    use project_store::{AssetsComponent, JavaComponent, ProjectComponents, ServerComponent};
+
+    let status = |kind: ComponentKind| {
+        report
+            .status(kind)
+            .ok_or_else(|| AppError::internal(format!("missing {} status", kind.as_str())))
+    };
+    let java_status = status(ComponentKind::Java)?;
+    let java = if java_status.state.is_ready() || generated.is_some() {
+        let (mode, sha256) = ready_component_pin(java_status, HashAlgorithm::Sha256)?;
+        let id = java_status
+            .id
+            .clone()
+            .ok_or_else(|| AppError::internal("ready Java has no logical id"))?;
+        Some(JavaComponent {
+            mode,
+            id: Some(id),
+            sha256: Some(sha256),
+        })
+    } else {
+        None
+    };
+    let assets_status = status(ComponentKind::Assets)?;
+    let assets = if assets_status.mode == Some(ComponentMode::Placeholder) {
+        AssetsComponent {
+            mode: ComponentMode::Placeholder,
+            client_jar_sha1: None,
+            catalog_id: None,
+            catalog_hash: None,
+            pack_stack: Vec::new(),
+        }
+    } else {
+        let (mode, sha1) = ready_component_pin(assets_status, HashAlgorithm::Sha1)?;
+        let path = assets_status
+            .path
+            .as_deref()
+            .ok_or_else(|| AppError::internal("ready client assets have no resolved JAR"))?;
+        let catalog = load_catalog(path)?;
+        if catalog.client_jar_sha1.as_deref() != Some(sha1.as_str())
+            || catalog.minecraft_version != target.minecraft_version.as_str()
+            || catalog.data_version != target.data_version
+        {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                "the client catalog does not match the verified client JAR and project version; recheck Components",
+            ));
+        }
+        AssetsComponent {
+            mode,
+            client_jar_sha1: Some(sha1),
+            catalog_id: Some(catalog.catalog_id),
+            catalog_hash: Some(catalog.catalog_hash),
+            pack_stack: Vec::new(),
+        }
+    };
+    let server = if let Some(generated) = generated {
+        let status = status(ComponentKind::Server)?;
+        let (mode, sha1) = ready_component_pin(status, HashAlgorithm::Sha1)?;
+        if status.version.as_deref() != Some(target.minecraft_version.as_str())
+            || !sha1.eq_ignore_ascii_case(&generated.server_jar_sha1)
+        {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                "the selected server JAR differs from the one used by the completed run; reselect the original server JAR",
+            ));
+        }
+        Some(ServerComponent {
+            mode,
+            version: Some(target.minecraft_version.clone()),
+            sha1: Some(sha1),
+        })
+    } else {
+        None
+    };
+    let pins = ProjectComponents {
+        java,
+        assets: Some(assets),
+        server,
+    };
+    pins.validate(target).map_err(project_error)?;
+    Ok(pins)
+}
+
+fn ready_component_pin(
+    status: &ComponentStatus,
+    algorithm: HashAlgorithm,
+) -> Result<(ComponentMode, String), AppError> {
+    if !status.state.is_ready() {
+        return Err(component_error(ComponentError::NotReady {
+            kind: status.kind.as_str(),
+            state: status.state.as_str(),
+            detail: status
+                .error
+                .clone()
+                .or_else(|| status.notes.first().cloned())
+                .unwrap_or_else(|| "no verified component is selected".to_owned()),
+        }));
+    }
+    let mode = status
+        .mode
+        .filter(|mode| mode.can_be_ready())
+        .ok_or_else(|| AppError::internal("ready component has no installed mode"))?;
+    let hash = status
+        .hash
+        .as_ref()
+        .filter(|hash| hash.algorithm == algorithm)
+        .ok_or_else(|| AppError::internal("ready component is missing its checksum"))?;
+    Ok((mode, hash.value.clone()))
+}
+
 fn create_project_inner(
     state: &AppState,
     reporter: &PrepareReporter,
     attempt: &PrepareAttempt,
     args: CreateProjectArgs,
 ) -> Result<OpenedProjectPayload, AppError> {
+    ensure_not_cancelled(attempt)?;
+    reporter.running("metadata", "Verifying project component identities");
+    let profile = match args.profile_id.as_deref() {
+        Some(id) => profile_for_id(id).ok_or_else(|| {
+            AppError::new(
+                ErrorCode::UnsupportedVersion,
+                format!("no built-in version profile has id `{id}`"),
+            )
+        })?,
+        None => default_profile(),
+    };
+    let target = project_store::ProjectTarget::from_profile(&profile);
+    let components = resolve_project_components(
+        &reporter.app.state::<ComponentManager>(),
+        &reporter.app.state::<AssetCatalogService>(),
+        &target,
+        None,
+    )?;
     ensure_not_cancelled(attempt)?;
     reporter.running(
         "metadata",
@@ -861,8 +1030,9 @@ fn create_project_inner(
             args.editor_state.clone(),
             project_store::CreateOptions {
                 folder: args.folder.as_deref(),
-                profile_id: args.profile_id.as_deref(),
+                profile_id: Some(&profile.id),
                 flat: args.flat,
+                components,
             },
         )
         .map_err(project_error)?;
@@ -1506,12 +1676,26 @@ fn import_world_project(
     );
     ensure_not_cancelled(attempt)?;
 
+    reporter.running("metadata", "Verifying project component identities");
+    let target =
+        project_store::ProjectTarget::for_world_version(world.version()).map_err(project_error)?;
+    let components = resolve_project_components(
+        &reporter.app.state::<ComponentManager>(),
+        &reporter.app.state::<AssetCatalogService>(),
+        &target,
+        vanilla.as_ref(),
+    )?;
+    ensure_not_cancelled(attempt)?;
     reporter.running("metadata", "Creating the project manifest and snapshot");
     let mut projects = state
         .projects
         .lock()
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
     ensure_not_cancelled(attempt)?;
+    let options = project_store::ImportOptions {
+        folder: folder.as_deref(),
+        components,
+    };
     let detail = match vanilla {
         Some(provenance) => projects.store.create_vanilla(
             &name,
@@ -1519,15 +1703,13 @@ fn import_world_project(
             &world,
             "world",
             provenance,
-            folder.as_deref(),
+            options,
         ),
-        None => projects.store.create_imported(
-            &name,
-            editor_state.clone(),
-            &world,
-            "world",
-            folder.as_deref(),
-        ),
+        None => {
+            projects
+                .store
+                .create_imported(&name, editor_state.clone(), &world, "world", options)
+        }
     }
     .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
@@ -4731,6 +4913,213 @@ mod workspace_tests {
 #[cfg(test)]
 mod component_command_tests {
     use super::*;
+    use std::io::Write;
+
+    fn component_test_manager(root: &Path) -> ComponentManager {
+        ComponentManager::from_paths(
+            root.join("java.json"),
+            root.join("java"),
+            root.join("assets.json"),
+            root.join("assets"),
+            root.join("versions.json"),
+            root.join("server.json"),
+            root.join("servers"),
+        )
+    }
+
+    #[test]
+    fn project_creation_pins_a_local_client_jar_and_catalog_without_paths() {
+        let root = std::env::temp_dir().join(format!("furybuilder-pins-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir(&root).unwrap();
+        let jar = root.join("custom-client.jar");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&jar).unwrap());
+        let profile = default_profile();
+        let version = serde_json::json!({
+            "id": profile.minecraft_version,
+            "name": profile.minecraft_version,
+            "world_version": profile.data_version,
+            "pack_version": {
+                "resource": profile.resource_pack_format,
+                "data": profile.datapack_format,
+            },
+        });
+        let files = [
+            ("version.json", version.to_string()),
+            (
+                "assets/minecraft/blockstates/stone.json",
+                r#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#.to_owned(),
+            ),
+        ];
+        for (name, text) in files {
+            zip.start_file(name, zip::write::SimpleFileOptions::default())
+                .unwrap();
+            zip.write_all(text.as_bytes()).unwrap();
+        }
+        zip.finish().unwrap();
+        let manager = component_test_manager(&root);
+        let asset = manager
+            .relink(
+                ComponentKind::Assets,
+                &jar,
+                &ComponentTarget::from_profile(&profile),
+            )
+            .expect("verify local client JAR");
+        let catalog_service = AssetCatalogService::new();
+        let target = project_store::ProjectTarget::from_profile(&profile);
+        let pins = resolve_project_components(&manager, &catalog_service, &target, None)
+            .expect("resolve component pins");
+        let store = project_store::ProjectStore::new(root.join("projects"));
+        let detail = store
+            .create_with_options(
+                "Pinned",
+                project_store::CreationMode::Empty,
+                project_store::EditorState::default(),
+                project_store::CreateOptions {
+                    profile_id: Some(&profile.id),
+                    components: pins.clone(),
+                    ..Default::default()
+                },
+            )
+            .expect("create project");
+
+        let path = store
+            .root()
+            .join(&detail.summary.folder)
+            .join(project_store::PROJECT_FILE);
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(manifest["projectSchemaVersion"], 2);
+        assert_eq!(manifest["components"]["assets"]["mode"], "manual");
+        assert_eq!(
+            manifest["components"]["assets"]["clientJarSha1"],
+            asset.hash.unwrap().value
+        );
+        let catalog = catalog_service
+            .catalog(&AssetSourceSetting {
+                kind: "client_jar".into(),
+                path: jar.to_string_lossy().into_owned(),
+            })
+            .unwrap();
+        assert_eq!(
+            manifest["components"]["assets"]["catalogId"],
+            catalog.catalog_id
+        );
+        assert_eq!(
+            manifest["components"]["assets"]["catalogHash"],
+            catalog.catalog_hash
+        );
+        assert!(!manifest["components"]
+            .to_string()
+            .contains("custom-client.jar"));
+        assert!(manifest["components"].get("java").is_none());
+        assert!(manifest["components"].get("server").is_none());
+        let folder = &detail.summary.folder;
+        let (opened, mut world, _) = store.open(folder).unwrap();
+        assert_eq!(opened.components, pins);
+        manager
+            .use_placeholder_assets(&ComponentTarget::from_profile(&profile))
+            .expect("change the global selection");
+        world.bump_revision();
+        store
+            .save(
+                folder,
+                &world,
+                project_store::EditorState::default(),
+                project_store::SaveKind::Manual,
+            )
+            .expect("save without replacing component pins");
+        assert_eq!(store.open(folder).unwrap().0.components, pins);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_creation_distinguishes_missing_assets_from_explicit_placeholder() {
+        let root =
+            std::env::temp_dir().join(format!("furybuilder-placeholder-{}", uuid::Uuid::new_v4()));
+        let profile = default_profile();
+        let target = project_store::ProjectTarget::from_profile(&profile);
+        let catalog = AssetCatalogService::new();
+        let manager = component_test_manager(&root);
+        let error = resolve_project_components(&manager, &catalog, &target, None).unwrap_err();
+        assert_eq!(error.code, ErrorCode::Conflict);
+        manager
+            .use_placeholder_assets(&ComponentTarget::from_profile(&profile))
+            .unwrap();
+        let pins = resolve_project_components(&manager, &catalog, &target, None).unwrap();
+        assert_eq!(
+            serde_json::to_value(pins).unwrap(),
+            serde_json::json!({
+                "assets": { "mode": "placeholder" },
+            })
+        );
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn vanilla_component_pins_require_the_server_from_the_completed_run() {
+        use component_manager::ComponentHash;
+        let target = project_store::ProjectTarget::from_profile(&default_profile());
+        let java_hash = "a".repeat(64);
+        let server_hash = "b".repeat(40);
+        let mut java = ComponentStatus::new(
+            ComponentKind::Java,
+            component_manager::ComponentState::Ready,
+        );
+        java.mode = Some(ComponentMode::Managed);
+        java.id = Some("temurin-test".into());
+        java.hash = Some(ComponentHash::sha256(&java_hash));
+        let mut assets = ComponentStatus::new(
+            ComponentKind::Assets,
+            component_manager::ComponentState::Unverified,
+        );
+        assets.mode = Some(ComponentMode::Placeholder);
+        let mut server = ComponentStatus::new(
+            ComponentKind::Server,
+            component_manager::ComponentState::Ready,
+        );
+        server.mode = Some(ComponentMode::Manual);
+        server.hash = Some(ComponentHash::sha1(&server_hash));
+        server.version = Some(target.minecraft_version.to_string());
+        let report = ComponentReport {
+            profile_id: target.profile_id.clone(),
+            minecraft_version: target.minecraft_version.clone(),
+            data_version: target.data_version,
+            java_major: target.java_major,
+            components: vec![java, assets, server],
+            ready: false,
+            warnings: Vec::new(),
+        };
+        let mut run = project_store::VanillaProvenance {
+            seed: "0".into(),
+            preset: "normal".into(),
+            center_x: 0,
+            center_z: 0,
+            radius_chunks: 1,
+            generate_structures: true,
+            datapacks: Vec::new(),
+            minecraft_version: target.minecraft_version.to_string(),
+            data_version: target.data_version,
+            java_version: "test".into(),
+            server_jar_sha1: server_hash.clone(),
+            run_id: "run-1-2".into(),
+            generated_at_ms: 1,
+            chunks: 9,
+            region_files: 1,
+            world_bytes: 4096,
+        };
+        let pins = project_component_pins(&target, &report, Some(&run), |_| {
+            panic!("placeholder must not load a catalog")
+        })
+        .expect("matching server identity");
+        assert_eq!(pins.java.unwrap().sha256, Some(java_hash));
+        assert_eq!(pins.server.unwrap().sha1, Some(server_hash));
+        run.server_jar_sha1 = "c".repeat(40);
+        let error = project_component_pins(&target, &report, Some(&run), |_| {
+            panic!("placeholder must not load a catalog")
+        })
+        .unwrap_err();
+        assert_eq!(error.code, ErrorCode::Conflict);
+    }
 
     #[test]
     fn component_errors_map_to_stable_app_codes() {

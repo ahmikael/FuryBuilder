@@ -53,7 +53,13 @@ fn run(source: &Path, project_root: &Path, name: &str) -> Result<(), Box<dyn std
     world.bump_revision();
 
     let store = ProjectStore::new(project_root);
-    let detail = store.create_imported(name, EditorState::default(), &world, "world", None)?;
+    let detail = store.create_imported(
+        name,
+        EditorState::default(),
+        &world,
+        "world",
+        project_store::ImportOptions::default(),
+    )?;
     let folder = detail.summary.folder.clone();
     let project_dir = project_root.join(&folder);
     let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");

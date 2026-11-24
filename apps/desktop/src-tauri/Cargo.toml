@@ -32,3 +32,6 @@ world-application = { path = "../../../crates/world-application", package = "fur
 world-domain = { path = "../../../crates/world-domain", package = "furybuilder-world-domain" }
 world-io = { path = "../../../crates/world-io", package = "furybuilder-world-io" }
 structure-library = { path = "../../../crates/structure-library", package = "furybuilder-structure-library" }
+
+[dev-dependencies]
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }

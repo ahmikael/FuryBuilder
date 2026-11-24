@@ -11,9 +11,9 @@ use crate::error::ProjectError;
 use crate::flat::{build_flat_base, FlatPreset};
 use crate::manifest::{
     folder_component, is_hex_sha256, normalize_name, now_ms, validate_folder, CreationMode,
-    EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, ProjectTarget,
-    RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaProvenance, PROJECT_FILE,
-    PROJECT_SCHEMA_VERSION,
+    EditorState, ProjectComponents, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary,
+    ProjectTarget, RecoveryInfo, SaveKind, SaveOutcome, SourceInfo, SourceKind, VanillaProvenance,
+    PROJECT_FILE, PROJECT_SCHEMA_VERSION,
 };
 use crate::snapshot::{decode_world, encode_world};
 use crate::source::{read_source_manifest, SourceFile, SourceManifest};
@@ -193,6 +193,7 @@ struct CreateRequest<'a> {
     source: SourceInfo,
     vanilla: Option<VanillaProvenance>,
     folder: Option<&'a str>,
+    components: ProjectComponents,
 }
 
 #[derive(Debug, Clone)]
@@ -359,6 +360,15 @@ pub struct CreateOptions<'a> {
     pub profile_id: Option<&'a str>,
     /// Flat source parameters. Only valid for `CreationMode::Flat`.
     pub flat: Option<FlatPreset>,
+    /// Component identities resolved for this project before writing the manifest.
+    pub components: ProjectComponents,
+}
+
+/// Destination and resolved components for a decoded world.
+#[derive(Debug, Clone, Default)]
+pub struct ImportOptions<'a> {
+    pub folder: Option<&'a str>,
+    pub components: ProjectComponents,
 }
 
 /// Builds the starting world for a versioned profile.
@@ -621,6 +631,7 @@ impl ProjectStore {
             source: SourceInfo::generated(),
             vanilla: None,
             folder: options.folder,
+            components: options.components,
         })
     }
 
@@ -634,7 +645,7 @@ impl ProjectStore {
         editor_state: EditorState,
         world: &World,
         source_reference: &str,
-        folder: Option<&str>,
+        options: ImportOptions<'_>,
     ) -> Result<ProjectDetail, ProjectError> {
         let name = normalize_name(name)?;
         editor_state.validate()?;
@@ -653,7 +664,8 @@ impl ProjectStore {
             world,
             source,
             vanilla: None,
-            folder,
+            folder: options.folder,
+            components: options.components,
         })
     }
 
@@ -667,7 +679,7 @@ impl ProjectStore {
         world: &World,
         source_reference: &str,
         provenance: VanillaProvenance,
-        folder: Option<&str>,
+        options: ImportOptions<'_>,
     ) -> Result<ProjectDetail, ProjectError> {
         let name = normalize_name(name)?;
         editor_state.validate()?;
@@ -687,7 +699,8 @@ impl ProjectStore {
             world,
             source,
             vanilla: Some(provenance),
-            folder,
+            folder: options.folder,
+            components: options.components,
         })
     }
 
@@ -700,6 +713,7 @@ impl ProjectStore {
             source,
             vanilla,
             folder,
+            components,
         } = request;
         fs::create_dir_all(&self.root)
             .map_err(|error| io_error(format!("creating {}", self.root.display()), error))?;
@@ -745,6 +759,7 @@ impl ProjectStore {
         manifest.editor_state = editor_state;
         manifest.source = source;
         manifest.vanilla = vanilla;
+        manifest.components = components;
         manifest.set_world_payload(format!("{DATA_DIR}/{file}"), checksum, bytes.len() as u64);
         manifest.validate()?;
         fs::create_dir(&dir).map_err(|error| {
@@ -1628,6 +1643,14 @@ mod tests {
             region_files: 1,
             world_bytes: 4096,
         };
+        let components = ProjectComponents {
+            server: Some(crate::ServerComponent {
+                mode: component_model::ComponentMode::Managed,
+                version: Some(provenance.minecraft_version.parse().unwrap()),
+                sha1: Some(provenance.server_jar_sha1.clone()),
+            }),
+            ..Default::default()
+        };
         let detail = store
             .create_vanilla(
                 "Vanilla Base",
@@ -1635,7 +1658,10 @@ mod tests {
                 &world,
                 "world",
                 provenance.clone(),
-                None,
+                ImportOptions {
+                    components: components.clone(),
+                    ..Default::default()
+                },
             )
             .expect("vanilla create");
         assert_eq!(detail.summary.creation_mode, CreationMode::Vanilla);
@@ -1645,11 +1671,15 @@ mod tests {
 
         let reopened = store.detail(&detail.summary.folder).expect("reopen");
         assert_eq!(reopened.vanilla, Some(provenance.clone()));
+        assert_eq!(reopened.components, components);
         let manifest = store
             .manifest(&root.join(&detail.summary.folder))
             .expect("manifest");
         assert_eq!(manifest.creation_mode, CreationMode::Vanilla);
         assert_eq!(manifest.vanilla, Some(provenance.clone()));
+        let mut mismatched = manifest;
+        mismatched.components.server.as_mut().unwrap().sha1 = Some("c".repeat(40));
+        assert!(mismatched.validate().is_err());
 
         let recorded = store
             .record_source_tree(&detail.summary.folder, "world", &[])
@@ -1674,7 +1704,7 @@ mod tests {
                 &world,
                 "world",
                 bad,
-                None
+                ImportOptions::default(),
             )
             .is_err());
         let mut bad_preset = provenance;
@@ -1686,7 +1716,7 @@ mod tests {
                 &world,
                 "world",
                 bad_preset,
-                None,
+                ImportOptions::default(),
             )
             .is_err());
     }

@@ -63,6 +63,20 @@ representable.
 Sponge `.schem` v3 is the planned second adapter and is not enabled. `.litematic` and
 legacy `.schematic` are not implemented. `.mcstructure` is Bedrock and out of scope.
 
+## Project manifest (`project.json`, schema 2)
+
+Desktop world creation stores the verified target profile and component identities in the
+first manifest. An installed Java runtime is recorded by mode, logical id and executable
+SHA-256; it is optional for editing-only projects. The client is recorded by mode, client
+JAR SHA-1 and the catalog id and SHA-256 derived from that exact JAR. An explicit
+placeholder records only its mode. Vanilla projects also record the server version and
+SHA-1; the checksum must agree with the completed generation run.
+
+These records contain no absolute component paths and are preserved across saves and
+reopens. The manifest records the vanilla catalog, not the global resource pack stack.
+Per-project pack selection and resolving pinned components for rendering on reopen are
+separate from writing the manifest.
+
 ## Complete world-folder export
 
 The backend can export a complete new world folder, not a bare `.mca`:

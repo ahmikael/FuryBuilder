@@ -398,8 +398,8 @@ pub struct ServerComponent {
     pub sha1: Option<String>,
 }
 
-/// Components a project was created with. Empty until the component manager has resolved
-/// them; a placeholder is always explicit and never claims a verified identity.
+/// Components resolved for a project at creation. Absent optional entries claim no identity;
+/// a placeholder is always explicit and never claims a verified identity.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectComponents {
@@ -429,26 +429,15 @@ impl ProjectComponents {
 impl JavaComponent {
     fn validate(&self) -> Result<(), ProjectError> {
         match self.mode {
-            ComponentMode::Managed => {
+            ComponentMode::Managed | ComponentMode::Manual => {
                 let id = self.id.as_deref().ok_or_else(|| {
-                    invalid_component("managed Java component needs a logical id")
+                    invalid_component("an installed Java component needs a logical id")
                 })?;
                 validate_component_id("java.id", id)?;
-                let sha256 = self
-                    .sha256
-                    .as_deref()
-                    .ok_or_else(|| invalid_component("managed Java component needs a SHA-256"))?;
+                let sha256 = self.sha256.as_deref().ok_or_else(|| {
+                    invalid_component("an installed Java component needs a SHA-256")
+                })?;
                 validate_hex("java.sha256", sha256, 64)?;
-            }
-            ComponentMode::Manual => {
-                let id = self
-                    .id
-                    .as_deref()
-                    .ok_or_else(|| invalid_component("manual Java component needs a logical id"))?;
-                validate_component_id("java.id", id)?;
-                if let Some(sha256) = &self.sha256 {
-                    validate_hex("java.sha256", sha256, 64)?;
-                }
             }
             ComponentMode::Placeholder => {
                 if self.id.is_some() || self.sha256.is_some() {
@@ -475,10 +464,9 @@ impl AssetsComponent {
                         validate_component_id("assets.catalogId", id)?;
                         validate_hex("assets.catalogHash", hash, 64)?;
                     }
-                    (None, None) if self.mode == ComponentMode::Manual => {}
                     (None, None) => {
                         return Err(invalid_component(
-                            "managed asset component needs a catalog id and hash",
+                            "an installed asset component needs a catalog id and hash",
                         ))
                     }
                     _ => {
@@ -694,6 +682,13 @@ impl ProjectManifest {
                 ProjectError::invalid_manifest("vanilla projects need generator provenance")
             })?;
             vanilla.validate(&target_version)?;
+            if let Some(server) = &self.components.server {
+                if server.sha1.as_deref() != Some(vanilla.server_jar_sha1.as_str()) {
+                    return Err(invalid_component(
+                        "server SHA-1 must match the Vanilla generation provenance",
+                    ));
+                }
+            }
         } else if self.vanilla.is_some() {
             return Err(ProjectError::invalid_manifest(
                 "generator provenance is only valid for vanilla projects",
