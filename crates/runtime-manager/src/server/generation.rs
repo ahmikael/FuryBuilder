@@ -30,9 +30,10 @@ use super::datapack;
 use super::jar::{is_sha1, ServerJarInfo};
 use super::process_tree::ProcessTree;
 use super::types::{
-    GeneratedWorld, GenerationDatapack, GenerationPhase, GenerationReport, GenerationRequest,
-    GenerationRunInfo, GenerationRunsReport, GenerationSnapshot, GenerationStopReason, RunManifest,
-    SavedEula, WorldPreset, RUN_MANIFEST_SCHEMA_VERSION,
+    GeneratedWorld, GenerationDatapack, GenerationEstimate, GenerationLimits, GenerationPhase,
+    GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
+    GenerationSnapshot, GenerationStopReason, RunManifest, SavedEula, WorldPreset,
+    RUN_MANIFEST_SCHEMA_VERSION,
 };
 use crate::error::ServerError;
 
@@ -55,6 +56,10 @@ const MIN_TIME_LIMIT_SECONDS: u32 = 10;
 const MAX_TIME_LIMIT_SECONDS: u32 = 3600;
 const MAX_RADIUS_CHUNKS: u32 = 16;
 const MAX_WORLD_COORD: i32 = 29_999_968;
+/// Conservative preflight budget for one generated chunk, including region metadata and
+/// temporary save files. It is intentionally higher than a typical compressed chunk.
+const ESTIMATED_CHUNK_BYTES: u64 = 24 * 1024;
+const ESTIMATED_WORLD_OVERHEAD_BYTES: u64 = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct GenerationRuntime<'a> {
@@ -276,8 +281,73 @@ impl Drop for GuardedChild {
 }
 
 pub(crate) fn expected_chunks(request: &GenerationRequest) -> u64 {
-    let side = request.radius_chunks.saturating_mul(2).saturating_add(1) as u64;
+    chunks_for_radius(request.radius_chunks)
+}
+
+pub(crate) fn chunks_for_radius(radius_chunks: u32) -> u64 {
+    let side = radius_chunks.saturating_mul(2).saturating_add(1) as u64;
     side.saturating_mul(side)
+}
+
+pub(crate) fn estimated_world_bytes(expected_chunks: u64) -> u64 {
+    expected_chunks
+        .saturating_mul(ESTIMATED_CHUNK_BYTES)
+        .saturating_add(ESTIMATED_WORLD_OVERHEAD_BYTES)
+}
+
+pub(crate) fn required_disk_bytes(estimated_world_bytes: u64) -> u64 {
+    let margin = download_pipeline::DISK_MARGIN_BYTES.max(estimated_world_bytes.saturating_div(10));
+    estimated_world_bytes.saturating_add(margin)
+}
+
+pub(crate) fn limits() -> GenerationLimits {
+    GenerationLimits {
+        min_radius_chunks: 1,
+        max_radius_chunks: MAX_RADIUS_CHUNKS,
+        min_time_limit_seconds: MIN_TIME_LIMIT_SECONDS,
+        max_time_limit_seconds: MAX_TIME_LIMIT_SECONDS,
+        min_memory_mb: MIN_MEMORY_MB,
+        max_memory_mb: MAX_MEMORY_MB,
+        min_view_distance: 2,
+        max_view_distance: 8,
+        min_cpu_threads: 1,
+        max_cpu_threads: 8,
+        max_datapacks: datapack::MAX_DATAPACKS,
+    }
+}
+
+pub(crate) fn estimate(
+    radius_chunks: u32,
+    time_limit_seconds: u32,
+    available_disk_bytes: u64,
+) -> Result<GenerationEstimate, ServerError> {
+    let limits = limits();
+    if !(limits.min_radius_chunks..=limits.max_radius_chunks).contains(&radius_chunks) {
+        return Err(ServerError::Limit(format!(
+            "radius must be between {} and {} chunks",
+            limits.min_radius_chunks, limits.max_radius_chunks
+        )));
+    }
+    if !(limits.min_time_limit_seconds..=limits.max_time_limit_seconds)
+        .contains(&time_limit_seconds)
+    {
+        return Err(ServerError::Limit(format!(
+            "time limit must be between {} and {} seconds",
+            limits.min_time_limit_seconds, limits.max_time_limit_seconds
+        )));
+    }
+    let expected_chunks = chunks_for_radius(radius_chunks);
+    let estimated_world_bytes = estimated_world_bytes(expected_chunks);
+    let required_disk_bytes = required_disk_bytes(estimated_world_bytes);
+    Ok(GenerationEstimate {
+        radius_chunks,
+        time_limit_seconds,
+        expected_chunks,
+        estimated_world_bytes,
+        required_disk_bytes,
+        available_disk_bytes,
+        fits_on_disk: available_disk_bytes >= required_disk_bytes,
+    })
 }
 
 pub(crate) fn validate_request(request: &GenerationRequest) -> Result<(), ServerError> {
@@ -1724,6 +1794,44 @@ mod tests {
         let mut bad_view = request("seed");
         bad_view.view_distance = 32;
         assert!(validate_request(&bad_view).is_err());
+    }
+
+    #[test]
+    fn estimate_reports_area_disk_and_backend_limits() {
+        let one = estimate(1, 120, u64::MAX).expect("radius 1");
+        assert_eq!(one.expected_chunks, 9);
+        assert_eq!(one.time_limit_seconds, 120);
+        assert!(one.estimated_world_bytes > ESTIMATED_WORLD_OVERHEAD_BYTES);
+        assert_eq!(
+            one.required_disk_bytes,
+            required_disk_bytes(one.estimated_world_bytes)
+        );
+        assert!(one.fits_on_disk);
+
+        let three = estimate(3, 60, u64::MAX).expect("radius 3");
+        assert_eq!(three.expected_chunks, 49);
+        assert!(three.estimated_world_bytes > one.estimated_world_bytes);
+
+        let low = estimate(1, 120, 1024).expect("low disk");
+        assert!(!low.fits_on_disk);
+
+        assert!(matches!(
+            estimate(0, 120, u64::MAX),
+            Err(ServerError::Limit(_))
+        ));
+        assert!(matches!(
+            estimate(17, 120, u64::MAX),
+            Err(ServerError::Limit(_))
+        ));
+        assert!(matches!(
+            estimate(1, 5, u64::MAX),
+            Err(ServerError::Limit(_))
+        ));
+
+        let limits = limits();
+        assert_eq!(limits.min_radius_chunks, 1);
+        assert_eq!(limits.max_radius_chunks, MAX_RADIUS_CHUNKS);
+        assert_eq!(limits.max_datapacks, datapack::MAX_DATAPACKS);
     }
 
     #[test]

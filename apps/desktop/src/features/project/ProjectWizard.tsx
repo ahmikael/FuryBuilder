@@ -1145,6 +1145,7 @@ export function ProjectWizard() {
                   />
                 ) : mode === "vanilla" ? (
                   <VanillaWorldWizard
+                    version={effectiveVersion}
                     onOpenWorld={(runId, projectName) =>
                       importGeneratedWorld(projectName, runId, destination)
                     }

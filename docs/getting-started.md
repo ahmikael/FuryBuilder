@@ -236,13 +236,22 @@ prerequisites.
    installed globally.
 3. Read and accept the Minecraft EULA for that exact server JAR and Minecraft version.
    FuryBuilder never accepts it for you, and another JAR or version needs its own acceptance.
-4. Open `Project → Create → Vanilla World`, choose a seed, preset, supported settings and
-   optional local data packs, then explicitly confirm the run.
-5. Wait for the isolated server to generate the requested area. It runs without a game
-   window, listens on loopback only and is terminated on cancel or failure.
-6. Click **Open as project** on the completed run. The generated folder becomes an immutable
+4. Open `Project → Create → Vanilla World`. The wizard shows the verified generation target;
+   a project that selects another version is refused instead of producing a mixed-version
+   world.
+5. In the Source step choose a seed, preset, radius/center, structures, time limit and optional
+   local data packs. Before anything starts, the step shows the expected chunk count, a
+   conservative world-size estimate, the free space on the run volume and the bounded time
+   limit. Generation is disabled when the estimate does not fit; the backend repeats the same
+   disk preflight before it creates a run directory.
+6. Read and accept the Minecraft EULA for that exact server JAR and Minecraft version in the
+   same step, then explicitly confirm the run. FuryBuilder never accepts the EULA for you, and
+   another JAR or version needs its own acceptance.
+7. Wait for the isolated server to generate the requested area. It runs without a game
+   window, listens on loopback only and is terminated on cancel, failure or the time limit.
+8. Click **Open as project** on the completed run. The generated folder becomes an immutable
    source copy with its seed, preset, data packs and Java/server identity recorded.
-7. For a vanilla project, the project dialog can compare the saved generated base with the
+9. For a vanilla project, the project dialog can compare the saved generated base with the
    original generator's reference chunks. The check is bounded, applies only to an untouched
    revision-1 base and reports differences with coordinates. It is not a general guarantee
    that every edited configuration reproduces Minecraft.

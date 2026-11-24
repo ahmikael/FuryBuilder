@@ -20,11 +20,11 @@ use minecraft_version::{
     builtin_profiles, default_profile, ManifestVersionType, VersionCatalog, VersionProfile,
 };
 use runtime_manager::{
-    DatapackInspection, GeneratedWorld, GenerationRequest, GenerationRunsReport,
-    GenerationSnapshot, GenerationStatusReport, InstalledRuntime, InstalledServerJar,
-    JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport, RuntimeDiscoveryReport,
-    RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport, ServerJarReport,
-    ServerProgress, ServerReleaseInfo,
+    DatapackInspection, GeneratedWorld, GenerationEstimate, GenerationLimits, GenerationRequest,
+    GenerationRunsReport, GenerationSnapshot, GenerationStatusReport, InstalledRuntime,
+    InstalledServerJar, JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport,
+    RuntimeDiscoveryReport, RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport,
+    ServerJarReport, ServerProgress, ServerReleaseInfo,
 };
 use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
 use tauri::{AppHandle, Emitter, State};
@@ -3549,6 +3549,23 @@ pub fn server_generation_status(components: State<'_, ComponentManager>) -> Gene
     components.server().generation_status()
 }
 
+/// Bounded preflight for the Source step: expected area, conservative world size and the
+/// free space on the volume that owns the isolated run directory.
+#[tauri::command]
+pub async fn server_generation_estimate(
+    components: State<'_, ComponentManager>,
+    radius_chunks: u32,
+    time_limit_seconds: u32,
+) -> Result<GenerationEstimate, AppError> {
+    let manager = components.server().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.generation_estimate(radius_chunks, time_limit_seconds)
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("generation estimate task failed: {error}")))?
+    .map_err(server_error)
+}
+
 #[tauri::command]
 pub fn server_cancel_generation(components: State<'_, ComponentManager>) -> bool {
     components.server().cancel_generation()
@@ -3656,6 +3673,7 @@ pub async fn vanilla_setup_check(
         target_data_version: profile.data_version,
         target_java_major: profile.java.recommended_major,
         server_datapack_format: runtime_manager::target_datapack_format(),
+        generation_limits: components.server().generation_limits(),
         java,
         java_ready,
         server: discovery.selected,
@@ -3674,6 +3692,7 @@ pub struct VanillaSetupReport {
     pub target_data_version: i32,
     pub target_java_major: u32,
     pub server_datapack_format: u32,
+    pub generation_limits: GenerationLimits,
     pub java: Option<JavaRuntimeReport>,
     pub java_ready: bool,
     pub server: Option<ServerJarReport>,

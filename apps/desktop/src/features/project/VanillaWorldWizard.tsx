@@ -4,6 +4,7 @@ import {
   CheckCircle2,
   Download,
   FolderOpen,
+  Gauge,
   HardDriveDownload,
   Loader2,
   Play,
@@ -41,6 +42,7 @@ import {
   installMinecraftServer,
   latestMinecraftServerRelease,
   selectMinecraftServerJar,
+  serverGenerationEstimate,
   serverGenerationStatus,
   startServerGeneration,
   vanillaSetupCheck,
@@ -49,6 +51,7 @@ import { cn } from "@/lib/utils";
 import type { RuntimeDiscoveryReport } from "@/runtime/types";
 import type {
   DatapackInspection,
+  GenerationEstimate,
   GenerationReport,
   GenerationRequest,
   GenerationSnapshot,
@@ -80,6 +83,8 @@ type Busy =
   | null;
 
 interface VanillaWorldWizardProps {
+  /** Version selected in the wizard; generation is refused when it differs from the verified target. */
+  version?: string;
   onOpenWorld?: (runId: string, name: string) => Promise<boolean>;
 }
 
@@ -114,11 +119,13 @@ function statusTone(ready: boolean): string {
     : "border-status-warn/40 bg-status-warn/5 text-status-warn";
 }
 
-export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
+export function VanillaWorldWizard({ version, onOpenWorld }: VanillaWorldWizardProps) {
   const [setup, setSetup] = useState<VanillaSetupReport | null>(null);
   const [runtimes, setRuntimes] = useState<RuntimeDiscoveryReport | null>(null);
   const [servers, setServers] = useState<ServerDiscoveryReport | null>(null);
   const [status, setStatus] = useState<GenerationStatusReport | null>(null);
+  const [estimate, setEstimate] = useState<GenerationEstimate | null>(null);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
   const [busy, setBusy] = useState<Busy>("load");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -184,10 +191,48 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
     return () => window.clearInterval(timer);
   }, [status?.active?.running]);
 
+  const radiusValue = Number(radius);
+  const timeLimitValue = Number(timeLimit);
+  useEffect(() => {
+    if (!setup) return;
+    if (!Number.isInteger(radiusValue) || !Number.isInteger(timeLimitValue)) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void serverGenerationEstimate(radiusValue, timeLimitValue)
+        .then((value) => {
+          if (cancelled) return;
+          setEstimate(value);
+          setEstimateError(null);
+        })
+        .catch((cause) => {
+          if (cancelled) return;
+          setEstimateError(cause instanceof Error ? cause.message : String(cause));
+        });
+    }, 150);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [setup, radiusValue, timeLimitValue]);
+
   const active: GenerationSnapshot | null = status?.active ?? null;
   const last = status?.last ?? null;
   const running = Boolean(active?.running);
   const selectedJava = setup?.java ?? null;
+  const limits = setup?.generationLimits ?? null;
+  const versionMismatch =
+    Boolean(version) &&
+    setup !== null &&
+    setup.targetMinecraftVersion.length > 0 &&
+    setup.targetMinecraftVersion !== version;
+  const currentEstimate =
+    estimate &&
+    estimate.radiusChunks === radiusValue &&
+    estimate.timeLimitSeconds === timeLimitValue
+      ? estimate
+      : null;
+  const diskBlocked = currentEstimate !== null && !currentEstimate.fitsOnDisk;
+  const setupLocked = busy !== null || versionMismatch;
   const compatibleCandidates =
     runtimes?.candidates.filter((candidate) => candidate.status === "compatible") ?? [];
   const validDatapacks = datapacks.filter((datapack) => datapack.valid);
@@ -220,7 +265,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
     await runBusy("java", async () => {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const path = await open({
-        title: "Choose a Java 21 executable",
+        title: `Choose a Java ${setup?.targetJavaMajor ?? ""} executable`,
         multiple: false,
         directory: false,
         filters: [{ name: "Java executable", extensions: ["exe"] }],
@@ -319,6 +364,18 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
   }
 
   async function start() {
+    if (versionMismatch) {
+      setError(
+        `Vanilla generation is available only for Minecraft ${setup?.targetMinecraftVersion ?? "the verified target"}; the selected version is ${version}.`,
+      );
+      return;
+    }
+    if (diskBlocked && currentEstimate) {
+      setError(
+        `Not enough free disk space: ${formatBytes(currentEstimate.requiredDiskBytes)} required, ${formatBytes(currentEstimate.availableDiskBytes)} available.`,
+      );
+      return;
+    }
     const request: GenerationRequest = {
       seed: seed.trim(),
       preset,
@@ -411,6 +468,19 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
           <span className="font-mono">{setup?.targetJavaMajor ?? "unknown"}</span>.
         </p>
 
+        {versionMismatch && setup ? (
+          <Alert variant="destructive">
+            <TriangleAlert />
+            <AlertTitle>Generation is not verified for this version</AlertTitle>
+            <AlertDescription>
+              This build can generate a Vanilla World only for Minecraft{" "}
+              <span className="font-mono">{setup.targetMinecraftVersion}</span>. The selected
+              project version is <span className="font-mono">{version}</span>. Choose the verified
+              version, or create an Empty, Flat or Imported project instead.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
         <div className={cn("space-y-4 rounded-xl border p-4", statusTone(Boolean(setup?.ready)))}>
           <div className="flex flex-wrap items-center gap-2 text-sm">
             {setup?.ready ? (
@@ -431,7 +501,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
               <div className="flex items-center gap-2 text-sm font-medium">
-                <HardDriveDownload className="size-4" /> Java 21
+                <HardDriveDownload className="size-4" /> Java {setup?.targetJavaMajor ?? ""}
               </div>
               {setup?.javaReady ? (
                 <div className="font-mono text-xs break-all text-muted-foreground">
@@ -446,7 +516,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                         label:
                           compatibleCandidates.length === 0
                             ? "No compatible Java candidate"
-                            : "Choose Java 21 candidate",
+                            : `Choose Java ${setup?.targetJavaMajor ?? ""} candidate`,
                       },
                       ...compatibleCandidates.map((candidate) => ({
                         value: candidate.path,
@@ -455,7 +525,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                     ]}
                     value={javaChoice}
                     onValueChange={(value) => setJavaChoice(value ?? "")}
-                    disabled={busy !== null || compatibleCandidates.length === 0}
+                    disabled={setupLocked || compatibleCandidates.length === 0}
                   >
                     <SelectTrigger
                       className="w-full font-mono"
@@ -467,7 +537,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                       <SelectItem value="">
                         {compatibleCandidates.length === 0
                           ? "No compatible Java candidate"
-                          : "Choose Java 21 candidate"}
+                          : `Choose Java ${setup?.targetJavaMajor ?? ""} candidate`}
                       </SelectItem>
                       {compatibleCandidates.map((candidate) => (
                         <SelectItem key={candidate.path} value={candidate.path}>
@@ -481,7 +551,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                       size="sm"
                       variant="outline"
                       onClick={() => void applyCandidate()}
-                      disabled={!javaChoice || busy !== null}
+                      disabled={!javaChoice || setupLocked}
                       aria-label="Use selected Java candidate"
                     >
                       Use
@@ -490,7 +560,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                       size="sm"
                       variant="outline"
                       onClick={() => void chooseJava()}
-                      disabled={busy !== null}
+                      disabled={setupLocked}
                       aria-label="Choose Java executable"
                     >
                       <FolderOpen /> Choose
@@ -520,7 +590,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                     size="sm"
                     variant="outline"
                     onClick={() => void downloadServer()}
-                    disabled={busy !== null}
+                    disabled={setupLocked}
                     aria-label="Download official Minecraft server JAR"
                   >
                     {busy === "server-download" ? (
@@ -534,7 +604,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                     size="sm"
                     variant="outline"
                     onClick={() => void selectServer()}
-                    disabled={busy !== null}
+                    disabled={setupLocked}
                     aria-label="Choose server JAR"
                   >
                     <FolderOpen /> Choose
@@ -569,6 +639,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                       className="mt-0.5"
                       checked={eulaChecked}
                       onCheckedChange={(checked) => setEulaChecked(checked === true)}
+                      disabled={setupLocked}
                       aria-label="I have read and accept the Minecraft EULA"
                     />
                     <span>I accept the Minecraft EULA for this JAR and version.</span>
@@ -577,7 +648,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
                     size="sm"
                     variant="outline"
                     onClick={() => void acceptEula()}
-                    disabled={!eulaChecked || busy !== null || !setup?.serverReady}
+                    disabled={!eulaChecked || setupLocked || !setup?.serverReady}
                     aria-label="Accept EULA"
                   >
                     {busy === "eula" ? <Loader2 className="animate-spin" /> : <CheckCircle2 />}
@@ -605,7 +676,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
               value={seed}
               maxLength={64}
               onChange={(event) => setSeed(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation seed"
             />
           </label>
@@ -615,7 +686,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
               items={WORLD_PRESETS}
               value={preset}
               onValueChange={(value) => setPreset(value as WorldPreset)}
-              disabled={running}
+              disabled={running || versionMismatch}
             >
               <SelectTrigger className="w-full" aria-label="Vanilla world preset">
                 <SelectValue />
@@ -633,12 +704,12 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             <span className="text-muted-foreground">Radius, chunks</span>
             <Input
               type="number"
-              min={1}
-              max={16}
+              min={limits?.minRadiusChunks ?? 1}
+              max={limits?.maxRadiusChunks ?? 16}
               className="font-mono"
               value={radius}
               onChange={(event) => setRadius(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation radius in chunks"
             />
           </label>
@@ -646,7 +717,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             <Checkbox
               checked={generateStructures}
               onCheckedChange={(checked) => setGenerateStructures(checked === true)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Generate structures"
             />
             <span>Generate structures</span>
@@ -658,7 +729,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
               className="font-mono"
               value={centerX}
               onChange={(event) => setCenterX(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation center X"
             />
           </label>
@@ -669,7 +740,7 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
               className="font-mono"
               value={centerZ}
               onChange={(event) => setCenterZ(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation center Z"
             />
           </label>
@@ -677,12 +748,12 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             <span className="text-muted-foreground">Time limit, s</span>
             <Input
               type="number"
-              min={10}
-              max={3600}
+              min={limits?.minTimeLimitSeconds ?? 10}
+              max={limits?.maxTimeLimitSeconds ?? 3600}
               className="font-mono"
               value={timeLimit}
               onChange={(event) => setTimeLimit(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation time limit seconds"
             />
           </label>
@@ -690,13 +761,13 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             <span className="text-muted-foreground">Memory, MiB</span>
             <Input
               type="number"
-              min={512}
-              max={4096}
+              min={limits?.minMemoryMb ?? 512}
+              max={limits?.maxMemoryMb ?? 4096}
               step={256}
               className="font-mono"
               value={memory}
               onChange={(event) => setMemory(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation memory limit"
             />
           </label>
@@ -704,12 +775,12 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             <span className="text-muted-foreground">View distance</span>
             <Input
               type="number"
-              min={2}
-              max={8}
+              min={limits?.minViewDistance ?? 2}
+              max={limits?.maxViewDistance ?? 8}
               className="font-mono"
               value={viewDistance}
               onChange={(event) => setViewDistance(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation view distance"
             />
           </label>
@@ -717,15 +788,74 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             <span className="text-muted-foreground">CPU threads</span>
             <Input
               type="number"
-              min={1}
-              max={8}
+              min={limits?.minCpuThreads ?? 1}
+              max={limits?.maxCpuThreads ?? 8}
               className="font-mono"
               value={cpuThreads}
               onChange={(event) => setCpuThreads(event.target.value)}
-              disabled={running}
+              disabled={running || versionMismatch}
               aria-label="Vanilla generation CPU threads"
             />
           </label>
+        </div>
+
+        <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <Gauge className="size-4" /> Generation estimate
+            </span>
+            {currentEstimate ? (
+              <Badge variant={currentEstimate.fitsOnDisk ? "secondary" : "destructive"}>
+                {currentEstimate.fitsOnDisk ? "Fits on disk" : "Not enough disk"}
+              </Badge>
+            ) : null}
+          </div>
+          {estimateError ? (
+            <div className="text-sm text-status-warn">
+              The disk estimate is unavailable: {estimateError}. The backend still checks free space
+              before any server process starts.
+            </div>
+          ) : currentEstimate ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                <div>
+                  <div className="text-xs text-muted-foreground">Expected area</div>
+                  <div className="font-mono">
+                    {currentEstimate.expectedChunks.toLocaleString()} chunks
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Estimated world</div>
+                  <div className="font-mono">
+                    {formatBytes(currentEstimate.estimatedWorldBytes)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Required free space</div>
+                  <div className="font-mono">{formatBytes(currentEstimate.requiredDiskBytes)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Free on run volume</div>
+                  <div className="font-mono">{formatBytes(currentEstimate.availableDiskBytes)}</div>
+                </div>
+              </div>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                Generation is bounded by the {currentEstimate.timeLimitSeconds}s time limit; the
+                server stops after it even if the requested area is incomplete. The world estimate
+                is conservative and includes a safety margin.
+              </p>
+              {!currentEstimate.fitsOnDisk ? (
+                <div className="text-sm text-status-warn">
+                  Free at least {formatBytes(currentEstimate.requiredDiskBytes)} on the volume that
+                  holds the isolated server runs, or reduce the radius.
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Checking the requested radius and the run volume…
+            </p>
+          )}
         </div>
 
         <div className="space-y-3 rounded-xl border bg-muted/30 p-4">
@@ -740,7 +870,12 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
               variant="outline"
               className="ml-auto"
               onClick={() => void browseDatapacks()}
-              disabled={busy !== null || running || datapacks.length >= 16}
+              disabled={
+                busy !== null ||
+                running ||
+                versionMismatch ||
+                datapacks.length >= (limits?.maxDatapacks ?? 16)
+              }
               aria-label="Add data packs"
             >
               {busy === "datapacks" ? <Loader2 className="animate-spin" /> : <FolderOpen />}
@@ -802,13 +937,13 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             className="mt-0.5"
             checked={consentChecked}
             onCheckedChange={(checked) => setConsentChecked(checked === true)}
-            disabled={running}
+            disabled={running || versionMismatch}
             aria-label="Confirm local official server run"
           />
           <span>
             I explicitly allow FuryBuilder to start the selected official server JAR with the
-            selected Java 21 runtime for this run. It listens on loopback only; no external player
-            can connect.
+            selected Java {setup?.targetJavaMajor ?? ""} runtime for this run. It listens on
+            loopback only; no external player can connect.
           </span>
         </label>
 
@@ -819,6 +954,8 @@ export function VanillaWorldWizard({ onOpenWorld }: VanillaWorldWizardProps) {
             disabled={
               busy !== null ||
               running ||
+              versionMismatch ||
+              diskBlocked ||
               !setup?.ready ||
               !consentChecked ||
               invalidDatapacks.length > 0

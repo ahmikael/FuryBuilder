@@ -40,12 +40,12 @@ use crate::types::RuntimeStatus;
 pub use jar::{inspect_server_jar, sha1_file, ServerJarInfo};
 pub use mojang::VERSION_MANIFEST_URL;
 pub use types::{
-    DatapackInspection, DatapackSelection, GeneratedWorld, GenerationDatapack, GenerationPhase,
-    GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
-    GenerationSnapshot, GenerationStatusReport, GenerationStopReason, InstalledServerJar,
-    ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula, SavedServerJar,
-    ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo, ServerSource,
-    ServerTarget, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES,
+    DatapackInspection, DatapackSelection, GeneratedWorld, GenerationDatapack, GenerationEstimate,
+    GenerationLimits, GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo,
+    GenerationRunsReport, GenerationSnapshot, GenerationStatusReport, GenerationStopReason,
+    InstalledServerJar, ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula,
+    SavedServerJar, ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo,
+    ServerSource, ServerTarget, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES,
     RUN_MANIFEST_SCHEMA_VERSION, SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION,
 };
 
@@ -136,6 +136,22 @@ impl ServerManager {
     /// so the wizard can show why a pack is rejected.
     pub fn inspect_datapacks(&self, paths: &[String]) -> Vec<DatapackInspection> {
         datapack::inspect_all(paths)
+    }
+
+    /// Backend-owned generation bounds. The wizard never invents these limits.
+    pub fn generation_limits(&self) -> GenerationLimits {
+        generation::limits()
+    }
+
+    /// Preflights one prospective run against the backend limits and the volume that owns
+    /// the isolated run directory. It never creates a run directory or starts a process.
+    pub fn generation_estimate(
+        &self,
+        radius_chunks: u32,
+        time_limit_seconds: u32,
+    ) -> Result<GenerationEstimate, ServerError> {
+        let available = download_pipeline::available_space(&self.inner.runs_root)?;
+        generation::estimate(radius_chunks, time_limit_seconds, available)
     }
 
     pub fn discover(&self) -> ServerDiscoveryReport {
@@ -538,6 +554,8 @@ impl ServerManager {
             }
         }
         generation::validate_request(&request)?;
+        let estimated = generation::estimated_world_bytes(generation::expected_chunks(&request));
+        download_pipeline::ensure_space(&self.inner.runs_root, estimated)?;
         let datapack_paths: Vec<String> = request
             .datapacks
             .iter()

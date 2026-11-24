@@ -192,6 +192,7 @@ pub fn run() {
             commands::server_clear_eula,
             commands::server_start_generation,
             commands::server_generation_status,
+            commands::server_generation_estimate,
             commands::server_cancel_generation,
             commands::server_generation_runs,
             commands::server_clear_generation_runs,

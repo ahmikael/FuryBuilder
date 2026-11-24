@@ -2,6 +2,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invokeCommand } from "@/lib/ipc";
 import type {
   DatapackInspection,
+  GenerationEstimate,
   GenerationRequest,
   GenerationRunsReport,
   GenerationSnapshot,
@@ -66,6 +67,17 @@ export function startServerGeneration(request: GenerationRequest): Promise<Gener
 
 export function serverGenerationStatus(): Promise<GenerationStatusReport> {
   return invokeCommand<GenerationStatusReport>("server_generation_status");
+}
+
+/** Bounded preflight for the Source step; it never creates a run directory or starts Java. */
+export function serverGenerationEstimate(
+  radiusChunks: number,
+  timeLimitSeconds: number,
+): Promise<GenerationEstimate> {
+  return invokeCommand<GenerationEstimate>("server_generation_estimate", {
+    radiusChunks,
+    timeLimitSeconds,
+  });
 }
 
 export function cancelServerGeneration(): Promise<boolean> {

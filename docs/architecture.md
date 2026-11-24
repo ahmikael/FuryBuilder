@@ -174,8 +174,16 @@ read-only; preview removes the staging folder, while import keeps it only until 
 byte-preserving source copy is complete. The step shows the source kind, dimensions,
 region/chunk counts, blockers and warnings, and requires the `Import as-is` strategy; conversion
 is an explicit disabled choice because no verified converter ships in this build. Vanilla keeps
-the existing generation panel. `Review` repeats the name, folder, library location, mode,
-version, flat layers, import source/strategy and source before creation. Every step returns its
+the existing generation panel but receives the selected version and refuses to generate when it
+differs from the verified server target. The step owns the seed, preset, radius/center,
+structures toggle, time limit and validated local data packs, and requires an explicit EULA
+acceptance for the selected JAR plus a separate per-run consent. It shows the backend-owned
+generation limits, expected chunk count, a conservative world-size estimate and the free space
+on the run volume; `server_generation_estimate` is a read-only preflight, and
+`server_start_generation` repeats the disk check before it creates a run directory. A run stops
+at the requested time limit even when the area is incomplete. `Review` repeats the name,
+folder, library location, mode, version, flat layers, import source/strategy and source before
+creation. Every step returns its
 own validation errors; `Next` refuses to advance, shows the reason, and the step buttons only
 reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only

@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  GenerationEstimate,
   GenerationReport,
   GenerationSnapshot,
   ServerDiscoveryReport,
@@ -24,6 +25,7 @@ const api = vi.hoisted(() => ({
   acceptEula: vi.fn(),
   install: vi.fn(),
   latest: vi.fn(),
+  estimate: vi.fn(),
 }));
 
 const dialog = vi.hoisted(() => ({ open: vi.fn() }));
@@ -39,6 +41,7 @@ vi.mock("@/lib/server-api", () => ({
   installMinecraftServer: api.install,
   latestMinecraftServerRelease: api.latest,
   selectMinecraftServerJar: api.selectJar,
+  serverGenerationEstimate: api.estimate,
 }));
 
 vi.mock("@/lib/runtime-api", async (importOriginal) => {
@@ -90,6 +93,19 @@ const readySetup: VanillaSetupReport = {
   targetDataVersion: 4189,
   targetJavaMajor: 21,
   serverDatapackFormat: 61,
+  generationLimits: {
+    minRadiusChunks: 1,
+    maxRadiusChunks: 16,
+    minTimeLimitSeconds: 10,
+    maxTimeLimitSeconds: 3600,
+    minMemoryMb: 512,
+    maxMemoryMb: 4096,
+    minViewDistance: 2,
+    maxViewDistance: 8,
+    minCpuThreads: 1,
+    maxCpuThreads: 8,
+    maxDatapacks: 16,
+  },
   java,
   javaReady: true,
   server,
@@ -98,6 +114,16 @@ const readySetup: VanillaSetupReport = {
   eulaMatchesSelected: true,
   blockers: [],
   ready: true,
+};
+
+const readyEstimate: GenerationEstimate = {
+  radiusChunks: 1,
+  timeLimitSeconds: 120,
+  expectedChunks: 9,
+  estimatedWorldBytes: 67_330_048,
+  requiredDiskBytes: 134_438_912,
+  availableDiskBytes: 10 * 1024 * 1024 * 1024,
+  fitsOnDisk: true,
 };
 
 const runtimeDiscovery: RuntimeDiscoveryReport = {
@@ -200,6 +226,7 @@ describe("VanillaWorldWizard", () => {
     api.start.mockResolvedValue(running);
     api.cancel.mockResolvedValue(true);
     api.inspect.mockResolvedValue([]);
+    api.estimate.mockResolvedValue(readyEstimate);
   });
 
   it("shows setup blockers and keeps generation disabled", async () => {
@@ -224,6 +251,61 @@ describe("VanillaWorldWizard", () => {
     expect(screen.getByText(/Select a compatible Java 21 runtime/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
     expect(api.start).not.toHaveBeenCalled();
+  });
+
+  it("shows the bounded area, time limit and disk estimate", async () => {
+    render(<VanillaWorldWizard />);
+
+    expect(await screen.findByText("Generation estimate")).toBeInTheDocument();
+    await waitFor(() => expect(api.estimate).toHaveBeenCalledWith(1, 120));
+    expect(await screen.findByText("9 chunks")).toBeInTheDocument();
+    expect(screen.getByText("Fits on disk")).toBeInTheDocument();
+    expect(screen.getByText(/Generation is bounded by the 120s time limit/)).toBeInTheDocument();
+    expect(screen.getByText("64.2 MiB")).toBeInTheDocument();
+    expect(screen.getByText("10.00 GiB")).toBeInTheDocument();
+  });
+
+  it("blocks generation when the estimated world does not fit on disk", async () => {
+    const user = userEvent.setup();
+    api.estimate.mockResolvedValue({
+      ...readyEstimate,
+      availableDiskBytes: 1024,
+      fitsOnDisk: false,
+    });
+    render(<VanillaWorldWizard />);
+
+    expect(await screen.findByText("Not enough disk")).toBeInTheDocument();
+    expect(screen.getByText(/Free at least/)).toBeInTheDocument();
+    const start = await screen.findByRole("button", {
+      name: "Start Vanilla World generation",
+    });
+    await user.click(screen.getByRole("checkbox", { name: "Confirm local official server run" }));
+    expect(start).toBeDisabled();
+    expect(api.start).not.toHaveBeenCalled();
+  });
+
+  it("refuses generation when the selected version is not the verified target", async () => {
+    api.setup.mockResolvedValue({
+      ...readySetup,
+      java: null,
+      javaReady: false,
+      server: null,
+      serverReady: false,
+      eulaAcceptedAt: null,
+      eulaMatchesSelected: false,
+      ready: false,
+      blockers: ["The selected version is not verified for generation."],
+    });
+    render(<VanillaWorldWizard version="1.21.5" />);
+
+    expect(
+      await screen.findByText("Generation is not verified for this version"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/The selected project version is/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Download official Minecraft server JAR" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
   });
 
   it("requires the explicit run consent and sends the supported world settings", async () => {

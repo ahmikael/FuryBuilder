@@ -89,6 +89,32 @@ export interface InstalledServerJar {
 
 export type WorldPreset = "normal" | "flat" | "large_biomes" | "amplified";
 
+/** Backend-owned bounds for the supported generation form fields. */
+export interface GenerationLimits {
+  minRadiusChunks: number;
+  maxRadiusChunks: number;
+  minTimeLimitSeconds: number;
+  maxTimeLimitSeconds: number;
+  minMemoryMb: number;
+  maxMemoryMb: number;
+  minViewDistance: number;
+  maxViewDistance: number;
+  minCpuThreads: number;
+  maxCpuThreads: number;
+  maxDatapacks: number;
+}
+
+/** Bounded disk/area preflight for one prospective generation run. */
+export interface GenerationEstimate {
+  radiusChunks: number;
+  timeLimitSeconds: number;
+  expectedChunks: number;
+  estimatedWorldBytes: number;
+  requiredDiskBytes: number;
+  availableDiskBytes: number;
+  fitsOnDisk: boolean;
+}
+
 export interface DatapackSelection {
   path: string;
 }
@@ -226,6 +252,7 @@ export interface VanillaSetupReport {
   targetDataVersion: number;
   targetJavaMajor: number;
   serverDatapackFormat: number;
+  generationLimits: GenerationLimits;
   java: JavaRuntimeReport | null;
   javaReady: boolean;
   server: ServerJarReport | null;

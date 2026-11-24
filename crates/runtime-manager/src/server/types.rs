@@ -249,6 +249,38 @@ impl WorldPreset {
     }
 }
 
+/// Backend-owned bounds for the supported Vanilla World generation fields. The wizard
+/// renders its inputs from these values instead of repeating constants.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationLimits {
+    pub min_radius_chunks: u32,
+    pub max_radius_chunks: u32,
+    pub min_time_limit_seconds: u32,
+    pub max_time_limit_seconds: u32,
+    pub min_memory_mb: u32,
+    pub max_memory_mb: u32,
+    pub min_view_distance: u8,
+    pub max_view_distance: u8,
+    pub min_cpu_threads: u8,
+    pub max_cpu_threads: u8,
+    pub max_datapacks: usize,
+}
+
+/// Bounded disk and area estimate for one prospective generation run. It is a preflight
+/// warning, not a promise about the final world size or runtime.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationEstimate {
+    pub radius_chunks: u32,
+    pub time_limit_seconds: u32,
+    pub expected_chunks: u64,
+    pub estimated_world_bytes: u64,
+    pub required_disk_bytes: u64,
+    pub available_disk_bytes: u64,
+    pub fits_on_disk: bool,
+}
+
 /// User-requested isolated generation. Values are validated again on the backend; this is
 /// not a promise that every Minecraft world setting is exposed.
 #[derive(Debug, Clone, Deserialize)]
