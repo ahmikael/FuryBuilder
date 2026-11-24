@@ -395,6 +395,17 @@ describe("Viewport", () => {
     expect(renderer.setGhostBox).toHaveBeenLastCalledWith(selection, "fill");
   });
 
+  it("keeps save status out of the performance panel", async () => {
+    ipc.tauri = false;
+    render(<Viewport />);
+    await waitFor(() => expect(useWorldStore.getState().status).toBe("ready"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Performance/ }));
+
+    expect(screen.queryByText("Save")).not.toBeInTheDocument();
+    expect(screen.queryByText(/saved r\d/)).not.toBeInTheDocument();
+  });
+
   it("disposes the renderer on unmount", async () => {
     ipc.tauri = false;
     const view = render(<Viewport />);

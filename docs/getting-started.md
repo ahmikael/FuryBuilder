@@ -117,8 +117,10 @@ files while the app is running.
   projects and exposes checkpoints and import/export. On the welcome screen it is disabled
   because the welcome screen and full-screen wizard own opening and creation. `View` toggles
   panels. `AI / MCP` sets agent access. Undo/redo, save, the project-state chip, the command
-  palette and Settings are on the right. `Tools` and `Export` are placeholders; their real
-  actions live in the viewport toolbar, bottom panel and Project dialog.
+  palette and Settings are on the right. The top bar does not repeat the active palette block:
+  the current block lives in the Inspector and palette. Core status lives only in the status
+  bar. `Tools` and `Export` are placeholders; their real actions live in the viewport toolbar,
+  bottom panel and Project dialog.
 - **World panel.** Switch the displayed dimension and filter the tree. The current alpha
   loads the overworld; the Nether and End are listed but not streamed yet.
 - **Viewport.** The 3D scene, selection box, chunk borders, grid and the bottom input hint.
@@ -184,7 +186,8 @@ Other useful shortcuts:
 
 ## 6. Save, close and recover
 
-- The toolbar chip and status bar show `Saved`, `Unsaved changes` or `Autosaved · unsaved`.
+- The toolbar chip shows `Saved`, `Unsaved changes` or `Autosaved · unsaved`. The viewport
+  performance panel reports rendering metrics and the last operation, not a second save state.
 - **Autosave** runs every 30 seconds while edits are unsaved, and on window close. It is not
   a replacement for `Ctrl+S`.
 - **Checkpoints** are full verified snapshots. Open `Project → Checkpoints`, write a reason

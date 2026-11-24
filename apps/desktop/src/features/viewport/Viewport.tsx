@@ -67,7 +67,7 @@ import {
   useWorldStore,
 } from "@/state/world-store";
 import { useToolStore } from "@/state/tool-store";
-import { projectAllowsEditor, projectIsDirty, useProjectStore } from "@/state/project-store";
+import { projectAllowsEditor, useProjectStore } from "@/state/project-store";
 import {
   applyActiveTool,
   copySelection,
@@ -305,8 +305,6 @@ export function Viewport() {
   const lastOperation = useToolStore((state) => state.lastOperation);
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
-  const projectDirty = projectIsDirty(project, revision);
-  const autosaved = projectDirty && project?.autosavedRevision === revision;
 
   const refreshAssets = useCallback(async (force = false): Promise<void> => {
     const renderer = rendererRef.current;
@@ -1099,16 +1097,6 @@ export function Viewport() {
                 ))}
               </SelectContent>
             </Select>
-            <span>Save</span>
-            <span
-              className={cn("text-right", projectDirty ? "text-status-warn" : "text-status-ok")}
-            >
-              {projectDirty
-                ? autosaved
-                  ? `autosaved r${project?.autosavedRevision}`
-                  : "unsaved"
-                : `saved r${project?.savedRevision}`}
-            </span>
             {lastOperation ? (
               <>
                 <span>Last op</span>

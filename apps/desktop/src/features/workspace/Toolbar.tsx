@@ -22,7 +22,6 @@ import type { BackendStatus } from "@/lib/contracts";
 import { isTauriRuntime } from "@/lib/ipc";
 import { redoWorld, undoWorld } from "@/editor/commands";
 import { COMMAND_PALETTE_SHORTCUT, PANEL_SHORTCUTS } from "@/editor/layout";
-import { blockColor } from "@/renderer/assets";
 import { useHistoryStore } from "@/state/history-store";
 import { useEditorStore } from "@/state/editor-store";
 import { projectIsDirty, useProjectStore } from "@/state/project-store";
@@ -53,7 +52,6 @@ export function Toolbar({
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
   const job = useToolStore((state) => state.job);
-  const selectedBlock = useToolStore((state) => state.selectedBlock);
   const current = useProjectStore((state) => state.current);
   const loading = useProjectStore((state) => state.loading);
   const lastSavedAtMs = useProjectStore((state) => state.lastSavedAtMs);
@@ -262,18 +260,6 @@ export function Toolbar({
           />
           <span className="truncate">{current?.name ?? saveState}</span>
           {projectOpen ? <span className="truncate text-muted-foreground">{saveState}</span> : null}
-        </Badge>
-
-        <Badge
-          variant="outline"
-          className="hidden max-w-48 gap-2 px-2.5 py-1 font-mono font-normal text-muted-foreground xl:inline-flex"
-          title="Active palette block"
-        >
-          <span
-            className="size-2.5 rounded-sm border border-black/30"
-            style={{ backgroundColor: blockColor(selectedBlock.name) }}
-          />
-          {selectedBlock.name.replace("minecraft:", "")}
         </Badge>
 
         <Tooltip>
