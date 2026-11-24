@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components и Review закрыты; идёт Preparing.
-> Дата: 2026-11-22; обновлено 2026-11-24 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components, Review и Preparing закрыты; идёт создание проекта через v2 manifest.
+> Дата: 2026-11-22; обновлено 2026-11-24 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1407,9 +1407,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-47` — Preparing: шаги, progress, Cancel/Retry; скачанное не теряется. Статус: P0 в работе.
+**Текущий фокус:** `P0-48` — Создание проекта через v2 manifest с logical ids и хэшами компонентов. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-48`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-49`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1496,7 +1496,7 @@ UI:
 - [x] `P0-44` Source Vanilla: seed/preset/radius/structures/datapacks, EULA, время/диск.
 - [x] `P0-45` Components: Auto/Manual/Existing для Java/assets/server с состоянием и ошибками.
 - [x] `P0-46` Review: сводка + все предупреждения + ожидаемый размер/время.
-- [ ] `P0-47` Preparing: шаги, progress, Cancel/Retry; скачанное не теряется.
+- [x] `P0-47` Preparing: шаги, progress, Cancel/Retry; скачанное не теряется.
 - [ ] `P0-48` Создание проекта через v2 manifest с logical ids и хэшами компонентов.
 - [ ] `P0-49` Import создаёт проект с автоопределённой/подтверждённой версией.
 - [ ] `P0-50` Убрать ProjectManager-dialog в режиме «нет проекта»; оставить открытие/переключение.
@@ -1689,6 +1689,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-24 | Preparing шага создания | `Preparing` показывает состояние Java/assets/catalog/server из Components и реальные этапы backend через `furybuilder-project-prepare`. Прогресс копирования — записанные байты; `project_prepare_cancel` останавливает операцию в безопасной точке до публикации и очищает незавершённый проект, не затрагивая кэш компонентов. Retry повторяет запрос с новым ID; для Vanilla использует тот же завершённый run, без перезапуска сервера. Значения мастера сохраняются. shadcn: `Card`, `Progress`, `Alert`, `Button` | см. `git log` | 685 Rust tests, 358 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit; browser QA с имитацией IPC-состояний |
 | 2026-11-24 | Review шага создания | Review вынесен в отдельный `ProjectReviewStep`: показывает имя/режим/версию/папку/source/strategy, режимы и версии Java/assets/server из того же verified summary, точный каталог (blocks/items/id), ожидаемый размер и время; для empty/flat — расчёт по платформе, для import — symlink-safe `sourceBytes` из backend-анализа плюс консервативный overlay по числу чанков, без выдуманного времени генерации; предупреждения агрегируют profile notes, analysis warnings, component warnings, derived entities, downgrade/read-only/convert и placeholder; server показывается только когда реально нужен; тесты Review/компонентов/wizard; docs обновлены | см. `git log` | 683 Rust tests, 350 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit, browser QA |
 | 2026-11-24 | Components шага создания | Новый шаг Components между Version и Source (для Import — после Version, для Vanilla — перед Source) собирает Java, client JAR и server JAR из одного facade: карточки Auto/Use existing/Manual, managed preview с источником/размером/checksum, прогресс с Cancel, ошибки через общий presenter и повторная проверка статуса; placeholder стал явным действием (`components_use_placeholder` + facade + TS API), проходит требование редактирования, но остаётся unverified и не заявляет JAR/каталог/checksum; после готового client JAR шаг показывает точный каталог блоков/предметов; состояние шага привязано к profile+mode и сбрасывается при их смене; wizard требует готовые assets (Java — для Vanilla, иначе остаётся предупреждением; server — только для Vanilla) до Next; docs обновлены | см. `git log` | 683 Rust tests, 346 TS tests (1 skipped), clippy, fmt, typecheck/lint/format, shadcn audit, browser QA |
 | 2026-11-24 | Source Vanilla | Шаг Source Vanilla получает выбранную версию и отклоняет генерацию, если она не совпадает с проверенным server target; форма уже покрывает seed/preset/radius/center/structures/time/memory/view distance/CPU и валидированные локальные datapacks, EULA принимается для конкретного JAR и версии, а запуск требует отдельного per-run consent; `GenerationLimits` и `GenerationEstimate` стали backend-owned: `server_generation_estimate` показывает ожидаемое число чанков, консервативный размер мира, требуемое и свободное место на volume запуска, лимиты полей берутся из `vanilla_setup_check`; `server_start_generation` повторяет disk preflight через общий `ensure_space` до создания run directory; UI показывает estimate, блокирует запуск при нехватке диска и объясняет time limit; Rust-тест на estimate/лимиты и TS-тесты на estimate, disk blocker и version guard; docs обновлены | см. `git log` | 682 Rust tests, 337 TS tests, clippy, fmt, typecheck/lint/format, shadcn audit, browser QA |
@@ -1750,4 +1751,3 @@ UI:
 - Definition of Done из §18 выполнен;
 - журнал §21.8 содержит коммит и проверки для каждого блока;
 - рабочее дерево чистое, все проверки зелёные, документация актуальна.
-

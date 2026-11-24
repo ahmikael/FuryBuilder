@@ -65,9 +65,10 @@ pub use parity::{
     MAX_PARITY_MISMATCHES, PARITY_DIMENSION,
 };
 pub use passthrough::{
-    passthrough_java_world, passthrough_java_world_with_options, CopiedFile, PassthroughError,
-    PassthroughOptions, PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES,
-    MAX_PASSTHROUGH_FILE_BYTES, MAX_PASSTHROUGH_TOTAL_BYTES,
+    passthrough_java_world, passthrough_java_world_observed, passthrough_java_world_with_options,
+    CopiedFile, CopyObserver, NoopCopyObserver, PassthroughError, PassthroughOptions,
+    PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES, MAX_PASSTHROUGH_FILE_BYTES,
+    MAX_PASSTHROUGH_TOTAL_BYTES,
 };
 pub use region_write::{
     verified_write_support, write_region_from_overlay, write_region_from_overlay_with_policy,

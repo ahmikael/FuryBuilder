@@ -77,11 +77,16 @@ cargo test --workspace
    whole source must stay inside the selected version's overworld height. Invalid layers are
    refused before the project is written.
 6. Review the source, the resolved components and catalog, the conservative size/time estimate
-   and every aggregated warning, then click **Create project** (or **Import world**). A flat
-   project is ready in a few seconds.
+   and every aggregated warning, then click **Create project** (or **Import world**). The
+   **Preparing** screen lists the components that are already installed (they stay in the cache)
+   and the real project stages: source analysis, editable blocks, metadata, source copy, verify
+   and ready. A source copy shows byte progress. **Cancel preparation** stops the unpublished
+   project at the next safe point and returns to Review without deleting downloads. If a stage
+   fails, **Retry** repeats the same request and **Back to review** keeps every entered value.
 
 Vanilla World uses `Basics → Version → Components → Source` and has no review step: creation
-happens from its generation panel with **Open as project**.
+starts from its generation panel with **Open as project**. If that import fails, **Retry** uses
+the completed run without generating it again. **Back to source** returns to the existing run.
 
 A new project can be created only after its version has a verified profile and its Components
 step is ready. A placeholder assets choice is accepted with a warning; it is never presented as

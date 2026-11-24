@@ -28,11 +28,16 @@ import {
   type ComponentStepState,
 } from "@/features/project/ProjectComponentsStep";
 import { ProjectReviewStep } from "@/features/project/ProjectReviewStep";
+import { ProjectPrepareStep } from "@/features/project/ProjectPrepareStep";
 import { EmptySourceStep, FlatSourceStep } from "@/features/project/ProjectSourceStep";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { presentError, type ErrorPresentation } from "@/lib/error-messages";
 import { isTauriRuntime } from "@/lib/ipc";
-import { fetchProjectDefaults, type CreateProjectOptions } from "@/lib/project-api";
+import {
+  fetchProjectDefaults,
+  listenProjectPrepare,
+  type CreateProjectOptions,
+} from "@/lib/project-api";
 import { fetchVersionCatalog } from "@/lib/version-api";
 import {
   CREATION_MODES,
@@ -678,35 +683,6 @@ function ImportSourceStep({
   );
 }
 
-function FailurePanel({
-  message,
-  hint,
-  retryDisabled,
-  onRetry,
-}: {
-  message: string;
-  hint: string | null;
-  retryDisabled: boolean;
-  onRetry: () => void;
-}) {
-  return (
-    <div className="space-y-4">
-      <Alert variant="destructive" role="alert">
-        <TriangleAlert />
-        <AlertTitle>Project could not be created</AlertTitle>
-        <AlertDescription>
-          <p>{message}</p>
-          {hint ? <p className="mt-1">{hint}</p> : null}
-        </AlertDescription>
-      </Alert>
-      <Button type="button" disabled={retryDisabled} onClick={onRetry}>
-        <RefreshCw data-icon="inline-start" />
-        Retry
-      </Button>
-    </div>
-  );
-}
-
 const BROWSER_PROJECT_DEFAULTS: ProjectDefaults = {
   projectsRoot: "Documents/FuryBuilder",
   folderSuffix: ".furybuilder",
@@ -749,6 +725,8 @@ export function ProjectWizard() {
   const setOpen = useProjectStore((state) => state.setManagerOpen);
   const phase = useProjectStore((state) => state.phase);
   const prepareMessage = useProjectStore((state) => state.prepareMessage);
+  const prepareProgress = useProjectStore((state) => state.prepareProgress);
+  const prepareCancelling = useProjectStore((state) => state.prepareCancelling);
   const failure = useProjectStore((state) => state.failure);
   const analysis = useProjectStore((state) => state.worldAnalysis);
   const analysisLoading = useProjectStore((state) => state.analysisLoading);
@@ -771,6 +749,10 @@ export function ProjectWizard() {
   const [furthestStep, setFurthestStep] = useState(0);
   const [attempted, setAttempted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [generatedRequest, setGeneratedRequest] = useState<{
+    runId: string;
+    name: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -793,11 +775,31 @@ export function ProjectWizard() {
     };
   }, [desktop]);
 
+  useEffect(() => {
+    if (!desktop) return;
+    let disposed = false;
+    let stop: (() => void) | null = null;
+    void listenProjectPrepare((event) => {
+      if (!disposed) useProjectStore.getState().applyPrepareProgress(event);
+    })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else stop = unlisten;
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+      stop?.();
+    };
+  }, [desktop]);
+
   const steps = useMemo(() => wizardSteps(mode), [mode]);
   const activeStep = Math.min(requestedStep, steps.length - 1);
   const step = steps[activeStep]!;
   const furthest = Math.min(furthestStep, steps.length - 1);
   const busy = phase === "preparing" || phase === "saving";
+  const showingPreparation =
+    submitted && (phase === "preparing" || (phase === "error" && failure !== null));
   const folderSuffix = defaults?.folderSuffix ?? BROWSER_PROJECT_DEFAULTS.folderSuffix;
   const projectsRoot = defaults?.projectsRoot ?? null;
   const destination = projectFolderName(projectFolder, folderSuffix) || undefined;
@@ -887,11 +889,22 @@ export function ProjectWizard() {
   };
 
   const retry = (): void => {
-    void submit();
+    if (mode === "vanilla" && generatedRequest) {
+      void importGeneratedWorld(generatedRequest.name, generatedRequest.runId, destination);
+    } else {
+      void submit();
+    }
+  };
+
+  const backToReview = (): void => {
+    setSubmitted(false);
+    setAttempted(false);
+    useProjectStore.getState().clearFailure();
+    setRequestedStep(steps.length - 1);
   };
 
   const goTo = (index: number): void => {
-    if (index < 0 || index >= steps.length || index > furthest) return;
+    if (showingPreparation || index < 0 || index >= steps.length || index > furthest) return;
     setRequestedStep(index);
     setAttempted(false);
     ensureVersionCatalog(index);
@@ -915,6 +928,7 @@ export function ProjectWizard() {
     setFurthestStep(0);
     setAttempted(false);
     setComponentStep(null);
+    setGeneratedRequest(null);
   };
 
   const changeImportSource = (value: string): void => {
@@ -971,43 +985,52 @@ export function ProjectWizard() {
           <h1 id="project-wizard-title" className="truncate text-base font-semibold">
             New project
           </h1>
-          <p className="truncate text-xs text-muted-foreground">{stepDescription}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {showingPreparation ? "Preparing your project" : stepDescription}
+          </p>
         </div>
-        <Badge variant="outline" className="ml-auto tabular-nums">
-          Step {activeStep + 1} of {steps.length}
-        </Badge>
-        <Button type="button" size="sm" variant="ghost" disabled={busy} onClick={cancel}>
+        {!showingPreparation && (
+          <Badge variant="outline" className="ml-auto tabular-nums">
+            Step {activeStep + 1} of {steps.length}
+          </Badge>
+        )}
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className={showingPreparation ? "ml-auto" : undefined}
+          disabled={busy}
+          onClick={cancel}
+        >
           <X data-icon="inline-start" />
           Cancel
         </Button>
       </header>
 
-      <div className="border-b px-4 py-3 sm:px-6">
-        <StepNav steps={steps} active={activeStep} furthest={furthest} onSelect={goTo} />
-      </div>
+      {!showingPreparation && (
+        <div className="border-b px-4 py-3 sm:px-6">
+          <StepNav steps={steps} active={activeStep} furthest={furthest} onSelect={goTo} />
+        </div>
+      )}
 
       <main className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-          {phase === "preparing" ? (
-            <Card className="gap-0 py-0">
-              <CardContent className="flex flex-col items-center gap-3 p-10 text-center">
-                <Loader2 className="size-6 animate-spin text-primary" />
-                <p className="text-sm font-medium">{prepareMessage ?? "Preparing the project…"}</p>
-                <p className="max-w-md text-sm leading-relaxed text-muted-foreground">
-                  The world, component checks and project metadata are prepared before the editor
-                  mounts. Keep this window open.
-                </p>
-              </CardContent>
-            </Card>
-          ) : phase === "error" && failure && submitted ? (
-            <FailurePanel
-              message={failure.message}
-              hint={failure.hint}
-              retryDisabled={busy}
+          {showingPreparation && (
+            <ProjectPrepareStep
+              mode={mode}
+              components={componentStep}
+              progress={prepareProgress}
+              message={prepareMessage}
+              cancelling={prepareCancelling}
+              failure={phase === "error" ? failure : null}
+              onCancel={() => void useProjectStore.getState().cancelPreparation()}
+              onBack={backToReview}
               onRetry={retry}
+              canCancel={prepareProgress.length > 0}
             />
-          ) : (
-            <div className="space-y-6">
+          )}
+          {(!showingPreparation || mode === "vanilla") && (
+            <div hidden={showingPreparation} className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold">{step.title}</h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
@@ -1063,9 +1086,11 @@ export function ProjectWizard() {
                 ) : mode === "vanilla" ? (
                   <VanillaWorldWizard
                     version={effectiveVersion}
-                    onOpenWorld={(runId, projectName) =>
-                      importGeneratedWorld(projectName, runId, destination)
-                    }
+                    onOpenWorld={(runId, projectName) => {
+                      setGeneratedRequest({ runId, name: projectName });
+                      setSubmitted(true);
+                      return importGeneratedWorld(projectName, runId, destination);
+                    }}
                   />
                 ) : mode === "flat" ? (
                   <FlatSourceStep
@@ -1143,49 +1168,53 @@ export function ProjectWizard() {
         </div>
       </main>
 
-      <Separator />
-      <footer className="border-t px-4 py-3 sm:px-6">
-        <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-3">
-          <div className="min-w-40 flex-1">
-            <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
-              <span>
-                Step {activeStep + 1} of {steps.length}
-              </span>
-              <span className="tabular-nums">{Math.round(progress)}%</span>
-            </div>
-            <Progress value={progress} aria-label="Project creation progress" />
-          </div>
+      {!showingPreparation && (
+        <>
+          <Separator />
+          <footer className="border-t px-4 py-3 sm:px-6">
+            <div className="mx-auto flex w-full max-w-3xl flex-wrap items-center gap-3">
+              <div className="min-w-40 flex-1">
+                <div className="mb-1.5 flex items-center justify-between text-xs text-muted-foreground">
+                  <span>
+                    Step {activeStep + 1} of {steps.length}
+                  </span>
+                  <span className="tabular-nums">{Math.round(progress)}%</span>
+                </div>
+                <Progress value={progress} aria-label="Project creation progress" />
+              </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={activeStep === 0 || busy}
-              onClick={() => goTo(activeStep - 1)}
-            >
-              <ArrowLeft data-icon="inline-start" />
-              Back
-            </Button>
-            {activeStep < steps.length - 1 ? (
-              <Button type="button" size="sm" disabled={busy} onClick={next}>
-                Next
-                <ArrowRight data-icon="inline-end" />
-              </Button>
-            ) : mode !== "vanilla" ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={busy || analysisLoading}
-                onClick={() => void submit()}
-              >
-                <Sparkles data-icon="inline-start" />
-                Create project
-              </Button>
-            ) : null}
-          </div>
-        </div>
-      </footer>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={activeStep === 0 || busy}
+                  onClick={() => goTo(activeStep - 1)}
+                >
+                  <ArrowLeft data-icon="inline-start" />
+                  Back
+                </Button>
+                {activeStep < steps.length - 1 ? (
+                  <Button type="button" size="sm" disabled={busy} onClick={next}>
+                    Next
+                    <ArrowRight data-icon="inline-end" />
+                  </Button>
+                ) : mode !== "vanilla" ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || analysisLoading}
+                    onClick={() => void submit()}
+                  >
+                    <Sparkles data-icon="inline-start" />
+                    Create project
+                  </Button>
+                ) : null}
+              </div>
+            </div>
+          </footer>
+        </>
+      )}
     </section>
   );
 }

@@ -4,6 +4,7 @@ import { presentError } from "@/lib/error-messages";
 import {
   analyzeJavaWorld,
   autosaveProject,
+  cancelProjectPrepare,
   checkpointProject,
   closeProject,
   createProject,
@@ -15,6 +16,7 @@ import {
   importJavaWorld,
   openCheckpoint,
   openProject,
+  type PrepareProgress,
   renameProject,
   saveProject,
 } from "@/lib/project-api";
@@ -114,6 +116,9 @@ interface ProjectUiState {
   current: SessionStatus | null;
   phase: ProjectPhase;
   prepareMessage: string | null;
+  prepareJobId: string | null;
+  prepareProgress: PrepareProgress[];
+  prepareCancelling: boolean;
   failure: ProjectFailure | null;
   recovery: RecoveryInfo | null;
   checkpoints: CheckpointMeta[];
@@ -137,6 +142,8 @@ interface ProjectUiState {
   beginSaving: () => void;
   fail: (error: unknown) => void;
   clearFailure: () => void;
+  applyPrepareProgress: (progress: PrepareProgress) => void;
+  cancelPreparation: () => Promise<boolean>;
   refreshList: () => Promise<void>;
   refreshSession: () => Promise<void>;
   resume: () => Promise<void>;
@@ -176,6 +183,9 @@ const initial = {
   current: null as SessionStatus | null,
   phase: "closed" as ProjectPhase,
   prepareMessage: null as string | null,
+  prepareJobId: null as string | null,
+  prepareProgress: [] as PrepareProgress[],
+  prepareCancelling: false,
   failure: null as ProjectFailure | null,
   recovery: null as RecoveryInfo | null,
   checkpoints: [] as CheckpointMeta[],
@@ -191,20 +201,33 @@ const initial = {
   bootstrapped: false,
 };
 
-function preparingState(message: string) {
+function preparingState(message: string, jobId: string | null = null) {
   return {
     phase: "preparing" as const,
     prepareMessage: message,
+    prepareJobId: jobId,
+    prepareProgress: [] as PrepareProgress[],
+    prepareCancelling: false,
     loading: true,
     failure: null,
     error: null,
   };
 }
 
+function newPrepareJobId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `prepare-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function readyState() {
   return {
     phase: "ready" as const,
     prepareMessage: null,
+    prepareJobId: null,
+    prepareProgress: [] as PrepareProgress[],
+    prepareCancelling: false,
     loading: false,
     failure: null,
     error: null,
@@ -215,6 +238,8 @@ function savingState() {
   return {
     phase: "saving" as const,
     prepareMessage: "Saving the project…",
+    prepareJobId: null,
+    prepareCancelling: false,
     loading: true,
     failure: null,
     error: null,
@@ -226,6 +251,8 @@ function failureState(error: unknown) {
   return {
     phase: "error" as const,
     prepareMessage: null,
+    prepareJobId: null,
+    prepareCancelling: false,
     loading: false,
     failure: presented,
     error: presented.message,
@@ -236,6 +263,9 @@ function closedState() {
   return {
     phase: "closed" as const,
     prepareMessage: null,
+    prepareJobId: null,
+    prepareProgress: [] as PrepareProgress[],
+    prepareCancelling: false,
     loading: false,
     failure: null,
     error: null,
@@ -326,8 +356,39 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     set((state) => ({
       failure: null,
       error: null,
+      prepareProgress: [],
       phase: state.current?.folder ? "ready" : "closed",
     })),
+
+  applyPrepareProgress: (progress) =>
+    set((state) => {
+      if (!state.prepareJobId || progress.jobId !== state.prepareJobId) return {};
+      return {
+        prepareProgress: [
+          ...state.prepareProgress.filter((entry) => entry.stage !== progress.stage),
+          progress,
+        ],
+      };
+    }),
+
+  cancelPreparation: async () => {
+    const jobId = get().prepareJobId;
+    if (!jobId || get().prepareCancelling) return false;
+    set({ prepareCancelling: true, prepareMessage: "Cancelling preparation…" });
+    try {
+      const accepted = await cancelProjectPrepare(jobId);
+      if (!accepted && get().prepareJobId === jobId) {
+        set({ prepareMessage: "Finishing preparation; it can no longer be cancelled." });
+      }
+      return accepted;
+    } catch (error) {
+      if (get().prepareJobId === jobId) {
+        set({ prepareCancelling: false, prepareMessage: "Preparing the project…" });
+        reportError(error, "Could not cancel preparation");
+      }
+      return false;
+    }
+  },
 
   refreshList: async () => {
     try {
@@ -393,17 +454,25 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
   },
 
   create: async (name, mode, folder, options) => {
-    set(preparingState("Creating the project…"));
+    const jobId = newPrepareJobId();
+    set(preparingState("Creating the project…", jobId));
     try {
       const payload = options
         ? await createProject(
+            jobId,
             name.trim(),
             mode,
             currentEditorState(),
             folder?.trim() || undefined,
             options,
           )
-        : await createProject(name.trim(), mode, currentEditorState(), folder?.trim() || undefined);
+        : await createProject(
+            jobId,
+            name.trim(),
+            mode,
+            currentEditorState(),
+            folder?.trim() || undefined,
+          );
       applyPayload(payload);
       set({ managerOpen: false });
       pushToast({
@@ -414,6 +483,15 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
+      if (presentError(error).code === "cancelled") {
+        set(get().current?.folder ? readyState() : closedState());
+        pushToast({
+          kind: "info",
+          title: "Preparation cancelled",
+          description: "Downloaded components stay in the cache. Adjust the review and try again.",
+        });
+        return false;
+      }
       set(failureState(error));
       reportError(error, "Project creation failed");
       return false;
@@ -455,9 +533,11 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     const trimmed = source.trim();
     if (!trimmed) return false;
     const analysis = get().worldAnalysis;
-    set(preparingState("Importing the world…"));
+    const jobId = newPrepareJobId();
+    set(preparingState("Importing the world…", jobId));
     try {
       const payload = await importJavaWorld(
+        jobId,
         name.trim(),
         trimmed,
         strategy,
@@ -474,6 +554,16 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
+      if (presentError(error).code === "cancelled") {
+        set(get().current?.folder ? readyState() : closedState());
+        pushToast({
+          kind: "info",
+          title: "Import cancelled",
+          description:
+            "The source was not changed and downloaded components stay in the cache. Try again when ready.",
+        });
+        return false;
+      }
       set(failureState(error));
       reportError(error, "World import failed");
       return false;
@@ -482,9 +572,11 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   importGeneratedWorld: async (name, runId, projectFolder) => {
     if (!runId.trim()) return false;
-    set(preparingState("Importing the generated world…"));
+    const jobId = newPrepareJobId();
+    set(preparingState("Importing the generated world…", jobId));
     try {
       const payload = await importGeneratedWorldApi(
+        jobId,
         name.trim(),
         runId,
         currentEditorState(),
@@ -503,6 +595,16 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       void get().refreshList();
       return true;
     } catch (error) {
+      if (presentError(error).code === "cancelled") {
+        set(get().current?.folder ? readyState() : closedState());
+        pushToast({
+          kind: "info",
+          title: "Import cancelled",
+          description:
+            "The generated run and downloaded components stay in place. Import it again when ready.",
+        });
+        return false;
+      }
       set(failureState(error));
       reportError(error, "Generated world import failed");
       return false;

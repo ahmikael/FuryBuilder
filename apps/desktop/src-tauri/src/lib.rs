@@ -133,6 +133,7 @@ pub fn run() {
             commands::versions_catalog,
             commands::project_list,
             commands::project_create,
+            commands::project_prepare_cancel,
             commands::project_open,
             commands::project_save,
             commands::project_autosave,

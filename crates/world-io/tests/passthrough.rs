@@ -4,14 +4,16 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::Mutex;
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use sha2::{Digest, Sha256};
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_END, TAG_STRING};
 use world_io::passthrough::{
-    passthrough_java_world, passthrough_java_world_with_options, PassthroughError,
-    PassthroughOptions,
+    passthrough_java_world, passthrough_java_world_observed, passthrough_java_world_with_options,
+    CopyObserver, PassthroughError, PassthroughOptions,
 };
 
 const TARGET: i32 = 4189;
@@ -199,6 +201,119 @@ fn temp_entries(root: &Path) -> Vec<String> {
 fn sha256(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[derive(Default)]
+struct TestObserver {
+    cancelled: AtomicBool,
+    cancel_after: Option<usize>,
+    calls: AtomicUsize,
+    events: Mutex<Vec<(u64, u64)>>,
+}
+
+impl TestObserver {
+    fn cancelling_after(calls: usize) -> Self {
+        Self {
+            cancel_after: Some(calls),
+            ..Self::default()
+        }
+    }
+
+    fn cancelled_before_start() -> Self {
+        Self {
+            cancelled: AtomicBool::new(true),
+            ..Self::default()
+        }
+    }
+
+    fn events(&self) -> Vec<(u64, u64)> {
+        self.events.lock().expect("events lock").clone()
+    }
+}
+
+impl CopyObserver for TestObserver {
+    fn progress(&self, copied: u64, total: u64) {
+        let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        self.events
+            .lock()
+            .expect("events lock")
+            .push((copied, total));
+        if self.cancel_after.is_some_and(|limit| call >= limit) {
+            self.cancelled.store(true, Ordering::SeqCst);
+        }
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+}
+
+#[test]
+fn reports_byte_progress_and_cancels_without_publishing() {
+    let dir = TempDir::new("progress");
+    let source = dir.path().join("source");
+    write_world(&source);
+    let before = snapshot(&source);
+    let expected_bytes: u64 = before
+        .iter()
+        .filter(|(relative, _)| relative.as_path() != Path::new("session.lock"))
+        .map(|(_, bytes)| bytes.len() as u64)
+        .sum();
+
+    let observer = TestObserver::default();
+    let destination = dir.path().join("copy");
+    let report = passthrough_java_world_observed(
+        &source,
+        &destination,
+        PassthroughOptions::default(),
+        expected_bytes,
+        &observer,
+    )
+    .expect("observed copy");
+    let events = observer.events();
+    assert!(!events.is_empty());
+    assert_eq!(
+        events.last().map(|(copied, _)| *copied),
+        Some(expected_bytes)
+    );
+    assert_eq!(events.last().map(|(_, total)| *total), Some(expected_bytes));
+    assert_eq!(report.bytes(), expected_bytes);
+    assert_eq!(snapshot(&source), before, "source must stay byte-identical");
+
+    let cancelled_dir = TempDir::new("progress-cancel");
+    let cancelled_source = cancelled_dir.path().join("source");
+    write_world(&cancelled_source);
+    let cancelled_destination = cancelled_dir.path().join("copy");
+    let cancelling = TestObserver::cancelling_after(1);
+    let error = passthrough_java_world_observed(
+        &cancelled_source,
+        &cancelled_destination,
+        PassthroughOptions::default(),
+        expected_bytes,
+        &cancelling,
+    )
+    .expect_err("must stop after the first progress event");
+    assert!(matches!(error, PassthroughError::Cancelled));
+    assert_eq!(error.code(), "cancelled");
+    assert!(!cancelled_destination.exists());
+    assert!(temp_entries(cancelled_dir.path()).is_empty());
+
+    let blocked_dir = TempDir::new("progress-blocked");
+    let blocked_source = blocked_dir.path().join("source");
+    write_world(&blocked_source);
+    let blocked_destination = blocked_dir.path().join("copy");
+    let blocked = TestObserver::cancelled_before_start();
+    let error = passthrough_java_world_observed(
+        &blocked_source,
+        &blocked_destination,
+        PassthroughOptions::default(),
+        expected_bytes,
+        &blocked,
+    )
+    .expect_err("must refuse a cancelled copy");
+    assert!(matches!(error, PassthroughError::Cancelled));
+    assert!(!blocked_destination.exists());
+    assert!(temp_entries(blocked_dir.path()).is_empty());
 }
 
 #[test]

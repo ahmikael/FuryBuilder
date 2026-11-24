@@ -725,18 +725,11 @@ impl ProjectStore {
             folder
         };
         let dir = self.root.join(&folder);
-        fs::create_dir_all(dir.join(DATA_DIR))
-            .map_err(|error| io_error(format!("creating {}", dir.display()), error))?;
-        fs::create_dir_all(dir.join(CACHE_DIR))
-            .map_err(|error| io_error(format!("creating {}", dir.display()), error))?;
-        fs::create_dir_all(dir.join(SOURCE_DIR))
-            .map_err(|error| io_error(format!("creating {}", dir.display()), error))?;
 
         let bytes = encode_world(world)?;
         verify_round_trip(&bytes)?;
         let checksum = sha256_hex(&bytes);
         let file = snapshot_file(world.revision());
-        write_atomic(&dir.join(DATA_DIR).join(&file), &bytes)?;
 
         let now = now_ms();
         let project_id = uuid::Uuid::new_v4().to_string();
@@ -754,13 +747,31 @@ impl ProjectStore {
         manifest.vanilla = vanilla;
         manifest.set_world_payload(format!("{DATA_DIR}/{file}"), checksum, bytes.len() as u64);
         manifest.validate()?;
-        write_json(&dir.join(PROJECT_FILE), &manifest)?;
-        write_json(
-            &dir.join(SOURCE_DIR).join("source.json"),
-            &SourceManifest::default(),
-        )?;
-
-        self.detail(&folder)
+        fs::create_dir(&dir).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                ProjectError::AlreadyExists(folder.clone())
+            } else {
+                io_error(format!("creating {}", dir.display()), error)
+            }
+        })?;
+        let result = (|| {
+            for child in [DATA_DIR, CACHE_DIR, SOURCE_DIR] {
+                let child = dir.join(child);
+                fs::create_dir(&child)
+                    .map_err(|error| io_error(format!("creating {}", child.display()), error))?;
+            }
+            write_atomic(&dir.join(DATA_DIR).join(&file), &bytes)?;
+            write_json(
+                &dir.join(SOURCE_DIR).join("source.json"),
+                &SourceManifest::default(),
+            )?;
+            write_json(&dir.join(PROJECT_FILE), &manifest)?;
+            self.detail(&folder)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_dir_all(&dir);
+        }
+        result
     }
 
     /// Renames the display name. The folder stays stable so external references and the

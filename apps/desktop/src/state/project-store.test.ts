@@ -23,6 +23,9 @@ const api = vi.hoisted(() => ({
   openCheckpoint: vi.fn(),
   close: vi.fn(),
   rename: vi.fn(),
+  importWorld: vi.fn(),
+  importGenerated: vi.fn(),
+  cancelPrepare: vi.fn(),
 }));
 
 const worldApi = vi.hoisted(() => ({
@@ -47,6 +50,9 @@ vi.mock("@/lib/project-api", () => ({
   openCheckpoint: api.openCheckpoint,
   closeProject: api.close,
   renameProject: api.rename,
+  importJavaWorld: api.importWorld,
+  importGeneratedWorld: api.importGenerated,
+  cancelProjectPrepare: api.cancelPrepare,
 }));
 
 vi.mock("@/lib/world-api", () => ({
@@ -194,6 +200,9 @@ function resetStores(): void {
     current: null,
     phase: "closed",
     prepareMessage: null,
+    prepareJobId: null,
+    prepareProgress: [],
+    prepareCancelling: false,
     failure: null,
     recovery: null,
     checkpoints: [],
@@ -220,6 +229,9 @@ beforeEach(() => {
   api.openCheckpoint.mockReset().mockResolvedValue({});
   api.close.mockReset().mockResolvedValue(session({ folder: null, name: null }));
   api.rename.mockReset().mockResolvedValue(payload().detail);
+  api.importWorld.mockReset().mockResolvedValue(payload());
+  api.importGenerated.mockReset().mockResolvedValue(payload());
+  api.cancelPrepare.mockReset().mockResolvedValue(true);
   worldApi.info.mockReset().mockResolvedValue(payload().info);
   worldApi.history.mockReset().mockResolvedValue({
     canUndo: false,
@@ -240,6 +252,7 @@ describe("project activation", () => {
       const created = await useProjectStore.getState().create("My Castle", "flat");
       expect(created).toBe(true);
       expect(api.create).toHaveBeenCalledWith(
+        expect.any(String),
         "My Castle",
         "flat",
         {
@@ -280,6 +293,7 @@ describe("project activation", () => {
 
     expect(created).toBe(true);
     expect(api.create).toHaveBeenCalledWith(
+      expect.any(String),
       "My Castle",
       "flat",
       {
@@ -404,6 +418,53 @@ describe("project lifecycle", () => {
     expect(await useProjectStore.getState().create("My Castle", "flat")).toBe(true);
     expect(useProjectStore.getState().phase).toBe("ready");
     expect(useProjectStore.getState().failure).toBeNull();
+  });
+
+  it("returns to a clean wizard state when creation is cancelled", async () => {
+    api.create.mockRejectedValue({ code: "cancelled", message: "cancelled by the user" });
+
+    const created = await useProjectStore.getState().create("My Castle", "flat");
+    expect(created).toBe(false);
+    const state = useProjectStore.getState();
+    expect(state.phase).toBe("closed");
+    expect(state.current).toBeNull();
+    expect(state.prepareJobId).toBeNull();
+    expect(state.prepareProgress).toEqual([]);
+    expect(state.prepareCancelling).toBe(false);
+    expect(getToasts().at(-1)?.title).toBe("Preparation cancelled");
+  });
+
+  it("tracks preparation progress for the active job and cancels it", async () => {
+    useProjectStore.setState({
+      phase: "preparing",
+      prepareJobId: "job-1",
+      prepareProgress: [],
+    });
+
+    useProjectStore.getState().applyPrepareProgress({
+      jobId: "other",
+      stage: "copy",
+      state: "running",
+      message: "ignored",
+      completed: 1,
+      total: 2,
+    });
+    expect(useProjectStore.getState().prepareProgress).toEqual([]);
+
+    useProjectStore.getState().applyPrepareProgress({
+      jobId: "job-1",
+      stage: "copy",
+      state: "running",
+      message: "Copying the source byte for byte",
+      completed: 1024,
+      total: 4096,
+    });
+    expect(useProjectStore.getState().prepareProgress).toHaveLength(1);
+
+    expect(await useProjectStore.getState().cancelPreparation()).toBe(true);
+    expect(api.cancelPrepare).toHaveBeenCalledWith("job-1");
+    expect(useProjectStore.getState().prepareCancelling).toBe(true);
+    expect(useProjectStore.getState().prepareMessage).toBe("Cancelling preparation…");
   });
 
   it("marks the open project saving without unmounting it", async () => {

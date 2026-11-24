@@ -3,6 +3,7 @@ import { invokeCommand } from "@/lib/ipc";
 import {
   analyzeJavaWorld,
   autosaveProject,
+  cancelProjectPrepare,
   checkpointProject,
   closeProject,
   createProject,
@@ -40,24 +41,30 @@ describe("project IPC contract", () => {
     expect(invoke).toHaveBeenLastCalledWith("project_defaults");
 
     const editorState = { selectedDimension: "minecraft:overworld", loadRadius: 2 };
-    await createProject("Castle", "flat", editorState);
+    await createProject("job-1", "Castle", "flat", editorState);
     expect(invoke).toHaveBeenLastCalledWith("project_create", {
-      name: "Castle",
-      mode: "flat",
-      editorState,
-      folder: null,
-      profileId: null,
-      flat: null,
+      jobId: "job-1",
+      request: {
+        name: "Castle",
+        mode: "flat",
+        editorState,
+        folder: null,
+        profileId: null,
+        flat: null,
+      },
     });
 
-    await createProject("Castle", "flat", editorState, "Chosen.furybuilder");
+    await createProject("job-2", "Castle", "flat", editorState, "Chosen.furybuilder");
     expect(invoke).toHaveBeenLastCalledWith("project_create", {
-      name: "Castle",
-      mode: "flat",
-      editorState,
-      folder: "Chosen.furybuilder",
-      profileId: null,
-      flat: null,
+      jobId: "job-2",
+      request: {
+        name: "Castle",
+        mode: "flat",
+        editorState,
+        folder: "Chosen.furybuilder",
+        profileId: null,
+        flat: null,
+      },
     });
 
     const flat = {
@@ -65,17 +72,20 @@ describe("project IPC contract", () => {
       layers: [{ block: "minecraft:stone", thickness: 2 }],
       biome: "minecraft:desert",
     };
-    await createProject("Castle", "flat", editorState, "Chosen.furybuilder", {
+    await createProject("job-3", "Castle", "flat", editorState, "Chosen.furybuilder", {
       profileId: "java-classic-test",
       flat,
     });
     expect(invoke).toHaveBeenLastCalledWith("project_create", {
-      name: "Castle",
-      mode: "flat",
-      editorState,
-      folder: "Chosen.furybuilder",
-      profileId: "java-classic-test",
-      flat,
+      jobId: "job-3",
+      request: {
+        name: "Castle",
+        mode: "flat",
+        editorState,
+        folder: "Chosen.furybuilder",
+        profileId: "java-classic-test",
+        flat,
+      },
     });
 
     await analyzeJavaWorld("C:\\saves\\Castle.zip");
@@ -84,6 +94,7 @@ describe("project IPC contract", () => {
     });
 
     await importJavaWorld(
+      "job-4",
       "Castle",
       "C:\\saves\\Castle",
       "importAsIs",
@@ -91,6 +102,7 @@ describe("project IPC contract", () => {
       "Imported.furybuilder",
     );
     expect(invoke).toHaveBeenLastCalledWith("project_import_world", {
+      jobId: "job-4",
       name: "Castle",
       source: "C:\\saves\\Castle",
       strategy: "importAsIs",
@@ -98,8 +110,9 @@ describe("project IPC contract", () => {
       folder: "Imported.furybuilder",
     });
 
-    await importGeneratedWorld("Castle", "run-1", editorState, "Vanilla.furybuilder");
+    await importGeneratedWorld("job-5", "Castle", "run-1", editorState, "Vanilla.furybuilder");
     expect(invoke).toHaveBeenLastCalledWith("project_import_generated_world", {
+      jobId: "job-5",
       name: "Castle",
       runId: "run-1",
       editorState,
@@ -148,5 +161,8 @@ describe("project IPC contract", () => {
       folder: "Castle.furybuilder",
       name: "Keep",
     });
+
+    await cancelProjectPrepare("job-6");
+    expect(invoke).toHaveBeenLastCalledWith("project_prepare_cancel", { jobId: "job-6" });
   });
 });

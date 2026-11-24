@@ -34,6 +34,24 @@ pub const MAX_PASSTHROUGH_DEPTH: usize = 64;
 
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 
+/// Receives byte progress from a passthrough copy and decides whether it should continue.
+/// Implementations must be cheap: the callback runs for every copied buffer.
+pub trait CopyObserver {
+    fn progress(&self, copied: u64, total: u64);
+    fn is_cancelled(&self) -> bool;
+}
+
+/// Observer for copies that cannot be cancelled and do not need progress.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NoopCopyObserver;
+
+impl CopyObserver for NoopCopyObserver {
+    fn progress(&self, _copied: u64, _total: u64) {}
+    fn is_cancelled(&self) -> bool {
+        false
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PassthroughOptions {
     /// Decode every allocated chunk while validating the source and the copy.
@@ -104,6 +122,8 @@ pub enum PassthroughError {
     LimitExceeded(String),
     #[error("source changed while it was being copied: {0}")]
     SourceChanged(String),
+    #[error("world copy was cancelled before publication")]
+    Cancelled,
     #[error("copy verification failed for {path}: expected sha256 {expected}, got {actual}")]
     VerificationFailed {
         path: String,
@@ -126,6 +146,7 @@ impl PassthroughError {
             PassthroughError::NotRegularFile(_) => "unsupported_format",
             PassthroughError::LimitExceeded(_) => "limit_exceeded",
             PassthroughError::SourceChanged(_) => "source_changed",
+            PassthroughError::Cancelled => "cancelled",
             PassthroughError::VerificationFailed { .. } => "verification_failed",
             PassthroughError::Io(_) => "io_error",
         }
@@ -137,7 +158,13 @@ pub fn passthrough_java_world(
     source: impl AsRef<Path>,
     destination: impl AsRef<Path>,
 ) -> Result<PassthroughReport, PassthroughError> {
-    passthrough_java_world_with_options(source, destination, PassthroughOptions::default())
+    passthrough_java_world_observed(
+        source,
+        destination,
+        PassthroughOptions::default(),
+        0,
+        &NoopCopyObserver,
+    )
 }
 
 pub fn passthrough_java_world_with_options(
@@ -145,6 +172,22 @@ pub fn passthrough_java_world_with_options(
     destination: impl AsRef<Path>,
     options: PassthroughOptions,
 ) -> Result<PassthroughReport, PassthroughError> {
+    passthrough_java_world_observed(source, destination, options, 0, &NoopCopyObserver)
+}
+
+/// Copies a supported classic world while reporting byte progress and honouring a
+/// cooperative cancel request. Cancellation before publication removes the temporary copy;
+/// the source and any existing destination are never touched.
+pub fn passthrough_java_world_observed(
+    source: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
+    options: PassthroughOptions,
+    total_bytes: u64,
+    observer: &dyn CopyObserver,
+) -> Result<PassthroughReport, PassthroughError> {
+    if observer.is_cancelled() {
+        return Err(PassthroughError::Cancelled);
+    }
     let source_path = source.as_ref();
     let source_metadata =
         fs::symlink_metadata(source_path).map_err(|error| io_error(source_path, &error))?;
@@ -186,16 +229,23 @@ pub fn passthrough_java_world_with_options(
         chunks,
         chunk_validation: options.validate_chunks,
     };
-    let mut total_bytes = 0u64;
+    let mut declared_bytes = 0u64;
+    let mut copied_bytes = 0u64;
     copy_dir(
         &source_root,
         guard.path(),
         Path::new(""),
         0,
         &options,
+        observer,
+        total_bytes,
+        &mut copied_bytes,
         &mut report,
-        &mut total_bytes,
+        &mut declared_bytes,
     )?;
+    if observer.is_cancelled() {
+        return Err(PassthroughError::Cancelled);
+    }
 
     let copied = JavaWorld::open(guard.path())?;
     let (copied_regions, copied_chunks) = validate_world(&copied, options.validate_chunks)?;
@@ -207,6 +257,9 @@ pub fn passthrough_java_world_with_options(
         });
     }
 
+    if observer.is_cancelled() {
+        return Err(PassthroughError::Cancelled);
+    }
     guard.publish(&destination)?;
     Ok(report)
 }
@@ -270,15 +323,22 @@ fn resolve_destination(source: &Path, destination: &Path) -> Result<PathBuf, Pas
     Ok(resolved)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn copy_dir(
     source_root: &Path,
     temp_root: &Path,
     relative: &Path,
     depth: usize,
     options: &PassthroughOptions,
+    observer: &dyn CopyObserver,
+    total_bytes: u64,
+    copied_bytes: &mut u64,
     report: &mut PassthroughReport,
-    total_bytes: &mut u64,
+    declared_bytes: &mut u64,
 ) -> Result<(), PassthroughError> {
+    if observer.is_cancelled() {
+        return Err(PassthroughError::Cancelled);
+    }
     if depth > MAX_PASSTHROUGH_DEPTH {
         return Err(PassthroughError::LimitExceeded(format!(
             "directory nesting exceeds {MAX_PASSTHROUGH_DEPTH} levels at {}",
@@ -309,8 +369,11 @@ fn copy_dir(
                 &entry_relative,
                 depth + 1,
                 options,
-                report,
+                observer,
                 total_bytes,
+                copied_bytes,
+                report,
+                declared_bytes,
             )?;
             continue;
         }
@@ -341,12 +404,12 @@ fn copy_dir(
                 options.max_file_bytes
             )));
         }
-        *total_bytes = total_bytes.checked_add(bytes).ok_or_else(|| {
+        *declared_bytes = declared_bytes.checked_add(bytes).ok_or_else(|| {
             PassthroughError::LimitExceeded("total byte count overflow".to_owned())
         })?;
-        if *total_bytes > options.max_total_bytes {
+        if *declared_bytes > options.max_total_bytes {
             return Err(PassthroughError::LimitExceeded(format!(
-                "{total_bytes} total bytes, limit is {}",
+                "{declared_bytes} total bytes, limit is {}",
                 options.max_total_bytes
             )));
         }
@@ -355,7 +418,14 @@ fn copy_dir(
         if let Some(parent) = target.parent() {
             fs::create_dir_all(parent).map_err(|error| io_error(parent, &error))?;
         }
-        let sha256 = copy_file(&source_path, &target, &metadata)?;
+        let sha256 = copy_file(
+            &source_path,
+            &target,
+            &metadata,
+            observer,
+            total_bytes,
+            copied_bytes,
+        )?;
         report.files.push(CopiedFile {
             relative_path: entry_relative,
             bytes,
@@ -369,6 +439,9 @@ fn copy_file(
     source: &Path,
     destination: &Path,
     metadata: &fs::Metadata,
+    observer: &dyn CopyObserver,
+    total_bytes: u64,
+    copied_bytes: &mut u64,
 ) -> Result<String, PassthroughError> {
     let expected_bytes = metadata.len();
     let source_modified = metadata.modified().ok();
@@ -379,6 +452,9 @@ fn copy_file(
     let mut buffer = [0u8; COPY_BUFFER_BYTES];
     let mut copied = 0u64;
     loop {
+        if observer.is_cancelled() {
+            return Err(PassthroughError::Cancelled);
+        }
         let read = reader
             .read(&mut buffer)
             .map_err(|error| io_error(source, &error))?;
@@ -397,6 +473,8 @@ fn copy_file(
         writer
             .write_all(&buffer[..read])
             .map_err(|error| io_error(destination, &error))?;
+        *copied_bytes = copied_bytes.saturating_add(read as u64);
+        observer.progress(*copied_bytes, total_bytes);
     }
     if copied != expected_bytes {
         return Err(PassthroughError::SourceChanged(
@@ -421,7 +499,7 @@ fn copy_file(
     }
 
     let expected = hex(&hasher.finalize());
-    let actual = hash_file(destination)?;
+    let actual = hash_file(destination, observer)?;
     if expected != actual {
         return Err(PassthroughError::VerificationFailed {
             path: destination.display().to_string(),
@@ -432,11 +510,14 @@ fn copy_file(
     Ok(expected)
 }
 
-fn hash_file(path: &Path) -> Result<String, PassthroughError> {
+fn hash_file(path: &Path, observer: &dyn CopyObserver) -> Result<String, PassthroughError> {
     let mut file = File::open(path).map_err(|error| io_error(path, &error))?;
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; COPY_BUFFER_BYTES];
     loop {
+        if observer.is_cancelled() {
+            return Err(PassthroughError::Cancelled);
+        }
         let read = file
             .read(&mut buffer)
             .map_err(|error| io_error(path, &error))?;
@@ -561,12 +642,16 @@ mod tests {
             chunk_validation: false,
         };
         let mut total = 0u64;
+        let mut copied = 0u64;
         let error = copy_dir(
             &root,
             &root,
             Path::new(""),
             MAX_PASSTHROUGH_DEPTH + 1,
             &PassthroughOptions::default(),
+            &NoopCopyObserver,
+            0,
+            &mut copied,
             &mut report,
             &mut total,
         )

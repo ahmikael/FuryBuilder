@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::{Arc, Mutex};
 
 use project_store::{EditorState, ProjectStore, ProjectTarget};
 use serde::Serialize;
-use world_application::{AppError, JobQueue, WorldService};
+use world_application::{AppError, ErrorCode, JobQueue, WorldService};
 
 use crate::diagnostics::Diagnostics;
 use crate::local_bridge::RendererBridge;
@@ -67,12 +68,118 @@ impl ProjectSession {
     }
 }
 
+/// One cooperative project-preparation job. Only one project can be prepared at a time;
+/// starting another job while one is active is a conflict rather than silent interleaving.
+#[derive(Debug, Default)]
+pub struct PrepareControl {
+    current: Mutex<Option<PrepareJob>>,
+}
+
+#[derive(Debug)]
+struct PrepareJob {
+    id: String,
+    attempt: Arc<PrepareAttempt>,
+}
+
+#[derive(Debug, Default)]
+pub struct PrepareAttempt(AtomicU8);
+
+impl PrepareAttempt {
+    const RUNNING: u8 = 0;
+    const CANCELLED: u8 = 1;
+    const PUBLISHING: u8 = 2;
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire) == Self::CANCELLED
+    }
+
+    fn cancel(&self) -> bool {
+        self.0
+            .compare_exchange(
+                Self::RUNNING,
+                Self::CANCELLED,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .is_ok()
+    }
+
+    pub fn begin_publish(&self) -> Result<(), AppError> {
+        self.0
+            .compare_exchange(
+                Self::RUNNING,
+                Self::PUBLISHING,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            )
+            .map(|_| ())
+            .map_err(|_| AppError::new(ErrorCode::Cancelled, "project preparation was cancelled"))
+    }
+}
+
+#[derive(Debug)]
+pub struct PrepareLease<'a> {
+    control: &'a PrepareControl,
+    id: &'a str,
+    pub attempt: Arc<PrepareAttempt>,
+}
+
+impl Drop for PrepareLease<'_> {
+    fn drop(&mut self) {
+        self.control.finish(self.id);
+    }
+}
+
+impl PrepareControl {
+    pub fn start<'a>(&'a self, id: &'a str) -> Result<PrepareLease<'a>, AppError> {
+        let mut current = self
+            .current
+            .lock()
+            .map_err(|_| AppError::internal("project preparation lock poisoned"))?;
+        if let Some(active) = current.as_ref() {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                format!("project preparation `{}` is already running", active.id),
+            ));
+        }
+        let attempt = Arc::new(PrepareAttempt::default());
+        *current = Some(PrepareJob {
+            id: id.to_owned(),
+            attempt: attempt.clone(),
+        });
+        Ok(PrepareLease {
+            control: self,
+            id,
+            attempt,
+        })
+    }
+
+    pub fn cancel(&self, id: &str) -> bool {
+        let Ok(current) = self.current.lock() else {
+            return false;
+        };
+        match current.as_ref() {
+            Some(job) if job.id == id => job.attempt.cancel(),
+            _ => false,
+        }
+    }
+
+    fn finish(&self, id: &str) {
+        if let Ok(mut current) = self.current.lock() {
+            if current.as_ref().is_some_and(|job| job.id == id) {
+                *current = None;
+            }
+        }
+    }
+}
+
 /// Shared authoritative services for the Tauri process. The project session and the world
 /// service are separate locks; commands never hold both while doing blocking disk I/O.
 pub struct AppState {
     pub service: Arc<Mutex<WorldService>>,
     pub jobs: JobQueue,
     pub projects: Mutex<ProjectSession>,
+    pub prepare: PrepareControl,
     pub renderer: RendererBridge,
     pub mcp_access: McpAccessState,
     pub mcp_confirmations: McpConfirmationBridge,
@@ -95,6 +202,7 @@ impl AppState {
             service: service.clone(),
             jobs: JobQueue::new(service),
             projects: Mutex::new(ProjectSession::new(ProjectStore::new(projects_root))),
+            prepare: PrepareControl::default(),
             renderer: RendererBridge::default(),
             mcp_access: McpAccessState::default(),
             mcp_confirmations: McpConfirmationBridge::default(),
@@ -189,5 +297,40 @@ pub fn autosave_on_exit(state: &AppState) {
                 serde_json::json!({ "folder": current.folder, "code": error.code() }),
             ),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PrepareControl;
+    use world_application::ErrorCode;
+
+    #[test]
+    fn prepare_control_allows_one_job_and_cancels_only_the_matching_id() {
+        let control = PrepareControl::default();
+        let first = control.start("first").expect("first job");
+        assert!(!first.attempt.is_cancelled());
+        assert!(!control.cancel("other"));
+        assert!(!first.attempt.is_cancelled());
+
+        let conflict = control
+            .start("second")
+            .expect_err("second job must conflict");
+        assert_eq!(conflict.code, ErrorCode::Conflict);
+
+        assert!(control.cancel("first"));
+        assert!(first.attempt.is_cancelled());
+        assert_eq!(
+            first.attempt.begin_publish().unwrap_err().code,
+            ErrorCode::Cancelled
+        );
+        drop(first);
+
+        let second = control.start("second").expect("job after finish");
+        second.attempt.begin_publish().expect("publication starts");
+        assert!(
+            !control.cancel("second"),
+            "publication cannot be interrupted"
+        );
     }
 }

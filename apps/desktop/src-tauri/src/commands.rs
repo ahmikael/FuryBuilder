@@ -1,7 +1,9 @@
 //! Typed Tauri IPC commands. Each command validates its own input and delegates to the
 //! application facade, returning structured `AppError` values.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
 use asset_source::{
     AssetBundle, AssetBundleService, AssetCatalogService, AssetDiscoveryReport, AssetPathReport,
@@ -26,8 +28,9 @@ use runtime_manager::{
     RuntimeDiscoveryReport, RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport,
     ServerJarReport, ServerProgress, ServerReleaseInfo,
 };
+use serde::Serialize;
 use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use world_application::{
     app_info as build_app_info, compile_build_dsl, Actor, AppError, AppInfo, BlockChange,
     BuildDslSummary, BuildRecipe, ChunkSnapshotBatch, ErrorCode, HistoryState, HistorySummary,
@@ -42,16 +45,150 @@ use world_domain::{
     BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
 };
 use world_io::{
-    self, JavaStructureError, JavaWorldAnalysis, PaletteCount, Structure, StructureImportPreview,
+    self, CopyObserver, JavaStructureError, JavaWorldAnalysis, PaletteCount, Structure,
+    StructureImportPreview,
 };
 
 use crate::state::{
-    session_status, AppState, CurrentProject, ProjectSession, SessionStatus, LOCAL_PROJECT_ID,
+    session_status, AppState, CurrentProject, PrepareAttempt, ProjectSession, SessionStatus,
+    LOCAL_PROJECT_ID,
 };
 
 /// Compressed structure uploads are capped before base64 decoding; the NBT codec then caps
 /// decompressed size and every collection independently.
 const MAX_STRUCTURE_UPLOAD_BYTES: usize = 32 * 1024 * 1024;
+
+/// Event stream for project creation/import preparation. The frontend renders these stages
+/// verbatim; no stage is invented by the UI.
+const PREPARE_EVENT: &str = "furybuilder-project-prepare";
+const PREPARE_PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PrepareProgress {
+    job_id: String,
+    stage: String,
+    state: String,
+    message: String,
+    completed: u64,
+    total: u64,
+}
+
+struct PrepareReporter {
+    app: AppHandle,
+    job_id: String,
+}
+
+impl PrepareReporter {
+    fn new(app: AppHandle, job_id: String) -> Self {
+        Self { app, job_id }
+    }
+
+    fn emit(
+        &self,
+        stage: &str,
+        state: &str,
+        message: impl Into<String>,
+        completed: u64,
+        total: u64,
+    ) {
+        let _ = self.app.emit(
+            PREPARE_EVENT,
+            PrepareProgress {
+                job_id: self.job_id.clone(),
+                stage: stage.to_owned(),
+                state: state.to_owned(),
+                message: message.into(),
+                completed,
+                total,
+            },
+        );
+    }
+
+    fn running(&self, stage: &str, message: impl Into<String>) {
+        self.emit(stage, "running", message, 0, 0);
+    }
+
+    fn done(&self, stage: &str, message: impl Into<String>) {
+        self.emit(stage, "done", message, 1, 1);
+    }
+}
+
+struct PrepareCopyObserver<'a> {
+    reporter: &'a PrepareReporter,
+    attempt: &'a PrepareAttempt,
+    last_emitted: Cell<Option<Instant>>,
+}
+
+impl CopyObserver for PrepareCopyObserver<'_> {
+    fn progress(&self, copied: u64, total: u64) {
+        let now = Instant::now();
+        if self
+            .last_emitted
+            .get()
+            .is_some_and(|last| now.duration_since(last) < PREPARE_PROGRESS_INTERVAL)
+        {
+            return;
+        }
+        self.last_emitted.set(Some(now));
+        self.reporter.emit(
+            "copy",
+            "running",
+            "Copying the source byte for byte",
+            copied,
+            total,
+        );
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.attempt.is_cancelled()
+    }
+}
+
+fn ensure_not_cancelled(attempt: &PrepareAttempt) -> Result<(), AppError> {
+    if attempt.is_cancelled() {
+        Err(AppError::new(
+            ErrorCode::Cancelled,
+            "project preparation was cancelled",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+async fn run_preparation(
+    app: AppHandle,
+    job_id: String,
+    run: impl FnOnce(
+            &AppState,
+            &PrepareReporter,
+            &PrepareAttempt,
+        ) -> Result<OpenedProjectPayload, AppError>
+        + Send
+        + 'static,
+) -> Result<OpenedProjectPayload, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let lease = state.prepare.start(&job_id)?;
+        let reporter = PrepareReporter::new(app.clone(), job_id.clone());
+        let result = run(state.inner(), &reporter, &lease.attempt);
+        ensure_not_cancelled(&lease.attempt)?;
+        result
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("project preparation task failed: {error}")))?
+}
+
+/// Owns the new folder until the prepared session is installed.
+struct UnpublishedProject(Option<PathBuf>);
+
+impl Drop for UnpublishedProject {
+    fn drop(&mut self) {
+        if let Some(path) = self.0.take() {
+            let _ = std::fs::remove_dir_all(path);
+        }
+    }
+}
 
 fn ui_actor() -> Actor {
     Actor::ui("ui")
@@ -444,6 +581,7 @@ fn passthrough_error(error: world_io::PassthroughError) -> AppError {
         "limit_exceeded" => ErrorCode::LimitExceeded,
         "unsupported_version" => ErrorCode::UnsupportedVersion,
         "unsupported_format" | "verification_failed" => ErrorCode::UnsupportedFormat,
+        "cancelled" => ErrorCode::Cancelled,
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
@@ -676,43 +814,75 @@ pub fn project_list(state: State<'_, AppState>) -> Result<project_store::Project
     Ok(projects.store.list())
 }
 
-#[tauri::command]
-pub fn project_create(
-    state: State<'_, AppState>,
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateProjectArgs {
     name: String,
     mode: project_store::CreationMode,
     editor_state: project_store::EditorState,
     folder: Option<String>,
     profile_id: Option<String>,
     flat: Option<project_store::FlatPreset>,
+}
+
+#[tauri::command]
+pub async fn project_create(
+    app: AppHandle,
+    job_id: String,
+    request: CreateProjectArgs,
 ) -> Result<OpenedProjectPayload, AppError> {
+    run_preparation(app, job_id, move |state, reporter, attempt| {
+        create_project_inner(state, reporter, attempt, request)
+    })
+    .await
+}
+
+fn create_project_inner(
+    state: &AppState,
+    reporter: &PrepareReporter,
+    attempt: &PrepareAttempt,
+    args: CreateProjectArgs,
+) -> Result<OpenedProjectPayload, AppError> {
+    ensure_not_cancelled(attempt)?;
+    reporter.running(
+        "metadata",
+        "Writing project metadata and the initial world snapshot",
+    );
     let mut projects = state
         .projects
         .lock()
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
-    ensure_current_closed(&state, &mut projects)?;
+    ensure_not_cancelled(attempt)?;
     let detail = projects
         .store
         .create_with_options(
-            &name,
-            mode,
-            editor_state.clone(),
+            &args.name,
+            args.mode,
+            args.editor_state.clone(),
             project_store::CreateOptions {
-                folder: folder.as_deref(),
-                profile_id: profile_id.as_deref(),
-                flat,
+                folder: args.folder.as_deref(),
+                profile_id: args.profile_id.as_deref(),
+                flat: args.flat,
             },
         )
         .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
+    let mut unpublished = UnpublishedProject(Some(projects.store.root().join(&folder)));
+    reporter.done("metadata", "Project metadata and snapshot written");
+
+    ensure_not_cancelled(attempt)?;
+
+    reporter.running("verify", "Opening and verifying the new project");
     let (detail, world, recovery) = projects.store.open(&folder).map_err(project_error)?;
     projects
         .store
         .begin_session(&folder, world.revision())
         .map_err(project_error)?;
+    attempt.begin_publish()?;
+    ensure_current_closed(state, &mut projects)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    install_world_service(&state, world, &editor_state)?;
+    install_world_service(state, world, &args.editor_state)?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -720,10 +890,12 @@ pub fn project_create(
         target: detail.target.clone(),
         saved_revision: detail.summary.world_revision,
         autosaved_revision: None,
-        editor_state,
+        editor_state: args.editor_state,
     });
     projects.refresh_checkpoints(&folder);
+    unpublished.0 = None;
     drop(projects);
+    reporter.done("verify", "Project opened and verified");
     state.diagnostics.write(
         "info",
         "project.create",
@@ -733,7 +905,16 @@ pub fn project_create(
             "mode": format!("{:?}", detail.summary.creation_mode).to_lowercase(),
         }),
     );
-    current_payload(&state, detail, info, recovery)
+    reporter.done("ready", "Project ready");
+    current_payload(state, detail, info, recovery)
+}
+
+/// Requests cooperative cancellation of a running project creation/import. The command
+/// keeps running until its next safe boundary, then removes the unpublished project folder
+/// and returns `cancelled`. Installed components are never removed by this command.
+#[tauri::command]
+pub fn project_prepare_cancel(state: State<'_, AppState>, job_id: String) -> bool {
+    state.prepare.cancel(&job_id)
 }
 
 #[tauri::command]
@@ -1105,49 +1286,91 @@ pub fn project_defaults(state: State<'_, AppState>) -> Result<ProjectDefaults, A
 }
 
 #[tauri::command]
-pub fn project_import_world(
-    state: State<'_, AppState>,
+pub async fn project_import_world(
+    app: AppHandle,
+    job_id: String,
     name: String,
     source: String,
     strategy: world_io::ImportStrategy,
     editor_state: project_store::EditorState,
     folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    if strategy != world_io::ImportStrategy::ImportAsIs {
-        return Err(AppError::new(
-            ErrorCode::UnsupportedVersion,
-            "conversion is not available for this source; choose Import as-is",
-        ));
-    }
-    let staging = ImportStaging::new();
-    let prepared =
-        world_io::prepare_world_source(&source, staging.path()).map_err(world_source_error)?;
-    import_world_project(
-        state.inner(),
-        name,
-        prepared.root(),
-        editor_state,
-        None,
-        folder.as_deref(),
-    )
+    run_preparation(app, job_id, move |state, reporter, attempt| {
+        if strategy != world_io::ImportStrategy::ImportAsIs {
+            return Err(AppError::new(
+                ErrorCode::UnsupportedVersion,
+                "conversion is not available for this source; choose Import as-is",
+            ));
+        }
+        ensure_not_cancelled(attempt)?;
+        reporter.running(
+            "source",
+            "Opening the world folder or extracting the archive",
+        );
+        let staging = ImportStaging::new();
+        let prepared =
+            world_io::prepare_world_source(source, staging.path()).map_err(world_source_error)?;
+        import_world_project(
+            state,
+            reporter,
+            attempt,
+            ImportWorldRequest {
+                name,
+                world_root: prepared.root(),
+                analysis: None,
+                editor_state,
+                vanilla: None,
+                folder,
+            },
+        )
+    })
+    .await
 }
 
 /// Imports a completed official-server generation run. The run is re-verified (manifest,
 /// completed report, world directory) before reading; the generated world becomes an
 /// immutable source copy and its exact generator identity is stored in `project.json`.
 #[tauri::command]
-pub fn project_import_generated_world(
-    state: State<'_, AppState>,
+pub async fn project_import_generated_world(
+    app: AppHandle,
     components: State<'_, ComponentManager>,
+    job_id: String,
     name: String,
     run_id: String,
     editor_state: project_store::EditorState,
     folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    let generated = components
-        .server()
-        .generated_world(&run_id)
-        .map_err(server_error)?;
+    let components = components.inner().clone();
+    run_preparation(app, job_id, move |state, reporter, attempt| {
+        ensure_not_cancelled(attempt)?;
+        reporter.running("source", "Verifying the completed official-server run");
+        let generated = components
+            .server()
+            .generated_world(&run_id)
+            .map_err(server_error)?;
+        import_generated_inner(
+            state,
+            reporter,
+            attempt,
+            generated,
+            name,
+            editor_state,
+            folder,
+        )
+    })
+    .await
+}
+
+fn import_generated_inner(
+    state: &AppState,
+    reporter: &PrepareReporter,
+    attempt: &PrepareAttempt,
+    generated: GeneratedWorld,
+    name: String,
+    editor_state: project_store::EditorState,
+    folder: Option<String>,
+) -> Result<OpenedProjectPayload, AppError> {
+    ensure_not_cancelled(attempt)?;
     let generated_version = world_io::analyze_java_world(&generated.world_dir);
     let minecraft_version = generated_version
         .version_name
@@ -1198,24 +1421,46 @@ pub fn project_import_generated_world(
         name
     };
     import_world_project(
-        state.inner(),
-        name,
-        Path::new(&generated.world_dir),
-        editor_state,
-        Some(provenance),
-        folder.as_deref(),
+        state,
+        reporter,
+        attempt,
+        ImportWorldRequest {
+            name,
+            world_root: Path::new(&generated.world_dir),
+            analysis: Some(generated_version),
+            editor_state,
+            vanilla: Some(provenance),
+            folder,
+        },
     )
+}
+
+struct ImportWorldRequest<'a> {
+    name: String,
+    world_root: &'a Path,
+    analysis: Option<JavaWorldAnalysis>,
+    editor_state: project_store::EditorState,
+    vanilla: Option<project_store::VanillaProvenance>,
+    folder: Option<String>,
 }
 
 fn import_world_project(
     state: &AppState,
-    name: String,
-    world_root: &Path,
-    mut editor_state: project_store::EditorState,
-    vanilla: Option<project_store::VanillaProvenance>,
-    folder: Option<&str>,
+    reporter: &PrepareReporter,
+    attempt: &PrepareAttempt,
+    request: ImportWorldRequest<'_>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    let analysis = world_io::analyze_java_world(world_root);
+    let ImportWorldRequest {
+        name,
+        world_root,
+        analysis,
+        mut editor_state,
+        vanilla,
+        folder,
+    } = request;
+    ensure_not_cancelled(attempt)?;
+    reporter.running("source", "Analyzing the source world");
+    let analysis = analysis.unwrap_or_else(|| world_io::analyze_java_world(world_root));
     if !analysis.supported {
         let code = if analysis
             .blockers
@@ -1234,6 +1479,15 @@ fn import_world_project(
             ),
         ));
     }
+    reporter.done(
+        "source",
+        format!(
+            "{} chunk(s) in {} region file(s)",
+            analysis.chunks, analysis.regions
+        ),
+    );
+    ensure_not_cancelled(attempt)?;
+    reporter.running("world", "Reading editable blocks and biomes");
     let (mut world, _load_report) =
         world_io::load_java_world(world_root).map_err(world_import_error)?;
     world.bump_revision();
@@ -1246,12 +1500,18 @@ fn import_world_project(
     editor_state.validate().map_err(project_error)?;
     let info = world.info();
     let revision = world.revision();
+    reporter.done(
+        "world",
+        format!("{} editable block(s) ready", info.block_count),
+    );
+    ensure_not_cancelled(attempt)?;
 
+    reporter.running("metadata", "Creating the project manifest and snapshot");
     let mut projects = state
         .projects
         .lock()
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
-    ensure_current_closed(state, &mut projects)?;
+    ensure_not_cancelled(attempt)?;
     let detail = match vanilla {
         Some(provenance) => projects.store.create_vanilla(
             &name,
@@ -1259,22 +1519,48 @@ fn import_world_project(
             &world,
             "world",
             provenance,
-            folder,
+            folder.as_deref(),
         ),
-        None => {
-            projects
-                .store
-                .create_imported(&name, editor_state.clone(), &world, "world", folder)
-        }
+        None => projects.store.create_imported(
+            &name,
+            editor_state.clone(),
+            &world,
+            "world",
+            folder.as_deref(),
+        ),
     }
     .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
     let project_dir = projects.store.root().join(&folder);
     let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");
+    let mut unpublished = UnpublishedProject(Some(project_dir));
+    reporter.done("metadata", "Project manifest and snapshot written");
 
-    let built = (|| -> Result<project_store::ProjectDetail, AppError> {
-        let copy = world_io::passthrough_java_world(world_root, &source_world)
-            .map_err(passthrough_error)?;
+    let detail = {
+        ensure_not_cancelled(attempt)?;
+        reporter.running("copy", "Copying the source byte for byte");
+        let observer = PrepareCopyObserver {
+            reporter,
+            attempt,
+            last_emitted: Cell::new(None),
+        };
+        let copy = world_io::passthrough_java_world_observed(
+            world_root,
+            &source_world,
+            world_io::PassthroughOptions::default(),
+            analysis.source_bytes,
+            &observer,
+        )
+        .map_err(passthrough_error)?;
+        reporter.done(
+            "copy",
+            format!("{} file(s) copied and hashed", copy.files.len()),
+        );
+        ensure_not_cancelled(attempt)?;
+        reporter.running(
+            "verify",
+            "Recording and verifying the immutable source copy",
+        );
         let files = copy
             .files
             .iter()
@@ -1295,34 +1581,27 @@ fn import_world_project(
             .store
             .begin_session(&folder, revision)
             .map_err(project_error)?;
-        Ok(detail)
-    })();
-
-    match built {
-        Ok(detail) => {
-            state.jobs.cancel_all("the open project changed");
-            install_world_service(state, world, &editor_state)?;
-            projects.current = Some(CurrentProject {
-                folder: folder.clone(),
-                project_id: detail.summary.project_id.clone(),
-                name: detail.summary.name.clone(),
-                target: detail.target.clone(),
-                saved_revision: detail.summary.world_revision,
-                autosaved_revision: None,
-                editor_state,
-            });
-            projects.refresh_checkpoints(&folder);
-            drop(projects);
-            current_payload(state, detail, info, None)
-        }
-        Err(error) => {
-            drop(projects);
-            // The project folder was created by this command and was never exposed as an
-            // open project. Remove it so a failed import leaves no half-usable state.
-            let _ = std::fs::remove_dir_all(&project_dir);
-            Err(error)
-        }
-    }
+        detail
+    };
+    attempt.begin_publish()?;
+    ensure_current_closed(state, &mut projects)?;
+    state.jobs.cancel_all("the open project changed");
+    install_world_service(state, world, &editor_state)?;
+    projects.current = Some(CurrentProject {
+        folder: folder.clone(),
+        project_id: detail.summary.project_id.clone(),
+        name: detail.summary.name.clone(),
+        target: detail.target.clone(),
+        saved_revision: detail.summary.world_revision,
+        autosaved_revision: None,
+        editor_state,
+    });
+    projects.refresh_checkpoints(&folder);
+    unpublished.0 = None;
+    drop(projects);
+    reporter.done("verify", "Source copy verified and project opened");
+    reporter.done("ready", "Project ready");
+    current_payload(state, detail, info, None)
 }
 
 // ---------------------------------------------------------------------------------------

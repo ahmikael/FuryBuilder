@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
@@ -6,6 +6,7 @@ import { ProjectManager } from "@/features/project/ProjectManager";
 import type { ComponentStepState } from "@/features/project/ProjectComponentsStep";
 import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
 import type { VersionCatalogReport } from "@/project/version-types";
+import type { PrepareProgress } from "@/lib/project-api";
 import { defaultWorkspacePolicy } from "@/project/types";
 import { defaultScene } from "@/project/scene-types";
 import { useProjectStore } from "@/state/project-store";
@@ -27,6 +28,9 @@ const api = vi.hoisted(() => ({
   rename: vi.fn(),
   analyze: vi.fn(),
   importWorld: vi.fn(),
+  importGenerated: vi.fn(),
+  cancelPrepare: vi.fn(),
+  listenPrepare: vi.fn(),
   defaults: vi.fn(),
   versions: vi.fn(),
 }));
@@ -50,6 +54,9 @@ vi.mock("@/lib/project-api", () => ({
   renameProject: api.rename,
   analyzeJavaWorld: api.analyze,
   importJavaWorld: api.importWorld,
+  importGeneratedWorld: api.importGenerated,
+  cancelProjectPrepare: api.cancelPrepare,
+  listenProjectPrepare: api.listenPrepare,
   fetchProjectDefaults: api.defaults,
 }));
 
@@ -60,6 +67,18 @@ vi.mock("@/lib/ipc", async (importOriginal) => {
 
 vi.mock("@/lib/version-api", () => ({
   fetchVersionCatalog: api.versions,
+}));
+
+vi.mock("@/features/project/VanillaWorldWizard", () => ({
+  VanillaWorldWizard: ({
+    onOpenWorld,
+  }: {
+    onOpenWorld: (runId: string, name: string) => Promise<boolean>;
+  }) => (
+    <button type="button" onClick={() => void onOpenWorld("completed-run", "Generated world")}>
+      Open as project
+    </button>
+  ),
 }));
 
 vi.mock("@/features/project/ProjectComponentsStep", async () => {
@@ -425,6 +444,9 @@ beforeEach(() => {
   }));
   api.analyze.mockReset();
   api.importWorld.mockReset();
+  api.importGenerated.mockReset();
+  api.cancelPrepare.mockReset().mockResolvedValue(true);
+  api.listenPrepare.mockReset().mockResolvedValue(() => {});
   api.versions.mockReset().mockResolvedValue(versionCatalog);
   api.defaults.mockReset().mockResolvedValue({
     projectsRoot: "C:\\Users\\Test\\Documents\\FuryBuilder",
@@ -468,6 +490,7 @@ describe("project manager", () => {
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
       expect(api.create).toHaveBeenCalledWith(
+        expect.any(String),
         "New World",
         "flat",
         {
@@ -579,6 +602,7 @@ describe("project manager", () => {
     await user.click(screen.getByRole("button", { name: "Import world" }));
     await waitFor(() =>
       expect(api.importWorld).toHaveBeenCalledWith(
+        expect.any(String),
         "Imported World",
         "C:\\saves\\World",
         "importAsIs",
@@ -751,6 +775,7 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
       expect(api.create).toHaveBeenCalledWith(
+        expect.any(String),
         "Wizard Flat",
         "flat",
         {
@@ -810,6 +835,7 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
       expect(api.create).toHaveBeenCalledWith(
+        expect.any(String),
         "Custom Layers",
         "flat",
         {
@@ -908,6 +934,7 @@ describe("project wizard", () => {
 
     await waitFor(() =>
       expect(api.importWorld).toHaveBeenCalledWith(
+        expect.any(String),
         "Imported Wizard",
         "C:\\saves\\Wizard",
         "importAsIs",
@@ -963,6 +990,7 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
       expect(api.importWorld).toHaveBeenCalledWith(
+        expect.any(String),
         "Archived Wizard",
         "C:\\downloads\\Wizard.zip",
         "importAsIs",
@@ -1008,6 +1036,88 @@ describe("project wizard", () => {
 
     await waitFor(() => expect(api.create).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("retries importing the completed vanilla run instead of creating a fresh world", async () => {
+    api.importGenerated
+      .mockRejectedValueOnce({ code: "disk_space", message: "Not enough free space" })
+      .mockResolvedValueOnce(opened({ ...first, creationMode: "vanilla" }));
+    const user = userEvent.setup();
+    openWizard("vanilla");
+    render(<ProjectManager />);
+    await user.type(screen.getByLabelText("Project folder"), "Generated Base");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Open as project" }));
+
+    expect(await screen.findByText("Not enough free space")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+    expect(api.create).not.toHaveBeenCalled();
+    expect(api.importGenerated).toHaveBeenCalledTimes(2);
+    expect(api.importGenerated.mock.calls[1]?.slice(1)).toEqual(
+      api.importGenerated.mock.calls[0]?.slice(1),
+    );
+    expect(api.importGenerated.mock.calls[1]?.[0]).not.toBe(api.importGenerated.mock.calls[0]?.[0]);
+    expect(api.importGenerated.mock.calls[1]?.[2]).toBe("completed-run");
+  });
+
+  it("shows preparation stages and cancels without losing downloaded components", async () => {
+    let emit: ((event: PrepareProgress) => void) | null = null;
+    api.listenPrepare.mockImplementation(async (handler: (event: PrepareProgress) => void) => {
+      emit = handler;
+      return () => {};
+    });
+    let rejectCreate!: (reason?: unknown) => void;
+    api.create.mockReturnValue(
+      new Promise((_, reject) => {
+        rejectCreate = reject;
+      }),
+    );
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    await waitFor(() => expect(emit).not.toBeNull());
+    await user.type(screen.getByLabelText("Project name"), "Cancel World");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+
+    expect(await screen.findByText("Preparing the project")).toBeInTheDocument();
+    expect(screen.getByText("Prepared components")).toBeInTheDocument();
+    expect(screen.getByText("1234 blocks · 567 items")).toBeInTheDocument();
+    expect(screen.getByText("Project stages")).toBeInTheDocument();
+    const jobId = useProjectStore.getState().prepareJobId;
+    expect(jobId).toBeTruthy();
+
+    act(() =>
+      emit?.({
+        jobId: jobId!,
+        stage: "metadata",
+        state: "running",
+        message: "Writing project metadata",
+        completed: 0,
+        total: 0,
+      }),
+    );
+    expect(await screen.findByText("Writing project metadata")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cancel preparation" }));
+    expect(api.cancelPrepare).toHaveBeenCalledWith(jobId);
+    expect(screen.getByText("Cancelling…")).toBeInTheDocument();
+
+    act(() => rejectCreate({ code: "cancelled", message: "cancelled by the user" }));
+    expect(await screen.findByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(screen.getByText("1234 blocks · 567 items")).toBeInTheDocument();
+    expect(useProjectStore.getState().prepareJobId).toBeNull();
   });
 
   it("closes the full-screen wizard without creating anything", async () => {

@@ -206,12 +206,19 @@ warnings (read-only/convert support, downgrade policy, preserved entities and pl
 limitations) before creation. Every step returns its
 own validation errors; `Next` refuses to advance, shows the reason, and the step buttons only
 reach steps that were already unlocked.
-`Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only
-progress indicators.
+`Back` keeps the entered values, and while editing, the progress bar plus `Step X of Y` label are
+the only progress indicators.
 
-Submitting shows `preparing` inside the wizard with the lifecycle message; a failure keeps the
-wizard open with the stable code, message and hint plus `Retry`, so the entered source is not
-lost. The wizard is built from stock shadcn primitives (`Button`, `Card`, `Alert`, `Badge`,
+Submitting enters `preparing`: the wizard lists the verified component facts captured earlier
+(Java, client assets, catalog, server when required) and the project stages reported by
+`furybuilder-project-prepare` (source analysis, editable blocks, metadata, byte-preserving source
+copy, verify, ready). The copy reports bytes written against the analyzed source size; no stage
+advances on a timer. `Cancel preparation` stops at the next safe checkpoint before publication,
+removes the unpublished project folder, and keeps installed components. A failure keeps the
+wizard open with the stable error message and hint. `Retry` repeats the same request; going back
+returns to Review or, for Vanilla, to the completed run in Source. Retrying Vanilla imports the
+same completed run without launching the server again. The wizard is built from stock shadcn
+primitives (`Button`, `Card`, `Alert`, `Badge`,
 `Checkbox`, `Field`, `Input`, `Progress`, `ScrollArea`, `Separator`, `ToggleGroup`) and uses
 semantic theme variables only. Later steps are added to the shell as their backend data becomes
 available, so no step shows a dead control.
