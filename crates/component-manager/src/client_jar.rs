@@ -211,6 +211,13 @@ impl ClientJarManager {
         self.cache.root()
     }
 
+    /// Loads the official version manifest through the same cache and network policy as
+    /// client JAR downloads. No JAR bytes are fetched.
+    pub fn version_catalog(&self) -> Result<VersionCatalog, ClientJarError> {
+        VersionCatalog::load_with_client(&self.manifest_cache, DEFAULT_MANIFEST_TTL, &self.client)
+            .map_err(client_catalog_error)
+    }
+
     pub fn contains(&self, path: &Path) -> bool {
         self.cache.contains(path)
     }

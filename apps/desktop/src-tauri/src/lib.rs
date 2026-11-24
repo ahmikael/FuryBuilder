@@ -130,6 +130,7 @@ pub fn run() {
             commands::template_insert,
             commands::project_status,
             commands::project_defaults,
+            commands::versions_catalog,
             commands::project_list,
             commands::project_create,
             commands::project_open,

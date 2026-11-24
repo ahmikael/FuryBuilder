@@ -14,6 +14,9 @@ use component_manager::{
     ComponentReport, ComponentRequirements, ComponentStatus, ComponentTarget,
     ComponentVerification, ResolvedComponent,
 };
+use minecraft_version::{
+    builtin_profiles, default_profile, ManifestVersionType, VersionCatalog, VersionProfile,
+};
 use runtime_manager::{
     DatapackInspection, GeneratedWorld, GenerationRequest, GenerationRunsReport,
     GenerationSnapshot, GenerationStatusReport, InstalledRuntime, InstalledServerJar,
@@ -447,6 +450,100 @@ pub struct OpenedProjectPayload {
 pub struct ProjectDefaults {
     pub projects_root: String,
     pub folder_suffix: String,
+}
+
+/// One official version entry plus the verified profile this build actually supports.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionCatalogEntryReport {
+    pub id: String,
+    pub version_type: ManifestVersionType,
+    pub release_time: String,
+    pub latest_release: bool,
+    pub latest_snapshot: bool,
+    pub recommended: bool,
+    pub profile: Option<VersionProfile>,
+    pub unavailable_reason: Option<String>,
+}
+
+/// The official version catalog shaped for the creation wizard. No JAR bytes are involved.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionCatalogReport {
+    pub source: String,
+    pub fetched_at_unix: u64,
+    pub latest_release: String,
+    pub latest_snapshot: String,
+    pub recommended: String,
+    pub versions: Vec<VersionCatalogEntryReport>,
+}
+
+fn build_version_catalog_report(catalog: &VersionCatalog) -> VersionCatalogReport {
+    let manifest = catalog.manifest();
+    let profiles = builtin_profiles();
+    let recommended = default_profile().minecraft_version.to_string();
+    let latest_release = manifest.latest.release.to_string();
+    let latest_snapshot = manifest.latest.snapshot.to_string();
+
+    let versions = manifest
+        .versions
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.version_type,
+                ManifestVersionType::Release | ManifestVersionType::Snapshot
+            )
+        })
+        .map(|entry| {
+            let profile = profiles
+                .iter()
+                .find(|profile| profile.minecraft_version == entry.id)
+                .cloned();
+            let version_id = entry.id.to_string();
+            let unavailable_reason = profile.is_none().then(|| {
+                if entry.version_type == ManifestVersionType::Snapshot {
+                    "This build has no verified snapshot profile; snapshots are read-only or convertible."
+                        .to_owned()
+                } else {
+                    "This build has no verified profile for this release yet.".to_owned()
+                }
+            });
+            VersionCatalogEntryReport {
+                latest_release: entry.id == manifest.latest.release,
+                latest_snapshot: entry.id == manifest.latest.snapshot,
+                recommended: version_id == recommended,
+                id: version_id,
+                version_type: entry.version_type,
+                release_time: entry.release_time.clone(),
+                profile,
+                unavailable_reason,
+            }
+        })
+        .collect();
+
+    VersionCatalogReport {
+        source: match catalog.source() {
+            minecraft_version::CatalogSource::Network => "network".to_owned(),
+            minecraft_version::CatalogSource::Cache => "cache".to_owned(),
+        },
+        fetched_at_unix: catalog.fetched_at_unix(),
+        latest_release,
+        latest_snapshot,
+        recommended,
+        versions,
+    }
+}
+
+#[tauri::command]
+pub async fn versions_catalog(
+    components: State<'_, ComponentManager>,
+) -> Result<VersionCatalogReport, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.version_catalog())
+        .await
+        .map_err(|error| AppError::internal(format!("version catalog task failed: {error}")))?
+        .map(|catalog| build_version_catalog_report(&catalog))
+        .map_err(component_error)
 }
 
 fn current_payload(
@@ -3605,6 +3702,108 @@ fn asset_catalog_error(error: asset_source::CatalogError) -> AppError {
         _ => ErrorCode::Internal,
     };
     AppError::new(code, error.to_string())
+}
+
+#[cfg(test)]
+mod version_catalog_tests {
+    use super::*;
+    use minecraft_version::{CatalogSource, VersionCatalog, VersionManifest};
+
+    const MANIFEST: &str = r#"{
+      "latest": { "release": "1.21.5", "snapshot": "26.1-snapshot-3" },
+      "versions": [
+        {
+          "id": "1.21.5",
+          "type": "release",
+          "url": "https://piston-meta.mojang.com/v1/packages/aaa/1.21.5.json",
+          "time": "2025-03-25T10:00:00+00:00",
+          "releaseTime": "2025-03-25T10:00:00+00:00",
+          "sha1": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "id": "26.1-snapshot-3",
+          "type": "snapshot",
+          "url": "https://piston-meta.mojang.com/v1/packages/bbb/26.1-snapshot-3.json",
+          "time": "2025-12-10T09:00:00+00:00",
+          "releaseTime": "2025-12-10T09:00:00+00:00",
+          "sha1": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "id": "1.21.4",
+          "type": "release",
+          "url": "https://piston-meta.mojang.com/v1/packages/ccc/1.21.4.json",
+          "time": "2024-12-03T10:12:57+00:00",
+          "releaseTime": "2024-12-03T10:12:57+00:00",
+          "sha1": "cccccccccccccccccccccccccccccccccccccccc"
+        }
+      ]
+    }"#;
+
+    fn report() -> VersionCatalogReport {
+        let manifest = VersionManifest::from_json(MANIFEST).expect("manifest");
+        let catalog =
+            VersionCatalog::from_manifest(manifest, 1_700_000_000, CatalogSource::Network)
+                .expect("catalog");
+        build_version_catalog_report(&catalog)
+    }
+
+    #[test]
+    fn report_marks_latest_and_recommended_without_promising_unsupported_profiles() {
+        let report = report();
+        assert_eq!(report.source, "network");
+        assert_eq!(report.latest_release, "1.21.5");
+        assert_eq!(report.latest_snapshot, "26.1-snapshot-3");
+        assert_eq!(report.recommended, "1.21.4");
+        assert_eq!(report.versions.len(), 3);
+
+        let latest = &report.versions[0];
+        assert_eq!(latest.id, "1.21.5");
+        assert!(latest.latest_release);
+        assert!(!latest.recommended);
+        assert!(latest.profile.is_none());
+        assert!(latest
+            .unavailable_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("no verified profile")));
+
+        let snapshot = &report.versions[1];
+        assert_eq!(snapshot.id, "26.1-snapshot-3");
+        assert!(snapshot.latest_snapshot);
+        assert!(snapshot.profile.is_none());
+        assert!(snapshot
+            .unavailable_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("snapshot")));
+
+        let recommended = &report.versions[2];
+        assert_eq!(recommended.id, "1.21.4");
+        assert!(recommended.recommended);
+        let profile = recommended.profile.as_ref().expect("verified profile");
+        assert_eq!(profile.id, minecraft_version::JAVA_CLASSIC_1_21_4_ID);
+        assert_eq!(
+            profile.capabilities.support_level,
+            minecraft_version::SupportLevel::Full
+        );
+        assert!(recommended.unavailable_reason.is_none());
+    }
+
+    #[test]
+    fn report_serializes_the_profile_as_camel_case() {
+        let value = serde_json::to_value(report()).expect("json");
+        assert_eq!(value["versions"][2]["versionType"], "release");
+        assert_eq!(
+            value["versions"][2]["profile"]["minecraftVersion"],
+            "1.21.4"
+        );
+        assert_eq!(
+            value["versions"][2]["profile"]["java"]["recommendedMajor"],
+            21
+        );
+        assert_eq!(
+            value["versions"][2]["profile"]["capabilities"]["supportLevel"],
+            "full"
+        );
+    }
 }
 
 #[cfg(test)]

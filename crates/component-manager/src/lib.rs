@@ -391,6 +391,12 @@ impl ComponentManager {
         &self.inner.assets
     }
 
+    /// Loads the official version manifest using the shared component network policy.
+    /// Nothing is downloaded beyond the manifest metadata and its cache.
+    pub fn version_catalog(&self) -> Result<minecraft_version::VersionCatalog, ComponentError> {
+        Ok(self.inner.client_jars.version_catalog()?)
+    }
+
     pub fn server(&self) -> &ServerManager {
         &self.inner.server
     }

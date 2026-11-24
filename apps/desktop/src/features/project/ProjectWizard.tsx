@@ -21,9 +21,12 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ProjectVersionStep } from "@/features/project/ProjectVersionStep";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
+import { presentError, type ErrorPresentation } from "@/lib/error-messages";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchProjectDefaults } from "@/lib/project-api";
+import { fetchVersionCatalog } from "@/lib/version-api";
 import {
   CREATION_MODES,
   creationModeLabel,
@@ -31,11 +34,12 @@ import {
   type JavaWorldAnalysis,
   type ProjectDefaults,
 } from "@/project/types";
+import type { VersionCatalogReport } from "@/project/version-types";
 import { useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 
 interface WizardStep {
-  id: "basics" | "source" | "review";
+  id: "basics" | "version" | "source" | "review";
   title: string;
   description: string;
 }
@@ -44,6 +48,12 @@ const BASICS_STEP: WizardStep = {
   id: "basics",
   title: "Basics",
   description: "Name the project, choose its folder and pick a starting world.",
+};
+
+const VERSION_STEP: WizardStep = {
+  id: "version",
+  title: "Version",
+  description: "Pick the exact Minecraft version and review what this build can do with it.",
 };
 
 const SOURCE_STEP: WizardStep = {
@@ -59,7 +69,13 @@ const REVIEW_STEP: WizardStep = {
 };
 
 function wizardSteps(mode: CreationMode): WizardStep[] {
-  return mode === "vanilla" ? [BASICS_STEP, SOURCE_STEP] : [BASICS_STEP, SOURCE_STEP, REVIEW_STEP];
+  if (mode === "import") {
+    return [BASICS_STEP, SOURCE_STEP, VERSION_STEP, REVIEW_STEP];
+  }
+  if (mode === "vanilla") {
+    return [BASICS_STEP, VERSION_STEP, SOURCE_STEP];
+  }
+  return [BASICS_STEP, VERSION_STEP, SOURCE_STEP, REVIEW_STEP];
 }
 
 function projectFolderName(folder: string, suffix: string): string {
@@ -88,6 +104,42 @@ function folderError(folder: string, suffix: string): string | null {
   return null;
 }
 
+function versionErrors({
+  catalog,
+  loading,
+  catalogError,
+  selected,
+  mode,
+  analysis,
+  desktop,
+}: {
+  catalog: VersionCatalogReport | null;
+  loading: boolean;
+  catalogError: ErrorPresentation | null;
+  selected: string;
+  mode: CreationMode;
+  analysis: JavaWorldAnalysis | null;
+  desktop: boolean;
+}): string[] {
+  if (!desktop) return ["Version selection needs the desktop app."];
+  if (catalogError) return ["Retry loading the version catalog."];
+  if (loading) return ["Wait for the version catalog to finish loading."];
+  if (!catalog) return ["Load the version catalog before continuing."];
+  if (mode === "import") {
+    if (!analysis) return ["Analyze the world to detect its version."];
+    if (!analysis.versionName) return ["The world does not declare a Minecraft version."];
+  }
+  if (selected.length === 0) return ["Choose a Minecraft version."];
+  const entry = catalog.versions.find((version) => version.id === selected);
+  if (!entry) return [`Minecraft ${selected} is not in the official version catalog.`];
+  if (!entry.profile) {
+    return [
+      `This build has no verified profile for Minecraft ${selected}. Choose a supported version.`,
+    ];
+  }
+  return [];
+}
+
 function stepErrors(
   step: WizardStep,
   name: string,
@@ -96,6 +148,13 @@ function stepErrors(
   folder: string,
   projectFolder: string,
   folderSuffix: string,
+  version: {
+    catalog: VersionCatalogReport | null;
+    loading: boolean;
+    error: ErrorPresentation | null;
+    selected: string;
+    desktop: boolean;
+  },
 ): string[] {
   if (step.id === "basics") {
     const errors: string[] = [];
@@ -103,6 +162,17 @@ function stepErrors(
     const invalidFolder = folderError(projectFolder, folderSuffix);
     if (invalidFolder) errors.push(invalidFolder);
     return errors;
+  }
+  if (step.id === "version") {
+    return versionErrors({
+      catalog: version.catalog,
+      loading: version.loading,
+      catalogError: version.error,
+      selected: version.selected,
+      mode,
+      analysis,
+      desktop: version.desktop,
+    });
   }
   if (step.id === "source" && mode === "import") {
     const errors: string[] = [];
@@ -404,6 +474,7 @@ function SimpleSourceStep({ mode }: { mode: "empty" | "flat" }) {
 function ReviewStep({
   name,
   mode,
+  version,
   folder,
   projectFolder,
   folderSuffix,
@@ -412,6 +483,7 @@ function ReviewStep({
 }: {
   name: string;
   mode: CreationMode;
+  version: string;
   folder: string;
   projectFolder: string;
   folderSuffix: string;
@@ -433,6 +505,10 @@ function ReviewStep({
             <div className="flex flex-wrap items-center gap-3 px-4 py-3">
               <dt className="w-28 text-sm text-muted-foreground">Mode</dt>
               <dd className="text-sm">{creationModeLabel(mode)}</dd>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <dt className="w-28 text-sm text-muted-foreground">Version</dt>
+              <dd className="font-mono text-sm">{version || "Unknown"}</dd>
             </div>
             <div className="flex flex-wrap items-center gap-3 px-4 py-3">
               <dt className="w-28 text-sm text-muted-foreground">Folder</dt>
@@ -533,6 +609,10 @@ export function ProjectWizard() {
   const [projectFolder, setProjectFolder] = useState("");
   const [defaults, setDefaults] = useState<ProjectDefaults | null>(null);
   const [worldFolder, setWorldFolder] = useState("");
+  const [catalog, setCatalog] = useState<VersionCatalogReport | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState<ErrorPresentation | null>(null);
+  const [selectedVersion, setSelectedVersion] = useState("");
   const [requestedStep, setRequestedStep] = useState(0);
   const [furthestStep, setFurthestStep] = useState(0);
   const [attempted, setAttempted] = useState(false);
@@ -567,12 +647,42 @@ export function ProjectWizard() {
   const folderSuffix = defaults?.folderSuffix ?? BROWSER_PROJECT_DEFAULTS.folderSuffix;
   const projectsRoot = defaults?.projectsRoot ?? null;
   const destination = projectFolderName(projectFolder, folderSuffix) || undefined;
-  const errors = stepErrors(step, name, mode, analysis, worldFolder, projectFolder, folderSuffix);
+  const effectiveVersion = mode === "import" ? (analysis?.versionName ?? "") : selectedVersion;
+  const errors = stepErrors(step, name, mode, analysis, worldFolder, projectFolder, folderSuffix, {
+    catalog,
+    loading: catalogLoading,
+    error: catalogError,
+    selected: effectiveVersion,
+    desktop,
+  });
   const progress = ((activeStep + 1) / steps.length) * 100;
   const stepDescription =
     step.id === "basics" && mode === "vanilla"
       ? "Choose the project folder and review what world generation needs."
-      : step.description;
+      : step.id === "version" && mode === "import"
+        ? "The source world decides its version; review the verified profile before continuing."
+        : step.description;
+
+  const loadVersions = async (): Promise<void> => {
+    if (!desktop) return;
+    setCatalogLoading(true);
+    setCatalogError(null);
+    try {
+      const report = await fetchVersionCatalog();
+      setCatalog(report);
+      setSelectedVersion((current) => current || report.recommended);
+    } catch (error) {
+      setCatalogError(presentError(error));
+    } finally {
+      setCatalogLoading(false);
+    }
+  };
+
+  const ensureVersionCatalog = (index: number): void => {
+    if (steps[index]?.id === "version" && desktop && !catalog && !catalogLoading) {
+      void loadVersions();
+    }
+  };
 
   const submit = async (): Promise<void> => {
     setSubmitted(true);
@@ -591,6 +701,7 @@ export function ProjectWizard() {
     if (index < 0 || index >= steps.length || index > furthest) return;
     setRequestedStep(index);
     setAttempted(false);
+    ensureVersionCatalog(index);
   };
 
   const next = (): void => {
@@ -602,6 +713,7 @@ export function ProjectWizard() {
     setRequestedStep(target);
     setFurthestStep((value) => Math.max(value, target));
     setAttempted(false);
+    ensureVersionCatalog(target);
   };
 
   const chooseMode = (nextMode: CreationMode): void => {
@@ -707,6 +819,19 @@ export function ProjectWizard() {
                 />
               ) : null}
 
+              {step.id === "version" ? (
+                <ProjectVersionStep
+                  catalog={catalog}
+                  loading={catalogLoading}
+                  error={catalogError}
+                  desktop={desktop}
+                  selected={effectiveVersion}
+                  locked={mode === "import"}
+                  onSelect={setSelectedVersion}
+                  onRetry={() => void loadVersions()}
+                />
+              ) : null}
+
               {step.id === "source" ? (
                 mode === "import" ? (
                   <ImportSourceStep
@@ -733,6 +858,7 @@ export function ProjectWizard() {
                 <ReviewStep
                   name={name}
                   mode={mode}
+                  version={effectiveVersion}
                   folder={worldFolder}
                   projectFolder={projectFolder}
                   folderSuffix={folderSuffix}

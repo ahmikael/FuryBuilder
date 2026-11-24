@@ -93,6 +93,11 @@ The desktop manages Java, client assets and the official server JAR through one
 - `components_install`, `components_cancel`, `components_relink`, `components_remove`,
   `components_verify`.
 
+The `versions_catalog` command reads the official manifest through the same
+`DownloadClient` and cache as provisioning and returns every release/snapshot entry with the
+verified profile this build can actually offer; it never downloads a JAR. The wizard version
+step is its only consumer.
+
 Every mutation validates the project target and the reviewed version/hash before touching
 the network. Installs stream `furybuilder-component-progress`; successful mutations emit
 `furybuilder-component-changed`; failures emit `furybuilder-component-error` with the same
@@ -135,20 +140,32 @@ idle.
 ## Project wizard
 
 Creating a project is a full-screen wizard, never a dialog over an empty scene. The shell owns
-the ordered steps, progress, validation and navigation: `Basics → Source → Review`. `Vanilla
-World` uses the same shell with its generation step in place of review, because the generated
-world names the project and creates it from the generation panel.
+the ordered steps, progress, validation and navigation. Empty, Flat and Vanilla use
+`Basics → Version → Source → Review` (Vanilla creates from its generation panel instead of a
+review step), while Import uses `Basics → Source → Version → Review` because the source world
+owns its version.
 
 `Basics` names the project, shows the library folder and lets the user override the
 project folder name. The backend owns the library root (`Documents/FuryBuilder`, with an
 app-data fallback) and the `.furybuilder` suffix; the wizard never invents either. The
 folder field is optional: a blank value uses the project name, an existing folder is never
 overwritten, and path separators or reserved characters are refused before `Next`. The
-same step chooses Empty, Flat, Import or Vanilla and lists that mode's requirements. `Source`
-shows the starting world: a compact description for Empty/Flat, read-only analysis with
-blockers and warnings for Import, and the existing generation panel for Vanilla. `Review`
-repeats the name, folder, library location, mode and source before creation. Every step
-returns its own validation errors; `Next` refuses
+same step chooses Empty, Flat, Import or Vanilla and lists that mode's requirements.
+
+`Version` loads the official version manifest through the shared component network policy and
+the same `<app-data>/version-manifest.json` cache as provisioning; only manifest metadata is
+read. Releases are grouped by release series, the latest release and the recommended version
+are marked, and snapshots stay behind an explicit toggle. Each row carries the support badge of
+its verified profile. The card repeats the profile's Java major, world height, world layout,
+resource/datapack formats and catalog formats, plus honest notes. Versions without a verified
+profile remain visible for inspection but block `Next`; a snapshot without a profile is
+read-only/convertible by policy, never presented as writable. Import locks the selection to the
+version detected in `level.dat` and asks the user to confirm it.
+
+`Source` shows the starting world: a compact description for Empty/Flat, read-only analysis
+with blockers and warnings for Import, and the existing generation panel for Vanilla. `Review`
+repeats the name, folder, library location, mode, version and source before creation. Every
+step returns its own validation errors; `Next` refuses
 to advance, shows the reason, and the step buttons only reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only
 progress indicators.
@@ -156,9 +173,9 @@ progress indicators.
 Submitting shows `preparing` inside the wizard with the lifecycle message; a failure keeps the
 wizard open with the stable code, message and hint plus `Retry`, so the entered source is not
 lost. The wizard is built from stock shadcn primitives (`Button`, `Card`, `Alert`, `Badge`,
-`Field`, `Input`, `Progress`, `Separator`, `ToggleGroup`) and uses semantic theme variables
-only. Later steps are added to the shell as their backend data becomes available, so no step
-shows a dead control.
+`Checkbox`, `Field`, `Input`, `Progress`, `ScrollArea`, `Separator`, `ToggleGroup`) and uses
+semantic theme variables only. Later steps are added to the shell as their backend data becomes
+available, so no step shows a dead control.
 
 ## Welcome screen
 

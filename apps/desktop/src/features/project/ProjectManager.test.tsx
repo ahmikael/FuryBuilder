@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
 import { ProjectManager } from "@/features/project/ProjectManager";
 import type { JavaWorldAnalysis, ProjectSummary } from "@/project/types";
+import type { VersionCatalogReport } from "@/project/version-types";
 import { defaultWorkspacePolicy } from "@/project/types";
 import { defaultScene } from "@/project/scene-types";
 import { useProjectStore } from "@/state/project-store";
@@ -26,6 +27,7 @@ const api = vi.hoisted(() => ({
   analyze: vi.fn(),
   importWorld: vi.fn(),
   defaults: vi.fn(),
+  versions: vi.fn(),
 }));
 
 const worldApi = vi.hoisted(() => ({
@@ -54,6 +56,10 @@ vi.mock("@/lib/ipc", async (importOriginal) => {
   const actual = await importOriginal<typeof IpcModule>();
   return { ...actual, isTauriRuntime: () => true };
 });
+
+vi.mock("@/lib/version-api", () => ({
+  fetchVersionCatalog: api.versions,
+}));
 
 vi.mock("@/lib/world-api", () => ({
   fetchWorldInfo: worldApi.info,
@@ -150,6 +156,85 @@ const worldAnalysis: JavaWorldAnalysis = {
       },
     ],
   },
+};
+
+const versionCatalog: VersionCatalogReport = {
+  source: "cache",
+  fetchedAtUnix: 1_700_000_000,
+  latestRelease: "1.21.5",
+  latestSnapshot: "26.1-snapshot-3",
+  recommended: "1.21.4",
+  versions: [
+    {
+      id: "1.21.5",
+      versionType: "release",
+      releaseTime: "2025-03-25T10:00:00+00:00",
+      latestRelease: true,
+      latestSnapshot: false,
+      recommended: false,
+      profile: null,
+      unavailableReason: "This build has no verified profile for this release yet.",
+    },
+    {
+      id: "26.1-snapshot-3",
+      versionType: "snapshot",
+      releaseTime: "2025-12-10T09:00:00+00:00",
+      latestRelease: false,
+      latestSnapshot: true,
+      recommended: false,
+      profile: null,
+      unavailableReason:
+        "This build has no verified snapshot profile; snapshots are read-only or convertible.",
+    },
+    {
+      id: "1.21.4",
+      versionType: "release",
+      releaseTime: "2024-12-03T10:12:57+00:00",
+      latestRelease: false,
+      latestSnapshot: false,
+      recommended: true,
+      unavailableReason: null,
+      profile: {
+        id: "java-classic-1.21.4",
+        minecraftVersion: "1.21.4",
+        dataVersion: 4189,
+        releaseType: "release",
+        family: "modern",
+        worldLayout: "classic-anvil",
+        chunkFamily: "modern-paletted",
+        biomeFormat: "palette-4x4x4",
+        dimensionProfiles: [
+          {
+            id: "minecraft:overworld",
+            kind: "overworld",
+            minY: -64,
+            height: 384,
+            folder: "region",
+          },
+        ],
+        java: { minimumMajor: 21, recommendedMajor: 21 },
+        resourcePackFormat: 46,
+        datapackFormat: 61,
+        contentCatalog: {
+          registryFormat: "named",
+          blockstateFormat: "json",
+          itemModelFormat: "item-definitions",
+          creativeCategories: true,
+          dataComponents: true,
+        },
+        capabilities: {
+          supportLevel: "full",
+          read: true,
+          edit: true,
+          write: true,
+          export: true,
+          generate: true,
+          assets: true,
+        },
+        notes: ["Block-state and biome writes are verified for classic Anvil 1.21.4."],
+      },
+    },
+  ],
 };
 
 function opened(summary: ProjectSummary) {
@@ -257,6 +342,7 @@ beforeEach(() => {
   }));
   api.analyze.mockReset();
   api.importWorld.mockReset();
+  api.versions.mockReset().mockResolvedValue(versionCatalog);
   api.defaults.mockReset().mockResolvedValue({
     projectsRoot: "C:\\Users\\Test\\Documents\\FuryBuilder",
     folderSuffix: ".furybuilder",
@@ -468,11 +554,12 @@ describe("project wizard", () => {
     render(<ProjectManager />);
 
     expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 1 of 3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 1 of 4").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("progressbar", { name: "Project creation progress" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Version/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Source/ })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -481,13 +568,65 @@ describe("project wizard", () => {
     await user.type(screen.getByLabelText("Project name"), "Wizard World");
     await user.click(screen.getByRole("button", { name: "Next" }));
 
+    expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
+    expect(screen.getAllByText("Step 2 of 4").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: /Version/ })).toHaveAttribute("aria-current", "step");
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 2 of 3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 3 of 4").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Source/ })).toHaveAttribute("aria-current", "step");
 
     await user.click(screen.getByRole("button", { name: /Basics/ }));
     expect(screen.getByRole("heading", { name: "Basics" })).toBeInTheDocument();
     expect(screen.getByDisplayValue("Wizard World")).toBeInTheDocument();
+  });
+
+  it("browses the catalog, filters snapshots and refuses unsupported versions", async () => {
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Version World");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    const search = await screen.findByLabelText("Find a version");
+    expect(
+      await screen.findByText("2 versions shown, grouped by release series."),
+    ).toBeInTheDocument();
+    const latest = screen.getByRole("button", { name: /1\.21\.5/ });
+    expect(within(latest).getByText("Latest")).toBeInTheDocument();
+    expect(within(latest).getByText("No profile")).toBeInTheDocument();
+    const recommended = screen.getByRole("button", { name: /1\.21\.4/ });
+    expect(within(recommended).getByText("Recommended")).toBeInTheDocument();
+    expect(within(recommended).getByText("Full support")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /26\.1-snapshot-3/ })).not.toBeInTheDocument();
+
+    await user.type(search, "1.21.5");
+    expect(screen.getByText("1 version shown, grouped by release series.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /1\.21\.4/ })).not.toBeInTheDocument();
+    await user.clear(search);
+
+    await user.click(screen.getByRole("checkbox", { name: "Show snapshots" }));
+    const snapshot = await screen.findByRole("button", { name: /26\.1-snapshot-3/ });
+    await user.click(snapshot);
+    expect(screen.getByRole("heading", { name: "26.1-snapshot-3" })).toBeInTheDocument();
+    expect(screen.getByText("Not selectable in this build")).toBeInTheDocument();
+    expect(screen.getByText(/no verified snapshot profile/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(
+      screen.getByText(
+        "This build has no verified profile for Minecraft 26.1-snapshot-3. Choose a supported version.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /1\.21\.4/ }));
+    expect(screen.getByRole("heading", { name: "1.21.4" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
   });
 
   it("creates a flat project from the review step with a chosen folder", async () => {
@@ -505,12 +644,16 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: /Flat base/ }));
     expect(screen.getByText("Flat base requirements")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByText("Wizard Flat")).toBeInTheDocument();
     expect(screen.getByText("Flat base")).toBeInTheDocument();
     expect(screen.getByText("Custom Flat.furybuilder")).toBeInTheDocument();
+    expect(screen.getByText("1.21.4")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
@@ -572,6 +715,9 @@ describe("project wizard", () => {
     expect(await screen.findByText(/DataVersion 4189/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
+    expect(await screen.findByText("Detected from the world")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create project" }));
 
@@ -596,7 +742,7 @@ describe("project wizard", () => {
     render(<ProjectManager />);
 
     expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 1 of 2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 1 of 3").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Project name")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Project folder")).toBeInTheDocument();
     expect(screen.getByText("Vanilla World requirements")).toBeInTheDocument();
@@ -612,6 +758,8 @@ describe("project wizard", () => {
     render(<ProjectManager />);
 
     await user.type(screen.getByLabelText("Project name"), "Retry World");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Create project" }));
