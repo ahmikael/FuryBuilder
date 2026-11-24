@@ -8,7 +8,6 @@
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -200,28 +199,7 @@ impl Diagnostics {
     pub fn open_folder(&self) -> Result<(), String> {
         fs::create_dir_all(&self.inner.dir)
             .map_err(|error| format!("creating the diagnostics directory failed: {error}"))?;
-        #[cfg(target_os = "windows")]
-        let mut command = {
-            let mut command = Command::new("explorer.exe");
-            command.arg(&self.inner.dir);
-            command
-        };
-        #[cfg(target_os = "macos")]
-        let mut command = {
-            let mut command = Command::new("open");
-            command.arg(&self.inner.dir);
-            command
-        };
-        #[cfg(all(unix, not(target_os = "macos")))]
-        let mut command = {
-            let mut command = Command::new("xdg-open");
-            command.arg(&self.inner.dir);
-            command
-        };
-        command
-            .spawn()
-            .map(|_| ())
-            .map_err(|error| format!("opening the diagnostics directory failed: {error}"))
+        crate::open::open_directory(&self.inner.dir)
     }
 
     fn append_locked(&self, line: &[u8]) -> std::io::Result<()> {

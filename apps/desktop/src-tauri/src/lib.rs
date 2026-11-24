@@ -3,6 +3,7 @@ mod diagnostics;
 mod local_bridge;
 mod mcp_access;
 mod mcp_activity;
+mod open;
 mod state;
 
 use std::path::PathBuf;
@@ -174,6 +175,8 @@ pub fn run() {
             commands::components_use_placeholder,
             commands::components_remove,
             commands::components_verify,
+            commands::components_verify_inventory,
+            commands::components_open_folder,
             commands::runtime_discover,
             commands::runtime_saved,
             commands::runtime_select_java,

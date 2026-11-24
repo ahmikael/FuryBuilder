@@ -42,9 +42,9 @@ pub use component_model::{
 };
 use minecraft_version::{VersionId, VersionProfile};
 use runtime_manager::{
-    JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport, RuntimeError, RuntimeManager,
-    RuntimeReleaseInfo, ServerError, ServerManager, ServerProgress, ServerReleaseInfo,
-    ServerTarget,
+    inspect_server_jar, JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport,
+    RuntimeError, RuntimeManager, RuntimeReleaseInfo, ServerError, ServerManager, ServerProgress,
+    ServerReleaseInfo, ServerTarget,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -408,6 +408,216 @@ impl ComponentManager {
             assets: self.inner.client_jars.managed_list()?,
             servers: self.inner.server.managed_list()?,
         })
+    }
+
+    /// Re-inspects one managed artifact from the Settings inventory. Unlike [`Self::verify`]
+    /// this needs no project target: it compares the cache manifest with the bytes on disk
+    /// and, for Java, re-probes the executable. An unknown inventory id is refused.
+    pub fn verify_inventory(
+        &self,
+        kind: ComponentKind,
+        id: &str,
+    ) -> Result<ComponentVerification, ComponentError> {
+        match kind {
+            ComponentKind::Java => {
+                let Some(runtime) = self
+                    .inner
+                    .java
+                    .managed_list()?
+                    .runtimes
+                    .into_iter()
+                    .find(|runtime| runtime.id == id)
+                else {
+                    return Err(ComponentError::NotFound {
+                        kind: kind.as_str(),
+                        id: id.to_owned(),
+                    });
+                };
+                let (verified, notes, error) = match self.inner.java.verify_managed(&runtime.id) {
+                    Ok(report) => (true, report.warnings, None),
+                    Err(error) => (false, Vec::new(), Some(error.to_string())),
+                };
+                Ok(ComponentVerification {
+                    kind,
+                    id: runtime.id,
+                    verified,
+                    state: if verified {
+                        ComponentState::Ready
+                    } else {
+                        ComponentState::Error
+                    },
+                    notes,
+                    error,
+                })
+            }
+            ComponentKind::Assets => self.verify_managed_assets(id),
+            ComponentKind::Server => self.verify_managed_server(id),
+        }
+    }
+
+    fn verify_managed_assets(&self, id: &str) -> Result<ComponentVerification, ComponentError> {
+        let kind = ComponentKind::Assets;
+        let Some(client) = self
+            .inner
+            .client_jars
+            .managed_list()?
+            .clients
+            .into_iter()
+            .find(|client| client.id == id)
+        else {
+            return Err(ComponentError::NotFound {
+                kind: kind.as_str(),
+                id: id.to_owned(),
+            });
+        };
+        // Verification is against the facts recorded for this cache entry, not against the
+        // current project target: the same shared client JAR may serve several projects.
+        let report = asset_source::inspect_asset_path(Path::new(&client.jar_path));
+        let version = report.version.as_ref().or_else(|| {
+            report.installation.as_ref().and_then(|installation| {
+                installation
+                    .versions
+                    .iter()
+                    .find(|version| version.id == client.version)
+            })
+        });
+        let actual = version.and_then(|version| version.actual_sha1.as_deref());
+        let reported_id = version.and_then(|version| version.internal_version_id.as_deref());
+        let reported_data_version = version.and_then(|version| version.world_version);
+        let id_matches = reported_id == Some(client.version.as_str());
+        let data_matches = reported_data_version == Some(client.data_version);
+        let size_matches = version.and_then(|version| version.jar_bytes) == Some(client.size);
+        let checksum_matches =
+            actual.is_some_and(|actual| actual.eq_ignore_ascii_case(&client.sha1));
+        let verified = id_matches && data_matches && size_matches && checksum_matches;
+        let mut notes = report.warnings.clone();
+        if let Some(version) = version {
+            notes.extend(version.notes.clone());
+        }
+        let error = if verified {
+            None
+        } else if !id_matches {
+            Some(match reported_id {
+                Some(actual) => {
+                    format!(
+                        "the cached client JAR is Minecraft {actual}, not {}",
+                        client.version
+                    )
+                }
+                None => "the cached client JAR has no readable version.json".to_owned(),
+            })
+        } else if !data_matches {
+            Some(match reported_data_version {
+                Some(actual) => format!(
+                    "the cached client JAR declares DataVersion {actual}, not {}",
+                    client.data_version
+                ),
+                None => "the cached client JAR has no DataVersion to compare".to_owned(),
+            })
+        } else if !size_matches {
+            Some(format!(
+                "the cached client JAR for Minecraft {} changed size",
+                client.version
+            ))
+        } else if actual.is_none() {
+            Some("the cached client JAR has no SHA-1 to compare".to_owned())
+        } else {
+            Some(format!(
+                "the cached client JAR for Minecraft {} does not match its SHA-1",
+                client.version
+            ))
+        };
+        let state = if verified {
+            ComponentState::Ready
+        } else if actual.is_none() {
+            ComponentState::Unverified
+        } else {
+            ComponentState::Incompatible
+        };
+        Ok(ComponentVerification {
+            kind,
+            id: client.id,
+            verified,
+            state,
+            notes,
+            error,
+        })
+    }
+
+    fn verify_managed_server(&self, id: &str) -> Result<ComponentVerification, ComponentError> {
+        let kind = ComponentKind::Server;
+        let Some(version) = id.strip_prefix("server-managed-") else {
+            return Err(ComponentError::NotFound {
+                kind: kind.as_str(),
+                id: id.to_owned(),
+            });
+        };
+        let Some(server) = self
+            .inner
+            .server
+            .managed_list()?
+            .servers
+            .into_iter()
+            .find(|server| server.version == version)
+        else {
+            return Err(ComponentError::NotFound {
+                kind: kind.as_str(),
+                id: id.to_owned(),
+            });
+        };
+        let canonical_id = format!("server-managed-{}", server.version);
+        match inspect_server_jar(Path::new(&server.jar_path)) {
+            Ok(info) => {
+                let version_matches = info.version == server.version;
+                let data_matches = info.data_version == server.data_version;
+                let size_matches = info.size == server.size;
+                let checksum_matches = info.sha1.eq_ignore_ascii_case(&server.sha1);
+                let verified = version_matches && data_matches && size_matches && checksum_matches;
+                let error = if verified {
+                    None
+                } else if !version_matches {
+                    Some(format!(
+                        "the cached server JAR is Minecraft {}, not {}",
+                        info.version, server.version
+                    ))
+                } else if !data_matches {
+                    Some(format!(
+                        "the cached server JAR declares DataVersion {}, not {}",
+                        info.data_version, server.data_version
+                    ))
+                } else if !size_matches {
+                    Some(format!(
+                        "the cached server JAR for Minecraft {} changed size",
+                        server.version
+                    ))
+                } else {
+                    Some(format!(
+                        "the cached server JAR for Minecraft {} does not match its SHA-1",
+                        server.version
+                    ))
+                };
+                Ok(ComponentVerification {
+                    kind,
+                    id: canonical_id,
+                    verified,
+                    state: if verified {
+                        ComponentState::Ready
+                    } else {
+                        ComponentState::Incompatible
+                    },
+                    notes: Vec::new(),
+                    error,
+                })
+            }
+            Err(error) => Ok(ComponentVerification {
+                kind,
+                id: canonical_id,
+                verified: false,
+                state: ComponentState::Error,
+                notes: Vec::new(),
+                error: Some(error.to_string()),
+            }),
+        }
     }
 
     /// Returns the official client JAR metadata for the target version. No bytes are
@@ -1540,6 +1750,40 @@ mod tests {
         }
     }
 
+    /// Seeds a FuryBuilder-owned managed server cache entry so inventory verification can be
+    /// exercised without the network.
+    fn seed_managed_server(
+        root: &TempDir,
+        version: &str,
+        data_version: i32,
+        java_major: u32,
+    ) -> String {
+        let directory = root.path.join("servers").join(version);
+        fs::create_dir_all(&directory).expect("create server cache directory");
+        let jar_path = directory.join("server.jar");
+        write_server_jar(&jar_path, version, data_version, java_major);
+        let bytes = fs::read(&jar_path).expect("read synthetic server jar");
+        let sha1 = hex(&sha1::Sha1::digest(&bytes));
+        let manifest = serde_json::json!({
+            "schemaVersion": 2,
+            "version": version,
+            "dataVersion": data_version,
+            "javaMajor": java_major,
+            "sha1": sha1,
+            "size": bytes.len(),
+            "releaseTime": "2024-12-03T10:12:57+00:00",
+            "sourceUrl": "https://piston-data.mojang.com/v1/objects/server.jar",
+            "versionJsonSha1": "d".repeat(40),
+            "installedAt": 1_700_000_000u64,
+        });
+        fs::write(
+            directory.join(".furybuilder-server.json"),
+            serde_json::to_vec_pretty(&manifest).expect("serialize server manifest"),
+        )
+        .expect("write server manifest");
+        format!("server-managed-{version}")
+    }
+
     /// Writes a structurally valid synthetic server JAR with the exact declared facts.
     fn write_server_jar(path: &Path, version: &str, data_version: i32, java_major: u32) {
         let file = fs::File::create(path).expect("create server jar");
@@ -2233,6 +2477,106 @@ mod tests {
             .expect("inventory")
             .clients
             .is_empty());
+    }
+
+    #[test]
+    fn inventory_verification_checks_managed_assets_and_server_facts() {
+        let root = TempDir::new("inventory-verify");
+        let manager = manager(&root);
+        let version: VersionId = "1.21.4".parse().expect("version");
+        let (release, document, jar) = client_jar::test_fixture("1.21.4", 4189);
+        manager
+            .inner
+            .client_jars
+            .install_reader(
+                &version,
+                &release,
+                &document,
+                Cursor::new(jar),
+                Some(4189),
+                &AtomicBool::new(false),
+                &|_| {},
+            )
+            .expect("seed managed client jar");
+
+        let inventory = manager.inventory().expect("inventory");
+        let assets_id = inventory.assets.clients[0].id.clone();
+        let assets = manager
+            .verify_inventory(ComponentKind::Assets, &assets_id)
+            .expect("verify assets");
+        assert!(assets.verified, "{assets:?}");
+        assert_eq!(assets.state, ComponentState::Ready);
+        assert_eq!(assets.id, assets_id);
+
+        let server_id = seed_managed_server(&root, "1.21.4", 4189, 21);
+        let server = manager
+            .verify_inventory(ComponentKind::Server, &server_id)
+            .expect("verify server");
+        assert!(server.verified, "{server:?}");
+        assert_eq!(server.state, ComponentState::Ready);
+        assert_eq!(server.id, server_id);
+    }
+
+    #[test]
+    fn inventory_verification_reports_a_changed_client_jar() {
+        let root = TempDir::new("inventory-tampered");
+        let manager = manager(&root);
+        let version: VersionId = "1.21.4".parse().expect("version");
+        let (release, document, jar) = client_jar::test_fixture("1.21.4", 4189);
+        let installed = manager
+            .inner
+            .client_jars
+            .install_reader(
+                &version,
+                &release,
+                &document,
+                Cursor::new(jar),
+                Some(4189),
+                &AtomicBool::new(false),
+                &|_| {},
+            )
+            .expect("seed managed client jar");
+
+        let mut bytes = fs::read(&installed.jar_path).expect("read client jar");
+        let needle = br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#;
+        let offset = bytes
+            .windows(needle.len())
+            .position(|window| window == needle)
+            .expect("find blockstate payload");
+        bytes[offset] = b'!';
+        fs::write(&installed.jar_path, &bytes).expect("tamper client jar");
+
+        let verification = manager
+            .verify_inventory(ComponentKind::Assets, &installed.id)
+            .expect("verify assets");
+        assert!(!verification.verified);
+        assert_eq!(verification.state, ComponentState::Incompatible);
+        assert!(
+            verification
+                .error
+                .as_deref()
+                .is_some_and(|error| error.contains("does not match its SHA-1")),
+            "{verification:?}"
+        );
+    }
+
+    #[test]
+    fn inventory_verification_refuses_ids_that_are_not_installed() {
+        let root = TempDir::new("inventory-unknown");
+        let manager = manager(&root);
+        for (kind, id) in [
+            (ComponentKind::Java, "temurin-21.0.5-11"),
+            (ComponentKind::Assets, "assets-managed-1.21.4"),
+            (ComponentKind::Server, "server-managed-1.21.4"),
+            (ComponentKind::Server, "1.21.4"),
+        ] {
+            match manager.verify_inventory(kind, id) {
+                Err(ComponentError::NotFound { kind: reported, .. }) => {
+                    assert_eq!(reported, kind.as_str())
+                }
+                other => panic!("expected {kind:?} {id} to be refused, got {other:?}"),
+            }
+        }
     }
 
     #[test]

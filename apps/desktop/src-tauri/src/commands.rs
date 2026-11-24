@@ -3760,6 +3760,45 @@ pub async fn components_verify(
         .map_err(component_error)
 }
 
+/// Re-inspects one managed artifact from the Settings inventory without a project target.
+#[tauri::command]
+pub async fn components_verify_inventory(
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+    id: String,
+) -> Result<ComponentVerification, AppError> {
+    let components = components.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || components.verify_inventory(kind, &id))
+        .await
+        .map_err(|error| AppError::internal(format!("component inventory verify failed: {error}")))?
+        .map_err(component_error)
+}
+
+/// Opens one FuryBuilder-owned component cache directory. The path is derived from the
+/// facade inventory, so the frontend cannot ask the backend to open arbitrary files.
+#[tauri::command]
+pub async fn components_open_folder(
+    components: State<'_, ComponentManager>,
+    kind: ComponentKind,
+) -> Result<(), AppError> {
+    let components = components.inner().clone();
+    let root = tauri::async_runtime::spawn_blocking(move || {
+        let inventory = components.inventory()?;
+        Ok::<PathBuf, ComponentError>(match kind {
+            ComponentKind::Java => PathBuf::from(inventory.java.root),
+            ComponentKind::Assets => PathBuf::from(inventory.assets.root),
+            ComponentKind::Server => PathBuf::from(inventory.servers.root),
+        })
+    })
+    .await
+    .map_err(|error| AppError::internal(format!("component folder task failed: {error}")))?
+    .map_err(component_error)?;
+    std::fs::create_dir_all(&root).map_err(|error| {
+        AppError::internal(format!("cannot create {}: {error}", root.display()))
+    })?;
+    crate::open::open_directory(&root).map_err(AppError::internal)
+}
+
 #[tauri::command]
 pub async fn runtime_discover(
     components: State<'_, ComponentManager>,

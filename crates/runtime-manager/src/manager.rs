@@ -145,6 +145,27 @@ impl RuntimeManager {
         self.inner.cache.list()
     }
 
+    /// Re-probes one managed runtime by its logical id. The cache manifest is not trusted:
+    /// the executable must still exist, run, and report the declared Java major.
+    pub fn verify_managed(&self, id: &str) -> Result<JavaRuntimeReport, RuntimeError> {
+        let runtime = self
+            .inner
+            .cache
+            .list()?
+            .runtimes
+            .into_iter()
+            .find(|runtime| runtime.id == id)
+            .ok_or_else(|| {
+                RuntimeError::Invalid(format!("managed Java runtime {id} is not installed"))
+            })?;
+        probe_compatible_for_major(
+            Path::new(&runtime.java_path),
+            RuntimeSource::Managed,
+            true,
+            runtime.major,
+        )
+    }
+
     /// Downloads, checksum-verifies, safely extracts, probes and selects the exact Adoptium
     /// release the user previewed. The expected version prevents a stale UI request from
     /// silently installing a different release if Adoptium publishes a new latest build.

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,11 +11,17 @@ import type { ManagedServerJar } from "@/runtime/server-types";
 const api = vi.hoisted(() => ({
   inventory: vi.fn(),
   listen: vi.fn(),
+  verify: vi.fn(),
+  remove: vi.fn(),
+  openFolder: vi.fn(),
 }));
 
 vi.mock("@/lib/components-api", () => ({
   componentInventory: api.inventory,
   listenComponentChanged: api.listen,
+  verifyComponentInventory: api.verify,
+  removeComponent: api.remove,
+  openComponentFolder: api.openFolder,
 }));
 
 const runtime: ManagedRuntime = {
@@ -36,7 +42,7 @@ const runtime: ManagedRuntime = {
 };
 
 const client: ManagedClientJar = {
-  id: "java-1.21.4-abcdef0123456789",
+  id: "assets-managed-1.21.4",
   version: "1.21.4",
   path: "C:\\FuryBuilder\\components\\assets\\1.21.4",
   jarPath: "C:\\FuryBuilder\\components\\assets\\1.21.4\\client.jar",
@@ -98,7 +104,11 @@ const empty: ComponentInventory = {
 beforeEach(() => {
   api.inventory.mockReset();
   api.listen.mockReset();
+  api.verify.mockReset();
+  api.remove.mockReset();
+  api.openFolder.mockReset();
   api.listen.mockResolvedValue(vi.fn());
+  api.openFolder.mockResolvedValue(undefined);
 });
 
 describe("ComponentInventorySection", () => {
@@ -113,13 +123,13 @@ describe("ComponentInventorySection", () => {
     expect(within(java).getByTitle(runtime.javaPath)).toBeInTheDocument();
 
     const assets = screen.getByRole("group", { name: "Minecraft client JARs" });
-    expect(within(assets).getByText("Minecraft 1.21.4")).toBeInTheDocument();
+    expect(within(assets).getByText("Minecraft 1.21.4 client JAR")).toBeInTheDocument();
     expect(within(assets).getByText("DataVersion 4189")).toBeInTheDocument();
     expect(within(assets).getByText("52.5 MiB")).toBeInTheDocument();
     expect(within(assets).getByTitle(client.jarPath)).toBeInTheDocument();
 
     const servers = screen.getByRole("group", { name: "Official server JARs" });
-    expect(within(servers).getByText("Minecraft 1.21.4")).toBeInTheDocument();
+    expect(within(servers).getByText("Minecraft 1.21.4 server JAR")).toBeInTheDocument();
     expect(within(servers).getByText("DataVersion 4189")).toBeInTheDocument();
     expect(within(servers).getByText("49.6 MiB")).toBeInTheDocument();
     expect(within(servers).getByTitle(server.jarPath)).toBeInTheDocument();
@@ -173,5 +183,130 @@ describe("ComponentInventorySection", () => {
     });
     expect(await screen.findByText("Java 21.0.5+11")).toBeInTheDocument();
     expect(api.inventory).toHaveBeenCalledTimes(2);
+  });
+
+  it("verifies a managed artifact against the recorded facts", async () => {
+    api.inventory.mockResolvedValue(inventory);
+    api.verify.mockResolvedValue({
+      kind: "assets",
+      id: "assets-managed-1.21.4",
+      verified: true,
+      state: "ready",
+      notes: ["checked against the cached manifest"],
+    });
+    const user = userEvent.setup();
+    render(<ComponentInventorySection />);
+
+    const assets = await screen.findByRole("group", { name: "Minecraft client JARs" });
+    await user.click(
+      within(assets).getByRole("button", { name: "Verify Minecraft 1.21.4 client JAR" }),
+    );
+
+    expect(api.verify).toHaveBeenCalledWith("assets", "assets-managed-1.21.4");
+    expect(await within(assets).findByText("Verified")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Minecraft 1.21.4 client JAR passed local verification."),
+    ).toBeInTheDocument();
+    expect(within(assets).getByText("checked against the cached manifest")).toBeInTheDocument();
+  });
+
+  it("shows the reason when local verification finds a changed artifact", async () => {
+    api.inventory.mockResolvedValue(inventory);
+    api.verify.mockResolvedValue({
+      kind: "server",
+      id: "server-managed-1.21.4",
+      verified: false,
+      state: "incompatible",
+      notes: [],
+      error: "the cached server JAR for Minecraft 1.21.4 does not match its SHA-1",
+    });
+    const user = userEvent.setup();
+    render(<ComponentInventorySection />);
+
+    const servers = await screen.findByRole("group", { name: "Official server JARs" });
+    await user.click(
+      within(servers).getByRole("button", { name: "Verify Minecraft 1.21.4 server JAR" }),
+    );
+
+    expect(api.verify).toHaveBeenCalledWith("server", "server-managed-1.21.4");
+    expect(await within(servers).findByText("Needs attention")).toBeInTheDocument();
+    expect(
+      within(servers).getByText(
+        "the cached server JAR for Minecraft 1.21.4 does not match its SHA-1",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Minecraft 1.21.4 server JAR did not pass local verification."),
+    ).toBeInTheDocument();
+  });
+
+  it("asks before removing an artifact and reloads the cache afterwards", async () => {
+    api.inventory.mockResolvedValue(inventory);
+    api.remove.mockImplementation((kind: string, id: string) =>
+      Promise.resolve({ kind, id, removedManaged: true, clearedSelection: false }),
+    );
+    const user = userEvent.setup();
+    render(<ComponentInventorySection />);
+
+    expect(await screen.findByText("Java 21.0.5+11")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove Java 21.0.5+11" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Remove cached component?" });
+    expect(api.remove).not.toHaveBeenCalled();
+
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(api.remove).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Remove Java 21.0.5+11" }));
+    const confirmation = await screen.findByRole("dialog", {
+      name: "Remove cached component?",
+    });
+    await user.click(within(confirmation).getByRole("button", { name: "Remove" }));
+
+    await waitFor(() => expect(api.remove).toHaveBeenCalledWith("java", "temurin-21.0.5-11"));
+    expect(
+      await screen.findByText("Removed Java 21.0.5+11 from the FuryBuilder cache."),
+    ).toBeInTheDocument();
+    await waitFor(() => expect(api.inventory).toHaveBeenCalledTimes(2));
+  });
+
+  it("closes the confirmation and explains a failed removal", async () => {
+    api.inventory.mockResolvedValue(inventory);
+    api.remove.mockRejectedValue(
+      new BackendError("not_found", "component `server` was not found: server-managed-1.21.4"),
+    );
+    const user = userEvent.setup();
+    render(<ComponentInventorySection />);
+
+    expect(await screen.findByText("Java 21.0.5+11")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove Minecraft 1.21.4 server JAR" }));
+    const dialog = await screen.findByRole("dialog", { name: "Remove cached component?" });
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+
+    expect(await screen.findByText("Component action failed")).toBeInTheDocument();
+    expect(
+      screen.getByText("component `server` was not found: server-managed-1.21.4"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Remove cached component?" })).toBeNull(),
+    );
+  });
+
+  it("opens a known cache folder and reports a platform failure", async () => {
+    api.inventory.mockResolvedValue(inventory);
+    api.openFolder
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new BackendError("internal", "opening the assets folder failed"));
+    const user = userEvent.setup();
+    render(<ComponentInventorySection />);
+
+    expect(await screen.findByText("Java 21.0.5+11")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Java runtimes folder" }));
+    expect(api.openFolder).toHaveBeenLastCalledWith("java");
+
+    await user.click(screen.getByRole("button", { name: "Open Minecraft client JARs folder" }));
+    expect(api.openFolder).toHaveBeenLastCalledWith("assets");
+    expect(await screen.findByText("Component action failed")).toBeInTheDocument();
+    expect(screen.getByText("opening the assets folder failed")).toBeInTheDocument();
   });
 });

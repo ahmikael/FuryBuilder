@@ -113,8 +113,9 @@ export function SettingsDialog({ open, onOpenChange, backend }: SettingsDialogPr
             <section className="space-y-1.5">
               <h3 className="text-base font-semibold">Components</h3>
               <p className="text-sm leading-relaxed text-muted-foreground">
-                The shared local component cache. Downloads, manual paths and placeholder textures
-                are chosen in the project wizard; this tab only lists what is installed.
+                The shared local component cache. Verify, remove or open the folder of installed
+                Java runtimes, client JARs and server JARs here. Downloads, manual paths and
+                placeholder textures are chosen in the project wizard.
               </p>
             </section>
             <ComponentInventorySection />

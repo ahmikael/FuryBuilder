@@ -282,10 +282,11 @@ prerequisites.
 ## 11. Settings essentials
 
 - **Appearance** — theme (dark/light/system) and UI scale.
-- **Components** — a read-only inventory of FuryBuilder-owned Java runtimes, client JARs and
-  official server JARs, with version, size and cache path for each artifact. Downloads,
-  manual paths and placeholder choices are made in the project wizard, not here; Settings
-  never provisions a project.
+- **Components** — an inventory of FuryBuilder-owned Java runtimes, client JARs and official
+  server JARs, with version, size and cache path for each artifact. Verify re-checks an
+  artifact against its recorded facts, Remove deletes only the cached copy after confirmation,
+  and Open folder shows the cache root. Downloads, manual paths and placeholder choices are
+  made in the project wizard, not here; Settings never provisions a project.
 - **Updates** — manual check and verified install of a newer FuryBuilder build.
 - **Diagnostics** — a bounded, path-redacted JSON Lines log with open-folder, refresh and
   clear actions. Clearing affects only `furybuilder*.log`.

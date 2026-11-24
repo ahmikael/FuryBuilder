@@ -12,11 +12,13 @@ import {
   listenComponentChanged,
   listenComponentError,
   listenComponentProgress,
+  openComponentFolder,
   relinkComponent,
   removeComponent,
   resolveComponent,
   selectPlaceholderComponent,
   verifyComponent,
+  verifyComponentInventory,
 } from "@/lib/components-api";
 import type {
   ComponentInstallRequest,
@@ -113,6 +115,15 @@ describe("component IPC contract", () => {
       id: "assets-managed-test-version",
       target,
     });
+
+    await verifyComponentInventory("server", "server-managed-test-version");
+    expect(invoke).toHaveBeenLastCalledWith("components_verify_inventory", {
+      kind: "server",
+      id: "server-managed-test-version",
+    });
+
+    await openComponentFolder("java");
+    expect(invoke).toHaveBeenLastCalledWith("components_open_folder", { kind: "java" });
   });
 
   it("subscribes to progress, change and error events with typed payloads", async () => {

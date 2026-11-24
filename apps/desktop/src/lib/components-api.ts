@@ -100,6 +100,19 @@ export function verifyComponent(
   return invokeCommand<ComponentVerification>("components_verify", { kind, id, target });
 }
 
+/** Re-inspects a managed artifact from the Settings inventory without a project target. */
+export function verifyComponentInventory(
+  kind: ComponentKind,
+  id: string,
+): Promise<ComponentVerification> {
+  return invokeCommand<ComponentVerification>("components_verify_inventory", { kind, id });
+}
+
+/** Opens one FuryBuilder-owned component cache directory in the platform file manager. */
+export function openComponentFolder(kind: ComponentKind): Promise<void> {
+  return invokeCommand<void>("components_open_folder", { kind });
+}
+
 export function listenComponentProgress(
   handler: (progress: ComponentProgress) => void,
 ): Promise<UnlistenFn> {

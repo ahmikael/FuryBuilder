@@ -91,7 +91,14 @@ The desktop manages Java, client assets and the official server JAR through one
 - `components_status`, `components_resolve`, `components_inventory`;
 - `components_java_release`, `components_assets_release`, `components_server_release`;
 - `components_install`, `components_cancel`, `components_relink`, `components_remove`,
-  `components_verify`.
+  `components_verify`;
+- `components_verify_inventory` and `components_open_folder` for the Settings inventory.
+
+`components_verify` re-inspects the component currently selected for a project target and
+refuses a stale id. `components_verify_inventory` re-hashes or re-probes one managed artifact
+from the shared cache without a project target, while `components_open_folder` only opens one
+of the three known FuryBuilder cache roots; the frontend cannot ask it to open an arbitrary
+path.
 
 The `versions_catalog` command reads the official manifest through the same
 `DownloadClient` and cache as provisioning and returns every release/snapshot entry with the
@@ -270,13 +277,18 @@ semantic theme variables only.
 
 ## Settings
 
-Settings is a five-tab dialog: `Appearance` (theme and UI scale), `Components` (a read-only
-inventory of FuryBuilder-owned Java runtimes, client JARs and server JARs with versions, sizes
-and paths), `Updates`, `Diagnostics`, and `Advanced` (backend status). Project creation owns
-first-time provisioning: downloads, manual paths, placeholder textures, EULA acceptance and
-Vanilla generation stay in the full-screen wizard. Settings never starts a component download,
-accepts an EULA or generates a world. The dialog is composed from the stock shadcn `Dialog`, `Tabs`,
-`Card`, `Slider`, and `ToggleGroup` primitives with semantic theme variables only.
+Settings is a five-tab dialog: `Appearance` (theme and UI scale), `Components` (an inventory
+of FuryBuilder-owned Java runtimes, client JARs and server JARs with versions, sizes and paths,
+where each artifact can be verified against its cache manifest, removed from the cache, or
+shown in the platform file manager), `Updates`, `Diagnostics`, and `Advanced` (backend status).
+Project creation owns first-time provisioning: downloads, manual paths, placeholder textures,
+EULA acceptance and Vanilla generation stay in the full-screen wizard. Settings never starts a
+component download, selects a manual or placeholder source, accepts an EULA or generates a
+world. Removal only deletes FuryBuilder-owned cache data; a user file is never touched, and a
+project that still needs the artifact can download or link it again through the wizard. The
+dialog is composed from the stock shadcn `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`,
+`Button`, `Badge`, `Alert`, and confirmation `Dialog` primitives with semantic theme variables
+only.
 
 ## Security boundaries
 

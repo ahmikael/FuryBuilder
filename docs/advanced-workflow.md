@@ -267,8 +267,10 @@ client JAR, so no block/item catalog or resource-pack stack is available: the vi
 original FuryBuilder textures and labels them, while the palette stays on the curated quick
 picks. Selecting a client source replaces placeholder mode.
 
-Settings only lists the managed client JARs in its **Components** tab: version, DataVersion,
-size and cache path. It never changes the asset source, the pack stack or placeholder mode.
+Settings' **Components** tab lists each managed client JAR with its version, DataVersion, size
+and cache path. `Verify` re-hashes the JAR and compares it with the cache manifest, `Remove`
+deletes only the FuryBuilder-owned copy after confirmation, and `Open folder` opens the known
+assets cache root. Settings never changes the asset source, the pack stack or placeholder mode.
 
 ### Java and the official server
 
@@ -285,8 +287,9 @@ provides:
 - manual JAR selection with the same exact-version checks.
 
 The backend accepts any exact server target and never substitutes another version. Settings
-only lists the managed Java runtimes and server JARs with version, size and cache path; it
-never downloads, selects a manual file, accepts an EULA or starts a server.
+lists the managed Java runtimes and server JARs with version, size and cache path and can
+re-probe Java, re-inspect a server JAR, remove a FuryBuilder-owned copy or open a known cache
+folder. It never downloads, selects a manual file, accepts an EULA or starts a server.
 
 Nothing is installed globally, no `PATH` is changed, and no EULA is accepted automatically.
 Each acceptance is stored for the exact server JAR SHA-1 and Minecraft version; another JAR
