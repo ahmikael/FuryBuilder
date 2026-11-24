@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   Check,
   FolderOpen,
+  Info,
   Loader2,
   RefreshCw,
   Sparkles,
@@ -22,11 +23,13 @@ import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { isTauriRuntime } from "@/lib/ipc";
+import { fetchProjectDefaults } from "@/lib/project-api";
 import {
   CREATION_MODES,
   creationModeLabel,
   type CreationMode,
   type JavaWorldAnalysis,
+  type ProjectDefaults,
 } from "@/project/types";
 import { useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
@@ -40,7 +43,7 @@ interface WizardStep {
 const BASICS_STEP: WizardStep = {
   id: "basics",
   title: "Basics",
-  description: "Name the project and choose what kind of world it starts from.",
+  description: "Name the project, choose its folder and pick a starting world.",
 };
 
 const SOURCE_STEP: WizardStep = {
@@ -59,16 +62,46 @@ function wizardSteps(mode: CreationMode): WizardStep[] {
   return mode === "vanilla" ? [BASICS_STEP, SOURCE_STEP] : [BASICS_STEP, SOURCE_STEP, REVIEW_STEP];
 }
 
+function projectFolderName(folder: string, suffix: string): string {
+  const trimmed = folder.trim();
+  if (trimmed.length === 0 || trimmed.endsWith(suffix)) return trimmed;
+  return `${trimmed}${suffix}`;
+}
+
+function folderError(folder: string, suffix: string): string | null {
+  const trimmed = folder.trim();
+  if (trimmed.length === 0) return null;
+  if (
+    trimmed === "." ||
+    trimmed === ".." ||
+    trimmed.includes("/") ||
+    trimmed.includes("\\") ||
+    trimmed.includes(":") ||
+    /[<>"|?*]/.test(trimmed) ||
+    [...trimmed].some((character) => character.charCodeAt(0) < 32)
+  ) {
+    return "Use a folder name without path separators or reserved characters.";
+  }
+  const normalized = projectFolderName(trimmed, suffix);
+  if (normalized.length <= suffix.length + 1) return "Enter a folder name.";
+  if (normalized.length > 160) return "The project folder must be at most 160 characters.";
+  return null;
+}
+
 function stepErrors(
   step: WizardStep,
   name: string,
   mode: CreationMode,
   analysis: JavaWorldAnalysis | null,
   folder: string,
+  projectFolder: string,
+  folderSuffix: string,
 ): string[] {
   if (step.id === "basics") {
     const errors: string[] = [];
     if (mode !== "vanilla" && name.trim().length === 0) errors.push("Enter a project name.");
+    const invalidFolder = folderError(projectFolder, folderSuffix);
+    if (invalidFolder) errors.push(invalidFolder);
     return errors;
   }
   if (step.id === "source" && mode === "import") {
@@ -127,16 +160,25 @@ function StepNav({
 function BasicsStep({
   name,
   mode,
+  folder,
+  folderSuffix,
+  projectsRoot,
   disabled,
   onName,
+  onFolder,
   onMode,
 }: {
   name: string;
   mode: CreationMode;
+  folder: string;
+  folderSuffix: string;
+  projectsRoot: string | null;
   disabled: boolean;
   onName: (value: string) => void;
+  onFolder: (value: string) => void;
   onMode: (mode: CreationMode) => void;
 }) {
+  const modeEntry = CREATION_MODES.find((entry) => entry.mode === mode);
   return (
     <div className="space-y-6">
       {mode === "vanilla" ? null : (
@@ -151,11 +193,30 @@ function BasicsStep({
             disabled={disabled}
             onChange={(event) => onName(event.target.value)}
           />
-          <FieldDescription>
-            The folder gets a unique suffix when a project with this name already exists.
-          </FieldDescription>
+          <FieldDescription>Shown in the project list and project settings.</FieldDescription>
         </Field>
       )}
+
+      <Field>
+        <FieldLabel htmlFor="wizard-project-folder">Project folder</FieldLabel>
+        <Input
+          id="wizard-project-folder"
+          value={folder}
+          placeholder="Named after the project"
+          maxLength={160}
+          disabled={disabled}
+          onChange={(event) => onFolder(event.target.value)}
+        />
+        <FieldDescription>
+          Created inside{" "}
+          <span className="break-all font-mono text-xs">
+            {projectsRoot ?? "the default library folder"}
+          </span>
+          . Leave blank to name the folder after the project;{" "}
+          <span className="font-mono text-xs">{folderSuffix}</span> is added automatically. An
+          existing folder is never overwritten.
+        </FieldDescription>
+      </Field>
 
       <div className="space-y-2">
         <p className="text-sm font-medium">Creation mode</p>
@@ -187,13 +248,21 @@ function BasicsStep({
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
-        {mode === "vanilla" ? (
-          <FieldDescription>
-            The generated world names the project from its seed; the first step only chooses the
-            mode.
-          </FieldDescription>
-        ) : null}
       </div>
+
+      {modeEntry ? (
+        <Alert>
+          <Info />
+          <AlertTitle>{modeEntry.label} requirements</AlertTitle>
+          <AlertDescription>
+            <ul className="list-disc space-y-1 pl-4">
+              {modeEntry.requirements.map((requirement) => (
+                <li key={requirement}>{requirement}</li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }
@@ -336,13 +405,20 @@ function ReviewStep({
   name,
   mode,
   folder,
+  projectFolder,
+  folderSuffix,
+  projectsRoot,
   analysis,
 }: {
   name: string;
   mode: CreationMode;
   folder: string;
+  projectFolder: string;
+  folderSuffix: string;
+  projectsRoot: string | null;
   analysis: JavaWorldAnalysis | null;
 }) {
+  const destination = projectFolderName(projectFolder, folderSuffix);
   return (
     <div className="space-y-4">
       <Card className="gap-0 py-0">
@@ -357,6 +433,18 @@ function ReviewStep({
             <div className="flex flex-wrap items-center gap-3 px-4 py-3">
               <dt className="w-28 text-sm text-muted-foreground">Mode</dt>
               <dd className="text-sm">{creationModeLabel(mode)}</dd>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <dt className="w-28 text-sm text-muted-foreground">Folder</dt>
+              <dd className="min-w-0 flex-1 truncate font-mono text-xs">
+                {destination || "Named after the project"}
+              </dd>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+              <dt className="w-28 text-sm text-muted-foreground">Location</dt>
+              <dd className="min-w-0 flex-1 break-all font-mono text-xs">
+                {projectsRoot ?? "Default library folder"}
+              </dd>
             </div>
             <div className="flex flex-wrap items-center gap-3 px-4 py-3">
               <dt className="w-28 text-sm text-muted-foreground">Source</dt>
@@ -418,6 +506,11 @@ function FailurePanel({
   );
 }
 
+const BROWSER_PROJECT_DEFAULTS: ProjectDefaults = {
+  projectsRoot: "Documents/FuryBuilder",
+  folderSuffix: ".furybuilder",
+};
+
 /**
  * Full-screen project creation wizard. The shell owns the step order, navigation,
  * validation and progress; each step only describes its own fields. Steps that need
@@ -437,27 +530,57 @@ export function ProjectWizard() {
   const desktop = isTauriRuntime();
 
   const [name, setName] = useState("");
+  const [projectFolder, setProjectFolder] = useState("");
+  const [defaults, setDefaults] = useState<ProjectDefaults | null>(null);
   const [worldFolder, setWorldFolder] = useState("");
   const [requestedStep, setRequestedStep] = useState(0);
   const [furthestStep, setFurthestStep] = useState(0);
   const [attempted, setAttempted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const value = desktop ? await fetchProjectDefaults() : BROWSER_PROJECT_DEFAULTS;
+        if (!cancelled) setDefaults(value);
+      } catch (error) {
+        if (!cancelled) {
+          pushToast({
+            kind: "warning",
+            title: "Project folder unavailable",
+            description: String(error),
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [desktop]);
+
   const steps = useMemo(() => wizardSteps(mode), [mode]);
   const activeStep = Math.min(requestedStep, steps.length - 1);
   const step = steps[activeStep]!;
   const furthest = Math.min(furthestStep, steps.length - 1);
   const busy = phase === "preparing" || phase === "saving";
-  const errors = stepErrors(step, name, mode, analysis, worldFolder);
+  const folderSuffix = defaults?.folderSuffix ?? BROWSER_PROJECT_DEFAULTS.folderSuffix;
+  const projectsRoot = defaults?.projectsRoot ?? null;
+  const destination = projectFolderName(projectFolder, folderSuffix) || undefined;
+  const errors = stepErrors(step, name, mode, analysis, worldFolder, projectFolder, folderSuffix);
   const progress = ((activeStep + 1) / steps.length) * 100;
+  const stepDescription =
+    step.id === "basics" && mode === "vanilla"
+      ? "Choose the project folder and review what world generation needs."
+      : step.description;
 
   const submit = async (): Promise<void> => {
     setSubmitted(true);
     if (mode === "import") {
-      await useProjectStore.getState().importWorld(name, worldFolder);
+      await useProjectStore.getState().importWorld(name, worldFolder, destination);
       return;
     }
-    await useProjectStore.getState().create(name, mode);
+    await useProjectStore.getState().create(name, mode, destination);
   };
 
   const retry = (): void => {
@@ -526,7 +649,7 @@ export function ProjectWizard() {
           <h1 id="project-wizard-title" className="truncate text-base font-semibold">
             New project
           </h1>
-          <p className="truncate text-xs text-muted-foreground">{step.description}</p>
+          <p className="truncate text-xs text-muted-foreground">{stepDescription}</p>
         </div>
         <Badge variant="outline" className="ml-auto tabular-nums">
           Step {activeStep + 1} of {steps.length}
@@ -566,7 +689,7 @@ export function ProjectWizard() {
               <div>
                 <h2 className="text-lg font-semibold">{step.title}</h2>
                 <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                  {step.description}
+                  {stepDescription}
                 </p>
               </div>
 
@@ -574,8 +697,12 @@ export function ProjectWizard() {
                 <BasicsStep
                   name={name}
                   mode={mode}
+                  folder={projectFolder}
+                  folderSuffix={folderSuffix}
+                  projectsRoot={projectsRoot}
                   disabled={busy}
                   onName={setName}
+                  onFolder={setProjectFolder}
                   onMode={chooseMode}
                 />
               ) : null}
@@ -593,7 +720,9 @@ export function ProjectWizard() {
                   />
                 ) : mode === "vanilla" ? (
                   <VanillaWorldWizard
-                    onOpenWorld={(runId, projectName) => importGeneratedWorld(projectName, runId)}
+                    onOpenWorld={(runId, projectName) =>
+                      importGeneratedWorld(projectName, runId, destination)
+                    }
                   />
                 ) : (
                   <SimpleSourceStep mode={mode} />
@@ -601,7 +730,15 @@ export function ProjectWizard() {
               ) : null}
 
               {step.id === "review" ? (
-                <ReviewStep name={name} mode={mode} folder={worldFolder} analysis={analysis} />
+                <ReviewStep
+                  name={name}
+                  mode={mode}
+                  folder={worldFolder}
+                  projectFolder={projectFolder}
+                  folderSuffix={folderSuffix}
+                  projectsRoot={projectsRoot}
+                  analysis={analysis}
+                />
               ) : null}
 
               {attempted && errors.length > 0 ? (
@@ -629,8 +766,8 @@ export function ProjectWizard() {
               {step.id === "source" && mode === "vanilla" ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   Generation prepares Java and the official server, accepts the EULA explicitly and
-                  imports the finished world as a read-only source. The project name comes from the
-                  seed.
+                  imports the finished world as a read-only source. The seed names the project; the
+                  folder chosen in Basics is kept.
                 </p>
               ) : null}
             </div>

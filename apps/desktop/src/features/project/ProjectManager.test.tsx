@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   rename: vi.fn(),
   analyze: vi.fn(),
   importWorld: vi.fn(),
+  defaults: vi.fn(),
 }));
 
 const worldApi = vi.hoisted(() => ({
@@ -46,6 +47,7 @@ vi.mock("@/lib/project-api", () => ({
   renameProject: api.rename,
   analyzeJavaWorld: api.analyze,
   importJavaWorld: api.importWorld,
+  fetchProjectDefaults: api.defaults,
 }));
 
 vi.mock("@/lib/ipc", async (importOriginal) => {
@@ -255,6 +257,10 @@ beforeEach(() => {
   }));
   api.analyze.mockReset();
   api.importWorld.mockReset();
+  api.defaults.mockReset().mockResolvedValue({
+    projectsRoot: "C:\\Users\\Test\\Documents\\FuryBuilder",
+    folderSuffix: ".furybuilder",
+  });
   worldApi.info.mockReset().mockResolvedValue(opened(first).info);
   worldApi.history.mockReset().mockResolvedValue({
     canUndo: false,
@@ -291,12 +297,17 @@ describe("project manager", () => {
     await user.click(screen.getByRole("button", { name: /Flat base/ }));
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith("New World", "flat", {
-        selectedDimension: "minecraft:overworld",
-        loadRadius: 1,
-        workspace: defaultWorkspacePolicy(),
-        scene: defaultScene(),
-      }),
+      expect(api.create).toHaveBeenCalledWith(
+        "New World",
+        "flat",
+        {
+          selectedDimension: "minecraft:overworld",
+          loadRadius: 1,
+          workspace: defaultWorkspacePolicy(),
+          scene: defaultScene(),
+        },
+        undefined,
+      ),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
   });
@@ -397,12 +408,17 @@ describe("project manager", () => {
     await user.type(screen.getByLabelText("Project name"), "Imported World");
     await user.click(screen.getByRole("button", { name: "Import world" }));
     await waitFor(() =>
-      expect(api.importWorld).toHaveBeenCalledWith("Imported World", "C:\\saves\\World", {
-        selectedDimension: "minecraft:overworld",
-        loadRadius: 1,
-        workspace: defaultWorkspacePolicy(),
-        scene: defaultScene(),
-      }),
+      expect(api.importWorld).toHaveBeenCalledWith(
+        "Imported World",
+        "C:\\saves\\World",
+        {
+          selectedDimension: "minecraft:overworld",
+          loadRadius: 1,
+          workspace: defaultWorkspacePolicy(),
+          scene: defaultScene(),
+        },
+        undefined,
+      ),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
   });
@@ -474,30 +490,59 @@ describe("project wizard", () => {
     expect(screen.getByDisplayValue("Wizard World")).toBeInTheDocument();
   });
 
-  it("creates a flat project from the review step", async () => {
+  it("creates a flat project from the review step with a chosen folder", async () => {
     const user = userEvent.setup();
     openWizard();
     render(<ProjectManager />);
 
+    await waitFor(() =>
+      expect(screen.getByText("C:\\Users\\Test\\Documents\\FuryBuilder")).toBeInTheDocument(),
+    );
+    expect(screen.getByText("Empty Project requirements")).toBeInTheDocument();
+
     await user.type(screen.getByLabelText("Project name"), "Wizard Flat");
+    await user.type(screen.getByLabelText("Project folder"), "Custom Flat");
     await user.click(screen.getByRole("button", { name: /Flat base/ }));
+    expect(screen.getByText("Flat base requirements")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByText("Wizard Flat")).toBeInTheDocument();
     expect(screen.getByText("Flat base")).toBeInTheDocument();
+    expect(screen.getByText("Custom Flat.furybuilder")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Create project" }));
     await waitFor(() =>
-      expect(api.create).toHaveBeenCalledWith("Wizard Flat", "flat", {
-        selectedDimension: "minecraft:overworld",
-        loadRadius: 1,
-        workspace: defaultWorkspacePolicy(),
-        scene: defaultScene(),
-      }),
+      expect(api.create).toHaveBeenCalledWith(
+        "Wizard Flat",
+        "flat",
+        {
+          selectedDimension: "minecraft:overworld",
+          loadRadius: 1,
+          workspace: defaultWorkspacePolicy(),
+          scene: defaultScene(),
+        },
+        "Custom Flat.furybuilder",
+      ),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("refuses an invalid project folder before the next step", async () => {
+    const user = userEvent.setup();
+    openWizard();
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Bad Folder");
+    await user.type(screen.getByLabelText("Project folder"), "nested/folder");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(
+      screen.getByText("Use a folder name without path separators or reserved characters."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Basics" })).toBeInTheDocument();
+    expect(api.create).not.toHaveBeenCalled();
   });
 
   it("blocks import until the world is analyzed and then imports it", async () => {
@@ -531,14 +576,31 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Create project" }));
 
     await waitFor(() =>
-      expect(api.importWorld).toHaveBeenCalledWith("Imported Wizard", "C:\\saves\\Wizard", {
-        selectedDimension: "minecraft:overworld",
-        loadRadius: 1,
-        workspace: defaultWorkspacePolicy(),
-        scene: defaultScene(),
-      }),
+      expect(api.importWorld).toHaveBeenCalledWith(
+        "Imported Wizard",
+        "C:\\saves\\Wizard",
+        {
+          selectedDimension: "minecraft:overworld",
+          loadRadius: 1,
+          workspace: defaultWorkspacePolicy(),
+          scene: defaultScene(),
+        },
+        undefined,
+      ),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("keeps the folder available but hides the name for vanilla generation", async () => {
+    openWizard("vanilla");
+    render(<ProjectManager />);
+
+    expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
+    expect(screen.getAllByText("Step 1 of 2").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Project name")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Project folder")).toBeInTheDocument();
+    expect(screen.getByText("Vanilla World requirements")).toBeInTheDocument();
+    expect(screen.getByText(/The seed names the generated project/)).toBeInTheDocument();
   });
 
   it("keeps the wizard open on failure and retries the same request", async () => {

@@ -42,7 +42,9 @@ application API over an authenticated local endpoint and never opens world files
 
 A project folder contains `project.json`, `source/` (immutable imported source), `data/`
 (versioned world snapshots), `changes/` (journal and checkpoints), `cache/` (regenerable)
-and optional `assets/` and `previews/`. `project.json` is the only eagerly parsed document;
+and optional `assets/` and `previews/`. Projects live in the user's `Documents/FuryBuilder`
+library, falling back to the app data directory when the documents folder is unavailable.
+`project.json` is the only eagerly parsed document;
 it stores schema version, project id, name, creation mode, target version profile
 (version/DataVersion/Java/pack formats), component references, world revision and provenance.
 
@@ -137,10 +139,16 @@ the ordered steps, progress, validation and navigation: `Basics → Source → R
 World` uses the same shell with its generation step in place of review, because the generated
 world names the project and creates it from the generation panel.
 
-`Basics` names the project and chooses Empty, Flat, Import or Vanilla. `Source` shows the
-starting world: a compact description for Empty/Flat, read-only analysis with blockers and
-warnings for Import, and the existing generation panel for Vanilla. `Review` repeats the name,
-mode and source before creation. Every step returns its own validation errors; `Next` refuses
+`Basics` names the project, shows the library folder and lets the user override the
+project folder name. The backend owns the library root (`Documents/FuryBuilder`, with an
+app-data fallback) and the `.furybuilder` suffix; the wizard never invents either. The
+folder field is optional: a blank value uses the project name, an existing folder is never
+overwritten, and path separators or reserved characters are refused before `Next`. The
+same step chooses Empty, Flat, Import or Vanilla and lists that mode's requirements. `Source`
+shows the starting world: a compact description for Empty/Flat, read-only analysis with
+blockers and warnings for Import, and the existing generation panel for Vanilla. `Review`
+repeats the name, folder, library location, mode and source before creation. Every step
+returns its own validation errors; `Next` refuses
 to advance, shows the reason, and the step buttons only reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only
 progress indicators.

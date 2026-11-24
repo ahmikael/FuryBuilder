@@ -168,6 +168,12 @@ export interface ProjectList {
   warnings: string[];
 }
 
+/** Library location owned by the backend; the wizard never invents either value. */
+export interface ProjectDefaults {
+  projectsRoot: string;
+  folderSuffix: string;
+}
+
 export interface RecoveryInfo {
   reason: string;
   recoveredRevision: number;
@@ -281,12 +287,17 @@ export const CREATION_MODES: Array<{
   mode: CreationMode;
   label: string;
   description: string;
+  requirements: string[];
   available: boolean;
 }> = [
   {
     mode: "empty",
     label: "Empty Project",
     description: "A blank world with only air. Every block is placed by you or a tool.",
+    requirements: [
+      "A project name and folder.",
+      "No Java runtime, client assets or server are used at creation.",
+    ],
     available: true,
   },
   {
@@ -294,6 +305,10 @@ export const CREATION_MODES: Array<{
     label: "Flat base",
     description:
       "A 33×33 stone, dirt and grass platform around the origin. Not vanilla world generation.",
+    requirements: [
+      "A project name and folder.",
+      "No world generator runs; the platform is created as FuryBuilder world data.",
+    ],
     available: true,
   },
   {
@@ -301,6 +316,11 @@ export const CREATION_MODES: Array<{
     label: "Vanilla World",
     description:
       "Choose a seed, preset, supported world settings and optional local data packs. The official local Java server generates the requested area after you accept the EULA and explicitly confirm the run.",
+    requirements: [
+      "A compatible local Java runtime and the exact official server JAR for the selected version.",
+      "Explicit EULA consent, free disk space and time for generation.",
+      "The seed names the generated project; the folder is still chosen here.",
+    ],
     available: true,
   },
   {
@@ -308,6 +328,11 @@ export const CREATION_MODES: Array<{
     label: "Import World",
     description:
       "Open a supported Java world read-only, keep a byte-for-byte source copy and edit its blocks through the project overlay.",
+    requirements: [
+      "A complete Java world folder with level.dat and region data.",
+      "Read-only analysis must pass before the project can be created.",
+      "A project name and folder; the source is copied byte for byte and never written.",
+    ],
     available: true,
   },
 ];

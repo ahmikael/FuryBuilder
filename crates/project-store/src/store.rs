@@ -183,6 +183,16 @@ enum RecoveryCheck {
 /// serialized by the caller (the Tauri app holds one service lock) and every publish is
 /// atomic: bytes are written to a temporary file, verified by decoding and re-encoding,
 /// then renamed into place.
+struct CreateRequest<'a> {
+    name: &'a str,
+    mode: CreationMode,
+    editor_state: EditorState,
+    world: &'a World,
+    source: SourceInfo,
+    vanilla: Option<VanillaProvenance>,
+    folder: Option<&'a str>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProjectStore {
     root: PathBuf,
@@ -555,6 +565,19 @@ impl ProjectStore {
         mode: CreationMode,
         editor_state: EditorState,
     ) -> Result<ProjectDetail, ProjectError> {
+        self.create_with_folder(name, mode, editor_state, None)
+    }
+
+    /// Creates a project in an explicit `.furybuilder` folder. An explicit folder is never
+    /// silently renamed: an existing folder is reported as a conflict so the wizard can ask
+    /// for another name.
+    pub fn create_with_folder(
+        &self,
+        name: &str,
+        mode: CreationMode,
+        editor_state: EditorState,
+        folder: Option<&str>,
+    ) -> Result<ProjectDetail, ProjectError> {
         let name = normalize_name(name)?;
         if !mode.is_available() {
             return Err(ProjectError::InvalidManifest(format!(
@@ -565,14 +588,15 @@ impl ProjectStore {
         editor_state.validate()?;
         let mut world = build_world(mode)?;
         world.bump_revision();
-        self.create_with_world(
-            &name,
+        self.create_with_world(CreateRequest {
+            name: &name,
             mode,
             editor_state,
-            &world,
-            SourceInfo::generated(),
-            None,
-        )
+            world: &world,
+            source: SourceInfo::generated(),
+            vanilla: None,
+            folder,
+        })
     }
 
     /// Creates an `Import World` project from an already decoded editable world.
@@ -585,6 +609,7 @@ impl ProjectStore {
         editor_state: EditorState,
         world: &World,
         source_reference: &str,
+        folder: Option<&str>,
     ) -> Result<ProjectDetail, ProjectError> {
         let name = normalize_name(name)?;
         editor_state.validate()?;
@@ -596,14 +621,15 @@ impl ProjectStore {
             immutable: true,
             reference: Some(source_reference.to_owned()),
         };
-        self.create_with_world(
-            &name,
-            CreationMode::Import,
+        self.create_with_world(CreateRequest {
+            name: &name,
+            mode: CreationMode::Import,
             editor_state,
             world,
             source,
-            None,
-        )
+            vanilla: None,
+            folder,
+        })
     }
 
     /// Creates a `Vanilla World` project from a completed official-server generation. The
@@ -616,6 +642,7 @@ impl ProjectStore {
         world: &World,
         source_reference: &str,
         provenance: VanillaProvenance,
+        folder: Option<&str>,
     ) -> Result<ProjectDetail, ProjectError> {
         let name = normalize_name(name)?;
         editor_state.validate()?;
@@ -628,39 +655,50 @@ impl ProjectStore {
             immutable: true,
             reference: Some(source_reference.to_owned()),
         };
-        self.create_with_world(
-            &name,
-            CreationMode::Vanilla,
+        self.create_with_world(CreateRequest {
+            name: &name,
+            mode: CreationMode::Vanilla,
             editor_state,
             world,
             source,
-            Some(provenance),
-        )
+            vanilla: Some(provenance),
+            folder,
+        })
     }
 
-    fn create_with_world(
-        &self,
-        name: &str,
-        mode: CreationMode,
-        editor_state: EditorState,
-        world: &World,
-        source: SourceInfo,
-        vanilla: Option<VanillaProvenance>,
-    ) -> Result<ProjectDetail, ProjectError> {
+    fn create_with_world(&self, request: CreateRequest<'_>) -> Result<ProjectDetail, ProjectError> {
+        let CreateRequest {
+            name,
+            mode,
+            editor_state,
+            world,
+            source,
+            vanilla,
+            folder,
+        } = request;
         fs::create_dir_all(&self.root)
             .map_err(|error| io_error(format!("creating {}", self.root.display()), error))?;
 
-        let base = folder_component(name);
-        let mut folder = base.clone();
-        let mut counter = 1;
-        while self.root.join(&folder).exists() {
-            counter += 1;
-            let stem = base.trim_end_matches(".furybuilder");
-            folder = format!("{stem} ({counter}).furybuilder");
-            if counter > 999 {
-                return Err(ProjectError::AlreadyExists(name.to_owned()));
+        let folder = if let Some(folder) = folder {
+            validate_folder(folder)?;
+            if self.root.join(folder).exists() {
+                return Err(ProjectError::AlreadyExists(folder.to_owned()));
             }
-        }
+            folder.to_owned()
+        } else {
+            let base = folder_component(name);
+            let mut folder = base.clone();
+            let mut counter = 1;
+            while self.root.join(&folder).exists() {
+                counter += 1;
+                let stem = base.trim_end_matches(".furybuilder");
+                folder = format!("{stem} ({counter}).furybuilder");
+                if counter > 999 {
+                    return Err(ProjectError::AlreadyExists(name.to_owned()));
+                }
+            }
+            folder
+        };
         let dir = self.root.join(&folder);
         fs::create_dir_all(dir.join(DATA_DIR))
             .map_err(|error| io_error(format!("creating {}", dir.display()), error))?;
@@ -1561,6 +1599,7 @@ mod tests {
                 &world,
                 "world",
                 provenance.clone(),
+                None,
             )
             .expect("vanilla create");
         assert_eq!(detail.summary.creation_mode, CreationMode::Vanilla);
@@ -1593,7 +1632,14 @@ mod tests {
         let mut bad = provenance.clone();
         bad.server_jar_sha1 = "not-a-sha1".to_owned();
         assert!(store
-            .create_vanilla("Bad Base", EditorState::default(), &world, "world", bad)
+            .create_vanilla(
+                "Bad Base",
+                EditorState::default(),
+                &world,
+                "world",
+                bad,
+                None
+            )
             .is_err());
         let mut bad_preset = provenance;
         bad_preset.preset = "superflat".to_owned();
@@ -1603,7 +1649,8 @@ mod tests {
                 EditorState::default(),
                 &world,
                 "world",
-                bad_preset
+                bad_preset,
+                None,
             )
             .is_err());
     }
@@ -2056,6 +2103,50 @@ mod tests {
             .expect("second");
         assert_ne!(first.summary.folder, second.summary.folder);
         assert_eq!(store.list().projects.len(), 2);
+    }
+
+    #[test]
+    fn explicit_folders_are_used_verbatim_and_conflicts_are_reported() {
+        let root = temp_root("explicit-folder");
+        let store = ProjectStore::new(&root);
+        let detail = store
+            .create_with_folder(
+                "Custom Name",
+                CreationMode::Empty,
+                EditorState::default(),
+                Some("Chosen.furybuilder"),
+            )
+            .expect("create with folder");
+        assert_eq!(detail.summary.folder, "Chosen.furybuilder");
+        assert_eq!(detail.summary.name, "Custom Name");
+
+        let conflict = store
+            .create_with_folder(
+                "Another Name",
+                CreationMode::Empty,
+                EditorState::default(),
+                Some("Chosen.furybuilder"),
+            )
+            .expect_err("existing folder must conflict");
+        assert!(matches!(conflict, ProjectError::AlreadyExists(_)));
+
+        for invalid in [
+            "../escape.furybuilder",
+            "nested/folder.furybuilder",
+            "NoSuffix",
+            "bad?.furybuilder",
+            "trailing .furybuilder ",
+        ] {
+            let error = store
+                .create_with_folder(
+                    "Invalid",
+                    CreationMode::Empty,
+                    EditorState::default(),
+                    Some(invalid),
+                )
+                .expect_err("invalid folder must be refused");
+            assert!(matches!(error, ProjectError::InvalidPath(_)));
+        }
     }
 
     #[test]

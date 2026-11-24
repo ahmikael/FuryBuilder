@@ -138,11 +138,11 @@ interface ProjectUiState {
   refreshList: () => Promise<void>;
   refreshSession: () => Promise<void>;
   resume: () => Promise<void>;
-  create: (name: string, mode: CreationMode) => Promise<boolean>;
+  create: (name: string, mode: CreationMode, folder?: string) => Promise<boolean>;
   analyzeWorld: (folder: string) => Promise<JavaWorldAnalysis | null>;
   clearWorldAnalysis: () => void;
-  importWorld: (name: string, folder: string) => Promise<boolean>;
-  importGeneratedWorld: (name: string, runId: string) => Promise<boolean>;
+  importWorld: (name: string, folder: string, projectFolder?: string) => Promise<boolean>;
+  importGeneratedWorld: (name: string, runId: string, projectFolder?: string) => Promise<boolean>;
   importStructure: (args: StructureImportProjectArgs) => Promise<boolean>;
   insertStructure: (args: StructureInsertArgs) => Promise<boolean>;
   open: (folder: string, options?: { discardCurrent?: boolean }) => Promise<boolean>;
@@ -380,10 +380,15 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     }
   },
 
-  create: async (name, mode) => {
+  create: async (name, mode, folder) => {
     set(preparingState("Creating the project…"));
     try {
-      const payload = await createProject(name.trim(), mode, currentEditorState());
+      const payload = await createProject(
+        name.trim(),
+        mode,
+        currentEditorState(),
+        folder?.trim() || undefined,
+      );
       applyPayload(payload);
       set({ managerOpen: false });
       pushToast({
@@ -431,13 +436,18 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
 
   clearWorldAnalysis: () => set({ worldAnalysis: null }),
 
-  importWorld: async (name, folder) => {
+  importWorld: async (name, folder, projectFolder) => {
     const trimmed = folder.trim();
     if (!trimmed) return false;
     const analysis = get().worldAnalysis;
     set(preparingState("Importing the world…"));
     try {
-      const payload = await importJavaWorld(name.trim(), trimmed, currentEditorState());
+      const payload = await importJavaWorld(
+        name.trim(),
+        trimmed,
+        currentEditorState(),
+        projectFolder?.trim() || undefined,
+      );
       applyPayload(payload);
       set({ managerOpen: false });
       pushToast({
@@ -454,11 +464,16 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     }
   },
 
-  importGeneratedWorld: async (name, runId) => {
+  importGeneratedWorld: async (name, runId, projectFolder) => {
     if (!runId.trim()) return false;
     set(preparingState("Importing the generated world…"));
     try {
-      const payload = await importGeneratedWorldApi(name.trim(), runId, currentEditorState());
+      const payload = await importGeneratedWorldApi(
+        name.trim(),
+        runId,
+        currentEditorState(),
+        projectFolder?.trim() || undefined,
+      );
       applyPayload(payload);
       set({ managerOpen: false });
       const vanilla = payload.detail.vanilla;

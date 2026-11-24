@@ -867,12 +867,16 @@ pub fn folder_component(name: &str) -> String {
 pub fn validate_folder(folder: &str) -> Result<(), ProjectError> {
     if folder.is_empty()
         || folder.len() > 160
+        || folder.trim() != folder
         || folder == "."
         || folder == ".."
         || folder.contains('/')
         || folder.contains('\\')
         || folder.contains(':')
         || folder.contains('\0')
+        || folder.chars().any(|character| {
+            character.is_control() || matches!(character, '<' | '>' | '"' | '|' | '?' | '*')
+        })
     {
         return Err(ProjectError::InvalidPath(folder.to_owned()));
     }

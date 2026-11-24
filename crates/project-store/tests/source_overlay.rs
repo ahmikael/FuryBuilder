@@ -66,7 +66,13 @@ fn imported_project_records_a_verified_immutable_world_tree() {
     );
 
     let detail = store
-        .create_imported("Imported World", EditorState::default(), &world, "world")
+        .create_imported(
+            "Imported World",
+            EditorState::default(),
+            &world,
+            "world",
+            None,
+        )
         .expect("create imported project");
     assert_eq!(detail.summary.creation_mode, CreationMode::Import);
     assert_eq!(detail.source.kind, SourceKind::Imported);

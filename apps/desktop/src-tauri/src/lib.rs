@@ -31,7 +31,11 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app_data_dir(app.handle())?;
-            let projects_root = data_dir.join("projects");
+            let projects_root = app
+                .path()
+                .document_dir()
+                .map(|documents| documents.join("FuryBuilder"))
+                .unwrap_or_else(|_| data_dir.join("projects"));
             std::fs::create_dir_all(&projects_root)?;
             let diagnostics =
                 std::sync::Arc::new(diagnostics::Diagnostics::new(data_dir.join("logs")));
@@ -125,6 +129,7 @@ pub fn run() {
             commands::template_preview,
             commands::template_insert,
             commands::project_status,
+            commands::project_defaults,
             commands::project_list,
             commands::project_create,
             commands::project_open,

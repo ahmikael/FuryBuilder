@@ -5,6 +5,7 @@ import type {
   EditorState,
   JavaWorldAnalysis,
   OpenedProjectPayload,
+  ProjectDefaults,
   ProjectDetail,
   ProjectList,
   SaveOutcome,
@@ -15,6 +16,10 @@ import type {
 
 export function fetchProjects(): Promise<ProjectList> {
   return invokeCommand<ProjectList>("project_list");
+}
+
+export function fetchProjectDefaults(): Promise<ProjectDefaults> {
+  return invokeCommand<ProjectDefaults>("project_defaults");
 }
 
 export function fetchProjectStatus(): Promise<SessionStatus> {
@@ -33,8 +38,14 @@ export function createProject(
   name: string,
   mode: CreationMode,
   editorState: EditorState,
+  folder?: string,
 ): Promise<OpenedProjectPayload> {
-  return invokeCommand<OpenedProjectPayload>("project_create", { name, mode, editorState });
+  return invokeCommand<OpenedProjectPayload>("project_create", {
+    name,
+    mode,
+    editorState,
+    folder: folder ?? null,
+  });
 }
 
 export function openProject(folder: string): Promise<OpenedProjectPayload> {
@@ -83,11 +94,13 @@ export function importJavaWorld(
   name: string,
   worldFolder: string,
   editorState: EditorState,
+  folder?: string,
 ): Promise<OpenedProjectPayload> {
   return invokeCommand<OpenedProjectPayload>("project_import_world", {
     name,
     worldFolder,
     editorState,
+    folder: folder ?? null,
   });
 }
 
@@ -107,10 +120,12 @@ export function importGeneratedWorld(
   name: string,
   runId: string,
   editorState: EditorState,
+  folder?: string,
 ): Promise<OpenedProjectPayload> {
   return invokeCommand<OpenedProjectPayload>("project_import_generated_world", {
     name,
     runId,
     editorState,
+    folder: folder ?? null,
   });
 }

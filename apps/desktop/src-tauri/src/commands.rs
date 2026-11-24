@@ -440,6 +440,15 @@ pub struct OpenedProjectPayload {
     pub session: SessionStatus,
 }
 
+/// The library location shown by the creation wizard. The backend is the only owner of
+/// the default projects folder and the project folder suffix.
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectDefaults {
+    pub projects_root: String,
+    pub folder_suffix: String,
+}
+
 fn current_payload(
     state: &AppState,
     detail: project_store::ProjectDetail,
@@ -560,6 +569,7 @@ pub fn project_create(
     name: String,
     mode: project_store::CreationMode,
     editor_state: project_store::EditorState,
+    folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
     let mut projects = state
         .projects
@@ -568,7 +578,7 @@ pub fn project_create(
     ensure_current_closed(&state, &mut projects)?;
     let detail = projects
         .store
-        .create(&name, mode, editor_state.clone())
+        .create_with_folder(&name, mode, editor_state.clone(), folder.as_deref())
         .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
     let (detail, world, recovery) = projects.store.open(&folder).map_err(project_error)?;
@@ -933,13 +943,33 @@ pub fn world_import_preview(folder: String) -> JavaWorldAnalysis {
 }
 
 #[tauri::command]
+pub fn project_defaults(state: State<'_, AppState>) -> Result<ProjectDefaults, AppError> {
+    let projects = state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?;
+    Ok(ProjectDefaults {
+        projects_root: projects.store.root().display().to_string(),
+        folder_suffix: format!(".{}", project_store::PROJECT_EXTENSION),
+    })
+}
+
+#[tauri::command]
 pub fn project_import_world(
     state: State<'_, AppState>,
     name: String,
     world_folder: String,
     editor_state: project_store::EditorState,
+    folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
-    import_world_project(state.inner(), name, world_folder, editor_state, None)
+    import_world_project(
+        state.inner(),
+        name,
+        world_folder,
+        editor_state,
+        None,
+        folder.as_deref(),
+    )
 }
 
 /// Imports a completed official-server generation run. The run is re-verified (manifest,
@@ -952,6 +982,7 @@ pub fn project_import_generated_world(
     name: String,
     run_id: String,
     editor_state: project_store::EditorState,
+    folder: Option<String>,
 ) -> Result<OpenedProjectPayload, AppError> {
     let generated = components
         .server()
@@ -1012,6 +1043,7 @@ pub fn project_import_generated_world(
         generated.world_dir,
         editor_state,
         Some(provenance),
+        folder.as_deref(),
     )
 }
 
@@ -1021,6 +1053,7 @@ fn import_world_project(
     world_folder: String,
     mut editor_state: project_store::EditorState,
     vanilla: Option<project_store::VanillaProvenance>,
+    folder: Option<&str>,
 ) -> Result<OpenedProjectPayload, AppError> {
     let analysis = world_io::analyze_java_world(&world_folder);
     if !analysis.supported {
@@ -1060,14 +1093,19 @@ fn import_world_project(
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
     ensure_current_closed(state, &mut projects)?;
     let detail = match vanilla {
-        Some(provenance) => {
+        Some(provenance) => projects.store.create_vanilla(
+            &name,
+            editor_state.clone(),
+            &world,
+            "world",
+            provenance,
+            folder,
+        ),
+        None => {
             projects
                 .store
-                .create_vanilla(&name, editor_state.clone(), &world, "world", provenance)
+                .create_imported(&name, editor_state.clone(), &world, "world", folder)
         }
-        None => projects
-            .store
-            .create_imported(&name, editor_state.clone(), &world, "world"),
     }
     .map_err(project_error)?;
     let folder = detail.summary.folder.clone();

@@ -239,12 +239,17 @@ describe("project activation", () => {
     try {
       const created = await useProjectStore.getState().create("My Castle", "flat");
       expect(created).toBe(true);
-      expect(api.create).toHaveBeenCalledWith("My Castle", "flat", {
-        selectedDimension: "minecraft:overworld",
-        loadRadius: 1,
-        workspace,
-        scene,
-      });
+      expect(api.create).toHaveBeenCalledWith(
+        "My Castle",
+        "flat",
+        {
+          selectedDimension: "minecraft:overworld",
+          loadRadius: 1,
+          workspace,
+          scene,
+        },
+        undefined,
+      );
       expect(useProjectStore.getState().current?.folder).toBe(summary.folder);
       expect(useWorldStore.getState().loadRadius).toBe(2);
       expect(useWorldStore.getState().revision).toBe(4);

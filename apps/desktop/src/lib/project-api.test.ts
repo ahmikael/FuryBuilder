@@ -6,8 +6,11 @@ import {
   closeProject,
   createProject,
   fetchCheckpoints,
+  fetchProjectDefaults,
   fetchProjectStatus,
   fetchProjects,
+  importGeneratedWorld,
+  importJavaWorld,
   openCheckpoint,
   openProject,
   renameProject,
@@ -32,12 +35,40 @@ describe("project IPC contract", () => {
     await fetchProjectStatus();
     expect(invoke).toHaveBeenLastCalledWith("project_status");
 
+    await fetchProjectDefaults();
+    expect(invoke).toHaveBeenLastCalledWith("project_defaults");
+
     const editorState = { selectedDimension: "minecraft:overworld", loadRadius: 2 };
     await createProject("Castle", "flat", editorState);
     expect(invoke).toHaveBeenLastCalledWith("project_create", {
       name: "Castle",
       mode: "flat",
       editorState,
+      folder: null,
+    });
+
+    await createProject("Castle", "flat", editorState, "Chosen.furybuilder");
+    expect(invoke).toHaveBeenLastCalledWith("project_create", {
+      name: "Castle",
+      mode: "flat",
+      editorState,
+      folder: "Chosen.furybuilder",
+    });
+
+    await importJavaWorld("Castle", "C:\\saves\\Castle", editorState, "Imported.furybuilder");
+    expect(invoke).toHaveBeenLastCalledWith("project_import_world", {
+      name: "Castle",
+      worldFolder: "C:\\saves\\Castle",
+      editorState,
+      folder: "Imported.furybuilder",
+    });
+
+    await importGeneratedWorld("Castle", "run-1", editorState, "Vanilla.furybuilder");
+    expect(invoke).toHaveBeenLastCalledWith("project_import_generated_world", {
+      name: "Castle",
+      runId: "run-1",
+      editorState,
+      folder: "Vanilla.furybuilder",
     });
 
     await openProject("Castle.furybuilder");
