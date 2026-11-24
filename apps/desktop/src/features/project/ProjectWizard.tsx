@@ -23,6 +23,10 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ProjectVersionStep } from "@/features/project/ProjectVersionStep";
+import {
+  ProjectComponentsStep,
+  type ComponentStepState,
+} from "@/features/project/ProjectComponentsStep";
 import { EmptySourceStep, FlatSourceStep } from "@/features/project/ProjectSourceStep";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { presentError, type ErrorPresentation } from "@/lib/error-messages";
@@ -48,7 +52,7 @@ import { useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 
 interface WizardStep {
-  id: "basics" | "version" | "source" | "review";
+  id: "basics" | "version" | "source" | "components" | "review";
   title: string;
   description: string;
 }
@@ -71,6 +75,13 @@ const SOURCE_STEP: WizardStep = {
   description: "Describe or inspect the world data that the project starts with.",
 };
 
+const COMPONENTS_STEP: WizardStep = {
+  id: "components",
+  title: "Components",
+  description:
+    "Review and prepare the Java runtime, Minecraft client assets and official server for this exact version.",
+};
+
 const REVIEW_STEP: WizardStep = {
   id: "review",
   title: "Review",
@@ -79,12 +90,12 @@ const REVIEW_STEP: WizardStep = {
 
 function wizardSteps(mode: CreationMode): WizardStep[] {
   if (mode === "import") {
-    return [BASICS_STEP, SOURCE_STEP, VERSION_STEP, REVIEW_STEP];
+    return [BASICS_STEP, SOURCE_STEP, VERSION_STEP, COMPONENTS_STEP, REVIEW_STEP];
   }
   if (mode === "vanilla") {
-    return [BASICS_STEP, VERSION_STEP, SOURCE_STEP];
+    return [BASICS_STEP, VERSION_STEP, COMPONENTS_STEP, SOURCE_STEP];
   }
-  return [BASICS_STEP, VERSION_STEP, SOURCE_STEP, REVIEW_STEP];
+  return [BASICS_STEP, VERSION_STEP, SOURCE_STEP, COMPONENTS_STEP, REVIEW_STEP];
 }
 
 function projectFolderName(folder: string, suffix: string): string {
@@ -225,6 +236,8 @@ function stepErrors(
     profile: VersionProfile | null;
     importStrategy: ImportStrategy;
   },
+  components: ComponentStepState | null,
+  componentTargetKey: string | null,
 ): string[] {
   if (step.id === "basics") {
     const errors: string[] = [];
@@ -263,6 +276,15 @@ function stepErrors(
   }
   if (step.id === "source" && mode === "flat") {
     return flatPresetErrors(source.flat, source.flatDefaults, source.profile);
+  }
+  if (step.id === "components") {
+    if (!componentTargetKey) {
+      return ["Choose a verified version before setting up components."];
+    }
+    if (!components || components.targetKey !== componentTargetKey) {
+      return ["Open the Components step and verify the project components."];
+    }
+    return components.errors;
   }
   return [];
 }
@@ -861,6 +883,7 @@ export function ProjectWizard() {
   const [catalogError, setCatalogError] = useState<ErrorPresentation | null>(null);
   const [selectedVersion, setSelectedVersion] = useState("");
   const [flatOverride, setFlatOverride] = useState<FlatPreset | null>(null);
+  const [componentStep, setComponentStep] = useState<ComponentStepState | null>(null);
   const [requestedStep, setRequestedStep] = useState(0);
   const [furthestStep, setFurthestStep] = useState(0);
   const [attempted, setAttempted] = useState(false);
@@ -898,6 +921,7 @@ export function ProjectWizard() {
   const effectiveVersion = mode === "import" ? (analysis?.versionName ?? "") : selectedVersion;
   const selectedProfile =
     catalog?.versions.find((version) => version.id === effectiveVersion)?.profile ?? null;
+  const componentTargetKey = selectedProfile ? `${selectedProfile.id}|${mode}` : null;
   const flatDefaults = defaults?.flat ?? null;
   const flatPreset = flatOverride ?? flatDefaults?.preset ?? null;
   const errorsForStep = (candidate: WizardStep): string[] =>
@@ -922,6 +946,8 @@ export function ProjectWizard() {
         profile: selectedProfile,
         importStrategy,
       },
+      componentStep,
+      componentTargetKey,
     );
   const errors = errorsForStep(step);
   const progress = ((activeStep + 1) / steps.length) * 100;
@@ -932,7 +958,9 @@ export function ProjectWizard() {
         ? "The source world decides its version; review the verified profile before continuing."
         : step.id === "source" && mode === "import"
           ? "Choose a world folder or .zip archive, analyze it read-only, then choose how to import."
-          : step.description;
+          : step.id === "components" && mode === "vanilla"
+            ? "Prepare Java and the official server JAR before generation. Assets stay shared with the editor."
+            : step.description;
 
   const loadVersions = async (): Promise<void> => {
     if (!desktop) return;
@@ -1003,11 +1031,13 @@ export function ProjectWizard() {
     setRequestedStep(0);
     setFurthestStep(0);
     setAttempted(false);
+    setComponentStep(null);
   };
 
   const changeImportSource = (value: string): void => {
     setImportSource(value);
     setImportStrategy("importAsIs");
+    setComponentStep(null);
     useProjectStore.getState().clearWorldAnalysis();
   };
 
@@ -1015,6 +1045,7 @@ export function ProjectWizard() {
     setImportSourceKind(value);
     setImportSource("");
     setImportStrategy("importAsIs");
+    setComponentStep(null);
     useProjectStore.getState().clearWorldAnalysis();
   };
 
@@ -1123,7 +1154,10 @@ export function ProjectWizard() {
                   desktop={desktop}
                   selected={effectiveVersion}
                   locked={mode === "import"}
-                  onSelect={setSelectedVersion}
+                  onSelect={(value) => {
+                    setSelectedVersion(value);
+                    setComponentStep(null);
+                  }}
                   onRetry={() => void loadVersions()}
                 />
               ) : null}
@@ -1162,6 +1196,18 @@ export function ProjectWizard() {
                 ) : (
                   <EmptySourceStep version={effectiveVersion} profile={selectedProfile} />
                 )
+              ) : null}
+
+              {step.id === "components" ? (
+                <ProjectComponentsStep
+                  key={componentTargetKey ?? "no-target"}
+                  targetKey={componentTargetKey ?? "no-target"}
+                  mode={mode}
+                  profile={selectedProfile}
+                  desktop={desktop}
+                  disabled={busy}
+                  onStateChange={setComponentStep}
+                />
               ) : null}
 
               {step.id === "review" ? (
@@ -1203,9 +1249,9 @@ export function ProjectWizard() {
 
               {step.id === "source" && mode === "vanilla" ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  Generation prepares Java and the official server, accepts the EULA explicitly and
-                  imports the finished world as a read-only source. The seed names the project; the
-                  folder chosen in Basics is kept.
+                  Generation uses the Java runtime and official server prepared in Components. It
+                  accepts the EULA explicitly and imports the finished world as a read-only source.
+                  The seed names the project; the folder chosen in Basics is kept.
                 </p>
               ) : null}
             </div>

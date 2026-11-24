@@ -140,10 +140,10 @@ idle.
 ## Project wizard
 
 Creating a project is a full-screen wizard, never a dialog over an empty scene. The shell owns
-the ordered steps, progress, validation and navigation. Empty, Flat and Vanilla use
-`Basics → Version → Source → Review` (Vanilla creates from its generation panel instead of a
-review step), while Import uses `Basics → Source → Version → Review` because the source world
-owns its version.
+the ordered steps, progress, validation and navigation. Empty, Flat and Import use
+`Basics → Version → Source → Components → Review`; Import swaps Version and Source because the
+source world owns its version. Vanilla uses `Basics → Version → Components → Source`, because it
+creates from its generation panel instead of a review step.
 
 `Basics` names the project, shows the library folder and lets the user override the
 project folder name. The backend owns the library root (`Documents/FuryBuilder`, with an
@@ -181,9 +181,25 @@ acceptance for the selected JAR plus a separate per-run consent. It shows the ba
 generation limits, expected chunk count, a conservative world-size estimate and the free space
 on the run volume; `server_generation_estimate` is a read-only preflight, and
 `server_start_generation` repeats the disk check before it creates a run directory. A run stops
-at the requested time limit even when the area is incomplete. `Review` repeats the name,
-folder, library location, mode, version, flat layers, import source/strategy and source before
-creation. Every step returns its
+at the requested time limit even when the area is incomplete.
+
+`Components` resolves the exact runtime and client assets for the selected profile and mode
+through the single `component-manager` facade. Client assets are required before the step can
+pass; Java is required for Vanilla World and remains a recommended, warned-about addition for
+editing-only projects. The server card appears only for Vanilla. The generation panel still
+repeats its own readiness controls until the remaining setup is consolidated into the wizard.
+Every card offers the managed download, an already-installed component from the inventory, or a
+manual file that is validated in place.
+Nothing is downloaded until the user presses a download button, and the managed preview only
+reads release metadata. Each card shows the resolved version, size, source host, checksum and
+status; installs stream progress with Cancel, and stable backend codes (offline, checksum
+mismatch, no disk space, incompatible Java) go through the shared error presenter. Placeholder
+textures are an explicit action: they satisfy the editing requirement but stay unverified, carry
+a warning, and never claim a client JAR, checksum or block/item catalog. Once a verified client
+JAR is ready, the step loads the exact-version catalog and shows its block/item counts and id.
+The captured step state is keyed by profile and mode, so changing either discards the previous
+result and requires a new check. `Review` repeats the name, folder, library location, mode,
+version, flat layers, import source/strategy and source before creation. Every step returns its
 own validation errors; `Next` refuses to advance, shows the reason, and the step buttons only
 reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only

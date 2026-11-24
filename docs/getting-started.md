@@ -64,17 +64,30 @@ cargo test --workspace
    a support badge and can be created; the card shows Java, world height, layout, pack formats
    and every known limitation. Import reads the version from the world and asks only for
    confirmation.
-4. On **Source**, Empty has no parameters; Flat exposes the platform's layers, bottom Y and
+4. On **Components**, prepare the exact-version client assets. Java is optional for editing and
+   required for Vanilla World; the server is requested only for Vanilla. Each card offers a
+   managed download, an already-installed component, or a manual file that is validated in
+   place. Nothing is downloaded until you press a download button; the card shows the version,
+   size, source host, checksum and status, and the download streams progress with Cancel.
+   `Placeholder` is an explicit choice: it lets you edit with clearly marked placeholder
+   textures, but it never claims a client JAR, checksum or block/item catalog. When a verified
+   client JAR is ready, the step shows the catalog's block and item counts.
+5. On **Source**, Empty has no parameters; Flat exposes the platform's layers, bottom Y and
    biome. Layers are written bottom-up, each 1–16 blocks thick up to the backend limit, and the
    whole source must stay inside the selected version's overworld height. Invalid layers are
    refused before the project is written.
-5. Review the source and summary, then click **Create project** (or **Import world**). A flat
+6. Review the source and summary, then click **Create project** (or **Import world**). A flat
    project is ready in a few seconds.
 
-A new project can be created only after its version has a verified profile. Projects are stored
-as folders inside `Documents/FuryBuilder` (falling back to the app-data directory when the
-documents folder is unavailable). Treat that folder as application data: use the editor to
-rename, checkpoint and save, and do not hand-edit project files while the app is running.
+Vanilla World uses `Basics → Version → Components → Source` and has no review step: creation
+happens from its generation panel with **Open as project**.
+
+A new project can be created only after its version has a verified profile and its Components
+step is ready. A placeholder assets choice is accepted with a warning; it is never presented as
+a verified catalog. Projects are stored as folders inside `Documents/FuryBuilder` (falling back
+to the app-data directory when the documents folder is unavailable). Treat that folder as
+application data: use the editor to rename, checkpoint and save, and do not hand-edit project
+files while the app is running.
 
 ## 4. A tour of the window
 
@@ -238,7 +251,8 @@ prerequisites.
    FuryBuilder never accepts it for you, and another JAR or version needs its own acceptance.
 4. Open `Project → Create → Vanilla World`. The wizard shows the verified generation target;
    a project that selects another version is refused instead of producing a mixed-version
-   world.
+   world. Its **Components** step repeats the Java and server readiness for this exact version
+   and offers the same managed downloads and manual paths.
 5. In the Source step choose a seed, preset, radius/center, structures, time limit and optional
    local data packs. Before anything starts, the step shows the expected chunk count, a
    conservative world-size estimate, the free space on the run volume and the bounded time

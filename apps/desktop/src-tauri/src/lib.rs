@@ -170,6 +170,7 @@ pub fn run() {
             commands::components_install,
             commands::components_cancel,
             commands::components_relink,
+            commands::components_use_placeholder,
             commands::components_remove,
             commands::components_verify,
             commands::runtime_discover,

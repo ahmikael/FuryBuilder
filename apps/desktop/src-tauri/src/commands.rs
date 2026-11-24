@@ -3198,6 +3198,26 @@ pub async fn components_relink(
     Ok(status)
 }
 
+/// Explicitly selects placeholder textures for the asset component. No client JAR, catalog or
+/// checksum is claimed, and the resulting status is never ready.
+#[tauri::command]
+pub async fn components_use_placeholder(
+    app: AppHandle,
+    components: State<'_, ComponentManager>,
+    target: ComponentTarget,
+) -> Result<ComponentStatus, AppError> {
+    let components = components.inner().clone();
+    let result =
+        tauri::async_runtime::spawn_blocking(move || components.use_placeholder_assets(&target))
+            .await
+            .map_err(|error| {
+                AppError::internal(format!("component placeholder task failed: {error}"))
+            })?;
+    let status = result.map_err(|error| component_app_error(&app, ComponentKind::Assets, error))?;
+    emit_component_changed(&app, ComponentKind::Assets);
+    Ok(status)
+}
+
 /// Removes FuryBuilder-owned data or clears a manual pointer. A user file outside the
 /// managed cache is never deleted.
 #[tauri::command]

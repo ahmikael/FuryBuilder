@@ -27,6 +27,13 @@ const HINTS: Record<string, string> = {
     "The operation exceeds a documented size or count limit. Reduce the region, file size or number of items.",
   disk_space:
     "The destination volume does not have enough free space for this download and its temporary files. Free some space or choose another cache location.",
+  checksum_mismatch:
+    "The file does not match the official checksum. Remove it and download again from the official source; FuryBuilder never substitutes a different file.",
+  busy: "Another component operation is already running for this kind. Wait for it to finish or cancel it, then retry.",
+  cancelled:
+    "The operation was cancelled and its partial file was removed. Start it again when you are ready.",
+  not_ready:
+    "The selected component is not verified. Check its exact version, architecture and checksum, then retry.",
   offline:
     "Network access is disabled or unavailable. Cached metadata can still be used; reconnect or turn off offline mode, then retry.",
   not_found:

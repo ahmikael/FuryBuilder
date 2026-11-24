@@ -15,6 +15,7 @@ import {
   relinkComponent,
   removeComponent,
   resolveComponent,
+  selectPlaceholderComponent,
   verifyComponent,
 } from "@/lib/components-api";
 import type {
@@ -96,6 +97,9 @@ describe("component IPC contract", () => {
       path: "C:\\Java\\bin\\java.exe",
       target,
     });
+
+    await selectPlaceholderComponent(target);
+    expect(invoke).toHaveBeenLastCalledWith("components_use_placeholder", { target });
 
     await removeComponent("server", "server-managed-test-version");
     expect(invoke).toHaveBeenLastCalledWith("components_remove", {

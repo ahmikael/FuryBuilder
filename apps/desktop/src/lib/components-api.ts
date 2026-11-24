@@ -81,6 +81,11 @@ export function relinkComponent(
   return invokeCommand<ComponentStatus>("components_relink", { kind, path, target });
 }
 
+/** Explicitly selects original placeholder textures; no client JAR or catalog is claimed. */
+export function selectPlaceholderComponent(target: ComponentTarget): Promise<ComponentStatus> {
+  return invokeCommand<ComponentStatus>("components_use_placeholder", { target });
+}
+
 /** Removes FuryBuilder-owned data or clears a manual pointer, never a user file. */
 export function removeComponent(kind: ComponentKind, id: string): Promise<ComponentRemoval> {
   return invokeCommand<ComponentRemoval>("components_remove", { kind, id });

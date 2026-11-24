@@ -61,6 +61,36 @@ vi.mock("@/lib/version-api", () => ({
   fetchVersionCatalog: api.versions,
 }));
 
+vi.mock("@/features/project/ProjectComponentsStep", async () => {
+  const React = await import("react");
+  return {
+    ProjectComponentsStep: ({
+      targetKey,
+      onStateChange,
+    }: {
+      targetKey: string;
+      onStateChange: (state: {
+        targetKey: string;
+        checking: boolean;
+        ready: boolean;
+        errors: string[];
+        warnings: string[];
+      }) => void;
+    }) => {
+      React.useEffect(() => {
+        onStateChange({
+          targetKey,
+          checking: false,
+          ready: true,
+          errors: [],
+          warnings: [],
+        });
+      }, [targetKey, onStateChange]);
+      return React.createElement("p", null, "Components step ready");
+    },
+  };
+});
+
 vi.mock("@/lib/world-api", () => ({
   fetchWorldInfo: worldApi.info,
   fetchHistoryState: worldApi.history,
@@ -585,13 +615,14 @@ describe("project wizard", () => {
     render(<ProjectManager />);
 
     expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 1 of 4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 1 of 5").length).toBeGreaterThan(0);
     expect(
       screen.getByRole("progressbar", { name: "Project creation progress" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Version/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Source/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Components/ })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByText("Enter a project name.")).toBeInTheDocument();
@@ -600,13 +631,13 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 2 of 4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 2 of 5").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Version/ })).toHaveAttribute("aria-current", "step");
     expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 3 of 4").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 3 of 5").length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: /Source/ })).toHaveAttribute("aria-current", "step");
 
     await user.click(screen.getByRole("button", { name: /Basics/ }));
@@ -678,6 +709,9 @@ describe("project wizard", () => {
     expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
     expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("heading", { name: "Source" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
@@ -738,6 +772,8 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("combobox", { name: "Flat source biome" }));
     await user.click(await screen.findByRole("option", { name: "Desert" }));
 
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByText("Stone ×2 → Sand ×1")).toBeInTheDocument();
@@ -837,6 +873,8 @@ describe("project wizard", () => {
     expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
     expect(await screen.findByText("Detected from the world")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create project" }));
 
@@ -885,6 +923,8 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Version" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
     expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
     expect(screen.getByText(/World archive · C:\\downloads\\Wizard.zip/)).toBeInTheDocument();
     expect(screen.getByText("Import as-is")).toBeInTheDocument();
@@ -906,7 +946,7 @@ describe("project wizard", () => {
     render(<ProjectManager />);
 
     expect(screen.getByRole("region", { name: "New project" })).toBeInTheDocument();
-    expect(screen.getAllByText("Step 1 of 3").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Step 1 of 4").length).toBeGreaterThan(0);
     expect(screen.queryByLabelText("Project name")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Project folder")).toBeInTheDocument();
     expect(screen.getByText("Vanilla World requirements")).toBeInTheDocument();
@@ -925,6 +965,9 @@ describe("project wizard", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
     await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("heading", { name: "Source" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByText("Components step ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
     await user.click(screen.getByRole("button", { name: "Create project" }));
 

@@ -448,6 +448,19 @@ impl ComponentManager {
         Ok(self.inner.client_jars.managed_list()?)
     }
 
+    /// Explicitly selects original placeholder textures. This is a deliberate choice, not a
+    /// fallback: the resulting status never carries a client JAR, catalog or checksum and is
+    /// never reported as ready.
+    pub fn use_placeholder_assets(
+        &self,
+        target: &ComponentTarget,
+    ) -> Result<ComponentStatus, ComponentError> {
+        target.validate()?;
+        self.ensure_managed_target(target)?;
+        self.inner.assets.use_placeholder()?;
+        Ok(self.assets_status(target, true, true))
+    }
+
     pub fn status(
         &self,
         target: &ComponentTarget,
@@ -1713,6 +1726,47 @@ mod tests {
             Err(ComponentError::NotReady { state, .. }) => assert_eq!(state, "unverified"),
             other => panic!("expected placeholder to be unresolvable, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn facade_selects_placeholder_assets_explicitly() {
+        let root = TempDir::new("facade-placeholder");
+        let manager = manager(&root);
+        let (minecraft, _) = manual_installation(&root, "1.21.4", 4189);
+        manager
+            .inner
+            .assets
+            .save(AssetSourceSetting {
+                kind: "minecraft_root".to_owned(),
+                path: minecraft.display().to_string(),
+            })
+            .expect("save source");
+
+        let status = manager
+            .use_placeholder_assets(&target())
+            .expect("select placeholder");
+        assert_eq!(status.kind, ComponentKind::Assets);
+        assert_eq!(status.mode, Some(ComponentMode::Placeholder));
+        assert_eq!(status.state, ComponentState::Unverified);
+        assert!(status.id.is_none());
+        assert!(status.path.is_none());
+        assert!(status.hash.is_none());
+        assert!(status
+            .notes
+            .iter()
+            .any(|note| note.contains("placeholder textures")));
+
+        let report = manager
+            .status(&target(), &ComponentRequirements::EDITOR)
+            .expect("status");
+        let assets = report.status(ComponentKind::Assets).expect("assets");
+        assert_eq!(assets.mode, Some(ComponentMode::Placeholder));
+        assert_eq!(assets.state, ComponentState::Unverified);
+        assert!(!report.ready);
+        assert!(report
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("placeholder textures")));
     }
 
     #[test]
