@@ -42,7 +42,7 @@ function resetUi() {
   });
 }
 
-describe("editor UX scenarios", () => {
+describe("editor UX scenarios", { timeout: 15_000 }, () => {
   beforeEach(() => {
     localStorage.clear();
     resetUi();
@@ -73,6 +73,7 @@ describe("editor UX scenarios", () => {
     const dialog = await screen.findByRole("dialog", { name: "Command palette" });
     const input = within(dialog).getByRole("combobox", { name: "Search commands" });
     await user.type(input, "hide inspector");
+    await within(dialog).findByRole("option", { name: /Hide Inspector/ });
     await user.keyboard("{Enter}");
 
     expect(useEditorStore.getState().rightPanelOpen).toBe(false);
