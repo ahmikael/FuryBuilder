@@ -130,7 +130,8 @@ files while the app is running.
 - **Bottom panel.** Twelve tabs: `Blocks`, `Terrain`, `Heightmap`, `Biomes`, `Generators`,
   `Layers`, `Templates`, `Objects`, `Parametric`, `Build DSL`, `Analysis`, `Activity`.
   `Analysis` groups `Observation` and `Validation`; `Activity` groups `Console` and `History`.
-  Your active tab and panel visibility are remembered between launches.
+  Your active tab and panel visibility are remembered between launches. A layout saved by an
+  older panel format is discarded once; the default `Blocks` tab and open panels are used.
 - **Status bar.** Backend state, project, dimension, active job or tool, revision, chunk and
   block counts, load radius, FPS/draw calls, target Minecraft version and `DataVersion`.
 

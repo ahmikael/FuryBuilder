@@ -12,9 +12,16 @@ export type PanelId = "left" | "right" | "bottom";
 
 export { DEFAULT_BOTTOM_PANEL_TAB };
 
+/**
+ * Bumped when the persisted layout shape changes. A stored layout from an older version is
+ * discarded instead of being migrated; theme and UI scale are user preferences, not layout.
+ */
+export const LAYOUT_VERSION = 2;
+
 interface EditorState {
   theme: ThemeMode;
   uiScale: number;
+  layoutVersion: number;
   /** UI-only selection placeholder; world data will come from Rust snapshots. */
   selectedDimension: string;
   leftPanelOpen: boolean;
@@ -43,6 +50,7 @@ export const useEditorStore = create<EditorState>()(
     (set) => ({
       theme: "dark",
       uiScale: 1,
+      layoutVersion: LAYOUT_VERSION,
       selectedDimension: "minecraft:overworld",
       leftPanelOpen: true,
       rightPanelOpen: true,
@@ -70,6 +78,7 @@ export const useEditorStore = create<EditorState>()(
       setBottomPanelTab: (bottomPanelTab) => set({ bottomPanelOpen: true, bottomPanelTab }),
       resetLayout: () =>
         set({
+          layoutVersion: LAYOUT_VERSION,
           leftPanelOpen: true,
           rightPanelOpen: true,
           bottomPanelOpen: true,
@@ -82,21 +91,24 @@ export const useEditorStore = create<EditorState>()(
       partialize: (state) => ({
         theme: state.theme,
         uiScale: state.uiScale,
+        layoutVersion: state.layoutVersion,
         selectedDimension: state.selectedDimension,
         leftPanelOpen: state.leftPanelOpen,
         rightPanelOpen: state.rightPanelOpen,
         bottomPanelOpen: state.bottomPanelOpen,
         bottomPanelTab: state.bottomPanelTab,
       }),
-      // Persisted layout from older builds may miss new fields or contain a tab id that
-      // no longer exists. Merge known fields into the current defaults and sanitize
-      // instead of letting localStorage override action functions.
+      // The layout is a disposable cache of panel visibility and the active tab. A layout
+      // from an older shape is not migrated: it is ignored and the current defaults are used.
+      // Theme and UI scale are preferences and remain readable across layout versions.
       merge: (persisted, current) => {
         const stored = (persisted ?? {}) as Partial<EditorState>;
         const bool = (value: unknown, fallback: boolean): boolean =>
           typeof value === "boolean" ? value : fallback;
+        const layoutCurrent = stored.layoutVersion === LAYOUT_VERSION;
         return {
           ...current,
+          layoutVersion: LAYOUT_VERSION,
           theme:
             stored.theme === "light" || stored.theme === "system" || stored.theme === "dark"
               ? stored.theme
@@ -104,17 +116,25 @@ export const useEditorStore = create<EditorState>()(
           uiScale:
             typeof stored.uiScale === "number" ? clampScale(stored.uiScale) : current.uiScale,
           selectedDimension:
-            typeof stored.selectedDimension === "string"
+            layoutCurrent && typeof stored.selectedDimension === "string"
               ? stored.selectedDimension
               : current.selectedDimension,
-          leftPanelOpen: bool(stored.leftPanelOpen, current.leftPanelOpen),
-          rightPanelOpen: bool(stored.rightPanelOpen, current.rightPanelOpen),
-          bottomPanelOpen: bool(stored.bottomPanelOpen, current.bottomPanelOpen),
-          bottomPanelTab: normalizeBottomPanelTab(
-            typeof stored.bottomPanelTab === "string"
-              ? stored.bottomPanelTab
-              : current.bottomPanelTab,
-          ),
+          leftPanelOpen: layoutCurrent
+            ? bool(stored.leftPanelOpen, current.leftPanelOpen)
+            : current.leftPanelOpen,
+          rightPanelOpen: layoutCurrent
+            ? bool(stored.rightPanelOpen, current.rightPanelOpen)
+            : current.rightPanelOpen,
+          bottomPanelOpen: layoutCurrent
+            ? bool(stored.bottomPanelOpen, current.bottomPanelOpen)
+            : current.bottomPanelOpen,
+          bottomPanelTab: layoutCurrent
+            ? normalizeBottomPanelTab(
+                typeof stored.bottomPanelTab === "string"
+                  ? stored.bottomPanelTab
+                  : current.bottomPanelTab,
+              )
+            : current.bottomPanelTab,
         };
       },
     },
