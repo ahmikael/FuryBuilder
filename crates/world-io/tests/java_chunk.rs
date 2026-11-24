@@ -520,7 +520,7 @@ fn validates_section_heights_and_dimension_bounds() {
     let error = decode_error(chunk_root(0, 0, -4, None));
     assert!(format!("{error}").contains("no sections list"), "{error}");
 
-    let too_many = (-4..21)
+    let too_many = (-4..23)
         .map(|y| {
             section(
                 y as i8,
@@ -530,7 +530,7 @@ fn validates_section_heights_and_dimension_bounds() {
         })
         .collect::<Vec<_>>();
     let error = decode_error(chunk_root(0, 0, -4, Some(too_many)));
-    assert!(format!("{error}").contains("room for 24"), "{error}");
+    assert!(format!("{error}").contains("room for 26"), "{error}");
 
     let small = dimension("custom:small", DimensionKind::Custom, 0, 32);
     let nbt = chunk_root(
@@ -561,6 +561,30 @@ fn validates_section_heights_and_dimension_bounds() {
         format!("{error}").contains("outside the chunk range 0..1"),
         "{error}"
     );
+}
+
+#[test]
+fn rejects_invalid_light_only_section_records() {
+    let outside_light_range = NbtValue::compound([
+        ("Y", NbtValue::Byte(-6)),
+        ("SkyLight", NbtValue::ByteArray(vec![0x11; 2048])),
+    ]);
+    let malformed_light = NbtValue::compound([
+        ("Y", NbtValue::Byte(-5)),
+        ("SkyLight", NbtValue::ByteArray(vec![0x11])),
+    ]);
+    let halo = NbtValue::compound([
+        ("Y", NbtValue::Byte(-5)),
+        ("SkyLight", NbtValue::ByteArray(vec![0x11; 2048])),
+    ]);
+    for (sections, expected) in [
+        (vec![outside_light_range], "outside the chunk range"),
+        (vec![malformed_light], "not a 2048-byte array"),
+        (vec![halo.clone(), halo], "duplicate section Y -5"),
+    ] {
+        let error = decode_error(chunk_root(0, 0, -4, Some(sections)));
+        assert!(error.to_string().contains(expected), "{error}");
+    }
 }
 
 #[test]

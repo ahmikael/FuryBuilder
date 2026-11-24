@@ -409,6 +409,111 @@ fn golden_classic_anvil_vanilla_rebuild() {
 }
 
 #[test]
+fn light_padding_is_not_terrain_and_obeys_both_export_policies() {
+    let dir = TempDir::new("light-padding");
+    let root = dir.path().join("world");
+    fs::create_dir_all(root.join("region")).expect("overworld region");
+    fs::write(root.join("level.dat"), level_dat_bytes()).expect("level.dat");
+
+    let mut source = chunk_nbt(
+        0,
+        0,
+        -4,
+        "minecraft:full",
+        "minecraft:stone",
+        "minecraft:plains",
+    );
+    let NbtValue::Compound(data) = &mut source.root else {
+        panic!("chunk root")
+    };
+    let NbtValue::List { items, .. } = data.get_mut("sections").expect("sections") else {
+        panic!("section list")
+    };
+    let lower = NbtValue::compound([
+        ("Y", NbtValue::Byte(-5)),
+        ("BlockLight", NbtValue::ByteArray(vec![0x12; 2048])),
+        ("UnknownSectionTag", NbtValue::Long(42)),
+    ]);
+    let upper = NbtValue::compound([
+        ("Y", NbtValue::Byte(20)),
+        ("SkyLight", NbtValue::ByteArray(vec![0xff; 2048])),
+    ]);
+    items.insert(0, lower.clone());
+    items.extend((-3..20).map(|y| section(y, "minecraft:stone", "minecraft:plains")));
+    items.push(upper.clone());
+    fs::write(
+        root.join("region/r.0.0.mca"),
+        region_bytes(&[(0, 0, source.clone())]),
+    )
+    .expect("region");
+    let original = read_tree(&root);
+    let (_, source_report) = load_java_world(&root).expect("import full chunk with light padding");
+    assert_eq!(source_report.sections, 24);
+    assert_eq!(source_report.biome_sections, 24);
+
+    let mut overlay = WorldOverlay::open(&root).expect("open overlay");
+    let gold: BlockState = "minecraft:gold_block".parse().unwrap();
+    overlay
+        .set_block(OVERWORLD, 0, -64, 0, &gold)
+        .expect("edit block");
+
+    for (name, policy) in [
+        ("preserved", DerivedDataPolicy::Preserve),
+        ("rebuilt", DerivedDataPolicy::VanillaRebuild),
+    ] {
+        let destination = dir.path().join(name);
+        export_java_world_with_options(
+            &overlay,
+            &destination,
+            WorldExportOptions {
+                derived_data_policy: policy,
+                ..WorldExportOptions::default()
+            },
+        )
+        .expect("export with light padding");
+        let world = JavaWorld::open(&destination).expect("reopen output");
+        let chunk = world
+            .read_region(OVERWORLD, 0, 0)
+            .unwrap()
+            .read_chunk(0, 0)
+            .unwrap();
+        let decoded = world
+            .decode_chunk(OVERWORLD, &chunk)
+            .expect("decode output");
+        assert_eq!(decoded.sections.len(), 24);
+        assert!(decoded.missing_sections.is_empty());
+        assert_eq!(decoded.block_at(0, -64, 0), Some(&gold));
+        assert!(decoded.block_at(0, -65, 0).is_none());
+        assert!(decoded.biome_at(0, 320, 0).is_none());
+        let tags = chunk.nbt.root.as_compound().unwrap();
+        let (_, sections) = tags["sections"].as_list().unwrap();
+        assert_eq!(sections.len(), 26);
+        if policy == DerivedDataPolicy::Preserve {
+            assert_eq!(sections[0], lower);
+            assert_eq!(sections[25], upper);
+            let source_tags = source.root.as_compound().unwrap();
+            assert_eq!(tags["Heightmaps"], source_tags["Heightmaps"]);
+            assert_eq!(tags["isLightOn"], NbtValue::Byte(1));
+        } else {
+            assert_eq!(
+                sections[0],
+                NbtValue::compound([
+                    ("Y", NbtValue::Byte(-5)),
+                    ("UnknownSectionTag", NbtValue::Long(42))
+                ])
+            );
+            assert_eq!(
+                sections[25],
+                NbtValue::compound([("Y", NbtValue::Byte(20))])
+            );
+            assert!(!tags.contains_key("Heightmaps"));
+            assert_eq!(tags["isLightOn"], NbtValue::Byte(0));
+        }
+    }
+    assert_eq!(read_tree(&root), original);
+}
+
+#[test]
 fn exports_complete_world_and_preserves_source() {
     let dir = TempDir::new("complete");
     let root = dir.path().join("world");

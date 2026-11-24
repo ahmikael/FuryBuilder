@@ -28,6 +28,8 @@ use world_domain::DimensionKind;
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, MAX_NBT_BYTES, TAG_COMPOUND};
 use crate::version_support;
 
+use super::format::ClassicChunkFormat;
+
 pub const ANVIL_REGION_EXTENSION: &str = "mca";
 pub const ANVIL_SECTOR_BYTES: u64 = 4096;
 pub const ANVIL_HEADER_SECTORS: u64 = 2;
@@ -292,30 +294,22 @@ impl JavaWorld {
 
         let mut dimensions = vec![discover_dimension(
             root,
+            &profile,
             "minecraft:overworld",
             Path::new("."),
             DimensionKind::Overworld,
-            -64,
-            384,
         )?];
-        for (folder, id, kind, min_y, height) in [
-            (
-                "DIM-1",
-                "minecraft:the_nether",
-                DimensionKind::Nether,
-                0,
-                256,
-            ),
-            ("DIM1", "minecraft:the_end", DimensionKind::End, 0, 256),
+        for (folder, id, kind) in [
+            ("DIM-1", "minecraft:the_nether", DimensionKind::Nether),
+            ("DIM1", "minecraft:the_end", DimensionKind::End),
         ] {
             if require_directory(&root.join(folder))? {
                 dimensions.push(discover_dimension(
                     root,
+                    &profile,
                     id,
                     Path::new(folder),
                     kind,
-                    min_y,
-                    height,
                 )?);
             }
         }
@@ -716,12 +710,7 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         AnvilError::InvalidRegion(format!("chunk ({x}, {z}) root is not a compound"))
     })?;
     let data_version = int_field(root, "DataVersion", "chunk")?;
-    if !version_support::supports_data_version(data_version) {
-        return Err(AnvilError::UnsupportedDataVersion {
-            found: data_version,
-            supported: version_support::supported_data_versions(),
-        });
-    }
+    let format = ClassicChunkFormat::for_read(data_version)?;
     let stored_x = int_field(root, "xPos", "chunk")?;
     let stored_z = int_field(root, "zPos", "chunk")?;
     if stored_x != x || stored_z != z {
@@ -730,7 +719,7 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         )));
     }
     let status = optional_string(root, "Status", "chunk")?;
-    let y_pos = match root.get("yPos") {
+    let y_pos = match root.get(format.chunk_y) {
         Some(NbtValue::Int(value)) => Some(*value),
         Some(_) => {
             return Err(AnvilError::InvalidRegion(format!(
@@ -739,11 +728,11 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         }
         None => None,
     };
-    let sections = compound_list_len(root, "sections", "chunk", true)?;
+    let sections = compound_list_len(root, format.sections, "chunk", true)?;
     let block_entities = compound_list_len(root, "block_entities", "chunk", false)?;
     let entities = compound_list_len(root, "entities", "chunk", false)?;
 
-    if let Some(NbtValue::List { kind, items }) = root.get("sections") {
+    if let Some(NbtValue::List { kind, items }) = root.get(format.sections) {
         if *kind != TAG_COMPOUND && !items.is_empty() {
             return Err(AnvilError::InvalidRegion(format!(
                 "chunk ({x}, {z}) sections is not a list of compounds"
@@ -753,7 +742,7 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
             let section = section.as_compound().ok_or_else(|| {
                 AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has a non-compound section"))
             })?;
-            match section.get("Y") {
+            match section.get(format.section_y) {
                 Some(NbtValue::Byte(_)) => {}
                 Some(_) => {
                     return Err(AnvilError::InvalidRegion(format!(
@@ -852,12 +841,21 @@ fn optional_string(
 
 fn discover_dimension(
     root: &Path,
+    profile: &VersionProfile,
     id: &str,
     relative_folder: &Path,
     kind: DimensionKind,
-    min_y: i32,
-    height: i32,
 ) -> Result<JavaWorldDimension, AnvilError> {
+    let bounds = profile
+        .dimension_profiles
+        .iter()
+        .find(|p| p.id == id)
+        .ok_or_else(|| {
+            AnvilError::UnsupportedLayout(format!(
+                "profile `{}` has no bounds for dimension `{id}`",
+                profile.id
+            ))
+        })?;
     let folder = if relative_folder == Path::new(".") {
         root.to_path_buf()
     } else {
@@ -867,8 +865,8 @@ fn discover_dimension(
     Ok(JavaWorldDimension {
         id: id.to_owned(),
         kind,
-        min_y,
-        height,
+        min_y: bounds.min_y,
+        height: bounds.height,
         folder,
         region_files: count_region_files(&region_folder)?,
         region_folder,

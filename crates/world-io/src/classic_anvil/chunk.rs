@@ -16,9 +16,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
-use crate::version_support;
 use crate::world_codec::world_codec;
 
+use super::format::{ClassicChunkFormat, PaletteLayout};
 use super::reader::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
@@ -207,12 +207,7 @@ pub(super) fn decode_chunk(
         .as_compound()
         .ok_or_else(|| invalid(x, z, "root tag is not a compound"))?;
     let data_version = chunk_int(root, "DataVersion", x, z)?;
-    if !version_support::supports_data_version(data_version) {
-        return Err(AnvilError::UnsupportedDataVersion {
-            found: data_version,
-            supported: version_support::supported_data_versions(),
-        });
-    }
+    let format = ClassicChunkFormat::for_read(data_version)?;
     let stored_x = chunk_int(root, "xPos", x, z)?;
     let stored_z = chunk_int(root, "zPos", x, z)?;
     if stored_x != x || stored_z != z {
@@ -222,8 +217,17 @@ pub(super) fn decode_chunk(
             format!("xPos/zPos {stored_x}/{stored_z} do not match the chunk coordinates"),
         ));
     }
-    let y_pos = chunk_int(root, "yPos", x, z)?;
-    let expected_y_pos = dimension.min_y.div_euclid(SECTION_SIZE);
+    let y_pos = chunk_int(root, format.chunk_y, x, z)?;
+    let section_range = format
+        .section_range(dimension.min_y, dimension.height)
+        .ok_or_else(|| {
+            invalid(
+                x,
+                z,
+                format!("dimension `{}` has invalid section bounds", dimension.id),
+            )
+        })?;
+    let expected_y_pos = section_range.start;
     if y_pos != expected_y_pos {
         return Err(invalid(
             x,
@@ -234,18 +238,6 @@ pub(super) fn decode_chunk(
             ),
         ));
     }
-    if dimension.height <= 0 || dimension.height % SECTION_SIZE != 0 {
-        return Err(invalid(
-            x,
-            z,
-            format!("dimension `{}` has an invalid height", dimension.id),
-        ));
-    }
-    let section_count = dimension.height / SECTION_SIZE;
-    let section_end = y_pos
-        .checked_add(section_count)
-        .ok_or_else(|| invalid(x, z, "section range overflow"))?;
-
     let status = match root.get("Status") {
         Some(NbtValue::String(value)) => Some(value.clone()),
         Some(_) => return Err(invalid(x, z, "Status is not a string")),
@@ -253,7 +245,7 @@ pub(super) fn decode_chunk(
     };
 
     let sections_value = root
-        .get("sections")
+        .get(format.sections)
         .ok_or_else(|| invalid(x, z, "chunk has no sections list"))?;
     let (kind, items) = sections_value
         .as_list()
@@ -261,12 +253,15 @@ pub(super) fn decode_chunk(
     if !items.is_empty() && kind != TAG_COMPOUND {
         return Err(invalid(x, z, "sections is not a list of compounds"));
     }
-    if items.len() > section_count as usize {
+    let light_range = section_range.start - format.light.padding_sections
+        ..section_range.end + format.light.padding_sections;
+    let max_records = light_range.len();
+    if items.len() > max_records {
         return Err(invalid(
             x,
             z,
             format!(
-                "chunk has {} sections, dimension `{}` has room for {section_count}",
+                "chunk has {} sections, dimension `{}` has room for {max_records} including light-only sections",
                 items.len(),
                 dimension.id
             ),
@@ -279,30 +274,53 @@ pub(super) fn decode_chunk(
         let section = item
             .as_compound()
             .ok_or_else(|| invalid(x, z, "section is not a compound"))?;
-        let y = match section.get("Y") {
+        let y = match section.get(format.section_y) {
             Some(NbtValue::Byte(value)) => *value as i32,
             Some(_) => return Err(invalid(x, z, "section Y is not a byte")),
             None => return Err(invalid(x, z, "section has no Y")),
         };
-        if y < y_pos || y >= section_end {
+        if !seen.insert(y) {
+            return Err(invalid(x, z, format!("duplicate section Y {y}")));
+        }
+        if !section_range.contains(&y) {
+            if light_range.contains(&y)
+                && !section.contains_key(format.blocks.container)
+                && !section.contains_key(format.biomes.container)
+            {
+                for key in [format.light.sky, format.light.block] {
+                    if let Some(value) = section.get(key) {
+                        if !matches!(value, NbtValue::ByteArray(bytes) if bytes.len() == format.light.bytes_per_section)
+                        {
+                            return Err(invalid(
+                                x,
+                                z,
+                                format!(
+                                    "light-only section {y} {key} is not a {}-byte array",
+                                    format.light.bytes_per_section
+                                ),
+                            ));
+                        }
+                    }
+                }
+                // Raw NBT retains the light halo (or its tags after invalidation);
+                // it must never become an editable terrain section.
+                continue;
+            }
             return Err(invalid(
                 x,
                 z,
                 format!(
                     "section Y {y} is outside the chunk range {y_pos}..{}",
-                    section_end - 1
+                    section_range.end - 1
                 ),
             ));
         }
-        if !seen.insert(y) {
-            return Err(invalid(x, z, format!("duplicate section Y {y}")));
-        }
-        let blocks = decode_block_states(section, x, z)?;
-        let biomes = decode_biomes(section, x, z)?;
+        let blocks = decode_block_states(section, &format.blocks, x, z)?;
+        let biomes = decode_biomes(section, &format.biomes, x, z)?;
         sections.insert(y, DecodedSection { y, blocks, biomes });
     }
 
-    let missing_sections = (y_pos..section_end)
+    let missing_sections = section_range
         .filter(|y| !sections.contains_key(y))
         .collect();
 
@@ -339,17 +357,18 @@ fn compound_list_len(
 
 fn decode_block_states(
     section: &BTreeMap<String, NbtValue>,
+    layout: &PaletteLayout,
     x: i32,
     z: i32,
 ) -> Result<Section, AnvilError> {
-    let Some(value) = section.get("block_states") else {
+    let Some(value) = section.get(layout.container) else {
         return Ok(Section::empty());
     };
     let block_states = value
         .as_compound()
         .ok_or_else(|| invalid(x, z, "block_states is not a compound"))?;
     let palette_value = block_states
-        .get("palette")
+        .get(layout.palette)
         .ok_or_else(|| invalid(x, z, "block_states has no palette"))?;
     let (kind, items) = palette_value
         .as_list()
@@ -379,51 +398,7 @@ fn decode_block_states(
         palette.push(decode_block_state(item, x, z)?);
     }
 
-    let indices = if palette.len() == 1 {
-        match block_states.get("data") {
-            None => vec![0u16; BLOCK_SECTION_VOLUME],
-            Some(NbtValue::LongArray(data)) if data.is_empty() => {
-                vec![0u16; BLOCK_SECTION_VOLUME]
-            }
-            Some(NbtValue::LongArray(_)) => {
-                return Err(invalid(
-                    x,
-                    z,
-                    "single-entry block palette has a non-empty data array",
-                ))
-            }
-            Some(_) => return Err(invalid(x, z, "block data is not a long array")),
-        }
-    } else {
-        let data = match block_states.get("data") {
-            Some(NbtValue::LongArray(data)) => data,
-            Some(_) => return Err(invalid(x, z, "block data is not a long array")),
-            None => return Err(invalid(x, z, "block data is missing")),
-        };
-        let bits = bits_for_palette(palette.len(), 4);
-        let values_per_long = 64 / bits as usize;
-        let expected_words = BLOCK_SECTION_VOLUME.div_ceil(values_per_long);
-        if data.len() != expected_words {
-            return Err(invalid(
-                x,
-                z,
-                format!(
-                    "block data has {} longs, expected {expected_words} for {bits} bits",
-                    data.len()
-                ),
-            ));
-        }
-        unpack_indices(
-            data,
-            bits,
-            values_per_long,
-            BLOCK_SECTION_VOLUME,
-            palette.len(),
-            x,
-            z,
-        )?
-    };
-
+    let indices = decode_indices(layout, block_states, "block", palette.len(), x, z)?;
     Section::from_palette_indices(palette, &indices)
         .ok_or_else(|| invalid(x, z, "block palette indices do not form a valid section"))
 }
@@ -464,17 +439,18 @@ fn decode_block_state(value: &NbtValue, x: i32, z: i32) -> Result<BlockState, An
 
 fn decode_biomes(
     section: &BTreeMap<String, NbtValue>,
+    layout: &PaletteLayout,
     x: i32,
     z: i32,
 ) -> Result<BiomeSection, AnvilError> {
     let value = section
-        .get("biomes")
+        .get(layout.container)
         .ok_or_else(|| invalid(x, z, "section has no biomes compound"))?;
     let biomes = value
         .as_compound()
         .ok_or_else(|| invalid(x, z, "biomes is not a compound"))?;
     let palette_value = biomes
-        .get("palette")
+        .get(layout.palette)
         .ok_or_else(|| invalid(x, z, "biomes has no palette"))?;
     let (kind, items) = palette_value
         .as_list()
@@ -506,86 +482,66 @@ fn decode_biomes(
         palette.push(name.to_owned());
     }
 
-    let cells = if palette.len() == 1 {
-        match biomes.get("data") {
-            None => vec![0u16; BIOME_SECTION_VOLUME],
-            Some(NbtValue::LongArray(data)) if data.is_empty() => {
-                vec![0u16; BIOME_SECTION_VOLUME]
-            }
-            Some(NbtValue::LongArray(_)) => {
-                return Err(invalid(
-                    x,
-                    z,
-                    "single-entry biome palette has a non-empty data array",
-                ))
-            }
-            Some(_) => return Err(invalid(x, z, "biome data is not a long array")),
-        }
-    } else {
-        let data = match biomes.get("data") {
-            Some(NbtValue::LongArray(data)) => data,
-            Some(_) => return Err(invalid(x, z, "biome data is not a long array")),
-            None => return Err(invalid(x, z, "biome data is missing")),
-        };
-        let bits = bits_for_palette(palette.len(), 0);
-        let values_per_long = 64 / bits as usize;
-        let expected_words = BIOME_SECTION_VOLUME.div_ceil(values_per_long);
-        if data.len() != expected_words {
-            return Err(invalid(
-                x,
-                z,
-                format!(
-                    "biome data has {} longs, expected {expected_words} for {bits} bits",
-                    data.len()
-                ),
-            ));
-        }
-        unpack_indices(
-            data,
-            bits,
-            values_per_long,
-            BIOME_SECTION_VOLUME,
-            palette.len(),
-            x,
-            z,
-        )?
-    };
-
+    let cells = decode_indices(layout, biomes, "biome", palette.len(), x, z)?;
     BiomeSection::from_palette(palette, cells)
         .ok_or_else(|| invalid(x, z, "biome palette cells are invalid"))
 }
 
-fn bits_for_palette(palette_len: usize, minimum: u8) -> u8 {
-    debug_assert!(palette_len >= 2);
-    let bits = (usize::BITS - (palette_len - 1).leading_zeros()) as u8;
-    bits.max(minimum)
-}
-
-fn unpack_indices(
-    data: &[i64],
-    bits: u8,
-    values_per_long: usize,
-    count: usize,
+fn decode_indices(
+    layout: &PaletteLayout,
+    container: &BTreeMap<String, NbtValue>,
+    label: &str,
     palette_len: usize,
     x: i32,
     z: i32,
 ) -> Result<Vec<u16>, AnvilError> {
-    let mask = (1u64 << bits) - 1;
-    let mut indices = Vec::with_capacity(count);
-    for index in 0..count {
-        let word = index / values_per_long;
-        let shift = ((index % values_per_long) * bits as usize) as u32;
-        let value = (((data[word] as u64) >> shift) & mask) as usize;
-        if value >= palette_len {
-            return Err(invalid(
+    let words = match container.get(layout.data) {
+        Some(NbtValue::LongArray(words)) => Some(words.as_slice()),
+        Some(_) => return Err(invalid(x, z, format!("{label} data is not a long array"))),
+        None => None,
+    };
+    if palette_len == 1 {
+        return if words.is_none_or(<[i64]>::is_empty) {
+            Ok(vec![0; layout.count])
+        } else {
+            Err(invalid(
                 x,
                 z,
-                format!("palette index {value} at {index} is outside a palette of {palette_len}"),
-            ));
-        }
-        indices.push(value as u16);
+                format!("single-entry {label} palette has a non-empty data array"),
+            ))
+        };
     }
-    Ok(indices)
+    let words = words.ok_or_else(|| invalid(x, z, format!("{label} data is missing")))?;
+    let packing = layout.packing(palette_len);
+    let expected = packing.word_count(layout.count);
+    if words.len() != expected {
+        return Err(invalid(
+            x,
+            z,
+            format!(
+                "{label} data has {} longs, expected {expected} for {} bits",
+                words.len(),
+                packing.bits
+            ),
+        ));
+    }
+    packing
+        .unpack(words, layout.count)
+        .enumerate()
+        .map(|(index, value)| {
+            if value as usize >= palette_len {
+                Err(invalid(
+                    x,
+                    z,
+                    format!(
+                        "palette index {value} at {index} is outside a palette of {palette_len}"
+                    ),
+                ))
+            } else {
+                Ok(value)
+            }
+        })
+        .collect()
 }
 
 fn chunk_int(

@@ -21,6 +21,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionFile};
+use crate::classic_anvil::format::ClassicChunkFormat;
 use crate::nbt::{NbtFile, NbtValue};
 use crate::version_support;
 
@@ -265,12 +266,12 @@ pub fn inspect_chunk_derived(
         }
         None => return Err(invalid(format!("chunk ({x}, {z}) has no DataVersion"))),
     };
-    if !version_support::supports_data_version(data_version) {
-        return Err(DerivedDataError::UnsupportedVersion {
-            found: data_version,
-            supported: version_support::supported_data_versions(),
-        });
-    }
+    let format = ClassicChunkFormat::for_read(data_version).map_err(|error| match error {
+        AnvilError::UnsupportedDataVersion { found, supported } => {
+            DerivedDataError::UnsupportedVersion { found, supported }
+        }
+        error => error.into(),
+    })?;
 
     let mut root_fields = BTreeMap::new();
     for (key, value) in root {
@@ -278,7 +279,7 @@ pub fn inspect_chunk_derived(
     }
 
     let status = optional_string(root, "Status", x, z)?;
-    let y_pos = optional_int(root, "yPos", x, z)?;
+    let y_pos = optional_int(root, format.chunk_y, x, z)?;
     let last_update = optional_long(root, "LastUpdate", x, z)?;
     let inhabited_time = optional_long(root, "InhabitedTime", x, z)?;
 
@@ -289,9 +290,9 @@ pub fn inspect_chunk_derived(
         sections_with_block_light,
         sky_light,
         block_light,
-    } = inspect_sections(root, x, z)?;
+    } = inspect_sections(root, format, x, z)?;
 
-    let heightmaps = inspect_heightmaps(root, x, z)?;
+    let heightmaps = inspect_heightmaps(root, format.heightmaps, x, z)?;
 
     let block_entities_list = list_value(root, "block_entities", x, z)?;
     let block_entity_ids = sample_ids(block_entities_list, "id");
@@ -300,7 +301,7 @@ pub fn inspect_chunk_derived(
 
     let block_ticks = list_len(root, "block_ticks", x, z)?;
     let fluid_ticks = list_len(root, "fluid_ticks", x, z)?;
-    let post_processing = any_list_len(root, "PostProcessing", x, z)?;
+    let post_processing = any_list_len(root, format.post_processing, x, z)?;
 
     let structures = match root.get("structures") {
         None => 0,
@@ -320,7 +321,7 @@ pub fn inspect_chunk_derived(
         }
     };
 
-    let light_on = match root.get("isLightOn") {
+    let light_on = match root.get(format.light.enabled) {
         None => None,
         Some(NbtValue::Byte(value)) => Some(*value != 0),
         Some(_) => return Err(invalid(format!("chunk ({x}, {z}) isLightOn is not a byte"))),
@@ -328,15 +329,15 @@ pub fn inspect_chunk_derived(
     let blending_data = root.contains_key("blending_data");
 
     let fingerprints = ChunkFingerprints {
-        heightmaps: root.get("Heightmaps").map(hash_value),
-        sections: root.get("sections").map(hash_value),
+        heightmaps: root.get(format.heightmaps).map(hash_value),
+        sections: root.get(format.sections).map(hash_value),
         sky_light: sky_light.map(|hasher| hex(hasher.finalize())),
         block_light: block_light.map(|hasher| hex(hasher.finalize())),
         block_entities: root.get("block_entities").map(hash_value),
         entities: root.get("entities").map(hash_value),
         block_ticks: root.get("block_ticks").map(hash_value),
         fluid_ticks: root.get("fluid_ticks").map(hash_value),
-        post_processing: root.get("PostProcessing").map(hash_value),
+        post_processing: root.get(format.post_processing).map(hash_value),
         structures: root.get("structures").map(hash_value),
     };
 
@@ -379,11 +380,12 @@ struct SectionInspection {
 
 fn inspect_sections(
     root: &BTreeMap<String, NbtValue>,
+    format: &ClassicChunkFormat,
     x: i32,
     z: i32,
 ) -> Result<SectionInspection, DerivedDataError> {
     let value = root
-        .get("sections")
+        .get(format.sections)
         .ok_or_else(|| invalid(format!("chunk ({x}, {z}) has no sections list")))?;
     let (kind, items) = value
         .as_list()
@@ -402,7 +404,7 @@ fn inspect_sections(
         let section = item
             .as_compound()
             .ok_or_else(|| invalid(format!("chunk ({x}, {z}) has a non-compound section")))?;
-        let y = match section.get("Y") {
+        let y = match section.get(format.section_y) {
             Some(NbtValue::Byte(value)) => *value as i32,
             Some(_) => return Err(invalid(format!("chunk ({x}, {z}) section Y is not a byte"))),
             None => return Err(invalid(format!("chunk ({x}, {z}) section has no Y"))),
@@ -410,7 +412,7 @@ fn inspect_sections(
         for key in section.keys() {
             *counts.entry(key.clone()).or_default() += 1;
         }
-        if let Some(value) = section.get("SkyLight") {
+        if let Some(value) = section.get(format.light.sky) {
             match value {
                 NbtValue::ByteArray(bytes) => {
                     sky_sections += 1;
@@ -426,7 +428,7 @@ fn inspect_sections(
                 }
             }
         }
-        if let Some(value) = section.get("BlockLight") {
+        if let Some(value) = section.get(format.light.block) {
             match value {
                 NbtValue::ByteArray(bytes) => {
                     block_sections += 1;
@@ -455,22 +457,23 @@ fn inspect_sections(
 
 fn inspect_heightmaps(
     root: &BTreeMap<String, NbtValue>,
+    key: &str,
     x: i32,
     z: i32,
 ) -> Result<BTreeMap<String, HeightmapInfo>, DerivedDataError> {
-    let Some(value) = root.get("Heightmaps") else {
+    let Some(value) = root.get(key) else {
         return Ok(BTreeMap::new());
     };
     let map = value
         .as_compound()
-        .ok_or_else(|| invalid(format!("chunk ({x}, {z}) Heightmaps is not a compound")))?;
+        .ok_or_else(|| invalid(format!("chunk ({x}, {z}) {key} is not a compound")))?;
     let mut heightmaps = BTreeMap::new();
     for (name, value) in map {
         let words = match value {
             NbtValue::LongArray(words) => words,
             _ => {
                 return Err(invalid(format!(
-                    "chunk ({x}, {z}) Heightmaps.{name} is not a long array"
+                    "chunk ({x}, {z}) {key}.{name} is not a long array"
                 )))
             }
         };
@@ -500,9 +503,13 @@ pub fn analyze_java_world_derived(
         });
     }
 
+    let format = ClassicChunkFormat::for_profile(&world.profile)?;
     let mut counters = DerivedCounters::default();
     let mut dimensions = Vec::new();
+    let mut warnings = Vec::new();
     for dimension in &world.dimensions {
+        let expected_words = format.heightmap_words(dimension.height);
+        let mut unexpected_heightmaps = 0;
         let mut dimension_counters = DerivedCounters::default();
         for path in list_region_files(&dimension.region_folder)? {
             let region = RegionFile::open(&path)?;
@@ -514,6 +521,11 @@ pub fn analyze_java_world_derived(
                 }
                 let nbt = region.read_nbt(entry.x, entry.z)?;
                 let chunk = inspect_chunk_derived(&nbt, entry.x, entry.z)?;
+                unexpected_heightmaps += chunk
+                    .heightmaps
+                    .values()
+                    .filter(|map| map.words != expected_words)
+                    .count();
                 dimension_counters.add(&chunk);
                 counters.add(&chunk);
             }
@@ -523,6 +535,12 @@ pub fn analyze_java_world_derived(
             folder: dimension.folder.display().to_string(),
             counters: dimension_counters,
         });
+        if unexpected_heightmaps > 0 {
+            warnings.push(format!(
+                "{} has {unexpected_heightmaps} heightmaps that do not use the expected {expected_words} longs; raw data is retained",
+                dimension.id
+            ));
+        }
     }
 
     let mut sidecars = Vec::new();
@@ -532,7 +550,6 @@ pub fn analyze_java_world_derived(
         }
     }
 
-    let mut warnings = Vec::new();
     if counters.chunks_with_block_entities > 0 {
         warnings.push(
             "block entity records are preserved as raw data; placing or removing block-entity blocks is not semantically supported yet"

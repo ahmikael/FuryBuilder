@@ -478,6 +478,9 @@ fn world_report_aggregates_chunks_and_sidecars_read_only() {
     assert_eq!(report.counters.structures, 1);
     assert_eq!(report.counters.heightmap_chunks["MOTION_BLOCKING"], 1);
     assert_eq!(report.counters.heightmap_words["MOTION_BLOCKING"], 3);
+    assert!(report.warnings.iter().any(|warning| warning.contains(
+        "minecraft:overworld has 2 heightmaps that do not use the expected 37 longs; raw data is retained"
+    )));
     assert!(report
         .warnings
         .iter()

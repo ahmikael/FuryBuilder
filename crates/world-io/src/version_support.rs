@@ -3,19 +3,23 @@
 //! Adapters never compare a `DataVersion` with a literal. They ask this module which
 //! built-in version profile owns that value and whether its reader is verified.
 
-use minecraft_version::{
-    builtin_profiles, default_profile, profile_for_data_version, VersionProfile,
-};
+use minecraft_version::{builtin_profiles, default_profile, VersionProfile};
 use world_domain::WorldVersion;
 
 /// Returns a codec-backed profile for the exact `DataVersion`.
 pub fn profile_for(data_version: i32) -> Option<VersionProfile> {
-    profile_for_data_version(data_version).filter(|profile| profile.capabilities.read)
+    read_profile(data_version).cloned()
+}
+
+pub(crate) fn read_profile(data_version: i32) -> Option<&'static VersionProfile> {
+    builtin_profiles()
+        .iter()
+        .find(|profile| profile.data_version == data_version && profile.capabilities.read)
 }
 
 /// Returns whether a `DataVersion` belongs to a built-in, codec-backed profile.
 pub fn supports_data_version(data_version: i32) -> bool {
-    profile_for(data_version).is_some()
+    read_profile(data_version).is_some()
 }
 
 /// Returns every `DataVersion` that this build can decode.
@@ -43,6 +47,7 @@ pub fn world_version(profile: &VersionProfile) -> WorldVersion {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minecraft_version::profile_for_data_version;
 
     #[test]
     fn builtin_profiles_are_addressable_by_data_version() {

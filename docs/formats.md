@@ -128,6 +128,13 @@ for replaced chunks so the vanilla engine rebuilds them on the next load. The so
 is opened read-only and is never modified. This path is verified in the backend/test flow
 but has no one-click UI action in the beta.
 
+Modern classic Anvil may store light-only records one section below or above
+the dimension's terrain. They do not contain editable blocks or biomes.
+`Preserve` keeps these records intact; `VanillaRebuild` clears their light
+arrays but retains the section positions and unknown tags. The derived-data
+scan warns if stored heightmaps do not have the packed length expected for
+the dimension. It does not rewrite or recalculate them.
+
 ## Selection rules
 
 Before import, export or copy, the selected path is classified:

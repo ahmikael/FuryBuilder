@@ -3,6 +3,7 @@
 //! enable additional versions.
 
 pub mod chunk;
+pub(crate) mod format;
 pub mod overlay;
 pub mod reader;
 pub mod region_write;

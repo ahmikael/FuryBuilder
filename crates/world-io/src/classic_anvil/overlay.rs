@@ -30,9 +30,9 @@ use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::world_codec::world_codec;
 
 use super::chunk::{
-    BiomeSection as JavaBiomeSection, DecodedChunk, DecodedSection, BLOCK_SECTION_VOLUME,
-    MAX_BLOCK_PALETTE,
+    BiomeSection as JavaBiomeSection, DecodedChunk, DecodedSection, MAX_BLOCK_PALETTE,
 };
+use super::format::{ClassicChunkFormat, PaletteLayout};
 use super::reader::{
     AnvilError, JavaWorld, JavaWorldDimension, RegionFile, ANVIL_REGION_AXIS_CHUNKS,
 };
@@ -869,6 +869,7 @@ impl WorldOverlay {
         let region = self.region(dimension_id, x, z)?;
         let source = region.read_chunk(x, z).map_err(map_missing_chunk)?;
         let source_decoded = source.decode(dimension)?;
+        let format = ClassicChunkFormat::for_read(source_decoded.data_version)?;
         let mut patched = source.nbt.clone();
 
         {
@@ -880,7 +881,7 @@ impl WorldOverlay {
                     ))
                 }
             };
-            let sections_value = root.get_mut("sections").ok_or_else(|| {
+            let sections_value = root.get_mut(format.sections).ok_or_else(|| {
                 OverlayError::VerificationFailed("patched chunk has no sections list".to_owned())
             })?;
             let items = match sections_value {
@@ -904,7 +905,7 @@ impl WorldOverlay {
             for section_y in edited_sections {
                 let entry = items
                     .iter_mut()
-                    .find(|item| section_y_of(item) == Some(section_y))
+                    .find(|item| section_y_of(item, format) == Some(section_y))
                     .ok_or_else(|| {
                         OverlayError::VerificationFailed(format!(
                             "source chunk ({x}, {z}) has no section {section_y}"
@@ -919,20 +920,27 @@ impl WorldOverlay {
                     }
                 };
                 if let Some(section) = edits.sections.get(&section_y) {
-                    compound.insert("block_states".to_owned(), encode_block_states(section));
+                    compound.insert(
+                        format.blocks.container.to_owned(),
+                        encode_block_states(section, &format.blocks),
+                    );
                 }
                 if let Some(section) = edits.biomes.get(&section_y) {
-                    compound.insert("biomes".to_owned(), encode_biomes(section));
+                    compound.insert(
+                        format.biomes.container.to_owned(),
+                        encode_biomes(section, &format.biomes),
+                    );
                 }
             }
         }
 
-        verify_preserved_fields(&source.nbt, &patched)?;
+        verify_preserved_fields(&source.nbt, &patched, format)?;
         verify_edit_scope(
             &source.nbt,
             &patched,
             edits.sections.keys().copied().collect(),
             edits.biomes.keys().copied().collect(),
+            format,
         )?;
 
         let decoded = self.world.decode_chunk_nbt(dimension_id, x, z, &patched)?;
@@ -1378,9 +1386,9 @@ fn map_missing_chunk(error: AnvilError) -> OverlayError {
     }
 }
 
-fn section_y_of(value: &NbtValue) -> Option<i32> {
+fn section_y_of(value: &NbtValue, format: &ClassicChunkFormat) -> Option<i32> {
     let compound = value.as_compound()?;
-    match compound.get("Y") {
+    match compound.get(format.section_y) {
         Some(NbtValue::Byte(y)) => Some(*y as i32),
         _ => None,
     }
@@ -1435,7 +1443,7 @@ fn biome_difference_count(a: &DomainBiomeSection, b: &JavaBiomeSection) -> usize
     count
 }
 
-fn encode_block_states(section: &Section) -> NbtValue {
+fn encode_block_states(section: &Section, layout: &PaletteLayout) -> NbtValue {
     let palette = section
         .palette()
         .iter()
@@ -1460,50 +1468,33 @@ fn encode_block_states(section: &Section) -> NbtValue {
 
     let mut block_states = BTreeMap::new();
     block_states.insert(
-        "palette".to_owned(),
+        layout.palette.to_owned(),
         NbtValue::List {
             kind: TAG_COMPOUND,
             items: palette,
         },
     );
     if section.palette_len() > 1 {
+        let indices = (0..layout.count).map(|index| {
+            let x = (index % 16) as u8;
+            let z = ((index / 16) % 16) as u8;
+            let y = ((index / 256) % 16) as u8;
+            section
+                .palette_index(x, y, z)
+                .expect("every local section position has a palette index")
+        });
         block_states.insert(
-            "data".to_owned(),
-            NbtValue::LongArray(pack_block_indices(section)),
+            layout.data.to_owned(),
+            NbtValue::LongArray(layout.packing(section.palette_len()).pack(indices)),
         );
     }
     NbtValue::Compound(block_states)
 }
 
-fn pack_block_indices(section: &Section) -> Vec<i64> {
-    let bits = block_bits(section.palette_len());
-    let values_per_long = 64 / bits as usize;
-    let word_count = BLOCK_SECTION_VOLUME.div_ceil(values_per_long);
-    let mut words = vec![0u64; word_count];
-    for index in 0..BLOCK_SECTION_VOLUME {
-        let x = (index % 16) as u8;
-        let z = ((index / 16) % 16) as u8;
-        let y = ((index / 256) % 16) as u8;
-        let palette_index = section
-            .palette_index(x, y, z)
-            .expect("every local section position has a palette index");
-        let word = index / values_per_long;
-        let shift = ((index % values_per_long) * bits as usize) as u32;
-        words[word] |= (palette_index as u64) << shift;
-    }
-    words.into_iter().map(|word| word as i64).collect()
-}
-
-fn block_bits(palette_len: usize) -> u8 {
-    debug_assert!(palette_len >= 2);
-    let bits = (usize::BITS - (palette_len - 1).leading_zeros()) as u8;
-    bits.max(4)
-}
-
-fn encode_biomes(section: &DomainBiomeSection) -> NbtValue {
+fn encode_biomes(section: &DomainBiomeSection, layout: &PaletteLayout) -> NbtValue {
     let mut biomes = BTreeMap::new();
     biomes.insert(
-        "palette".to_owned(),
+        layout.palette.to_owned(),
         NbtValue::List {
             kind: TAG_STRING,
             items: section
@@ -1515,35 +1506,21 @@ fn encode_biomes(section: &DomainBiomeSection) -> NbtValue {
     );
     if section.palette().len() > 1 {
         biomes.insert(
-            "data".to_owned(),
-            NbtValue::LongArray(pack_biome_cells(section)),
+            layout.data.to_owned(),
+            NbtValue::LongArray(
+                layout
+                    .packing(section.palette().len())
+                    .pack(section.cells().iter().copied()),
+            ),
         );
     }
     NbtValue::Compound(biomes)
 }
 
-fn pack_biome_cells(section: &DomainBiomeSection) -> Vec<i64> {
-    let bits = biome_bits(section.palette().len());
-    let values_per_long = 64 / bits as usize;
-    let word_count = BIOME_CELLS.div_ceil(values_per_long);
-    let mut words = vec![0u64; word_count];
-    for (index, palette_index) in section.cells().iter().enumerate() {
-        let word = index / values_per_long;
-        let shift = ((index % values_per_long) * bits as usize) as u32;
-        words[word] |= (*palette_index as u64) << shift;
-    }
-    words.into_iter().map(|word| word as i64).collect()
-}
-
-fn biome_bits(palette_len: usize) -> u8 {
-    debug_assert!(palette_len >= 2);
-    let bits = (usize::BITS - (palette_len - 1).leading_zeros()) as u8;
-    bits.max(1)
-}
-
 pub(super) fn verify_preserved_fields(
     source: &NbtFile,
     patched: &NbtFile,
+    format: &ClassicChunkFormat,
 ) -> Result<(), OverlayError> {
     if source.root_name != patched.root_name {
         return Err(OverlayError::VerificationFailed(
@@ -1562,7 +1539,7 @@ pub(super) fn verify_preserved_fields(
         ));
     }
     for (key, value) in source_root {
-        if key == "sections" {
+        if key == format.sections {
             continue;
         }
         if patched_root.get(key) != Some(value) {
@@ -1572,14 +1549,14 @@ pub(super) fn verify_preserved_fields(
         }
     }
 
-    let source_sections = section_compounds(source_root)?;
-    let patched_sections = section_compounds(patched_root)?;
+    let source_sections = section_compounds(source_root, format)?;
+    let patched_sections = section_compounds(patched_root, format)?;
     if source_sections.keys().collect::<Vec<_>>() != patched_sections.keys().collect::<Vec<_>>() {
         return Err(OverlayError::VerificationFailed(
             "section list changed while editing blocks".to_owned(),
         ));
     }
-    if section_order(source_root)? != section_order(patched_root)? {
+    if section_order(source_root, format)? != section_order(patched_root, format)? {
         return Err(OverlayError::VerificationFailed(
             "section order changed while editing blocks".to_owned(),
         ));
@@ -1590,11 +1567,15 @@ pub(super) fn verify_preserved_fields(
             .ok_or_else(|| OverlayError::VerificationFailed(format!("section {y} disappeared")))?;
         let source_rest = source_section
             .iter()
-            .filter(|(key, _)| key.as_str() != "block_states" && key.as_str() != "biomes")
+            .filter(|(key, _)| {
+                key.as_str() != format.blocks.container && key.as_str() != format.biomes.container
+            })
             .collect::<Vec<_>>();
         let patched_rest = patched_section
             .iter()
-            .filter(|(key, _)| key.as_str() != "block_states" && key.as_str() != "biomes")
+            .filter(|(key, _)| {
+                key.as_str() != format.blocks.container && key.as_str() != format.biomes.container
+            })
             .collect::<Vec<_>>();
         if source_rest != patched_rest {
             return Err(OverlayError::VerificationFailed(format!(
@@ -1613,6 +1594,7 @@ fn verify_edit_scope(
     patched: &NbtFile,
     block_sections: BTreeSet<i32>,
     biome_sections: BTreeSet<i32>,
+    format: &ClassicChunkFormat,
 ) -> Result<(), OverlayError> {
     let source_root = source.root.as_compound().ok_or_else(|| {
         OverlayError::VerificationFailed("source root is not a compound".to_owned())
@@ -1620,21 +1602,23 @@ fn verify_edit_scope(
     let patched_root = patched.root.as_compound().ok_or_else(|| {
         OverlayError::VerificationFailed("patched root is not a compound".to_owned())
     })?;
-    let source_sections = section_compounds(source_root)?;
-    let patched_sections = section_compounds(patched_root)?;
+    let source_sections = section_compounds(source_root, format)?;
+    let patched_sections = section_compounds(patched_root, format)?;
     for (y, source_section) in source_sections {
         let patched_section = patched_sections
             .get(&y)
             .ok_or_else(|| OverlayError::VerificationFailed(format!("section {y} disappeared")))?;
         if !block_sections.contains(&y)
-            && source_section.get("block_states") != patched_section.get("block_states")
+            && source_section.get(format.blocks.container)
+                != patched_section.get(format.blocks.container)
         {
             return Err(OverlayError::VerificationFailed(format!(
                 "section {y} block_states changed without a block edit"
             )));
         }
         if !biome_sections.contains(&y)
-            && source_section.get("biomes") != patched_section.get("biomes")
+            && source_section.get(format.biomes.container)
+                != patched_section.get(format.biomes.container)
         {
             return Err(OverlayError::VerificationFailed(format!(
                 "section {y} biomes changed without a biome edit"
@@ -1644,11 +1628,12 @@ fn verify_edit_scope(
     Ok(())
 }
 
-fn section_compounds(
-    root: &BTreeMap<String, NbtValue>,
-) -> Result<BTreeMap<i32, &BTreeMap<String, NbtValue>>, OverlayError> {
+fn section_compounds<'a>(
+    root: &'a BTreeMap<String, NbtValue>,
+    format: &ClassicChunkFormat,
+) -> Result<BTreeMap<i32, &'a BTreeMap<String, NbtValue>>, OverlayError> {
     let value = root
-        .get("sections")
+        .get(format.sections)
         .ok_or_else(|| OverlayError::VerificationFailed("missing sections list".to_owned()))?;
     let (_, items) = value
         .as_list()
@@ -1658,7 +1643,7 @@ fn section_compounds(
         let compound = item.as_compound().ok_or_else(|| {
             OverlayError::VerificationFailed("section is not a compound".to_owned())
         })?;
-        let y = match compound.get("Y") {
+        let y = match compound.get(format.section_y) {
             Some(NbtValue::Byte(value)) => *value as i32,
             _ => {
                 return Err(OverlayError::VerificationFailed(
@@ -1675,9 +1660,12 @@ fn section_compounds(
     Ok(sections)
 }
 
-fn section_order(root: &BTreeMap<String, NbtValue>) -> Result<Vec<i32>, OverlayError> {
+fn section_order(
+    root: &BTreeMap<String, NbtValue>,
+    format: &ClassicChunkFormat,
+) -> Result<Vec<i32>, OverlayError> {
     let value = root
-        .get("sections")
+        .get(format.sections)
         .ok_or_else(|| OverlayError::VerificationFailed("missing sections list".to_owned()))?;
     let (_, items) = value
         .as_list()
@@ -1687,7 +1675,7 @@ fn section_order(root: &BTreeMap<String, NbtValue>) -> Result<Vec<i32>, OverlayE
         let compound = item.as_compound().ok_or_else(|| {
             OverlayError::VerificationFailed("section is not a compound".to_owned())
         })?;
-        match compound.get("Y") {
+        match compound.get(format.section_y) {
             Some(NbtValue::Byte(value)) => order.push(*value as i32),
             _ => {
                 return Err(OverlayError::VerificationFailed(

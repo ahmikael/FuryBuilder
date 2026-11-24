@@ -38,6 +38,7 @@ use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
 use crate::version_support;
 use crate::world_codec::world_codec;
 
+use super::format::ClassicChunkFormat;
 use super::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
 use super::reader::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, RegionChunk, RegionEntry,
@@ -263,6 +264,7 @@ pub(super) fn write_region(
             supported: vec![world.profile.data_version],
         });
     }
+    let format = ClassicChunkFormat::for_profile(&world.profile)?;
     let dimension = world
         .dimension(dimension_id)
         .ok_or_else(|| RegionWriteError::UnknownDimension(dimension_id.to_owned()))?;
@@ -339,9 +341,9 @@ pub(super) fn write_region(
             }
             let mut nbt = replacement.nbt.clone();
             if policy == DerivedDataPolicy::VanillaRebuild {
-                invalidate_derived_fields(&mut nbt)?;
+                invalidate_derived_fields(&mut nbt, format)?;
             }
-            verify_replacement(world, dimension_id, &source, &nbt, policy)?;
+            verify_replacement(world, dimension_id, &source, &nbt, policy, format)?;
             verified.insert((entry.x, entry.z), nbt);
         }
     }
@@ -457,10 +459,11 @@ pub fn write_region_from_overlay_with_policy(
 fn source_with_policy(
     source: &RegionChunk,
     policy: DerivedDataPolicy,
+    format: &ClassicChunkFormat,
 ) -> Result<NbtFile, RegionWriteError> {
     let mut nbt = source.nbt.clone();
     if policy == DerivedDataPolicy::VanillaRebuild {
-        invalidate_derived_fields(&mut nbt)?;
+        invalidate_derived_fields(&mut nbt, format)?;
     }
     Ok(nbt)
 }
@@ -471,7 +474,10 @@ fn source_with_policy(
 /// fully generated modern chunk: `isLightOn = 0` marks the serialized light as not
 /// trustworthy, missing `Heightmaps` are re-primed from section data, and queued
 /// `PostProcessing` positions refer to the pre-edit geometry.
-fn invalidate_derived_fields(nbt: &mut NbtFile) -> Result<(), RegionWriteError> {
+fn invalidate_derived_fields(
+    nbt: &mut NbtFile,
+    format: &ClassicChunkFormat,
+) -> Result<(), RegionWriteError> {
     let root = match &mut nbt.root {
         NbtValue::Compound(root) => root,
         _ => {
@@ -480,12 +486,12 @@ fn invalidate_derived_fields(nbt: &mut NbtFile) -> Result<(), RegionWriteError> 
             ))
         }
     };
-    root.remove("Heightmaps");
-    root.remove("PostProcessing");
-    if root.contains_key("isLightOn") {
-        root.insert("isLightOn".to_owned(), NbtValue::Byte(0));
+    root.remove(format.heightmaps);
+    root.remove(format.post_processing);
+    if let Some(enabled) = root.get_mut(format.light.enabled) {
+        *enabled = NbtValue::Byte(0);
     }
-    let sections = root.get_mut("sections").ok_or_else(|| {
+    let sections = root.get_mut(format.sections).ok_or_else(|| {
         RegionWriteError::VerificationFailed("chunk has no sections list".to_owned())
     })?;
     let (kind, items) = match sections {
@@ -510,8 +516,8 @@ fn invalidate_derived_fields(nbt: &mut NbtFile) -> Result<(), RegionWriteError> 
                 ))
             }
         };
-        section.remove("SkyLight");
-        section.remove("BlockLight");
+        section.remove(format.light.sky);
+        section.remove(format.light.block);
     }
     Ok(())
 }
@@ -522,6 +528,7 @@ fn verify_replacement(
     source: &RegionChunk,
     replacement: &NbtFile,
     policy: DerivedDataPolicy,
+    format: &ClassicChunkFormat,
 ) -> Result<(), RegionWriteError> {
     let root = replacement.root.as_compound().ok_or_else(|| {
         RegionWriteError::VerificationFailed(format!(
@@ -553,8 +560,8 @@ fn verify_replacement(
             )))
         }
     }
-    let expected_source = source_with_policy(source, policy)?;
-    verify_preserved_fields(&expected_source, replacement)?;
+    let expected_source = source_with_policy(source, policy, format)?;
+    verify_preserved_fields(&expected_source, replacement, format)?;
     if replacement == &expected_source {
         return Err(RegionWriteError::InvalidArgument(format!(
             "chunk ({}, {}) replacement is identical to the source chunk",
@@ -792,6 +799,7 @@ fn verify_written_region(
     source_entries: &[RegionEntry],
     policy: DerivedDataPolicy,
 ) -> Result<(), RegionWriteError> {
+    let format = ClassicChunkFormat::for_profile(&world.profile)?;
     let written = RegionFile::open(written_path)?;
     if written.region_coordinates() != source.region_coordinates() {
         return Err(RegionWriteError::VerificationFailed(
@@ -835,8 +843,8 @@ fn verify_written_region(
                     )));
                 }
                 let source_chunk = source.read_chunk(source_entry.x, source_entry.z)?;
-                let expected_source = source_with_policy(&source_chunk, policy)?;
-                verify_preserved_fields(&expected_source, &chunk.nbt)?;
+                let expected_source = source_with_policy(&source_chunk, policy, format)?;
+                verify_preserved_fields(&expected_source, &chunk.nbt, format)?;
                 world.decode_chunk_nbt(dimension_id, source_entry.x, source_entry.z, &chunk.nbt)?;
             }
             None => {
