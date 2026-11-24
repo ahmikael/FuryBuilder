@@ -4,13 +4,62 @@ Notable user-visible changes to FuryBuilder.
 
 ## [Unreleased]
 
+This release makes the Minecraft version a property of the project and moves first-run setup
+into a full-screen wizard. It is a deliberate schema reset: projects written by older internal
+formats are not migrated.
+
+### Added
+
+- Full-screen project wizard with Basics, Version, Source, Components, Review and Preparing
+  steps, plus a welcome screen that acts as the project hub for recent projects and recovery.
+- Official Minecraft version catalog with releases, snapshots and legacy/special manifest ids.
+  A version needs a verified profile to advance; `1.21.4` is the verified write target in this
+  beta.
+- Managed client JAR download and an exact-version block/item catalog built from that JAR
+  (1,097 blocks and 1,385 items for 1.21.4), plus manual `.minecraft`/client JAR selection and
+  an explicit placeholder mode.
+- Unified component manager for Java, client assets and official servers with progress,
+  cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
+- Manual Java selection that probes the major version, architecture and vendor; newer runtimes
+  are allowed with a warning, while older, 32-bit or unreadable runtimes are blocked.
+- Project schema v2, snapshot format v3 and checkpoint metadata v2, with the target version,
+  component hashes and catalog identity pinned in the project.
+- Five-tab Settings (Appearance, Components, Updates, Diagnostics, Advanced) and a grouped
+  bottom panel with `Blocks`, `Analysis` (Observation/Validation) and `Activity`
+  (Console/History).
+- Versioned editor layout: a layout saved by an older panel format is discarded once, while
+  theme and UI scale remain user preferences.
+
 ### Changed
 
+- Project creation and import moved to the full-screen wizard; Settings no longer downloads,
+  selects or provisions components.
+- Internal project formats are not migrated: a project from before manifest schema v2,
+  snapshot format v3 or checkpoint metadata v2 must be recreated.
+- The version manifest keeps Mojang's raw ids, so legacy and special versions no longer abort
+  the catalog.
+- Managed Java, client JAR and server downloads share one verified pipeline with host
+  allowlisting, size and checksum checks, disk preflight, retry/offline handling and atomic
+  publish.
+- The top bar no longer shows an active block or a second core/save status; the project chip is
+  the single save indicator.
 - Notifications now use the shadcn Toast component and its Base UI toast manager, with
   consistent success, warning and error styling and automatic dismissal.
 - Every select field now uses the shadcn Select component; the remaining native select
   wrapper was removed.
 - Expandable detail areas now use the shadcn Collapsible component.
+
+### Fixed
+
+- The version catalog no longer fails on official pre-release and special ids such as
+  `26.4-pre-1`, `1.14.2 Pre-Release 4` and `25w14craftmine`.
+- A client JAR without launcher metadata is accepted with an explicit warning, while a
+  declared checksum or version mismatch is still refused.
+
+### Security
+
+- Managed component downloads require an explicit action and verify official checksums and
+  sizes. FuryBuilder bundles and redistributes no Mojang files.
 
 ## [0.2.0] - 2026-11-21
 

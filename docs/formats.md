@@ -3,6 +3,11 @@
 Target: Minecraft Java **1.21.4**, `DataVersion` 4189. This is the only write-verified
 version. Anything else is detected and refused rather than guessed.
 
+The version picker reads the official Mojang manifest and shows every entry, including
+releases, snapshots and legacy/special ids. Project creation requires a verified
+`VersionProfile`; only 1.21.4 has one in this beta, so other entries are inspectable but
+cannot advance the wizard.
+
 ## Supported versions
 
 | Version family      | DataVersion | Layout                            | Status                 | Read                        | Edit                      | Write                              | Passthrough     |
@@ -15,7 +20,9 @@ version. Anything else is detected and refused rather than guessed.
 | Bedrock Edition     | n/a         | Bedrock                           | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
 
 A complete 26.1+ split save is structurally complete but not readable, editable or
-comparable. A bare `.mca` file or a `region/` directory is not a complete save at all.
+comparable. A bare `.mca` file or a `region/` directory is not a complete save at all. The
+support matrix describes analysis and import boundaries; it does not add project profiles.
+Only a version with a verified profile can be selected for a new project.
 
 ## What is editable (classic 1.21.4)
 
@@ -50,7 +57,8 @@ and is accepted by structure blocks, `/place template`, datapacks and structure-
 editors. It is never a project store: objects, DSL, history and source provenance are not
 representable.
 
-- Root is gzip-compressed big-endian NBT; `DataVersion` must be `4189` on strict import.
+- Root is gzip-compressed big-endian NBT; `DataVersion` must match the project's verified
+  target (currently `4189`) on strict import.
 - `size` axes are `1..=1024`, volume `<= 1,000,000`, palette `<= 4,096`, blocks are sparse
   non-air positions. Missing positions are air.
 - Block states and properties are preserved exactly; orientation is a property, not a
@@ -63,10 +71,28 @@ representable.
 Sponge `.schem` v3 is the planned second adapter and is not enabled. `.litematic` and
 legacy `.schematic` are not implemented. `.mcstructure` is Bedrock and out of scope.
 
-## Project manifest (`project.json`, schema 2)
+## Project files and schema versions
+
+FuryBuilder writes only the current internal formats. The schema numbers are exact; an older
+project, snapshot or checkpoint is refused rather than migrated or read through a compatibility
+path.
+
+| File                                         | Version | Contents                                                                                   |
+| -------------------------------------------- | ------- | ------------------------------------------------------------------------------------------ |
+| `project.json`                               | 2       | verified target, component ids/hashes, active world revision/checksum, editor state, source |
+| `data/world-*.fwl`, `data/autosave.fwl`      | 3       | binary snapshot: profileId, DataVersion, layout, biome mode, dimensions and chunks          |
+| `changes/checkpoint-*.json`                  | 2       | checkpoint metadata: profileId, revision, checksum, label, reason, editorState             |
+| `source/source.json`                         | 1       | immutable source file list and SHA-256 values                                              |
+| `components/.../.furybuilder-assets.json`    | 1       | managed client JAR version, SHA-1, size, DataVersion and pack formats                      |
+| `components/.../.furybuilder-server.json`    | 2       | managed server version, SHA-1, size, DataVersion and Java major                            |
+| `server.json`                                | 3       | selected server per version and per-JAR/version EULA consent                               |
+| `.furybuilder-run.json`                      | 2       | generation version, JAR SHA-1, EULA time and per-run consent                               |
+
+Project files live inside the `.furybuilder` folder. The `components/...` manifests and
+`server.json` belong to the shared application-data component cache, not to one project.
 
 Desktop world creation stores the verified target profile and component identities in the
-first manifest. For an as-is import, that target must match the Minecraft version and DataVersion
+manifest. For an as-is import, that target must match the Minecraft version and DataVersion
 confirmed after previewing the source. The editable snapshot and the immutable copy of `level.dat`
 must agree with it; unsupported or inconsistent version metadata is refused without opening a project.
 An installed Java runtime is recorded by mode, logical id and executable

@@ -1,6 +1,10 @@
-# Reference (Windows beta 0.1.0)
+# Reference (Windows beta 0.2.0)
 
-Target: Minecraft Java **1.21.4**, `DataVersion` 4189. Last reviewed: 2026-11-20.
+Target: Minecraft Java **1.21.4**, `DataVersion` 4189. Last reviewed: 2026-11-25.
+
+The version picker reads the full official Mojang manifest, but only `1.21.4` has a verified
+write profile in this beta. Other entries, including snapshots and legacy/special ids, are
+visible and are refused at project creation rather than guessed.
 
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
@@ -16,7 +20,7 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 | CPU              | 64-bit x86-64 CPU supported by the installed Windows version                                                                                       | Intel Core i5-9600KF (6 cores / 6 threads) tested; older/low-core CPUs and ARM64 are not tested                                               |
 | Memory           | 8 GB is the practical baseline target; 16 GB is the tested reference                                                                               | 16 GB measured; 8 GB has **not** been validated                                                                                               |
 | Graphics         | WebGL 2.0-capable GPU with a working Direct3D 11 path; software WARP/SwiftShader can run but is much slower                                        | One physical NVIDIA GeForce GTX 1060 3 GB (driver `32.0.15.6094`) tested; integrated GPUs, switching and other vendors are not tested          |
-| Disk             | About 24 MB installed (desktop plus Rust MCP sidecar); the 0.1.0 NSIS installer is 7.0 MB. Keep at least 1 GB free for projects and caches          | Sizes measured from the 0.1.0 NSIS installer. Vanilla World dependencies took about 270 MB in the server test                                 |
+| Disk             | Keep at least 1 GB free for projects, checkpoints and component caches; managed Java and per-version client/server JARs add well over 100 MB | The 0.1.0 NSIS installer was 7.0 MB; Vanilla World dependencies took about 270 MB in the server test. The 0.2.0 package was not re-measured |
 | Display/input    | A normal desktop session with a visible window; keyboard and mouse                                                                                 | MCP screenshots require a visible viewport; headless and minimized capture are not supported                                                  |
 | Network          | Not required for `Empty Project`, `Flat base`, `Import World`, structure exchange or local MCP. The updater contacts GitHub Releases after startup | Core offline work is the design; optional downloads, update checks and the WebView2 bootstrapper need network when used                       |
 | Permissions      | The NSIS package is per-user and does not require administrator rights                                                                             | NSIS install/update/uninstall tested without elevation                                                                                         |
@@ -24,15 +28,15 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 
 ### Feature dependencies
 
-| Feature                         | Minecraft install | Java 21 | Official `server.jar` | Network                                          |
-| ------------------------------- | ----------------- | ------- | --------------------- | ------------------------------------------------ |
-| `Empty Project` / `Flat base`   | No                | No      | No                    | No                                               |
-| `Import World` (1.21.4)         | No                | No      | No                    | No                                               |
-| Structure `.nbt` import/export  | No                | No      | No                    | No                                               |
-| Real Minecraft textures         | Optional          | No      | No                    | No                                               |
-| `Vanilla World` generation      | No                | Yes     | Yes                   | Only for optional downloads; cache works offline |
-| MCP bridge (external AI client) | No                | No      | No                    | No (local named pipe)                            |
-| Installing a newer beta         | No                | No      | No                    | Yes (manual installer download)                  |
+| Feature                           | Minecraft install | Client JAR                    | Java                                | Official `server.jar` | Network                                           |
+| --------------------------------- | ----------------- | ----------------------------- | ----------------------------------- | --------------------- | ------------------------------------------------- |
+| `Empty Project` / `Flat base`     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
+| `Import World` (1.21.4)           | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
+| Structure `.nbt` import/export    | No                | No                            | No                                  | No                    | No                                                |
+| Real textures / exact catalog     | No                | Yes                           | No                                  | No                    | First download only; cached afterwards            |
+| `Vanilla World` generation        | No                | Optional; `Placeholder` works | Yes, profile major (21 for 1.21.4)  | Yes                   | Downloads; generation can run offline after cache |
+| MCP bridge (external AI client)   | No                | No                            | No                                  | No                    | No (local named pipe)                             |
+| Installing a newer beta           | No                | No                            | No                                  | No                    | Yes (manual installer download)                   |
 
 `Vanilla World` also requires the user to accept the Minecraft EULA for the exact server
 JAR SHA-1 and Minecraft version, then confirm each local run separately. FuryBuilder never
@@ -51,8 +55,8 @@ remains available, while uncached component downloads fail with an `offline` err
 | Memory            | 16 GB                                                                                                                          |
 | GPU               | NVIDIA GeForce GTX 1060 3 GB, driver `32.0.15.6094`; only one physical display adapter                                         |
 | WebView2          | `157.0.4341.60`                                                                                                                |
-| Application       | FuryBuilder `0.1.0`                                                                                                            |
-| Java (optional)   | Eclipse Temurin `21.0.12.1+1` for Vanilla World and server tests                                                               |
+| Application       | FuryBuilder `0.2.0`                                                                                                            |
+| Java (optional)   | Eclipse Temurin `21.0.13.1+2` for Vanilla World and server tests                                                               |
 | Server (optional) | Official Minecraft Java `1.21.4` server JAR, SHA-1 `4707d00eb834b446575d89a61a11b5d548d8c001`                                  |
 | MCP client        | OpenCode CLI `2.3.2` is the verified client; other clients are not guaranteed                                                  |
 
@@ -65,8 +69,9 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
 - 8 GB RAM systems, lower-core CPUs and very old drivers.
 - Integrated/discrete switching, multi-GPU laptops, other GPU vendors and remote-desktop
   display capture.
-- Modded servers, data packs, other server versions, Bedrock worlds and Java versions other
-  than 1.21.4 / DV 4189.
+- Modded servers, data packs, other server versions, Bedrock worlds and Minecraft versions
+  other than 1.21.4 / DV 4189. Other official versions are listed but cannot be created or
+  edited; Java majors other than 21 are not validated in this beta.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -84,7 +89,7 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Only Java 1.21.4 / DV 4189; other versions and Bedrock are refused                     |
+| KL-05 | Version support  | Only Java 1.21.4 / DV 4189 is write-verified; other official versions are listed but stop at the profile check |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split/legacy refused               |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
@@ -92,7 +97,7 @@ checkpoint and keep the original world untouched.
 | KL-10 | World export     | Complete world-folder export has no one-click UI action                                |
 | KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                        |
 | KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                       |
-| KL-13 | Vanilla World    | Requires Java 21, official server JAR, EULA and possibly a download                    |
+| KL-13 | Vanilla World    | Requires the profile's Java major (21 for 1.21.4), official server JAR, EULA and possibly a download |
 | KL-14 | Vanilla World    | Generation is bounded; only completed runs can become projects                         |
 | KL-15 | Vanilla parity   | Parity check is untouched-revision block states only, not general parity               |
 | KL-16 | Vanilla settings | Only `generate-structures` is exposed; data-pack behaviour is not tested               |
@@ -108,7 +113,7 @@ checkpoint and keep the original world untouched.
 | KL-26 | Policy           | One active mask; no multi-select layers/masks                                          |
 | KL-27 | References       | PNG/schematic reference overlays are researched but not enabled                        |
 | KL-28 | Rendering        | Nether/End are listed but only the overworld is streamed                               |
-| KL-29 | Assets           | Mojang assets are not bundled; placeholders and approximate shapes                     |
+| KL-29 | Assets           | Mojang assets are not bundled; managed client JAR, manual selection or explicit placeholder |
 | KL-30 | Assets           | Model subset: no entity/block-entity models, fluid flow or animations                  |
 | KL-31 | Performance      | Large-scene envelope is machine-specific; radius 32 is stress-only                     |
 | KL-32 | Performance      | Only one physical GPU tested; WARP/SwiftShader are software                            |
@@ -123,3 +128,5 @@ checkpoint and keep the original world untouched.
 | KL-41 | Diagnostics      | Logs are local, bounded and redacted; no telemetry or crash upload                     |
 | KL-42 | Project storage  | No project deletion or folder relocation in the UI; rename is display-only             |
 | KL-43 | Release evidence | No external beta-user field data yet; checks use internal harnesses and one machine    |
+| KL-44 | Catalog          | The exact-version catalog is built and pinned, but the Blocks tab still uses curated quick picks |
+| KL-45 | Project formats  | Projects with older manifest, snapshot or checkpoint schemas are refused, not migrated |

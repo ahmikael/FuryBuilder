@@ -65,8 +65,9 @@ reported as entries with an explicit warning; they are not silently presented as
 `catalogHash` is SHA-256 over the canonical blocks/items/atlases, the version, the
 `DataVersion` and the client JAR SHA-1. `catalogId` is
 `java-<version>-<first 16 hex of catalogHash>`. The catalog cache is process-local and keyed
-by the JAR path, size, modification time and catalog schema; a persistent cache and the
-project `catalogId`/`catalogHash` pin arrive with the project catalog task.
+by the JAR path, size, modification time and catalog schema. A project pins `catalogId` and
+`catalogHash` in its schema-2 manifest; a persistent catalog cache and the full palette/search
+remain later stages.
 
 Exposed as the `assets_catalog` Tauri command and `loadAssetCatalog()` in the desktop client.
 
