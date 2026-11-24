@@ -24,6 +24,7 @@ use crate::anvil::{AnvilError, JavaWorld, LevelDat};
 use crate::passthrough::PassthroughError;
 use crate::support_matrix::{support_matrix, SupportMatrix};
 use crate::version_support;
+use crate::world_codec::world_codec;
 use crate::world_selection::{classify_world_selection, WorldSelectionKind};
 use crate::world_source::{ArchiveReport, WorldSourceKind};
 
@@ -149,7 +150,10 @@ impl WorldImportError {
 /// an exception so the wizard can show why creation is disabled. The function never
 /// modifies the world.
 pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
-    let root = root.as_ref();
+    world_codec().inspect(root.as_ref())
+}
+
+pub(crate) fn inspect_anvil_world(root: &Path) -> JavaWorldAnalysis {
     let selection = classify_world_selection(root);
     let mut analysis = JavaWorldAnalysis {
         root: root.display().to_string(),
@@ -364,6 +368,13 @@ pub fn load_java_world(
 
 pub fn load_java_world_with_options(
     root: impl AsRef<Path>,
+    options: WorldImportOptions,
+) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
+    world_codec().load_world(root.as_ref(), options)
+}
+
+pub(crate) fn load_anvil_world(
+    root: &Path,
     options: WorldImportOptions,
 ) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
     let world = JavaWorld::open(root)?;

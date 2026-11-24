@@ -33,6 +33,7 @@ use crate::passthrough::{
 use crate::region_write::{
     write_region_from_overlay_with_policy, DerivedDataPolicy, RegionWriteError,
 };
+use crate::world_codec::world_codec;
 
 pub const MAX_EXPORT_REGIONS: usize = 4_096;
 const HASH_BUFFER_BYTES: usize = 64 * 1024;
@@ -156,6 +157,14 @@ pub fn export_java_world_with_options(
     destination: impl AsRef<Path>,
     options: WorldExportOptions,
 ) -> Result<WorldExportReport, WorldExportError> {
+    world_codec().export_world(overlay, destination.as_ref(), options)
+}
+
+pub(crate) fn export_anvil_world(
+    overlay: &WorldOverlay,
+    destination: &Path,
+    options: WorldExportOptions,
+) -> Result<WorldExportReport, WorldExportError> {
     let world = overlay.world();
     if world.level.data_version != world.profile.data_version {
         return Err(WorldExportError::RegionWrite(
@@ -168,7 +177,7 @@ pub fn export_java_world_with_options(
 
     let source = fs::canonicalize(&world.root)
         .map_err(|error| io_error(format!("resolving {}", world.root.display()), error))?;
-    let destination = resolve_destination(&source, destination.as_ref())?;
+    let destination = resolve_destination(&source, destination)?;
     let parent = destination
         .parent()
         .ok_or_else(|| WorldExportError::InvalidArgument(destination.display().to_string()))?;

@@ -21,6 +21,7 @@ pub mod region_write;
 pub mod structure;
 pub mod support_matrix;
 pub mod version_support;
+mod world_codec;
 pub mod world_export;
 pub mod world_import;
 pub mod world_selection;

@@ -18,6 +18,7 @@ use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::version_support;
+use crate::world_codec::world_codec;
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
 pub const BIOME_SECTION_VOLUME: usize = 64;
@@ -160,7 +161,7 @@ impl DecodedChunk {
 impl RegionChunk {
     /// Decodes block states and biomes for the given dimension.
     pub fn decode(&self, dimension: &JavaWorldDimension) -> Result<DecodedChunk, AnvilError> {
-        decode_chunk(&self.nbt, self.x, self.z, dimension)
+        world_codec().decode_chunk(&self.nbt, ChunkPos::new(self.x, self.z), dimension)
     }
 }
 
@@ -190,11 +191,11 @@ impl JavaWorld {
         let dimension = self
             .dimension(dimension_id)
             .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
-        decode_chunk(nbt, x, z, dimension)
+        world_codec().decode_chunk(nbt, ChunkPos::new(x, z), dimension)
     }
 }
 
-fn decode_chunk(
+pub(crate) fn decode_chunk(
     nbt: &NbtFile,
     x: i32,
     z: i32,

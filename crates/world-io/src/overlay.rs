@@ -22,8 +22,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{
-    BiomeSection as DomainBiomeSection, BiomeState, BlockState, Section, BIOME_CELLS, CHUNK_SIZE,
-    MAX_BIOME_PALETTE, SECTION_SIZE,
+    BiomeSection as DomainBiomeSection, BiomeState, BlockState, ChunkPos, Section, BIOME_CELLS,
+    CHUNK_SIZE, MAX_BIOME_PALETTE, SECTION_SIZE,
 };
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, ANVIL_REGION_AXIS_CHUNKS};
@@ -32,6 +32,7 @@ use crate::java_chunk::{
     MAX_BLOCK_PALETTE,
 };
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
+use crate::world_codec::world_codec;
 
 /// Overlay schema 2 adds editable biome cells. Schema 1 documents remain readable.
 pub const OVERLAY_SCHEMA_VERSION: u32 = 2;
@@ -241,6 +242,10 @@ pub struct WorldOverlay {
 impl WorldOverlay {
     /// Opens a supported world read-only and starts with no edits.
     pub fn open(root: impl AsRef<Path>) -> Result<Self, OverlayError> {
+        world_codec().load_overlay(root.as_ref())
+    }
+
+    pub(crate) fn open_anvil(root: &Path) -> Result<Self, OverlayError> {
         Ok(Self {
             world: JavaWorld::open(root)?,
             chunks: BTreeMap::new(),
@@ -836,6 +841,15 @@ impl WorldOverlay {
     /// The returned NBT is verified by re-decoding it and by comparing every non-block-state
     /// field with the source chunk.
     pub fn materialize_chunk_nbt(
+        &self,
+        dimension_id: &str,
+        x: i32,
+        z: i32,
+    ) -> Result<Option<NbtFile>, OverlayError> {
+        world_codec().encode_chunk(self, dimension_id, ChunkPos::new(x, z))
+    }
+
+    pub(crate) fn encode_anvil_chunk(
         &self,
         dimension_id: &str,
         x: i32,

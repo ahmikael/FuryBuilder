@@ -294,6 +294,16 @@ there is one status vocabulary and one card layout across both surfaces. The dia
 from the stock shadcn `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`, `Button`, `Badge`,
 `Alert`, and confirmation `Dialog` primitives with semantic theme variables only.
 
+## World codec boundary
+
+`world-io` routes inspection, bounded world and overlay loading, chunk decode and
+materialization, verified region writes, and full-world export through its internal
+`WorldCodec` interface. Existing world I/O entry points still use the same classic Anvil
+readers, writers, and error checks for Minecraft Java 1.21.4. The interface does not
+enable any additional layout or version. A loaded overlay carries the verified source
+profile; encoding starts with that source's original NBT, and untouched chunk records
+never need to be re-encoded.
+
 ## Security boundaries
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.

@@ -11,11 +11,12 @@ use std::path::{Path, PathBuf};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use world_domain::{BiomeState, BlockState};
+use world_domain::{BiomeState, BlockPos, BlockState};
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::{
-    export_java_world, export_java_world_with_options, region_file_name, DerivedDataPolicy,
-    JavaWorld, WorldExportError, WorldExportOptions, WorldOverlay,
+    analyze_java_world, export_java_world, export_java_world_with_options, load_java_world,
+    region_file_name, DerivedDataPolicy, JavaWorld, WorldExportError, WorldExportOptions,
+    WorldOverlay,
 };
 
 const TARGET: i32 = 4189;
@@ -112,14 +113,14 @@ fn section(y: i8, block: &str, biome: &str) -> NbtValue {
     ])
 }
 
-fn chunk_nbt(x: i32, z: i32, status: &str, blocks: &str, biome: &str) -> NbtFile {
+fn chunk_nbt(x: i32, z: i32, section_y: i8, status: &str, blocks: &str, biome: &str) -> NbtFile {
     NbtFile::new(
         "",
         NbtValue::compound([
             ("DataVersion", NbtValue::Int(TARGET)),
             ("xPos", NbtValue::Int(x)),
             ("zPos", NbtValue::Int(z)),
-            ("yPos", NbtValue::Int(-4)),
+            ("yPos", NbtValue::Int(i32::from(section_y))),
             ("Status", NbtValue::String(status.to_owned())),
             ("isLightOn", NbtValue::Byte(1)),
             (
@@ -135,7 +136,7 @@ fn chunk_nbt(x: i32, z: i32, status: &str, blocks: &str, biome: &str) -> NbtFile
                     kind: TAG_COMPOUND,
                     items: vec![NbtValue::compound([(
                         "pos",
-                        NbtValue::IntArray(vec![0, -60, 0]),
+                        NbtValue::IntArray(vec![0, i32::from(section_y) * 16 + 4, 0]),
                     )])],
                 },
             ),
@@ -143,7 +144,7 @@ fn chunk_nbt(x: i32, z: i32, status: &str, blocks: &str, biome: &str) -> NbtFile
                 "sections",
                 NbtValue::List {
                     kind: TAG_COMPOUND,
-                    items: vec![section(-4, blocks, biome)],
+                    items: vec![section(section_y, blocks, biome)],
                 },
             ),
             (
@@ -226,6 +227,7 @@ fn write_world(root: &Path, overworld_status: &str) {
                 chunk_nbt(
                     0,
                     0,
+                    -4,
                     overworld_status,
                     "minecraft:stone",
                     "minecraft:plains",
@@ -234,7 +236,14 @@ fn write_world(root: &Path, overworld_status: &str) {
             (
                 1,
                 0,
-                chunk_nbt(1, 0, "minecraft:full", "minecraft:dirt", "minecraft:forest"),
+                chunk_nbt(
+                    1,
+                    0,
+                    -4,
+                    "minecraft:full",
+                    "minecraft:dirt",
+                    "minecraft:forest",
+                ),
             ),
         ]),
     )
@@ -247,6 +256,7 @@ fn write_world(root: &Path, overworld_status: &str) {
             0,
             0,
             chunk_nbt(
+                0,
                 0,
                 0,
                 "minecraft:full",
@@ -264,6 +274,7 @@ fn write_world(root: &Path, overworld_status: &str) {
             0,
             0,
             chunk_nbt(
+                0,
                 0,
                 0,
                 "minecraft:full",
@@ -328,6 +339,11 @@ fn exports_complete_world_and_preserves_source() {
     write_world(&root, "minecraft:full");
     let before = read_tree(&root);
     let destination = output_path(dir.path());
+
+    let inspection = analyze_java_world(&root);
+    assert!(inspection.supported, "{:?}", inspection.blockers);
+    assert_eq!(inspection.data_version, Some(TARGET));
+    assert_eq!(inspection.chunks, 4);
 
     let mut overlay = WorldOverlay::open(&root).expect("open overlay");
     overlay
@@ -449,6 +465,23 @@ fn exports_complete_world_and_preserves_source() {
             .status
             .as_deref(),
         Some("minecraft:full")
+    );
+
+    let (reopened, load) = load_java_world(&destination).expect("import the exported world");
+    assert_eq!(load.data_version, TARGET);
+    assert_eq!(load.chunks, inspection.chunks);
+    let origin = BlockPos::new(0, -64, 0);
+    assert_eq!(
+        reopened.get_block(OVERWORLD, origin).unwrap().to_string(),
+        "minecraft:gold_block"
+    );
+    assert_eq!(
+        reopened
+            .get_biome(OVERWORLD, origin)
+            .unwrap()
+            .unwrap()
+            .as_str(),
+        "minecraft:desert"
     );
 }
 

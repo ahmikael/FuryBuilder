@@ -42,6 +42,7 @@ use crate::anvil::{
 use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
 use crate::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
 use crate::version_support;
+use crate::world_codec::world_codec;
 
 pub const VERIFIED_WRITE_LAYOUT: &str = "classic_anvil";
 /// The complete set of chunk fields this writer fills from the overlay.
@@ -235,6 +236,25 @@ pub fn write_verified_region_with_policy(
     destination: impl AsRef<Path>,
     policy: DerivedDataPolicy,
 ) -> Result<RegionWriteReport, RegionWriteError> {
+    world_codec().write_region(
+        world,
+        dimension_id,
+        (region_x, region_z),
+        replacements,
+        destination.as_ref(),
+        policy,
+    )
+}
+
+pub(crate) fn write_anvil_region(
+    world: &JavaWorld,
+    dimension_id: &str,
+    region_x: i32,
+    region_z: i32,
+    replacements: &[VerifiedChunkReplacement],
+    destination: &Path,
+    policy: DerivedDataPolicy,
+) -> Result<RegionWriteReport, RegionWriteError> {
     world.level.ensure_supported()?;
     if world.level.data_version != world.profile.data_version {
         return Err(RegionWriteError::UnsupportedDataVersion {
@@ -263,7 +283,6 @@ pub fn write_verified_region_with_policy(
             region.path().display().to_string(),
         ));
     }
-    let destination = destination.as_ref();
     validate_destination(destination, region.path(), region_x, region_z)?;
     let source_region_sha256 = sha256_file(region.path())?;
 
