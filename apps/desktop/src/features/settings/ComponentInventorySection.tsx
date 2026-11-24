@@ -16,7 +16,6 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +24,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  ComponentCard,
+  ComponentStatusBadges,
+  ComponentStatusDetails,
+} from "@/features/components";
 import {
   componentInventory,
   listenComponentChanged,
@@ -35,6 +39,7 @@ import {
 import type {
   ComponentInventory,
   ComponentKind,
+  ComponentStatus,
   ComponentVerification,
 } from "@/lib/component-types";
 import { presentError, type ErrorPresentation } from "@/lib/error-messages";
@@ -70,47 +75,51 @@ function InventoryGroup({
   children,
 }: InventoryGroupProps) {
   return (
-    <Card role="group" aria-label={title} className="min-w-0 gap-0 py-0">
-      <CardContent className="space-y-4 p-6">
-        <div className="flex flex-wrap items-center gap-2">
-          {icon}
-          <h4 className="text-sm font-semibold">{title}</h4>
-          <Badge variant="secondary" className="ml-auto font-mono">
-            {count} · {formatBytes(totalBytes)}
-          </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenFolder}
-            disabled={opening}
-            aria-label={`Open ${title} folder`}
-          >
-            {opening ? (
-              <Loader2 data-icon="inline-start" className="animate-spin" />
-            ) : (
-              <FolderOpen data-icon="inline-start" />
-            )}
-            Open folder
-          </Button>
-        </div>
-        {count === 0 ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">{empty}</p>
-        ) : (
-          <ul className="space-y-3">{children}</ul>
-        )}
-        <p
-          className="truncate font-mono text-xs text-muted-foreground"
-          title={displayRuntimePath(root)}
+    <ComponentCard
+      label={title}
+      titleAs="h4"
+      icon={icon}
+      title={title}
+      contentClassName="p-6"
+      meta={
+        <Badge variant="secondary" className="font-mono">
+          {count} · {formatBytes(totalBytes)}
+        </Badge>
+      }
+      action={
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onOpenFolder}
+          disabled={opening}
+          aria-label={`Open ${title} folder`}
         >
-          {displayRuntimePath(root)}
+          {opening ? (
+            <Loader2 data-icon="inline-start" className="animate-spin" />
+          ) : (
+            <FolderOpen data-icon="inline-start" />
+          )}
+          Open folder
+        </Button>
+      }
+    >
+      {count === 0 ? (
+        <p className="text-sm leading-relaxed text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="space-y-3">{children}</ul>
+      )}
+      <p
+        className="truncate font-mono text-xs text-muted-foreground"
+        title={displayRuntimePath(root)}
+      >
+        {displayRuntimePath(root)}
+      </p>
+      {problems.map((problem) => (
+        <p key={problem} className="text-sm text-status-warn">
+          {problem}
         </p>
-        {problems.map((problem) => (
-          <p key={problem} className="text-sm text-status-warn">
-            {problem}
-          </p>
-        ))}
-      </CardContent>
-    </Card>
+      ))}
+    </ComponentCard>
   );
 }
 
@@ -137,15 +146,26 @@ function InventoryItem({
   onVerify,
   onAskRemove,
 }: InventoryItemProps) {
+  const status: ComponentStatus | null = verification
+    ? {
+        kind: verification.kind,
+        required: true,
+        id: verification.id,
+        state: verification.state,
+        ...(verification.notes ? { notes: verification.notes } : {}),
+        ...(verification.error ? { error: verification.error } : {}),
+      }
+    : null;
   return (
     <li className="min-w-0 rounded-lg border bg-background p-3">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-medium">{title}</span>
         {meta}
-        {verification ? (
-          <Badge variant={verification.verified ? "secondary" : "destructive"}>
-            {verification.verified ? "Verified" : "Needs attention"}
-          </Badge>
+        {status ? (
+          <ComponentStatusBadges
+            status={status}
+            label={verification?.verified ? "Verified" : "Needs attention"}
+          />
         ) : null}
         <span className="ml-auto font-mono text-xs text-muted-foreground">{size}</span>
       </div>
@@ -181,16 +201,7 @@ function InventoryItem({
           Remove
         </Button>
       </div>
-      {verification && !verification.verified ? (
-        <p className="text-sm text-status-warn">
-          {verification.error ?? "The artifact did not pass local verification."}
-        </p>
-      ) : null}
-      {verification?.notes?.length ? (
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {verification.notes.join(" ")}
-        </p>
-      ) : null}
+      <ComponentStatusDetails status={status} />
     </li>
   );
 }

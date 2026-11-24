@@ -286,9 +286,11 @@ EULA acceptance and Vanilla generation stay in the full-screen wizard. Settings 
 component download, selects a manual or placeholder source, accepts an EULA or generates a
 world. Removal only deletes FuryBuilder-owned cache data; a user file is never touched, and a
 project that still needs the artifact can download or link it again through the wizard. The
-dialog is composed from the stock shadcn `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`,
-`Button`, `Badge`, `Alert`, and confirmation `Dialog` primitives with semantic theme variables
-only.
+Components tab and the project wizard render through the same `features/components` primitives
+(`ComponentCard`, `ComponentPicker`, `ComponentStatus`); only their meta and actions differ, so
+there is one status vocabulary and one card layout across both surfaces. The dialog is composed
+from the stock shadcn `Dialog`, `Tabs`, `Card`, `Slider`, `ToggleGroup`, `Button`, `Badge`,
+`Alert`, and confirmation `Dialog` primitives with semantic theme variables only.
 
 ## Security boundaries
 

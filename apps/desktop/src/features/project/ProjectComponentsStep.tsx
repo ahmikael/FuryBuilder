@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import {
   Ban,
   BookOpen,
@@ -20,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { ComponentCard, ComponentPicker, type ComponentPickerOption } from "@/features/components";
 import type { CatalogSnapshot } from "@/assets/types";
 import { loadAssetCatalog } from "@/lib/assets-api";
 import {
@@ -105,40 +104,23 @@ interface ProjectComponentsStepProps {
   onStateChange: (state: ComponentStepState) => void;
 }
 
-const STATE_LABELS: Record<ComponentState, string> = {
-  ready: "Ready",
-  missing: "Not set up",
-  unverified: "Unverified",
-  incompatible: "Incompatible",
-  error: "Error",
-  not_required: "Not required",
-};
+const JAVA_MODES: readonly ComponentPickerOption<ProvisionMode>[] = [
+  { value: "auto", label: "Auto (recommended)" },
+  { value: "existing", label: "Use existing" },
+  { value: "manual", label: "Manual path" },
+];
 
-function stateVariant(state: ComponentState): "default" | "secondary" | "destructive" | "outline" {
-  switch (state) {
-    case "ready":
-      return "secondary";
-    case "incompatible":
-    case "error":
-      return "destructive";
-    case "not_required":
-    case "missing":
-      return "outline";
-    default:
-      return "secondary";
-  }
-}
+const ASSET_MODES: readonly ComponentPickerOption<AssetProvisionMode>[] = [
+  { value: "auto", label: "Auto download" },
+  { value: "manual", label: "Manual" },
+  { value: "placeholder", label: "Placeholder" },
+];
 
-function modeLabel(mode: ComponentMode): string {
-  switch (mode) {
-    case "managed":
-      return "Managed";
-    case "manual":
-      return "Manual";
-    case "placeholder":
-      return "Placeholder";
-  }
-}
+const SERVER_MODES: readonly ComponentPickerOption<ProvisionMode>[] = [
+  { value: "auto", label: "Auto download" },
+  { value: "existing", label: "Use existing" },
+  { value: "manual", label: "Manual JAR" },
+];
 
 function targetFor(profile: VersionProfile): ComponentTarget {
   return {
@@ -160,11 +142,6 @@ function releaseHost(url: string): string {
 function shortPath(path: string): string {
   if (path.length <= 52) return path;
   return `…${path.slice(-49)}`;
-}
-
-function hashLabel(status: ComponentStatus | null): string | null {
-  if (!status?.hash) return null;
-  return `${status.hash.algorithm.toUpperCase()} ${status.hash.value.slice(0, 12)}…`;
 }
 
 function componentLabel(kind: ComponentKind): string {
@@ -219,84 +196,6 @@ function installRequest(
     expectedVersion: release.minecraftVersion,
     expectedHash: { algorithm: "sha1", value: release.sha1 },
   };
-}
-
-function StatusDetails({ status }: { status: ComponentStatus | null }) {
-  if (!status) return null;
-  const hash = hashLabel(status);
-  return (
-    <div className="space-y-1 text-xs">
-      {status.state === "ready" ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground">
-          {status.version ? <span className="font-mono">{status.version}</span> : null}
-          {status.bytes !== undefined ? <span>{formatBytes(status.bytes)}</span> : null}
-          {hash ? (
-            <span className="font-mono" title={status.hash?.value}>
-              {hash}
-            </span>
-          ) : null}
-          {status.path ? (
-            <span className="max-w-full min-w-0 truncate font-mono" title={status.path}>
-              {status.path}
-            </span>
-          ) : null}
-        </div>
-      ) : status.mode === "placeholder" ? (
-        <p className="text-status-warn">
-          No client JAR, catalog or checksum is associated with this explicit choice.
-        </p>
-      ) : status.state === "missing" ? (
-        <p className="text-muted-foreground">Nothing is selected for this project yet.</p>
-      ) : (
-        <p className="text-status-warn">{status.error ?? "This component is not verified."}</p>
-      )}
-      {status.notes?.length ? (
-        <ul className="space-y-0.5 text-muted-foreground">
-          {status.notes.map((note) => (
-            <li key={note}>{note}</li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
-function ComponentCard({
-  icon,
-  title,
-  description,
-  status,
-  children,
-}: {
-  icon: ReactNode;
-  title: string;
-  description: string;
-  status: ComponentStatus | null;
-  children: ReactNode;
-}) {
-  return (
-    <Card className="gap-0 py-0">
-      <CardContent className="space-y-4 p-5">
-        <div className="flex flex-wrap items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            {icon}
-          </div>
-          <div className="min-w-0 flex-1 space-y-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-sm font-semibold">{title}</h3>
-              {status ? (
-                <Badge variant={stateVariant(status.state)}>{STATE_LABELS[status.state]}</Badge>
-              ) : null}
-              {status?.mode ? <Badge variant="outline">{modeLabel(status.mode)}</Badge> : null}
-            </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
-          </div>
-        </div>
-        <StatusDetails status={status} />
-        {children}
-      </CardContent>
-    </Card>
-  );
 }
 
 interface ReleaseSummary {
@@ -1045,21 +944,13 @@ export function ProjectComponentsStep({
             }
             status={javaStatus}
           >
-            <ToggleGroup
-              variant="outline"
-              size="sm"
-              value={[javaMode]}
+            <ComponentPicker
+              label="Java provisioning"
+              value={javaMode}
+              options={JAVA_MODES}
               disabled={locked}
-              className="grid w-full grid-cols-1 sm:grid-cols-3"
-              onValueChange={(value) => {
-                const next = value[0];
-                if (next === "auto" || next === "existing" || next === "manual") setJavaMode(next);
-              }}
-            >
-              <ToggleGroupItem value="auto">Auto (recommended)</ToggleGroupItem>
-              <ToggleGroupItem value="existing">Use existing</ToggleGroupItem>
-              <ToggleGroupItem value="manual">Manual path</ToggleGroupItem>
-            </ToggleGroup>
+              onChange={setJavaMode}
+            />
             {javaMode === "auto" ? (
               <ReleasePanel
                 summary={javaSummary}
@@ -1102,23 +993,13 @@ export function ProjectComponentsStep({
             description="Blocks, items, textures and the palette catalog for this exact version."
             status={assetsStatus}
           >
-            <ToggleGroup
-              variant="outline"
-              size="sm"
-              value={[assetsMode]}
+            <ComponentPicker
+              label="Client assets provisioning"
+              value={assetsMode}
+              options={ASSET_MODES}
               disabled={locked}
-              className="grid w-full grid-cols-1 sm:grid-cols-3"
-              onValueChange={(value) => {
-                const next = value[0];
-                if (next === "auto" || next === "manual" || next === "placeholder") {
-                  setAssetsMode(next);
-                }
-              }}
-            >
-              <ToggleGroupItem value="auto">Auto download</ToggleGroupItem>
-              <ToggleGroupItem value="manual">Manual</ToggleGroupItem>
-              <ToggleGroupItem value="placeholder">Placeholder</ToggleGroupItem>
-            </ToggleGroup>
+              onChange={setAssetsMode}
+            />
             {assetsMode === "auto" ? (
               <ReleasePanel
                 summary={assetsSummary}
@@ -1234,23 +1115,13 @@ export function ProjectComponentsStep({
               description="Required for Vanilla World generation. The server runs only after explicit EULA and per-run consent in the Source step."
               status={serverStatus}
             >
-              <ToggleGroup
-                variant="outline"
-                size="sm"
-                value={[serverMode]}
+              <ComponentPicker
+                label="Official server provisioning"
+                value={serverMode}
+                options={SERVER_MODES}
                 disabled={locked}
-                className="grid w-full grid-cols-1 sm:grid-cols-3"
-                onValueChange={(value) => {
-                  const next = value[0];
-                  if (next === "auto" || next === "existing" || next === "manual") {
-                    setServerMode(next);
-                  }
-                }}
-              >
-                <ToggleGroupItem value="auto">Auto download</ToggleGroupItem>
-                <ToggleGroupItem value="existing">Use existing</ToggleGroupItem>
-                <ToggleGroupItem value="manual">Manual JAR</ToggleGroupItem>
-              </ToggleGroup>
+                onChange={setServerMode}
+              />
               {serverMode === "auto" ? (
                 <ReleasePanel
                   summary={serverSummary}
