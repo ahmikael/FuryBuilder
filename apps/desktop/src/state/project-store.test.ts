@@ -265,6 +265,34 @@ describe("project activation", () => {
     }
   });
 
+  it("forwards the verified profile and flat preset to the creator", async () => {
+    const flat = {
+      baseY: 70,
+      layers: [{ block: "minecraft:stone", thickness: 2 }],
+      biome: "minecraft:desert",
+    };
+    const created = await useProjectStore
+      .getState()
+      .create("My Castle", "flat", "Custom.furybuilder", {
+        profileId: "java-classic-test",
+        flat,
+      });
+
+    expect(created).toBe(true);
+    expect(api.create).toHaveBeenCalledWith(
+      "My Castle",
+      "flat",
+      {
+        selectedDimension: "minecraft:overworld",
+        loadRadius: 1,
+        workspace,
+        scene,
+      },
+      "Custom.furybuilder",
+      { profileId: "java-classic-test", flat },
+    );
+  });
+
   it("refuses to switch projects with unsaved changes unless discarding", async () => {
     useProjectStore.setState({ current: session(), projects: [summary] });
     useWorldStore.setState({ revision: 7 });

@@ -158,6 +158,32 @@ const worldAnalysis: JavaWorldAnalysis = {
   },
 };
 
+const flatDefaults = {
+  preset: {
+    baseY: 62,
+    layers: [
+      { block: "minecraft:stone", thickness: 1 },
+      { block: "minecraft:dirt", thickness: 1 },
+      { block: "minecraft:grass_block", thickness: 1 },
+    ],
+    biome: "minecraft:plains",
+  },
+  limits: { maxLayers: 8, maxLayerThickness: 16, maxTotalThickness: 64, footprint: 33 },
+  blockChoices: [
+    "minecraft:stone",
+    "minecraft:dirt",
+    "minecraft:grass_block",
+    "minecraft:sand",
+    "minecraft:oak_planks",
+  ],
+  biomeChoices: [
+    "minecraft:plains",
+    "minecraft:forest",
+    "minecraft:desert",
+    "minecraft:snowy_plains",
+  ],
+};
+
 const versionCatalog: VersionCatalogReport = {
   source: "cache",
   fetchedAtUnix: 1_700_000_000,
@@ -346,6 +372,7 @@ beforeEach(() => {
   api.defaults.mockReset().mockResolvedValue({
     projectsRoot: "C:\\Users\\Test\\Documents\\FuryBuilder",
     folderSuffix: ".furybuilder",
+    flat: flatDefaults,
   });
   worldApi.info.mockReset().mockResolvedValue(opened(first).info);
   worldApi.history.mockReset().mockResolvedValue({
@@ -667,9 +694,97 @@ describe("project wizard", () => {
           scene: defaultScene(),
         },
         "Custom Flat.furybuilder",
+        {
+          profileId: "java-classic-1.21.4",
+          flat: flatDefaults.preset,
+        },
       ),
     );
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("edits flat layers, height and biome before creating the project", async () => {
+    const user = userEvent.setup();
+    openWizard("flat");
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Custom Layers");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByRole("heading", { name: "Source" })).toBeInTheDocument();
+    expect(screen.getByText(/33×33 platform/)).toBeInTheDocument();
+    expect(screen.getByText(/Y -64\.\.=319/)).toBeInTheDocument();
+
+    const baseY = screen.getByLabelText("Bottom Y");
+    await user.clear(baseY);
+    await user.type(baseY, "70");
+
+    const firstThickness = screen.getByLabelText("Layer 1 thickness");
+    await user.clear(firstThickness);
+    await user.type(firstThickness, "2");
+
+    await user.click(screen.getByRole("button", { name: "Remove layer 3" }));
+    await user.click(screen.getByRole("button", { name: "Remove layer 2" }));
+    await user.click(screen.getByRole("button", { name: "Add layer" }));
+
+    await user.click(screen.getByRole("combobox", { name: "Layer 2 block" }));
+    await user.click(await screen.findByRole("option", { name: "Sand" }));
+    await user.click(screen.getByRole("combobox", { name: "Flat source biome" }));
+    await user.click(await screen.findByRole("option", { name: "Desert" }));
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Review" })).toBeInTheDocument();
+    expect(screen.getByText("Stone ×2 → Sand ×1")).toBeInTheDocument();
+    expect(screen.getByText("minecraft:desert")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create project" }));
+    await waitFor(() =>
+      expect(api.create).toHaveBeenCalledWith(
+        "Custom Layers",
+        "flat",
+        {
+          selectedDimension: "minecraft:overworld",
+          loadRadius: 1,
+          workspace: defaultWorkspacePolicy(),
+          scene: defaultScene(),
+        },
+        undefined,
+        {
+          profileId: "java-classic-1.21.4",
+          flat: {
+            baseY: 70,
+            layers: [
+              { block: "minecraft:stone", thickness: 2 },
+              { block: "minecraft:sand", thickness: 1 },
+            ],
+            biome: "minecraft:desert",
+          },
+        },
+      ),
+    );
+    await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
+  });
+
+  it("refuses a flat source outside the selected version bounds", async () => {
+    const user = userEvent.setup();
+    openWizard("flat");
+    render(<ProjectManager />);
+
+    await user.type(screen.getByLabelText("Project name"), "Out Of Bounds");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect((await screen.findAllByText("Full support")).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    const baseY = await screen.findByLabelText("Bottom Y");
+    await user.clear(baseY);
+    await user.type(baseY, "319");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByText("Keep the flat source inside overworld Y -64..=319.")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
+    expect(api.create).not.toHaveBeenCalled();
   });
 
   it("refuses an invalid project folder before the next step", async () => {

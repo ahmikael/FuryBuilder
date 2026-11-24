@@ -162,11 +162,15 @@ profile remain visible for inspection but block `Next`; a snapshot without a pro
 read-only/convertible by policy, never presented as writable. Import locks the selection to the
 version detected in `level.dat` and asks the user to confirm it.
 
-`Source` shows the starting world: a compact description for Empty/Flat, read-only analysis
-with blockers and warnings for Import, and the existing generation panel for Vanilla. `Review`
-repeats the name, folder, library location, mode, version and source before creation. Every
-step returns its own validation errors; `Next` refuses
-to advance, shows the reason, and the step buttons only reach steps that were already unlocked.
+`Source` shows the starting world. Empty states the selected version and its overworld height.
+Flat reads backend-owned defaults, limits and quick choices, then lets the user edit the layer
+stack (block, thickness, order), bottom Y and biome. The wizard validates the same limits before
+`Next`, and `project_create` carries the verified `profileId` plus the flat preset so the store
+re-validates every block, the biome and the profile's Y range before it writes a single block.
+Import shows read-only analysis with blockers and warnings, and Vanilla keeps the existing
+generation panel. `Review` repeats the name, folder, library location, mode, version, flat layers
+and source before creation. Every step returns its own validation errors; `Next` refuses to
+advance, shows the reason, and the step buttons only reach steps that were already unlocked.
 `Back` keeps the entered values, and the progress bar plus `Step X of Y` label are the only
 progress indicators.
 

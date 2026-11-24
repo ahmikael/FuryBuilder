@@ -1,7 +1,7 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics и Version закрыты; идёт шаг Source.
-> Дата: 2026-11-22; обновлено 2026-11-24 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step).
+> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version и Source Empty/Flat закрыты; идёт Source Import.
+> Дата: 2026-11-22; обновлено 2026-11-24 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
 ---
@@ -1407,9 +1407,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P0-42` — Source Empty/Flat: параметры слоёв/высоты/биома под версию. Статус: P0 в работе.
+**Текущий фокус:** `P0-43` — Source Import: выбор папки/архива, анализ, blockers, `Import as-is`/`Convert`. Статус: P0 в работе.
 
-**Следующий шаг после закрытия текущего фокуса:** `P0-43`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P0-44`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1491,7 +1491,7 @@ UI:
 - [x] `P0-39` Каркас wizard: шаги, навигация, валидация, прогресс, полноэкранный режим.
 - [x] `P0-40` Basics: имя, папка, режим Empty/Flat/Import/Vanilla, требования режима.
 - [x] `P0-41` Version: каталог, поиск, latest/recommended, snapshot toggle, карточка, badges, предупреждения.
-- [ ] `P0-42` Source Empty/Flat: параметры слоёв/высоты/биома под версию.
+- [x] `P0-42` Source Empty/Flat: параметры слоёв/высоты/биома под версию.
 - [ ] `P0-43` Source Import: выбор папки/архива, анализ, blockers, `Import as-is`/`Convert`.
 - [ ] `P0-44` Source Vanilla: seed/preset/radius/structures/datapacks, EULA, время/диск.
 - [ ] `P0-45` Components: Auto/Manual/Existing для Java/assets/server с состоянием и ошибками.
@@ -1689,6 +1689,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-24 | Source Empty/Flat | Шаг Source получил версионные параметры: backend владеет `FlatDefaults` (пресет, лимиты, быстрые блоки и биомы) и валидирует слои, толщину, нижний Y и биом против выбранного `VersionProfile` до записи; `CreateRequest` заменён на `CreateOptions` с `profileId` и `FlatPreset`, `project_create`/TS API/`useProjectStore` пробрасывают их; wizard показывает Empty с высотой мира, для Flat даёт редактировать слои (block/thickness/порядок, до лимита), нижний Y и биом, повторяет слои/биом в Review и блокирует `Next` при выходе за overworld-диапазон; store-тесты на кастомные слои/высоту/биом, unknown block, air, границы и неверный профиль; UI собран из штатных shadcn `Button`/`Card`/`Field`/`Input`/`Select`/`Badge`; docs обновлены | см. `git log` | 668 Rust tests, 333 TS tests, clippy, fmt, typecheck/lint/format, browser QA |
 | 2026-11-24 | Version шага создания | `versions_catalog` отдаёт официальный manifest через общий `DownloadClient` и кэш `<app-data>/version-manifest.json`, сопоставляя каждую release/snapshot запись с проверенным профилем сборки; wizard получил шаг Version между Basics и Source (для Import — после анализа мира, версия зафиксирована из `level.dat`), поиск и группировку по серии, метки latest/recommended, snapshot toggle, карточку с DataVersion, Java, высотой, layout, pack-форматами, каталогом, support badge и честными предупреждениями; версии без профиля видны, но блокируют `Next`; Review показывает выбранную версию; UI собран из штатных shadcn `Button`/`Card`/`Alert`/`Badge`/`Checkbox`/`Field`/`Input`/`ScrollArea`; docs обновлены | см. `git log` | 663 Rust tests, 330 TS tests, clippy, fmt, typecheck/lint/format, browser QA |
 | 2026-11-24 | Basics шага создания | Backend владеет library root (`Documents/FuryBuilder`, fallback в app data) и суффиксом `.furybuilder`; wizard показывает папку проекта, позволяет переопределить имя папки, сам добавляет суффикс и до `Next` отклоняет path separators/reserved characters; имя и папка сохраняются при переходах, для каждого режима показаны требования; Review повторяет папку и location; импорт и Vanilla получают выбранную папку через `project_import_world`/`project_import_generated_world`; `create_with_folder` не перезаписывает существующую папку и возвращает conflict; тесты store и wizard | см. `git log` | Rust tests, TS tests, clippy, fmt, typecheck/lint/format, browser QA |
 | 2026-11-23 | Project wizard shell | Новый полноэкранный `ProjectWizard` открывается вместо dialog в режиме «нет проекта»: шаги Basics → Source → Review (Vanilla использует шаги Basics → Source), навигация по уже открытым шагам, отдельная валидация каждого шага с понятной ошибкой, `Step X of Y` и progress bar; Basics даёт имя и режим, Source показывает Empty/Flat, разбор импортируемого мира или генерацию Vanilla, Review повторяет сводку; отправка показывает `preparing`, ошибка остаётся в мастере с `Retry`, значения не теряются; UI собран из штатных shadcn `Button`/`Card`/`Alert`/`Badge`/`Field`/`Input`/`Progress`/`Separator`/`ToggleGroup`, visual QA в браузере без console errors; тесты на шаги, прогресс, валидацию, создание, импорт, retry и отмену | см. `git log` | 660 Rust tests, TS tests, clippy, fmt, typecheck/lint/format, browser QA |

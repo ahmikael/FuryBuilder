@@ -7,6 +7,7 @@ import {
   checkpointProject,
   closeProject,
   createProject,
+  type CreateProjectOptions,
   fetchCheckpoints,
   fetchProjectStatus,
   fetchProjects,
@@ -138,7 +139,12 @@ interface ProjectUiState {
   refreshList: () => Promise<void>;
   refreshSession: () => Promise<void>;
   resume: () => Promise<void>;
-  create: (name: string, mode: CreationMode, folder?: string) => Promise<boolean>;
+  create: (
+    name: string,
+    mode: CreationMode,
+    folder?: string,
+    options?: CreateProjectOptions,
+  ) => Promise<boolean>;
   analyzeWorld: (folder: string) => Promise<JavaWorldAnalysis | null>;
   clearWorldAnalysis: () => void;
   importWorld: (name: string, folder: string, projectFolder?: string) => Promise<boolean>;
@@ -380,15 +386,18 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
     }
   },
 
-  create: async (name, mode, folder) => {
+  create: async (name, mode, folder, options) => {
     set(preparingState("Creating the project…"));
     try {
-      const payload = await createProject(
-        name.trim(),
-        mode,
-        currentEditorState(),
-        folder?.trim() || undefined,
-      );
+      const payload = options
+        ? await createProject(
+            name.trim(),
+            mode,
+            currentEditorState(),
+            folder?.trim() || undefined,
+            options,
+          )
+        : await createProject(name.trim(), mode, currentEditorState(), folder?.trim() || undefined);
       applyPayload(payload);
       set({ managerOpen: false });
       pushToast({

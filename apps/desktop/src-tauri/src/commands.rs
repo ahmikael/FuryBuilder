@@ -450,6 +450,7 @@ pub struct OpenedProjectPayload {
 pub struct ProjectDefaults {
     pub projects_root: String,
     pub folder_suffix: String,
+    pub flat: project_store::FlatDefaults,
 }
 
 /// One official version entry plus the verified profile this build actually supports.
@@ -667,6 +668,8 @@ pub fn project_create(
     mode: project_store::CreationMode,
     editor_state: project_store::EditorState,
     folder: Option<String>,
+    profile_id: Option<String>,
+    flat: Option<project_store::FlatPreset>,
 ) -> Result<OpenedProjectPayload, AppError> {
     let mut projects = state
         .projects
@@ -675,7 +678,16 @@ pub fn project_create(
     ensure_current_closed(&state, &mut projects)?;
     let detail = projects
         .store
-        .create_with_folder(&name, mode, editor_state.clone(), folder.as_deref())
+        .create_with_options(
+            &name,
+            mode,
+            editor_state.clone(),
+            project_store::CreateOptions {
+                folder: folder.as_deref(),
+                profile_id: profile_id.as_deref(),
+                flat,
+            },
+        )
         .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
     let (detail, world, recovery) = projects.store.open(&folder).map_err(project_error)?;
@@ -1048,6 +1060,7 @@ pub fn project_defaults(state: State<'_, AppState>) -> Result<ProjectDefaults, A
     Ok(ProjectDefaults {
         projects_root: projects.store.root().display().to_string(),
         folder_suffix: format!(".{}", project_store::PROJECT_EXTENSION),
+        flat: project_store::FlatDefaults::default(),
     })
 }
 

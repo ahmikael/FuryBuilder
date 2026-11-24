@@ -168,10 +168,56 @@ export interface ProjectList {
   warnings: string[];
 }
 
-/** Library location owned by the backend; the wizard never invents either value. */
+/** One horizontal layer of the flat starting shape, listed bottom-up. */
+export interface FlatLayer {
+  block: string;
+  thickness: number;
+}
+
+/** Version-neutral flat source definition validated by the backend before any write. */
+export interface FlatPreset {
+  baseY: number;
+  layers: FlatLayer[];
+  biome: string;
+}
+
+export interface FlatLimits {
+  maxLayers: number;
+  maxLayerThickness: number;
+  maxTotalThickness: number;
+  footprint: number;
+}
+
+/** Backend-owned flat defaults, limits and quick choices; the wizard never invents them. */
+export interface FlatDefaults {
+  preset: FlatPreset;
+  limits: FlatLimits;
+  blockChoices: string[];
+  biomeChoices: string[];
+}
+
+/** Library location and flat-source parameters owned by the backend. */
 export interface ProjectDefaults {
   projectsRoot: string;
   folderSuffix: string;
+  flat: FlatDefaults;
+}
+
+export function flatTotalThickness(preset: FlatPreset): number {
+  return preset.layers.reduce((sum, layer) => sum + layer.thickness, 0);
+}
+
+export function flatTopY(preset: FlatPreset): number {
+  return preset.baseY + flatTotalThickness(preset) - 1;
+}
+
+/** Human label for a namespaced id while keeping the full id in tooltips and code. */
+export function formatResourceId(id: string): string {
+  const path = id.includes(":") ? id.slice(id.indexOf(":") + 1) : id;
+  return path
+    .split("_")
+    .map((part) => (part.length > 0 ? part[0]!.toUpperCase() + part.slice(1) : part))
+    .join(" ");
 }
 
 export interface RecoveryInfo {
@@ -304,10 +350,11 @@ export const CREATION_MODES: Array<{
     mode: "flat",
     label: "Flat base",
     description:
-      "A 33×33 stone, dirt and grass platform around the origin. Not vanilla world generation.",
+      "An editable flat platform around the origin with your own layers, height and biome. Not vanilla world generation.",
     requirements: [
       "A project name and folder.",
       "No world generator runs; the platform is created as FuryBuilder world data.",
+      "Layers, height and biome must fit the selected version's overworld height.",
     ],
     available: true,
   },

@@ -26,6 +26,8 @@ pub enum ProjectError {
     UnsupportedSchema { found: u32, supported: u32 },
     #[error("world version is not supported by this build: {0}")]
     UnsupportedWorldVersion(String),
+    #[error("invalid flat source: {0}")]
+    InvalidFlatPreset(String),
     #[error("project data is corrupt: {0}")]
     Corrupt(String),
     #[error("project snapshot checksum mismatch: expected {expected}, got {actual}")]
@@ -68,6 +70,7 @@ impl ProjectError {
             ProjectError::UnsupportedSchema { .. } | ProjectError::UnsupportedWorldVersion(_) => {
                 "unsupported_version"
             }
+            ProjectError::InvalidFlatPreset(_) => "invalid_argument",
             ProjectError::Corrupt(_) | ProjectError::ChecksumMismatch { .. } => "conflict",
             ProjectError::LimitExceeded(_) => "limit_exceeded",
             ProjectError::UnsafeSource(_) => "permission_denied",

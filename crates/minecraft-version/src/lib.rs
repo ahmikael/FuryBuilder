@@ -23,7 +23,7 @@ pub use profile_builder::{
 };
 pub use profiles::{
     builtin_profiles, default_profile, java_classic_1_21_4, profile_for_data_version,
-    profile_for_version, JAVA_CLASSIC_1_21_4_ID,
+    profile_for_id, profile_for_version, JAVA_CLASSIC_1_21_4_ID,
 };
 pub use version_json::{
     fetch_version_json, fetch_version_json_document, fetch_version_json_document_with, AssetIndex,

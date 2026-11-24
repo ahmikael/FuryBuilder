@@ -3,10 +3,12 @@ use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use minecraft_version::{default_profile, profile_for_id, VersionProfile};
 use sha2::{Digest, Sha256};
-use world_domain::{BiomeSection, BiomeState, BlockPos, ChunkPos, World};
+use world_domain::{BlockPos, ChunkPos, World, WorldVersion};
 
 use crate::error::ProjectError;
+use crate::flat::{build_flat_base, FlatPreset};
 use crate::manifest::{
     folder_component, is_hex_sha256, normalize_name, now_ms, validate_folder, CreationMode,
     EditorState, ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, ProjectTarget,
@@ -347,53 +349,38 @@ fn read_checkpoint_meta(
     Ok(meta)
 }
 
-/// Builds a deterministic flat base: a 33x33 stone platform at y=63..=64 around the
-/// origin. It is deliberate manual geometry, not vanilla world generation. Every
-/// overworld section also receives a uniform `minecraft:plains` biome so the biome editor
-/// has an explicit, documented starting value instead of inventing one during an edit.
-pub fn create_flat_base(world: &mut World) -> Result<(), ProjectError> {
-    let stone: world_domain::BlockState = "minecraft:stone"
-        .parse()
-        .map_err(|_| ProjectError::corrupt("built-in stone state is invalid"))?;
-    let dirt: world_domain::BlockState = "minecraft:dirt".parse().unwrap();
-    let grass: world_domain::BlockState = "minecraft:grass_block[snowy=false]".parse().unwrap();
-    for x in -16..=16 {
-        for z in -16..=16 {
-            world
-                .set_block("minecraft:overworld", BlockPos::new(x, 62, z), &stone)
-                .map_err(|error| ProjectError::corrupt(error.to_string()))?;
-            world
-                .set_block("minecraft:overworld", BlockPos::new(x, 63, z), &dirt)
-                .map_err(|error| ProjectError::corrupt(error.to_string()))?;
-            world
-                .set_block("minecraft:overworld", BlockPos::new(x, 64, z), &grass)
-                .map_err(|error| ProjectError::corrupt(error.to_string()))?;
-        }
-    }
-    let plains: BiomeState = "minecraft:plains"
-        .parse()
-        .map_err(|_| ProjectError::corrupt("built-in plains biome is invalid"))?;
-    for chunk_x in -1..=1 {
-        for chunk_z in -1..=1 {
-            for section_y in -4..=19 {
-                world
-                    .install_biomes(
-                        "minecraft:overworld",
-                        ChunkPos::new(chunk_x, chunk_z),
-                        section_y,
-                        Some(BiomeSection::uniform(plains.clone())),
-                    )
-                    .map_err(|error| ProjectError::corrupt(error.to_string()))?;
-            }
-        }
-    }
-    Ok(())
+/// Options for the generic Empty/Flat creator. Import and Vanilla worlds carry their own
+/// version and provenance, so they use their dedicated constructors.
+#[derive(Debug, Clone, Default)]
+pub struct CreateOptions<'a> {
+    /// Explicit `.furybuilder` folder name. An existing folder is a conflict.
+    pub folder: Option<&'a str>,
+    /// Verified profile selected in the wizard. Defaults to the recommended profile.
+    pub profile_id: Option<&'a str>,
+    /// Flat source parameters. Only valid for `CreationMode::Flat`.
+    pub flat: Option<FlatPreset>,
 }
 
-pub fn build_world(mode: CreationMode) -> Result<World, ProjectError> {
+/// Builds the starting world for a versioned profile.
+pub fn build_world(
+    mode: CreationMode,
+    flat: Option<&FlatPreset>,
+    profile: &VersionProfile,
+) -> Result<World, ProjectError> {
     let mut world = World::new_empty();
+    let version = WorldVersion::new(profile.minecraft_version.as_str(), profile.data_version)
+        .map_err(|error| ProjectError::UnsupportedWorldVersion(error.to_string()))?;
+    world.set_version(version);
     if mode == CreationMode::Flat {
-        create_flat_base(&mut world)?;
+        let default_preset;
+        let preset = match flat {
+            Some(preset) => preset,
+            None => {
+                default_preset = FlatPreset::default();
+                &default_preset
+            }
+        };
+        build_flat_base(&mut world, preset, profile)?;
     }
     Ok(world)
 }
@@ -565,7 +552,7 @@ impl ProjectStore {
         mode: CreationMode,
         editor_state: EditorState,
     ) -> Result<ProjectDetail, ProjectError> {
-        self.create_with_folder(name, mode, editor_state, None)
+        self.create_with_options(name, mode, editor_state, CreateOptions::default())
     }
 
     /// Creates a project in an explicit `.furybuilder` folder. An explicit folder is never
@@ -578,6 +565,25 @@ impl ProjectStore {
         editor_state: EditorState,
         folder: Option<&str>,
     ) -> Result<ProjectDetail, ProjectError> {
+        self.create_with_options(
+            name,
+            mode,
+            editor_state,
+            CreateOptions {
+                folder,
+                ..CreateOptions::default()
+            },
+        )
+    }
+
+    /// Creates an Empty or Flat project with an explicit verified profile and flat source.
+    pub fn create_with_options(
+        &self,
+        name: &str,
+        mode: CreationMode,
+        editor_state: EditorState,
+        options: CreateOptions<'_>,
+    ) -> Result<ProjectDetail, ProjectError> {
         let name = normalize_name(name)?;
         if !mode.is_available() {
             return Err(ProjectError::InvalidManifest(format!(
@@ -585,8 +591,27 @@ impl ProjectStore {
                 mode.label()
             )));
         }
+        if mode != CreationMode::Flat && options.flat.is_some() {
+            return Err(ProjectError::InvalidFlatPreset(
+                "flat source parameters are only valid for a flat project".to_owned(),
+            ));
+        }
         editor_state.validate()?;
-        let mut world = build_world(mode)?;
+        let profile = match options.profile_id {
+            Some(id) => profile_for_id(id).ok_or_else(|| {
+                ProjectError::UnsupportedWorldVersion(format!(
+                    "no built-in version profile has id `{id}`"
+                ))
+            })?,
+            None => default_profile(),
+        };
+        if !profile.capabilities.write || !profile.capabilities.edit {
+            return Err(ProjectError::UnsupportedWorldVersion(format!(
+                "the version profile `{}` is not writable",
+                profile.id
+            )));
+        }
+        let mut world = build_world(mode, options.flat.as_ref(), &profile)?;
         world.bump_revision();
         self.create_with_world(CreateRequest {
             name: &name,
@@ -595,7 +620,7 @@ impl ProjectStore {
             world: &world,
             source: SourceInfo::generated(),
             vanilla: None,
-            folder,
+            folder: options.folder,
         })
     }
 
@@ -1567,7 +1592,7 @@ mod tests {
     fn vanilla_provenance_is_persisted_and_validated() {
         let root = temp_root("vanilla");
         let store = ProjectStore::new(&root);
-        let mut world = build_world(CreationMode::Empty).expect("world");
+        let mut world = build_world(CreationMode::Empty, None, &default_profile()).expect("world");
         world.bump_revision();
         let provenance = VanillaProvenance {
             seed: "FuryBuilder".to_owned(),
@@ -2089,6 +2114,182 @@ mod tests {
         assert_eq!(fs::read_dir(dir.join(CACHE_DIR)).unwrap().count(), 0);
         assert!(dir.join(&manifest.world_file).exists());
         assert!(dir.join(PROJECT_FILE).exists());
+    }
+
+    #[test]
+    fn flat_preset_controls_layers_height_biome_and_footprint() {
+        let root = temp_root("flat-preset");
+        let store = ProjectStore::new(&root);
+        let preset = FlatPreset {
+            base_y: 70,
+            layers: vec![
+                crate::flat::FlatLayer {
+                    block: "minecraft:stone".to_owned(),
+                    thickness: 2,
+                },
+                crate::flat::FlatLayer {
+                    block: "minecraft:grass_block".to_owned(),
+                    thickness: 1,
+                },
+            ],
+            biome: "minecraft:desert".to_owned(),
+        };
+        let detail = store
+            .create_with_options(
+                "Custom Flat",
+                CreationMode::Flat,
+                EditorState::default(),
+                CreateOptions {
+                    profile_id: Some(minecraft_version::JAVA_CLASSIC_1_21_4_ID),
+                    flat: Some(preset),
+                    ..CreateOptions::default()
+                },
+            )
+            .expect("create");
+        let (_, world, _) = store.open(&detail.summary.folder).expect("open");
+
+        for y in 70..=71 {
+            assert_eq!(
+                block_at(&world, "minecraft:overworld", BlockPos::new(16, y, -16))
+                    .unwrap()
+                    .name(),
+                "minecraft:stone"
+            );
+        }
+        assert_eq!(
+            block_at(&world, "minecraft:overworld", BlockPos::new(-16, 72, 16))
+                .unwrap()
+                .name(),
+            "minecraft:grass_block"
+        );
+        assert_eq!(
+            block_at(&world, "minecraft:overworld", BlockPos::new(0, 69, 0))
+                .unwrap()
+                .name(),
+            "minecraft:air"
+        );
+        assert_eq!(
+            world
+                .get_biome("minecraft:overworld", BlockPos::new(0, 0, 0))
+                .unwrap()
+                .map(|biome| biome.as_str().to_owned())
+                .as_deref(),
+            Some("minecraft:desert")
+        );
+        assert_eq!(detail.target.minecraft_version.as_str(), "1.21.4");
+    }
+
+    #[test]
+    fn flat_preset_validation_refuses_unsafe_values() {
+        let root = temp_root("flat-invalid");
+        let store = ProjectStore::new(&root);
+        let create = |preset: FlatPreset| {
+            store.create_with_options(
+                "Invalid Flat",
+                CreationMode::Flat,
+                EditorState::default(),
+                CreateOptions {
+                    flat: Some(preset),
+                    ..CreateOptions::default()
+                },
+            )
+        };
+
+        let above_bounds = FlatPreset {
+            base_y: 319,
+            ..FlatPreset::default()
+        };
+        assert!(matches!(
+            create(above_bounds),
+            Err(ProjectError::InvalidFlatPreset(message)) if message.contains("overworld Y")
+        ));
+
+        let below_bounds = FlatPreset {
+            base_y: -65,
+            ..FlatPreset::default()
+        };
+        assert!(matches!(
+            create(below_bounds),
+            Err(ProjectError::InvalidFlatPreset(_))
+        ));
+
+        let unknown_block = FlatPreset {
+            layers: vec![crate::flat::FlatLayer {
+                block: "minecraft:not_a_block".to_owned(),
+                thickness: 1,
+            }],
+            ..FlatPreset::default()
+        };
+        assert!(matches!(
+            create(unknown_block),
+            Err(ProjectError::InvalidFlatPreset(message)) if message.contains("verified starting set")
+        ));
+
+        let mut air = FlatPreset::default();
+        air.layers[0].block = "minecraft:air".to_owned();
+        assert!(matches!(
+            create(air),
+            Err(ProjectError::InvalidFlatPreset(message)) if message.contains("cannot be air")
+        ));
+
+        let mut too_thick = FlatPreset::default();
+        too_thick.layers[0].thickness = 17;
+        assert!(matches!(
+            create(too_thick),
+            Err(ProjectError::InvalidFlatPreset(message)) if message.contains("blocks thick")
+        ));
+
+        let mut enormous = FlatPreset::default();
+        enormous.layers[0].thickness = u32::MAX;
+        assert!(matches!(
+            create(enormous),
+            Err(ProjectError::InvalidFlatPreset(message)) if message.contains("blocks thick")
+        ));
+
+        let bad_biome = FlatPreset {
+            biome: "plains".to_owned(),
+            ..FlatPreset::default()
+        };
+        assert!(matches!(
+            create(bad_biome),
+            Err(ProjectError::InvalidFlatPreset(message)) if message.contains("biome")
+        ));
+        assert!(store.list().projects.is_empty());
+    }
+
+    #[test]
+    fn flat_parameters_are_only_accepted_for_flat_projects() {
+        let root = temp_root("flat-mode");
+        let store = ProjectStore::new(&root);
+        let result = store.create_with_options(
+            "Empty With Flat",
+            CreationMode::Empty,
+            EditorState::default(),
+            CreateOptions {
+                flat: Some(FlatPreset::default()),
+                ..CreateOptions::default()
+            },
+        );
+        assert!(matches!(result, Err(ProjectError::InvalidFlatPreset(_))));
+    }
+
+    #[test]
+    fn create_refuses_an_unknown_profile_id() {
+        let root = temp_root("profile-id");
+        let store = ProjectStore::new(&root);
+        let result = store.create_with_options(
+            "Unknown Profile",
+            CreationMode::Empty,
+            EditorState::default(),
+            CreateOptions {
+                profile_id: Some("java-classic-9.9.9"),
+                ..CreateOptions::default()
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(ProjectError::UnsupportedWorldVersion(_))
+        ));
     }
 
     #[test]

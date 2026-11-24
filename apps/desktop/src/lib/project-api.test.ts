@@ -45,6 +45,8 @@ describe("project IPC contract", () => {
       mode: "flat",
       editorState,
       folder: null,
+      profileId: null,
+      flat: null,
     });
 
     await createProject("Castle", "flat", editorState, "Chosen.furybuilder");
@@ -53,6 +55,26 @@ describe("project IPC contract", () => {
       mode: "flat",
       editorState,
       folder: "Chosen.furybuilder",
+      profileId: null,
+      flat: null,
+    });
+
+    const flat = {
+      baseY: 70,
+      layers: [{ block: "minecraft:stone", thickness: 2 }],
+      biome: "minecraft:desert",
+    };
+    await createProject("Castle", "flat", editorState, "Chosen.furybuilder", {
+      profileId: "java-classic-test",
+      flat,
+    });
+    expect(invoke).toHaveBeenLastCalledWith("project_create", {
+      name: "Castle",
+      mode: "flat",
+      editorState,
+      folder: "Chosen.furybuilder",
+      profileId: "java-classic-test",
+      flat,
     });
 
     await importJavaWorld("Castle", "C:\\saves\\Castle", editorState, "Imported.furybuilder");

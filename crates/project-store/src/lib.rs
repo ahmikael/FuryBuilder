@@ -16,6 +16,7 @@
 //! decoding and re-encoding it before the manifest references it.
 
 pub mod error;
+pub mod flat;
 pub mod manifest;
 pub mod snapshot;
 pub mod source;
@@ -23,6 +24,10 @@ pub mod store;
 
 pub use component_model::ComponentMode;
 pub use error::ProjectError;
+pub use flat::{
+    build_flat_base, FlatDefaults, FlatLayer, FlatLimits, FlatPreset, FLAT_BIOME_CHOICES,
+    FLAT_FOOTPRINT, MAX_FLAT_LAYERS, MAX_FLAT_LAYER_THICKNESS, MAX_FLAT_TOTAL_THICKNESS,
+};
 pub use manifest::{
     AssetsComponent, AssetsPack, CreationMode, EditorState, JavaComponent, ProjectComponents,
     ProjectDetail, ProjectList, ProjectManifest, ProjectSummary, ProjectTarget, RecoveryInfo,
@@ -33,7 +38,7 @@ pub use snapshot::{decode_world, encode_world, SNAPSHOT_FORMAT_VERSION};
 pub use source::{SourceFile, SourceManifest};
 pub use store::TEMPLATES_DIR;
 pub use store::{
-    build_world, checksum, create_flat_base, is_safe_file_name, snapshot_bytes, CheckpointMeta,
+    build_world, checksum, is_safe_file_name, snapshot_bytes, CheckpointMeta, CreateOptions,
     ExportOutcome, OpenedCheckpoint, ProjectStore, AUTOSAVE_FILE, CACHE_DIR, CHECKPOINT_DIR,
     CHECKPOINT_SCHEMA_VERSION, DATA_DIR, EXPORTS_DIR, MAX_CHECKPOINTS, MAX_CHECKPOINT_TEXT_CHARS,
     MAX_MANIFEST_BACKUPS, MAX_SNAPSHOTS, MAX_SOURCE_FILES, SESSION_MARKER, SOURCE_DIR,

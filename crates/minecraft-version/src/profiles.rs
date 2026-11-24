@@ -50,6 +50,13 @@ pub fn profile_for_data_version(data_version: i32) -> Option<VersionProfile> {
         .find(|profile| profile.data_version == data_version)
 }
 
+/// Returns the built-in profile with a stable profile id.
+pub fn profile_for_id(id: &str) -> Option<VersionProfile> {
+    builtin_profiles()
+        .into_iter()
+        .find(|profile| profile.id == id)
+}
+
 /// Returns the built-in profile for an exact Minecraft version id.
 pub fn profile_for_version(version: &VersionId) -> Option<VersionProfile> {
     builtin_profiles()
@@ -92,6 +99,15 @@ mod tests {
         assert_eq!(profile.java.recommended_major, 21);
         assert_eq!(profile.resource_pack_format, Some(46));
         assert_eq!(profile.datapack_format, Some(61));
+    }
+
+    #[test]
+    fn profile_lookup_by_id_is_exact() {
+        assert_eq!(
+            profile_for_id(JAVA_CLASSIC_1_21_4_ID).map(|profile| profile.id),
+            Some(JAVA_CLASSIC_1_21_4_ID.to_owned())
+        );
+        assert!(profile_for_id("java-classic-9.9.9").is_none());
     }
 
     #[test]

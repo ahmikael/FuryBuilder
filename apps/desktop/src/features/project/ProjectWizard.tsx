@@ -22,19 +22,24 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ProjectVersionStep } from "@/features/project/ProjectVersionStep";
+import { EmptySourceStep, FlatSourceStep } from "@/features/project/ProjectSourceStep";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { presentError, type ErrorPresentation } from "@/lib/error-messages";
 import { isTauriRuntime } from "@/lib/ipc";
-import { fetchProjectDefaults } from "@/lib/project-api";
+import { fetchProjectDefaults, type CreateProjectOptions } from "@/lib/project-api";
 import { fetchVersionCatalog } from "@/lib/version-api";
 import {
   CREATION_MODES,
   creationModeLabel,
+  flatTopY,
+  formatResourceId,
   type CreationMode,
+  type FlatDefaults,
+  type FlatPreset,
   type JavaWorldAnalysis,
   type ProjectDefaults,
 } from "@/project/types";
-import type { VersionCatalogReport } from "@/project/version-types";
+import type { VersionCatalogReport, VersionProfile } from "@/project/version-types";
 import { useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 
@@ -140,6 +145,61 @@ function versionErrors({
   return [];
 }
 
+function flatPresetErrors(
+  preset: FlatPreset | null,
+  defaults: FlatDefaults | null,
+  profile: VersionProfile | null,
+): string[] {
+  if (!profile) return ["Choose a verified version before describing the flat source."];
+  if (!preset || !defaults) {
+    return ["Flat source defaults are not available. Retry loading the project settings."];
+  }
+  const overworld = profile.dimensionProfiles.find((dimension) => dimension.kind === "overworld");
+  if (!overworld) return ["The selected version has no overworld dimension."];
+
+  const errors: string[] = [];
+  const minY = overworld.minY;
+  const maxY = overworld.minY + overworld.height - 1;
+  const limits = defaults.limits;
+
+  if (!Number.isInteger(preset.baseY)) {
+    errors.push("The bottom Y must be a whole number.");
+  }
+  if (preset.layers.length === 0) {
+    errors.push("Add at least one flat layer.");
+  }
+  if (preset.layers.length > limits.maxLayers) {
+    errors.push(`A flat source supports at most ${limits.maxLayers} layers.`);
+  }
+  preset.layers.forEach((layer, index) => {
+    if (!layer.block) {
+      errors.push(`Choose a block for layer ${index + 1}.`);
+    } else if (layer.block === "minecraft:air") {
+      errors.push(`Layer ${index + 1} cannot be air.`);
+    }
+    if (
+      !Number.isInteger(layer.thickness) ||
+      layer.thickness < 1 ||
+      layer.thickness > limits.maxLayerThickness
+    ) {
+      errors.push(
+        `Layer ${index + 1} must be between 1 and ${limits.maxLayerThickness} blocks thick.`,
+      );
+    }
+  });
+  const total = preset.layers.reduce((sum, layer) => sum + layer.thickness, 0);
+  if (total > limits.maxTotalThickness) {
+    errors.push(`The flat source must be at most ${limits.maxTotalThickness} blocks thick.`);
+  }
+  if (!preset.biome.trim()) {
+    errors.push("Choose a flat biome.");
+  }
+  if (Number.isInteger(preset.baseY) && (preset.baseY < minY || preset.baseY + total - 1 > maxY)) {
+    errors.push(`Keep the flat source inside overworld Y ${minY}..=${maxY}.`);
+  }
+  return errors;
+}
+
 function stepErrors(
   step: WizardStep,
   name: string,
@@ -154,6 +214,11 @@ function stepErrors(
     error: ErrorPresentation | null;
     selected: string;
     desktop: boolean;
+  },
+  source: {
+    flat: FlatPreset | null;
+    flatDefaults: FlatDefaults | null;
+    profile: VersionProfile | null;
   },
 ): string[] {
   if (step.id === "basics") {
@@ -181,6 +246,9 @@ function stepErrors(
     if (analysis && !analysis.supported)
       errors.push("This world has blockers and cannot be imported.");
     return errors;
+  }
+  if (step.id === "source" && mode === "flat") {
+    return flatPresetErrors(source.flat, source.flatDefaults, source.profile);
   }
   return [];
 }
@@ -452,25 +520,6 @@ function ImportSourceStep({
   );
 }
 
-function SimpleSourceStep({ mode }: { mode: "empty" | "flat" }) {
-  return (
-    <Card className="gap-0 py-0">
-      <CardContent className="space-y-2 p-5">
-        <p className="text-sm font-medium">{creationModeLabel(mode)}</p>
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {mode === "empty"
-            ? "A blank world is created with only air. Every block is placed by you or a tool."
-            : "A flat platform around the origin is created. This is a FuryBuilder starting shape, not vanilla world generation."}
-        </p>
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          The supported Minecraft version and project format are selected when the project is
-          created.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
 function ReviewStep({
   name,
   mode,
@@ -480,6 +529,7 @@ function ReviewStep({
   folderSuffix,
   projectsRoot,
   analysis,
+  flat,
 }: {
   name: string;
   mode: CreationMode;
@@ -489,8 +539,18 @@ function ReviewStep({
   folderSuffix: string;
   projectsRoot: string | null;
   analysis: JavaWorldAnalysis | null;
+  flat: FlatPreset | null;
 }) {
   const destination = projectFolderName(projectFolder, folderSuffix);
+  const flatSource =
+    mode === "flat"
+      ? flat
+        ? `Flat platform · ${flat.layers.length} layer(s) · Y ${flat.baseY}..=${flatTopY(flat)}`
+        : "Flat starting platform"
+      : null;
+  const layerSummary = flat?.layers
+    .map((layer) => `${formatResourceId(layer.block)} ×${layer.thickness}`)
+    .join(" → ");
   return (
     <div className="space-y-4">
       <Card className="gap-0 py-0">
@@ -525,13 +585,21 @@ function ReviewStep({
             <div className="flex flex-wrap items-center gap-3 px-4 py-3">
               <dt className="w-28 text-sm text-muted-foreground">Source</dt>
               <dd className="min-w-0 flex-1 truncate font-mono text-xs">
-                {mode === "import"
-                  ? folder
-                  : mode === "flat"
-                    ? "Flat starting platform"
-                    : "Empty world"}
+                {mode === "import" ? folder : mode === "flat" ? flatSource : "Empty world"}
               </dd>
             </div>
+            {mode === "flat" && flat && layerSummary ? (
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <dt className="w-28 text-sm text-muted-foreground">Layers</dt>
+                <dd className="min-w-0 flex-1 break-words text-xs">{layerSummary}</dd>
+              </div>
+            ) : null}
+            {mode === "flat" && flat ? (
+              <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <dt className="w-28 text-sm text-muted-foreground">Biome</dt>
+                <dd className="font-mono text-xs">{flat.biome}</dd>
+              </div>
+            ) : null}
             {analysis ? (
               <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <dt className="w-28 text-sm text-muted-foreground">Detected</dt>
@@ -585,6 +653,31 @@ function FailurePanel({
 const BROWSER_PROJECT_DEFAULTS: ProjectDefaults = {
   projectsRoot: "Documents/FuryBuilder",
   folderSuffix: ".furybuilder",
+  flat: {
+    preset: {
+      baseY: 62,
+      layers: [
+        { block: "minecraft:stone", thickness: 1 },
+        { block: "minecraft:dirt", thickness: 1 },
+        { block: "minecraft:grass_block", thickness: 1 },
+      ],
+      biome: "minecraft:plains",
+    },
+    limits: { maxLayers: 8, maxLayerThickness: 16, maxTotalThickness: 64, footprint: 33 },
+    blockChoices: [
+      "minecraft:stone",
+      "minecraft:dirt",
+      "minecraft:grass_block",
+      "minecraft:sand",
+      "minecraft:oak_planks",
+    ],
+    biomeChoices: [
+      "minecraft:plains",
+      "minecraft:forest",
+      "minecraft:desert",
+      "minecraft:snowy_plains",
+    ],
+  },
 };
 
 /**
@@ -613,6 +706,7 @@ export function ProjectWizard() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState<ErrorPresentation | null>(null);
   const [selectedVersion, setSelectedVersion] = useState("");
+  const [flatOverride, setFlatOverride] = useState<FlatPreset | null>(null);
   const [requestedStep, setRequestedStep] = useState(0);
   const [furthestStep, setFurthestStep] = useState(0);
   const [attempted, setAttempted] = useState(false);
@@ -648,13 +742,29 @@ export function ProjectWizard() {
   const projectsRoot = defaults?.projectsRoot ?? null;
   const destination = projectFolderName(projectFolder, folderSuffix) || undefined;
   const effectiveVersion = mode === "import" ? (analysis?.versionName ?? "") : selectedVersion;
-  const errors = stepErrors(step, name, mode, analysis, worldFolder, projectFolder, folderSuffix, {
-    catalog,
-    loading: catalogLoading,
-    error: catalogError,
-    selected: effectiveVersion,
-    desktop,
-  });
+  const selectedProfile =
+    catalog?.versions.find((version) => version.id === effectiveVersion)?.profile ?? null;
+  const flatDefaults = defaults?.flat ?? null;
+  const flatPreset = flatOverride ?? flatDefaults?.preset ?? null;
+  const errorsForStep = (candidate: WizardStep): string[] =>
+    stepErrors(
+      candidate,
+      name,
+      mode,
+      analysis,
+      worldFolder,
+      projectFolder,
+      folderSuffix,
+      {
+        catalog,
+        loading: catalogLoading,
+        error: catalogError,
+        selected: effectiveVersion,
+        desktop,
+      },
+      { flat: flatPreset, flatDefaults, profile: selectedProfile },
+    );
+  const errors = errorsForStep(step);
   const progress = ((activeStep + 1) / steps.length) * 100;
   const stepDescription =
     step.id === "basics" && mode === "vanilla"
@@ -685,12 +795,23 @@ export function ProjectWizard() {
   };
 
   const submit = async (): Promise<void> => {
+    const invalid = steps
+      .map((candidate, index) => ({ index, errors: errorsForStep(candidate) }))
+      .find((entry) => entry.errors.length > 0);
+    if (invalid) {
+      setRequestedStep(invalid.index);
+      setAttempted(true);
+      return;
+    }
     setSubmitted(true);
     if (mode === "import") {
       await useProjectStore.getState().importWorld(name, worldFolder, destination);
       return;
     }
-    await useProjectStore.getState().create(name, mode, destination);
+    const options: CreateProjectOptions = {};
+    if (selectedProfile) options.profileId = selectedProfile.id;
+    if (mode === "flat" && flatPreset) options.flat = flatPreset;
+    await useProjectStore.getState().create(name, mode, destination, options);
   };
 
   const retry = (): void => {
@@ -849,8 +970,17 @@ export function ProjectWizard() {
                       importGeneratedWorld(projectName, runId, destination)
                     }
                   />
+                ) : mode === "flat" ? (
+                  <FlatSourceStep
+                    version={effectiveVersion}
+                    profile={selectedProfile}
+                    preset={flatPreset}
+                    defaults={flatDefaults}
+                    disabled={busy}
+                    onChange={setFlatOverride}
+                  />
                 ) : (
-                  <SimpleSourceStep mode={mode} />
+                  <EmptySourceStep version={effectiveVersion} profile={selectedProfile} />
                 )
               ) : null}
 
@@ -864,6 +994,7 @@ export function ProjectWizard() {
                   folderSuffix={folderSuffix}
                   projectsRoot={projectsRoot}
                   analysis={analysis}
+                  flat={flatPreset}
                 />
               ) : null}
 

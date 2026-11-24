@@ -3,6 +3,7 @@ import type {
   CheckpointMeta,
   CreationMode,
   EditorState,
+  FlatPreset,
   JavaWorldAnalysis,
   OpenedProjectPayload,
   ProjectDefaults,
@@ -13,6 +14,14 @@ import type {
   VanillaParityReport,
   WorkspacePolicy,
 } from "@/project/types";
+
+/** Optional verified profile and source parameters for the generic creator. */
+export interface CreateProjectOptions {
+  /** Verified profile id selected in the wizard. */
+  profileId?: string;
+  /** Flat source parameters, only valid for the flat creation mode. */
+  flat?: FlatPreset;
+}
 
 export function fetchProjects(): Promise<ProjectList> {
   return invokeCommand<ProjectList>("project_list");
@@ -39,12 +48,15 @@ export function createProject(
   mode: CreationMode,
   editorState: EditorState,
   folder?: string,
+  options?: CreateProjectOptions,
 ): Promise<OpenedProjectPayload> {
   return invokeCommand<OpenedProjectPayload>("project_create", {
     name,
     mode,
     editorState,
     folder: folder ?? null,
+    profileId: options?.profileId ?? null,
+    flat: options?.flat ?? null,
   });
 }
 
