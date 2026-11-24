@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: план принят; реализация ведётся по рабочему чеклисту в §21. Version foundation, project data, component facade, Java по major/download/manual, client JAR download, JAR-инспекция, baseline-каталог, manual assets, explicit placeholder, exact-version server provisioning, EULA consent, общий download pipeline, Tauri components API + TS-клиент, mock HTTP-тесты, hardening manual/placeholder/relink, lifecycle store, Welcome screen, Project gate, Teardown при закрытии, Recoverable autosave, lifecycle-тесты, каркас wizard, Basics, Version, Source Empty/Flat, Source Import, Source Vanilla, Components, Review, Preparing, запись компонентов в v2 manifest, подтверждение версии при импорте, Project Manager только для открытого проекта, UI-тесты всех веток wizard, Settings на пять вкладок, inventory компонентов без setup-дублей, действия inventory (verify/remove/open folder), общие `ComponentCard`/`ComponentPicker`/`ComponentStatus` для wizard и Settings, переход Vanilla Source на Components, тест границ Settings, удаление `Active palette block` с дублями save status, нижняя панель с Blocks/Analysis/Activity, версия сохранённого layout, тесты нижней панели/toolbar, зелёный финальный прогон P0, реальный Tauri smoke auto/manual и документация P0 закрыты, P0 закрыт; следующий шаг — P1-01.
+> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11; запись по-прежнему проверена только для 1.21.4. Следующий шаг — интерфейс `WorldCodec`; прогресс и проверки в §21.
 > Дата: 2026-11-22; обновлено 2026-11-25 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P1-01` — Профили 1.18–1.21.x: exact DataVersion, Java, pack/datapack, dimensions, height. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P1-02` — Ввести `WorldCodec` (§5.2), не меняя поведение 1.21.4. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P1-02`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P1-03`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1532,7 +1532,7 @@ UI:
 
 #### A. Codec и профили
 
-- [ ] `P1-01` Профили 1.18–1.21.x: exact DataVersion, Java, pack/datapack, dimensions, height.
+- [x] `P1-01` Профили 1.18–1.21.x: exact DataVersion, Java, pack/datapack, dimensions, height.
 - [ ] `P1-02` Ввести `WorldCodec` trait/interfaces (§5.2), не меняя поведение 1.21.4.
 - [ ] `P1-03` `ClassicAnvilCodec`: вынести 1.21.4 в реализацию + golden-тесты без diff.
 - [ ] `P1-04` Параметризовать section layout, palette, heightmaps и light для 1.18+.
@@ -1690,6 +1690,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | Профили classic Anvil | Добавлены точные метаданные 27 релизов 1.18–1.21.11: DataVersion, Java major, форматы пакетов (включая minor с 1.21.9), границы и папки измерений. Java сверена с Mojang launcher JSON, DataVersion и pack formats — с `version.json` из client JAR, размеры измерений — с vanilla dimension types. Новые профили вне baseline помечены `unverified`: мастер, world I/O и сохранение проектов их не разблокируют. Обновлён `docs/formats.md` | см. `git log` | 27 сверенных профилей; 701 Rust tests (71 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | P0 закрыт | Финальный прогон после документации: Rust workspace, clippy, fmt, TS typecheck/lint/format/test. Коммит закрывает P0, после него рабочее дерево чистое; следующий фокус — `P1-01`. Push не выполнялся | см. `git log` | 695 Rust tests (71 suites), 373 TS tests + 1 skipped (374), clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Документация P0 | Обновлены `getting-started` (порядок шагов для Empty/Flat/Import/Vanilla, Components, Preparing, schema v2/v3, текущий curated Blocks и честные ограничения), `reference` (0.2.0, официальный каталог версий, зависимости компонентов, Java 21.0.13.1, KL-44/45), `formats` (полный официальный манифест, project files schema 2/3/2, component cache manifests, structure DataVersion = target) и `changelog` (added/changed/fixed/security). Уточнён `catalog.md`: project `catalogId`/`catalogHash` уже пишется в schema-2 manifest. Код не менялся | см. `git log` | 695 Rust tests (71 suites), 373 TS tests + 1 skipped (374), clippy `-D warnings`, fmt, typecheck/lint/format; docs-only diff |
 | 2026-11-25 | Реальный Tauri smoke | Официальный манифест читается целиком: 103 release/snapshot записи, `1.21.4` — recommended/full. Auto: скачаны Java 21 (46.8 MiB) и client JAR 1.21.4 (27.0 MiB), каталог 1097 блоков / 1385 предметов, Empty-проект создан, сохранён, приложение закрыто и проект переоткрыт из Welcome. Manual: `client.jar` и Java runtime скопированы вне managed cache, manual relink прошёл с ожидаемым предупреждением об отсутствии launcher metadata, в `project.json` v2 записаны `mode: manual` и хэши, проект сохранён и переоткрыт. По ходу найден и исправлен блокер: неизвестный id `26.4-pre-1` и legacy/special id (`1.14.2 Pre-Release 4`, `25w14craftmine`) обрушивали весь каталог; manifest entries теперь хранят raw id, а `pre`/`rc` принимают дефисную форму. Тестовые проекты и временные копии удалены | `f3e89eb` + см. `git log` | 695 Rust tests, clippy, fmt; 373 TS tests (1 skipped) без изменений; реальный Tauri smoke, ошибок в UI не наблюдалось |

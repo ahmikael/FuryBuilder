@@ -1,18 +1,16 @@
 //! Bridge between the version catalog and the world adapters.
 //!
 //! Adapters never compare a `DataVersion` with a literal. They ask this module which
-//! built-in version profile owns that value. When a profile is added to
-//! `furybuilder-minecraft-version`, the matching codec has to be implemented before the
-//! profile is listed; the registry is therefore the single support decision.
+//! built-in version profile owns that value and whether its reader is verified.
 
 use minecraft_version::{
     builtin_profiles, default_profile, profile_for_data_version, VersionProfile,
 };
 use world_domain::WorldVersion;
 
-/// Returns the profile that owns a `DataVersion`.
+/// Returns a codec-backed profile for the exact `DataVersion`.
 pub fn profile_for(data_version: i32) -> Option<VersionProfile> {
-    profile_for_data_version(data_version)
+    profile_for_data_version(data_version).filter(|profile| profile.capabilities.read)
 }
 
 /// Returns whether a `DataVersion` belongs to a built-in, codec-backed profile.
@@ -23,7 +21,8 @@ pub fn supports_data_version(data_version: i32) -> bool {
 /// Returns every `DataVersion` that this build can decode.
 pub fn supported_data_versions() -> Vec<i32> {
     let mut versions = builtin_profiles()
-        .into_iter()
+        .iter()
+        .filter(|profile| profile.capabilities.read)
         .map(|profile| profile.data_version)
         .collect::<Vec<_>>();
     versions.sort_unstable();
@@ -63,5 +62,13 @@ mod tests {
 
         assert_eq!(version.minecraft_version(), "1.21.4");
         assert_eq!(version.data_version(), 4189);
+    }
+
+    #[test]
+    fn known_metadata_does_not_enable_world_decoding() {
+        let profile = profile_for_data_version(3839).expect("known release metadata");
+        assert_eq!(profile.minecraft_version.as_str(), "1.20.6");
+        assert!(!supports_data_version(profile.data_version));
+        assert!(!supported_data_versions().contains(&profile.data_version));
     }
 }

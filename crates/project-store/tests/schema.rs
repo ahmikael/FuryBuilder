@@ -4,11 +4,48 @@
 //! newer files are not guessed, and a refused manifest is never rewritten.
 
 use project_store::{
-    decode_world, snapshot_bytes, CreationMode, EditorState, ProjectError, ProjectStore,
-    PROJECT_FILE, PROJECT_SCHEMA_VERSION, SNAPSHOT_FORMAT_VERSION,
+    decode_world, snapshot_bytes, CreateOptions, CreationMode, EditorState, ProjectError,
+    ProjectStore, ProjectTarget, PROJECT_FILE, PROJECT_SCHEMA_VERSION, SNAPSHOT_FORMAT_VERSION,
 };
 
 mod common;
+
+#[test]
+fn metadata_only_release_is_not_a_project_target() {
+    let profile = minecraft_version::profile_for_id("java-classic-1.20.6").expect("known profile");
+    let target = ProjectTarget::from_profile(&profile);
+    assert!(matches!(
+        target.validate(),
+        Err(ProjectError::UnsupportedWorldVersion(_))
+    ));
+    let version = target.world_version().expect("valid version identity");
+    assert!(ProjectTarget::for_world_version(&version).is_err());
+    let mut world = world_domain::World::new_empty();
+    world.set_version(version);
+    assert!(matches!(
+        snapshot_bytes(&world),
+        Err(ProjectError::UnsupportedWorldVersion(_))
+    ));
+
+    let root = common::temp_root("metadata-only-project");
+    let store = ProjectStore::new(&root);
+    assert!(matches!(
+        store.create_with_options(
+            "Metadata only",
+            CreationMode::Empty,
+            EditorState::default(),
+            CreateOptions {
+                profile_id: Some(&profile.id),
+                ..CreateOptions::default()
+            },
+        ),
+        Err(ProjectError::UnsupportedWorldVersion(_))
+    ));
+    assert!(
+        !root.exists(),
+        "refused targets must not create project data"
+    );
+}
 
 #[test]
 fn only_the_current_project_schema_is_read() {

@@ -346,7 +346,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
 
     let version_json = read_version_json(&mut archive, &resolved.version)?;
     let (resource_pack_format, datapack_format) = version_json
-        .pack_formats()
+        .integer_pack_formats()
         .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
 
     let entry_names: Vec<String> = archive

@@ -658,7 +658,7 @@ fn build_version_catalog_report(catalog: &VersionCatalog) -> VersionCatalogRepor
         .map(|entry| {
             let profile = profiles
                 .iter()
-                .find(|profile| profile.minecraft_version.as_str() == entry.id)
+                .find(|profile| profile.capabilities.write && profile.minecraft_version.as_str() == entry.id)
                 .cloned();
             let version_id = entry.id.to_string();
             let unavailable_reason = profile.is_none().then(|| {
@@ -1008,12 +1008,14 @@ fn create_project_inner(
     ensure_not_cancelled(attempt)?;
     reporter.running("metadata", "Verifying project component identities");
     let profile = match args.profile_id.as_deref() {
-        Some(id) => profile_for_id(id).ok_or_else(|| {
-            AppError::new(
-                ErrorCode::UnsupportedVersion,
-                format!("no built-in version profile has id `{id}`"),
-            )
-        })?,
+        Some(id) => profile_for_id(id)
+            .filter(|profile| profile.capabilities.write && profile.capabilities.edit)
+            .ok_or_else(|| {
+                AppError::new(
+                    ErrorCode::UnsupportedVersion,
+                    format!("no editable version profile has id `{id}`"),
+                )
+            })?,
         None => default_profile(),
     };
     let target = project_store::ProjectTarget::from_profile(&profile);
@@ -4409,6 +4411,7 @@ mod version_catalog_tests {
         assert_eq!(latest.id, "1.21.5");
         assert!(latest.latest_release);
         assert!(!latest.recommended);
+        assert!(profile_for_id("java-classic-1.21.5").is_some());
         assert!(latest.profile.is_none());
         assert!(latest
             .unavailable_reason

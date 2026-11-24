@@ -143,7 +143,10 @@ fn biome_mode_id(format: BiomeFormat) -> &'static str {
 fn snapshot_profile(world: &World) -> Result<VersionProfile, ProjectError> {
     let version = world.version();
     profile_for_data_version(version.data_version())
-        .filter(|profile| profile.minecraft_version.as_str() == version.minecraft_version())
+        .filter(|profile| {
+            profile.capabilities.write
+                && profile.minecraft_version.as_str() == version.minecraft_version()
+        })
         .ok_or_else(|| {
             ProjectError::UnsupportedWorldVersion(format!(
                 "Minecraft {} (DataVersion {})",
@@ -241,7 +244,7 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
     let layout = reader.string()?;
     let biome_mode = reader.string()?;
     let profile = profile_for_data_version(data_version)
-        .filter(|profile| profile.id == profile_id)
+        .filter(|profile| profile.capabilities.write && profile.id == profile_id)
         .ok_or_else(|| {
             ProjectError::UnsupportedWorldVersion(format!(
                 "snapshot profile `{profile_id}` (DataVersion {data_version})"

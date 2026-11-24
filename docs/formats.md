@@ -3,10 +3,17 @@
 Target: Minecraft Java **1.21.4**, `DataVersion` 4189. This is the only write-verified
 version. Anything else is detected and refused rather than guessed.
 
-The version picker reads the official Mojang manifest and shows every entry, including
-releases, snapshots and legacy/special ids. Project creation requires a verified
-`VersionProfile`; only 1.21.4 has one in this beta, so other entries are inspectable but
-cannot advance the wizard.
+The version picker lists releases and snapshots from the official Mojang manifest. Project
+creation requires a profile with verified write support, so only 1.21.4 can advance the
+wizard.
+
+FuryBuilder has built-in metadata for all 27 Java releases from 1.18 through 1.21.11. The
+Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
+the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
+client JAR. Starting with 1.21.9, pack formats have both a major and a minor component (for
+example, 1.21.11 uses data pack format `94.1`). For these classic Anvil releases, the vanilla
+Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. Knowing these
+facts does not enable opening, editing, exporting or generating a world for an unverified release.
 
 ## Supported versions
 

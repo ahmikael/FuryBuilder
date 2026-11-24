@@ -17,8 +17,9 @@ use crate::version_json::VersionJson;
 use crate::{
     BiomeFormat, BlockstateFormat, CapabilityError, CatalogRegistryFormat, ChunkFamily,
     ContentCatalogProfile, DimensionKind, DimensionProfile, GenerationCapabilities,
-    ItemModelFormat, JavaRequirement, LevelTypeSyntax, ServerProfile, StructureProfile,
-    StructureSupport, VersionFamily, VersionId, VersionProfile, WorldCapabilities, WorldLayout,
+    ItemModelFormat, JavaRequirement, LevelTypeSyntax, PackFormatMinors, ServerProfile,
+    StructureProfile, StructureSupport, VersionFamily, VersionId, VersionProfile,
+    WorldCapabilities, WorldLayout,
 };
 
 const MAX_JAR_VERSION_JSON_BYTES: u64 = 1024 * 1024;
@@ -31,6 +32,7 @@ pub struct ProfileBuildInput {
     pub java_major: u32,
     pub resource_pack_format: Option<u32>,
     pub datapack_format: Option<u32>,
+    pub pack_format_minors: Option<PackFormatMinors>,
     pub capabilities: WorldCapabilities,
     pub notes: Vec<String>,
 }
@@ -45,11 +47,18 @@ pub fn build_version_profile(
     if input.java_major == 0 {
         return Err(ProfileBuildError::InvalidJavaMajor);
     }
+    if input.resource_pack_format == Some(0)
+        || input.datapack_format == Some(0)
+        || (input.pack_format_minors.is_some()
+            && (input.resource_pack_format.is_none() || input.datapack_format.is_none()))
+    {
+        return Err(ProfileBuildError::InvalidPackFormat);
+    }
     input.capabilities.validate()?;
 
     let family = input.version.family();
     let release_type = input.version.release_type();
-    let defaults = family_defaults(family, &input.version)?;
+    let defaults = family_defaults(family, &input.version, input.capabilities)?;
     let profile_id = profile_id(&input.version, defaults.world_layout);
 
     Ok(VersionProfile {
@@ -68,6 +77,7 @@ pub fn build_version_profile(
         },
         resource_pack_format: input.resource_pack_format,
         datapack_format: input.datapack_format,
+        pack_format_minors: input.pack_format_minors,
         content_catalog: defaults.content_catalog,
         structure_formats: defaults.structure_formats,
         server: defaults.server,
@@ -93,14 +103,15 @@ pub fn build_profile_from_version_json(
     let java_major = version_json
         .java_major()
         .ok_or(ProfileBuildError::MissingJavaVersion)?;
-    let (resource_pack_format, datapack_format) = jar.pack_formats()?;
+    let formats = jar.pack_formats()?;
 
     build_version_profile(ProfileBuildInput {
         version: version_json.id.clone(),
         data_version: jar.world_version,
         java_major,
-        resource_pack_format,
-        datapack_format,
+        resource_pack_format: formats.map(|formats| formats.resource),
+        datapack_format: formats.map(|formats| formats.data),
+        pack_format_minors: formats.and_then(|formats| formats.minors),
         capabilities,
         notes,
     })
@@ -119,32 +130,75 @@ pub struct JarVersionJson {
 }
 
 impl JarVersionJson {
-    /// Returns `(resource, data)` pack formats.
-    pub fn pack_formats(&self) -> Result<(Option<u32>, Option<u32>), ProfileBuildError> {
-        match self.pack_version {
+    /// Returns the exact pack versions without dropping the minor components.
+    pub fn pack_formats(&self) -> Result<Option<JarPackFormats>, ProfileBuildError> {
+        let (resource, data, minors) = match self.pack_version {
+            None => return Ok(None),
+            Some(JarPackVersion::Versioned {
+                resource_major,
+                resource_minor,
+                data_major,
+                data_minor,
+            }) => (
+                resource_major,
+                data_major,
+                Some(PackFormatMinors {
+                    resource: resource_minor,
+                    data: data_minor,
+                }),
+            ),
+            Some(JarPackVersion::Split { resource, data }) => (resource, data, None),
+            Some(JarPackVersion::Combined(format)) => (format, format, None),
+        };
+        if resource == 0 || data == 0 {
+            return Err(ProfileBuildError::InvalidPackFormat);
+        }
+        Ok(Some(JarPackFormats {
+            resource,
+            data,
+            minors,
+        }))
+    }
+
+    /// Current asset/cache formats carry integer versions only. Refuse major/minor
+    /// versions there rather than silently dropping part of the identity.
+    pub fn integer_pack_formats(&self) -> Result<(Option<u32>, Option<u32>), ProfileBuildError> {
+        match self.pack_formats()? {
             None => Ok((None, None)),
-            Some(JarPackVersion::Split { resource, data }) => {
-                if resource == 0 || data == 0 {
-                    return Err(ProfileBuildError::InvalidPackFormat);
-                }
-                Ok((Some(resource), Some(data)))
-            }
-            Some(JarPackVersion::Combined(format)) => {
-                if format == 0 {
-                    return Err(ProfileBuildError::InvalidPackFormat);
-                }
-                Ok((Some(format), Some(format)))
-            }
+            Some(JarPackFormats {
+                resource,
+                data,
+                minors: None,
+            }) => Ok((Some(resource), Some(data))),
+            Some(_) => Err(ProfileBuildError::VersionedPackFormatsUnsupported),
         }
     }
 }
 
-/// `pack_version` was a single number in older versions and an object later.
+/// `pack_version` encodings used by Mojang's client JARs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum JarPackVersion {
-    Split { resource: u32, data: u32 },
+    Versioned {
+        resource_major: u32,
+        resource_minor: u32,
+        data_major: u32,
+        data_minor: u32,
+    },
+    Split {
+        resource: u32,
+        data: u32,
+    },
     Combined(u32),
+}
+
+/// Pack formats extracted from a JAR. When present, the minor components are
+/// part of the identity, including a zero minor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct JarPackFormats {
+    pub resource: u32,
+    pub data: u32,
+    pub minors: Option<PackFormatMinors>,
 }
 
 /// Reads and validates `version.json` from a client JAR.
@@ -207,16 +261,28 @@ struct FamilyDefaults {
 fn family_defaults(
     family: VersionFamily,
     version: &VersionId,
+    capabilities: WorldCapabilities,
 ) -> Result<FamilyDefaults, ProfileBuildError> {
     match family {
         VersionFamily::Modern => Ok(FamilyDefaults {
             world_layout: WorldLayout::ClassicAnvil,
             chunk_family: ChunkFamily::ModernPaletted,
             biome_format: BiomeFormat::Palette4x4x4,
-            dimension_profiles: classic_dimensions(-64, 384),
-            content_catalog: named_catalog(ItemModelFormat::ItemDefinitions, true),
-            structure_formats: java_nbt_only(),
-            server: server_profile(true, LevelTypeSyntax::ModernNamespaced, true),
+            dimension_profiles: classic_dimensions((-64, 384), (0, 256)),
+            content_catalog: named_catalog(
+                if version >= &"1.21.4".parse().expect("item definition boundary") {
+                    ItemModelFormat::ItemDefinitions
+                } else {
+                    ItemModelFormat::ItemModels
+                },
+                version >= &"1.20.5".parse().expect("item data component boundary"),
+            ),
+            structure_formats: java_nbt_only(capabilities.edit, capabilities.write),
+            server: server_profile(
+                true,
+                LevelTypeSyntax::ModernNamespaced,
+                capabilities.generate,
+            ),
         }),
         VersionFamily::Split => Ok(FamilyDefaults {
             world_layout: WorldLayout::SplitAnvil,
@@ -225,7 +291,11 @@ fn family_defaults(
             dimension_profiles: split_dimensions(),
             content_catalog: named_catalog(ItemModelFormat::ItemDefinitions, true),
             structure_formats: no_structures(),
-            server: server_profile(true, LevelTypeSyntax::ModernNamespaced, true),
+            server: server_profile(
+                true,
+                LevelTypeSyntax::ModernNamespaced,
+                capabilities.generate,
+            ),
         }),
         VersionFamily::Flattened => {
             let section_biomes = minor_version(version).is_some_and(|minor| minor >= 15);
@@ -238,7 +308,7 @@ fn family_defaults(
                 } else {
                     BiomeFormat::Column
                 },
-                dimension_profiles: classic_dimensions(0, 256),
+                dimension_profiles: classic_dimensions((0, 256), (0, 256)),
                 content_catalog: named_catalog(ItemModelFormat::ItemModels, false),
                 structure_formats: no_structures(),
                 server: server_profile(
@@ -248,7 +318,7 @@ fn family_defaults(
                     } else {
                         LevelTypeSyntax::LegacyCamelCase
                     },
-                    true,
+                    capabilities.generate,
                 ),
             })
         }
@@ -256,7 +326,7 @@ fn family_defaults(
             world_layout: WorldLayout::ClassicAnvil,
             chunk_family: ChunkFamily::NumericIds,
             biome_format: BiomeFormat::Column,
-            dimension_profiles: classic_dimensions(0, 256),
+            dimension_profiles: classic_dimensions((0, 256), (0, 256)),
             content_catalog: ContentCatalogProfile {
                 registry_format: CatalogRegistryFormat::NumericIds,
                 blockstate_format: BlockstateFormat::LegacyMetadata,
@@ -265,13 +335,13 @@ fn family_defaults(
                 data_components: false,
             },
             structure_formats: no_structures(),
-            server: server_profile(true, LevelTypeSyntax::LegacyUpper, true),
+            server: server_profile(true, LevelTypeSyntax::LegacyUpper, capabilities.generate),
         }),
         VersionFamily::Legacy => Ok(FamilyDefaults {
             world_layout: WorldLayout::McRegion,
             chunk_family: ChunkFamily::Legacy,
             biome_format: BiomeFormat::Column,
-            dimension_profiles: classic_dimensions(0, 128),
+            dimension_profiles: classic_dimensions((0, 128), (0, 128)),
             content_catalog: ContentCatalogProfile {
                 registry_format: CatalogRegistryFormat::Legacy,
                 blockstate_format: BlockstateFormat::LegacyMetadata,
@@ -307,27 +377,27 @@ fn minor_version(version: &VersionId) -> Option<u32> {
         .ok()
 }
 
-fn classic_dimensions(min_y: i32, height: i32) -> Vec<DimensionProfile> {
+fn classic_dimensions(overworld: (i32, i32), other: (i32, i32)) -> Vec<DimensionProfile> {
     vec![
         DimensionProfile {
             id: "minecraft:overworld".to_owned(),
             kind: DimensionKind::Overworld,
-            min_y,
-            height,
+            min_y: overworld.0,
+            height: overworld.1,
             folder: "region".to_owned(),
         },
         DimensionProfile {
             id: "minecraft:the_nether".to_owned(),
             kind: DimensionKind::Nether,
-            min_y,
-            height,
+            min_y: other.0,
+            height: other.1,
             folder: "DIM-1/region".to_owned(),
         },
         DimensionProfile {
             id: "minecraft:the_end".to_owned(),
             kind: DimensionKind::End,
-            min_y,
-            height,
+            min_y: other.0,
+            height: other.1,
             folder: "DIM1/region".to_owned(),
         },
     ]
@@ -372,24 +442,10 @@ fn named_catalog(
     }
 }
 
-fn java_nbt_only() -> StructureProfile {
+fn java_nbt_only(import: bool, export: bool) -> StructureProfile {
     StructureProfile {
-        java_nbt: StructureSupport {
-            import: true,
-            export: true,
-        },
-        sponge_schem: StructureSupport {
-            import: false,
-            export: false,
-        },
-        legacy_schematic: StructureSupport {
-            import: false,
-            export: false,
-        },
-        litematic: StructureSupport {
-            import: false,
-            export: false,
-        },
+        java_nbt: StructureSupport { import, export },
+        ..no_structures()
     }
 }
 
@@ -446,6 +502,8 @@ pub enum ProfileBuildError {
     MissingJavaVersion,
     #[error("invalid pack format")]
     InvalidPackFormat,
+    #[error("major/minor pack formats are not yet supported by the asset pipeline")]
+    VersionedPackFormatsUnsupported,
     #[error("client JAR I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("client JAR is not a valid zip: {0}")]
@@ -538,6 +596,7 @@ mod tests {
             java_major: 21,
             resource_pack_format: Some(46),
             datapack_format: Some(61),
+            pack_format_minors: None,
             capabilities: full_capabilities(),
             notes: vec!["fixture-backed".to_owned()],
         })
@@ -568,6 +627,7 @@ mod tests {
             java_major: 25,
             resource_pack_format: Some(64),
             datapack_format: Some(80),
+            pack_format_minors: None,
             capabilities: WorldCapabilities {
                 support_level: SupportLevel::ReadOnly,
                 read: true,
@@ -599,6 +659,7 @@ mod tests {
             java_major: 8,
             resource_pack_format: Some(6),
             datapack_format: Some(6),
+            pack_format_minors: None,
             capabilities: WorldCapabilities {
                 support_level: SupportLevel::ReadOnly,
                 read: true,
@@ -630,6 +691,7 @@ mod tests {
             java_major: 8,
             resource_pack_format: Some(4),
             datapack_format: Some(4),
+            pack_format_minors: None,
             capabilities: WorldCapabilities {
                 support_level: SupportLevel::ReadOnly,
                 read: true,
@@ -658,7 +720,7 @@ mod tests {
         assert_eq!(parsed.id, "1.21.4");
         assert_eq!(parsed.world_version, 4189);
         assert_eq!(
-            parsed.pack_formats().expect("pack formats"),
+            parsed.integer_pack_formats().expect("pack formats"),
             (Some(46), Some(61))
         );
         assert_eq!(parsed.stable, Some(true));
@@ -701,10 +763,47 @@ mod tests {
 
         let parsed = read_client_jar_version_json(&jar, &version("1.21.4")).expect("jar metadata");
         assert_eq!(
-            parsed.pack_formats().expect("pack formats"),
+            parsed.integer_pack_formats().expect("pack formats"),
             (Some(4), Some(4))
         );
 
+        let _ = fs::remove_dir_all(jar.parent().expect("jar parent"));
+    }
+
+    #[test]
+    fn major_minor_jar_metadata_matches_the_builtin_release() {
+        let jar = temp_jar("major-minor");
+        let metadata = br#"{
+            "id": "1.21.11",
+            "world_version": 4671,
+            "pack_version": {
+                "resource_major": 75, "resource_minor": 0,
+                "data_major": 94, "data_minor": 1
+            },
+            "stable": true
+        }"#;
+        write_jar(&jar, &[("version.json", metadata)]);
+        let id = version("1.21.11");
+        let parsed = read_client_jar_version_json(&jar, &id).expect("jar metadata");
+        let launcher = VersionJson::from_json(&MOJANG_VERSION_JSON.replace("1.21.4", id.as_str()))
+            .expect("launcher metadata");
+        let builtin = crate::profile_for_version(&id).expect("built-in profile");
+        let built = build_profile_from_version_json(
+            &launcher,
+            &parsed,
+            builtin.capabilities,
+            builtin.notes.clone(),
+        )
+        .expect("assemble major/minor profile");
+        assert_eq!(built, builtin);
+        assert_eq!(
+            serde_json::to_value(built).unwrap()["packFormatMinors"],
+            serde_json::json!({ "resource": 0, "data": 1 })
+        );
+        assert!(matches!(
+            parsed.integer_pack_formats(),
+            Err(ProfileBuildError::VersionedPackFormatsUnsupported)
+        ));
         let _ = fs::remove_dir_all(jar.parent().expect("jar parent"));
     }
 
@@ -739,6 +838,7 @@ mod tests {
             java_major: 21,
             resource_pack_format: None,
             datapack_format: None,
+            pack_format_minors: None,
             capabilities: full_capabilities(),
             notes: Vec::new(),
         });
@@ -753,6 +853,7 @@ mod tests {
             java_major: 21,
             resource_pack_format: Some(46),
             datapack_format: Some(61),
+            pack_format_minors: None,
             capabilities: WorldCapabilities {
                 support_level: SupportLevel::Full,
                 read: true,

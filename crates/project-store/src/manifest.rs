@@ -291,10 +291,12 @@ impl ProjectTarget {
             ProjectError::invalid_manifest(format!("invalid target Minecraft version: {error}"))
         })?;
         let profile = profile_for_version(&version_id)
-            .filter(|profile| profile.data_version == version.data_version())
+            .filter(|profile| {
+                profile.capabilities.write && profile.data_version == version.data_version()
+            })
             .ok_or_else(|| {
                 ProjectError::invalid_manifest(format!(
-                    "no built-in version profile matches Minecraft {} (DataVersion {})",
+                    "no writable version profile matches Minecraft {} (DataVersion {})",
                     version.minecraft_version(),
                     version.data_version()
                 ))
@@ -304,7 +306,7 @@ impl ProjectTarget {
 
     pub fn validate(&self) -> Result<(), ProjectError> {
         let profile = builtin_profiles()
-            .into_iter()
+            .iter()
             .find(|profile| profile.id == self.profile_id)
             .ok_or_else(|| {
                 ProjectError::invalid_manifest(format!(
@@ -312,6 +314,9 @@ impl ProjectTarget {
                     self.profile_id
                 ))
             })?;
+        if !profile.capabilities.write || profile.pack_format_minors.is_some() {
+            return Err(ProjectError::UnsupportedWorldVersion(profile.id.clone()));
+        }
         if self.minecraft_version != profile.minecraft_version {
             return Err(ProjectError::invalid_manifest(format!(
                 "target Minecraft version `{}` does not match profile `{}` ({})",

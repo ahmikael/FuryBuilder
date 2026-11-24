@@ -409,7 +409,7 @@ impl ClientJarManager {
                 )));
             }
         }
-        let (resource_pack_format, datapack_format) = internal.pack_formats()?;
+        let (resource_pack_format, datapack_format) = internal.integer_pack_formats()?;
         if cancel.load(Ordering::Relaxed) {
             return Err(ClientJarError::Cancelled);
         }

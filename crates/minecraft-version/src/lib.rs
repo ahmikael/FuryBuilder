@@ -19,7 +19,7 @@ pub use catalog::{
 };
 pub use profile_builder::{
     build_profile_from_version_json, build_version_profile, read_client_jar_version_json,
-    JarPackVersion, JarVersionJson, ProfileBuildError, ProfileBuildInput,
+    JarPackFormats, JarPackVersion, JarVersionJson, ProfileBuildError, ProfileBuildInput,
 };
 pub use profiles::{
     builtin_profiles, default_profile, java_classic_1_21_4, profile_for_data_version,
@@ -290,11 +290,22 @@ pub struct VersionProfile {
     pub java: JavaRequirement,
     pub resource_pack_format: Option<u32>,
     pub datapack_format: Option<u32>,
+    /// The minor components when Mojang declares major/minor pack versions.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_format_minors: Option<PackFormatMinors>,
     pub content_catalog: ContentCatalogProfile,
     pub structure_formats: StructureProfile,
     pub server: ServerProfile,
     pub capabilities: WorldCapabilities,
     pub notes: Vec<String>,
+}
+
+/// Minor components of the resource-pack and data-pack formats, respectively.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackFormatMinors {
+    pub resource: u32,
+    pub data: u32,
 }
 
 /// How a world folder is laid out on disk.
@@ -500,6 +511,8 @@ pub enum SupportLevel {
     ReadOnly,
     /// Read and convert to a supported version; the original is preserved.
     Convert,
+    /// Exact version metadata is available, but the editor's adapters are not verified.
+    Unverified,
     /// Explicit refusal, for example Bedrock Edition.
     OutOfScope,
 }
@@ -528,7 +541,7 @@ impl WorldCapabilities {
                     return Err(CapabilityError::ConvertMustReadWithoutWriting);
                 }
             }
-            SupportLevel::OutOfScope => {
+            SupportLevel::Unverified | SupportLevel::OutOfScope => {
                 if self.read
                     || self.edit
                     || self.write
@@ -536,7 +549,11 @@ impl WorldCapabilities {
                     || self.generate
                     || self.assets
                 {
-                    return Err(CapabilityError::OutOfScopeMustNotClaimCapabilities);
+                    return Err(if self.support_level == SupportLevel::Unverified {
+                        CapabilityError::UnverifiedMustNotClaimCapabilities
+                    } else {
+                        CapabilityError::OutOfScopeMustNotClaimCapabilities
+                    });
                 }
             }
         }
@@ -555,6 +572,8 @@ pub enum CapabilityError {
     ReadOnlyMustNotWrite,
     #[error("support level `convert` requires read and must not claim write")]
     ConvertMustReadWithoutWriting,
+    #[error("support level `unverified` must not claim any capability")]
+    UnverifiedMustNotClaimCapabilities,
     #[error("support level `out-of-scope` must not claim any capability")]
     OutOfScopeMustNotClaimCapabilities,
 }
@@ -798,6 +817,7 @@ mod tests {
             },
             resource_pack_format: Some(46),
             datapack_format: Some(61),
+            pack_format_minors: None,
             content_catalog: ContentCatalogProfile {
                 registry_format: CatalogRegistryFormat::Named,
                 blockstate_format: BlockstateFormat::Json,
@@ -885,6 +905,7 @@ mod tests {
             (SupportLevel::ReadWriteSubset, "read-write-subset"),
             (SupportLevel::ReadOnly, "read-only"),
             (SupportLevel::Convert, "convert"),
+            (SupportLevel::Unverified, "unverified"),
             (SupportLevel::OutOfScope, "out-of-scope"),
         ];
 
