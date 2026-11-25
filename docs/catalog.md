@@ -61,6 +61,9 @@ reported as entries with an explicit warning; they are not silently presented as
 - `catalogId` and `catalogHash`;
 - exact Minecraft version, `DataVersion`, client JAR SHA-1 and pack formats;
 - sorted blocks, items and atlas definitions;
+- declared property keys and values, whether those values are complete, and the single
+  declared default state when it is unambiguous;
+- item definition model types and resolved concrete models;
 - counts for blockstates, models, item definitions, textures, languages, tags and atlases;
 - bounded inspection warnings.
 
@@ -90,16 +93,30 @@ for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open
 
 ## Honest limits
 
-- `defaultProperties` is the first declared blockstate variant. For multipart blocks it is
-  `null`, because the real default state lives in game code, not in the JAR. Exact registry
-  defaults and value validation remain a later catalog task.
+- `defaultProperties` is the only state declared by the blockstate file. When several
+  variants exist it is `null`; the palette then omits properties, which lets Minecraft
+  resolve the exact game default. `propertyValuesComplete` is true only when the file
+  enumerates every value of every property it declares. Multipart conditions and single
+  empty variants are incomplete, and properties that never affect a model are not declared
+  at all.
+- Write validation rejects unknown block names and values outside a complete declared set.
+  A key declared by any block in the same catalog is accepted on another block because
+  blockstate files omit properties that do not affect a model (for example `waterlogged` on
+  stairs); such values are not checked. A key that is unknown across the catalog is
+  rejected. Exact per-block property registries remain a later catalog stage.
 - Creative categories, technical/creative-only flags and item components are not assigned yet.
 - The palette lists blocks only. Item definitions are extracted and counted, but the item
   browser and placeable-item duplication are later stages.
+- Item definitions resolve the first concrete model from `model`, `base`, `select`,
+  `range_dispatch`, `condition` and `composite` shapes; `modelType` records the top-level
+  dispatcher. The full definition stays in the JAR; item components and stack data are not
+  modelled.
 - Tag membership is direct. Transitive `#tag` references remain available in the JAR and are
   not flattened into each entry.
 - A texture missing from the JAR produces a null icon and a warning. The asset-index fallback
-  is not implemented yet.
+  is not implemented yet. Special item renderers (shields, heads, banners) have no baked item
+  texture; their `particle` placeholder is not used as an icon, so the icon is null instead
+  of a misleading block texture.
 - Versions before item definitions fall back to item models and language keys. Numeric ids and
   pre-1.8 registries are outside the baseline catalog and belong to the legacy stage.
 - Tests use a synthetic 1.21.4 client JAR. The real-JAR matrix and captured catalog snapshots

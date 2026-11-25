@@ -76,11 +76,15 @@ fn catalog_write_registry_admits_catalog_blocks_while_quick_picks_stay_curated()
         world_domain::BlockSchemaEntry {
             name: "minecraft:stone".to_owned(),
             properties: Default::default(),
+            values: Default::default(),
+            property_values_complete: false,
             default_properties: Default::default(),
         },
         world_domain::BlockSchemaEntry {
             name: "minecraft:chiseled_deepslate".to_owned(),
             properties: Default::default(),
+            values: Default::default(),
+            property_values_complete: false,
             default_properties: Default::default(),
         },
     ]));

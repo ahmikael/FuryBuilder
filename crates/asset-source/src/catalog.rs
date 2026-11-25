@@ -30,7 +30,7 @@ use crate::discovery::inspect_asset_path;
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
-pub const CATALOG_SCHEMA_VERSION: u32 = 1;
+pub const CATALOG_SCHEMA_VERSION: u32 = 2;
 /// A vanilla client JAR has a few thousand blockstates and items.
 pub const MAX_CATALOG_BLOCKS: usize = 32_768;
 pub const MAX_CATALOG_ITEMS: usize = 32_768;
@@ -54,8 +54,14 @@ pub struct CatalogBlock {
     pub display_name: Option<String>,
     /// Every property key and all values declared by variants or multipart conditions.
     pub properties: BTreeMap<String, Vec<String>>,
-    /// The first declared variant. `None` for multipart blocks, whose default state is
-    /// maintained by the game code, not by the blockstate file.
+    /// True when the blockstate file enumerates every value of every property it declares.
+    /// Multipart conditions and single empty variants only name some states, so they are
+    /// incomplete. Properties that never affect a model (for example `waterlogged` on stairs)
+    /// are not declared at all and cannot be validated from the blockstate file.
+    pub property_values_complete: bool,
+    /// The only state declared by the blockstate file. `None` when several variants exist,
+    /// because the game default is maintained by game code, not by the blockstate file.
+    /// Omitting properties lets Minecraft resolve the exact default state.
     pub default_properties: Option<BTreeMap<String, String>>,
     /// Number of explicit `variants` entries; zero for multipart blocks.
     pub variants: usize,
@@ -76,6 +82,9 @@ pub struct CatalogItem {
     pub display_name: Option<String>,
     /// True when the entry came from `assets/<namespace>/items/<item>.json`.
     pub item_definition: bool,
+    /// Top-level item definition model type, for example `minecraft:select` or
+    /// `minecraft:special`. `None` for legacy item models and definitions without a type.
+    pub model_type: Option<String>,
     pub model: Option<String>,
     pub icon_texture: Option<String>,
     /// Present when the item is also a block (`minecraft:stone`).
@@ -319,6 +328,7 @@ fn cache_key(resolved: &ResolvedClientJar) -> Result<String, CatalogError> {
 struct BlockStateFacts {
     properties: BTreeMap<String, BTreeSet<String>>,
     default_properties: Option<BTreeMap<String, String>>,
+    property_values_complete: bool,
     variants: usize,
     multipart: bool,
     first_model: Option<String>,
@@ -326,6 +336,7 @@ struct BlockStateFacts {
 
 struct ItemFacts {
     model: Option<String>,
+    model_type: Option<String>,
     item_definition: bool,
 }
 
@@ -414,6 +425,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                 id: id.clone(),
                 display_name: block_display_name(&lang, id),
                 properties,
+                property_values_complete: facts.property_values_complete,
                 default_properties: facts.default_properties,
                 variants: facts.variants,
                 multipart: facts.multipart,
@@ -437,8 +449,9 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
     let mut items: BTreeMap<String, ItemFacts> = BTreeMap::new();
     for (id, entry) in &definition_entries {
         let mut model = None;
+        let mut model_type = None;
         if let Some(document) = read_json(&mut archive, entry, &mut warnings) {
-            model = item_definition_model(&document);
+            (model, model_type) = item_definition_model(&document);
             if model.is_none() {
                 push_warning(
                     &mut warnings,
@@ -450,6 +463,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
             id.clone(),
             ItemFacts {
                 model,
+                model_type,
                 item_definition: true,
             },
         );
@@ -465,6 +479,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                         block.clone(),
                         ItemFacts {
                             model: Some(format!("{namespace}:item/{path}")),
+                            model_type: None,
                             item_definition: false,
                         },
                     );
@@ -485,6 +500,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
             if crate::bundle::valid_id(&id) {
                 items.entry(id.clone()).or_insert(ItemFacts {
                     model: Some(format!("{namespace}:item/{path}")),
+                    model_type: None,
                     item_definition: false,
                 });
             }
@@ -507,10 +523,10 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         .collect();
     let mut item_icons: HashMap<String, Option<String>> = HashMap::new();
     for (id, item) in &items {
-        let icon = item
-            .model
-            .as_ref()
-            .and_then(|model| resolver.icon_texture(model, &texture_ids, &mut warnings));
+        let special = item.model_type.as_deref() == Some("minecraft:special");
+        let icon = item.model.as_ref().and_then(|model| {
+            resolver.item_icon_texture(model, special, &texture_ids, &mut warnings)
+        });
         item_icons.insert(id.clone(), icon);
     }
 
@@ -532,12 +548,17 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         .iter()
         .map(|(id, facts)| {
             let block = blocks.contains_key(id).then(|| id.clone());
+            let special = facts.model_type.as_deref() == Some("minecraft:special");
             CatalogItem {
                 id: id.clone(),
                 display_name: item_display_name(&lang, id, block.is_some()),
                 item_definition: facts.item_definition,
+                model_type: facts.model_type.clone(),
                 model: facts.model.clone(),
                 icon_texture: item_icons.get(id).cloned().flatten().or_else(|| {
+                    if special {
+                        return None;
+                    }
                     block
                         .as_ref()
                         .and_then(|block| block_icons.get(block).cloned().flatten())
@@ -763,11 +784,21 @@ fn item_display_name(lang: &BTreeMap<String, String>, id: &str, has_block: bool)
 fn parse_blockstate(document: &Value, entry: &str, warnings: &mut Vec<String>) -> BlockStateFacts {
     let mut facts = BlockStateFacts::default();
     if let Some(variants) = document.get("variants").and_then(Value::as_object) {
+        let mut parsed_variants = 0usize;
+        let mut declared_keys: Option<BTreeSet<String>> = None;
+        let mut keys_consistent = true;
         for (key, value) in variants {
             facts.variants += 1;
             match parse_state_key(key) {
                 Some(properties) => {
-                    if facts.default_properties.is_none() {
+                    parsed_variants += 1;
+                    let keys: BTreeSet<String> = properties.keys().cloned().collect();
+                    match &declared_keys {
+                        None => declared_keys = Some(keys),
+                        Some(expected) if *expected != keys => keys_consistent = false,
+                        Some(_) => {}
+                    }
+                    if facts.variants == 1 {
                         facts.default_properties = Some(properties.clone());
                     }
                     merge_properties(&mut facts.properties, &properties);
@@ -778,6 +809,13 @@ fn parse_blockstate(document: &Value, entry: &str, warnings: &mut Vec<String>) -
                 facts.first_model = first_model_ref(value);
             }
         }
+        if facts.variants != 1 || parsed_variants != 1 {
+            facts.default_properties = None;
+        }
+        facts.property_values_complete = parsed_variants > 0
+            && parsed_variants == facts.variants
+            && keys_consistent
+            && declared_keys.as_ref().is_some_and(|keys| !keys.is_empty());
     } else if let Some(parts) = document.get("multipart").and_then(Value::as_array) {
         facts.multipart = true;
         for part in parts {
@@ -880,11 +918,42 @@ fn first_model_ref(value: &Value) -> Option<String> {
     }
 }
 
-fn item_definition_model(document: &Value) -> Option<String> {
-    document
-        .get("model")
-        .and_then(first_model_ref)
-        .or_else(|| document.get("parent").and_then(first_model_ref))
+fn item_definition_model(document: &Value) -> (Option<String>, Option<String>) {
+    let model = document.get("model");
+    let model_type = model
+        .and_then(Value::as_object)
+        .and_then(|object| object.get("type"))
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned);
+    let model = model
+        .and_then(item_model_ref)
+        .or_else(|| document.get("parent").and_then(item_model_ref));
+    (model, model_type)
+}
+
+/// Resolves the first concrete model referenced by a modern item definition. Definitions
+/// may dispatch on a property (`select`, `range_dispatch`, `condition`), use a special
+/// renderer with a `base` model, or compose several models. The first branch in declaration
+/// order is the palette icon; the full definition remains available in the JAR.
+fn item_model_ref(value: &Value) -> Option<String> {
+    match value {
+        Value::String(model) => normalize_id(model),
+        Value::Array(items) => items.iter().find_map(item_model_ref),
+        Value::Object(object) => {
+            for key in ["model", "base", "on_false", "on_true"] {
+                if let Some(model) = object.get(key).and_then(item_model_ref) {
+                    return Some(model);
+                }
+            }
+            for key in ["cases", "entries", "models"] {
+                if let Some(model) = object.get(key).and_then(item_model_ref) {
+                    return Some(model);
+                }
+            }
+            None
+        }
+        _ => None,
+    }
 }
 
 fn tags_for(tags: &BTreeMap<String, BTreeSet<String>>, id: &str) -> Vec<String> {
@@ -1007,12 +1076,38 @@ impl ModelResolver<'_> {
         textures: &BTreeSet<String>,
         warnings: &mut Vec<String>,
     ) -> Option<String> {
+        self.icon_texture_inner(model, textures, warnings, true, true)
+    }
+
+    /// Item icons must not fall back to a model's `particle` texture: special items such as
+    /// shields and heads use an entity renderer and only carry a particle placeholder.
+    fn item_icon_texture(
+        &mut self,
+        model: &str,
+        special: bool,
+        textures: &BTreeSet<String>,
+        warnings: &mut Vec<String>,
+    ) -> Option<String> {
+        self.icon_texture_inner(model, textures, warnings, false, !special)
+    }
+
+    fn icon_texture_inner(
+        &mut self,
+        model: &str,
+        textures: &BTreeSet<String>,
+        warnings: &mut Vec<String>,
+        allow_particle: bool,
+        warn_missing: bool,
+    ) -> Option<String> {
         let merged = self.resolve(model, 0, &mut Vec::new(), warnings)?;
         const PREFERRED: [&str; 13] = [
             "layer0", "all", "particle", "top", "texture", "cross", "side", "still", "flow",
             "base", "end", "bottom", "front",
         ];
         for key in PREFERRED {
+            if key == "particle" && !allow_particle {
+                continue;
+            }
             if let Some(value) = merged.get(key) {
                 if let Some(texture) = resolve_texture_reference(value, &merged, 0) {
                     if textures.contains(&texture) {
@@ -1021,17 +1116,22 @@ impl ModelResolver<'_> {
                 }
             }
         }
-        for value in merged.values() {
+        for (key, value) in &merged {
+            if key == "particle" && !allow_particle {
+                continue;
+            }
             if let Some(texture) = resolve_texture_reference(value, &merged, 0) {
                 if textures.contains(&texture) {
                     return Some(texture);
                 }
             }
         }
-        push_warning(
-            warnings,
-            format!("model {model} has no texture present in the client JAR"),
-        );
+        if warn_missing {
+            push_warning(
+                warnings,
+                format!("model {model} has no texture present in the client JAR"),
+            );
+        }
         None
     }
 
@@ -1283,7 +1383,7 @@ mod tests {
         text(
             &mut zip,
             "assets/minecraft/blockstates/water.json",
-            r#"{"variants":{"level=0":{"model":"minecraft:block/water"}}}"#,
+            r#"{"variants":{"":{"model":"minecraft:block/water"}}}"#,
         );
         text(
             &mut zip,
@@ -1423,6 +1523,13 @@ mod tests {
             zip.start_file(*name, options).expect("start file");
             zip.write_all(text.as_bytes()).expect("write file");
         }
+        for name in [
+            "assets/minecraft/textures/item/clock_00.png",
+            "assets/minecraft/textures/block/soul_sand.png",
+        ] {
+            zip.start_file(name, options).expect("start texture");
+            zip.write_all(&tiny_png()).expect("write texture");
+        }
         zip.finish().expect("finish jar");
         path
     }
@@ -1483,6 +1590,8 @@ mod tests {
             .expect("stone");
         assert_eq!(stone.display_name.as_deref(), Some("Stone"));
         assert!(stone.properties.is_empty());
+        assert!(!stone.property_values_complete);
+        assert_eq!(stone.default_properties, Some(BTreeMap::new()));
         assert_eq!(stone.variants, 1);
         assert!(!stone.multipart);
         assert_eq!(stone.model.as_deref(), Some("minecraft:block/stone"));
@@ -1509,15 +1618,8 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec!["false", "true"]
         );
-        assert_eq!(
-            stairs
-                .default_properties
-                .as_ref()
-                .expect("default variant")
-                .get("half")
-                .map(String::as_str),
-            Some("bottom")
-        );
+        assert!(stairs.property_values_complete);
+        assert!(stairs.default_properties.is_none());
         assert_eq!(stairs.variants, 2);
         assert_eq!(
             stairs.icon_texture.as_deref(),
@@ -1532,6 +1634,7 @@ mod tests {
         assert!(fence.multipart);
         assert_eq!(fence.variants, 0);
         assert!(fence.default_properties.is_none());
+        assert!(!fence.property_values_complete);
         assert_eq!(
             fence.properties["north"]
                 .iter()
@@ -1546,13 +1649,9 @@ mod tests {
             .find(|block| block.id == "minecraft:water")
             .expect("water");
         assert!(!water.has_item);
-        assert_eq!(
-            water.properties["level"]
-                .iter()
-                .map(String::as_str)
-                .collect::<Vec<_>>(),
-            vec!["0"]
-        );
+        assert!(water.properties.is_empty());
+        assert!(!water.property_values_complete);
+        assert_eq!(water.default_properties, Some(BTreeMap::new()));
 
         let sword = catalog
             .items
@@ -1785,8 +1884,128 @@ mod tests {
             .expect("sword");
         assert!(!sword.item_definition);
         assert!(sword.block.is_none());
+        assert!(sword.model_type.is_none());
         assert_eq!(sword.display_name.as_deref(), Some("Diamond Sword"));
         assert_eq!(sword.tags, vec!["minecraft:swords"]);
+    }
+
+    #[test]
+    fn nested_item_definitions_resolve_the_first_concrete_model() {
+        let dir = TempDir::new("nested-items");
+        let path = write_minimal_jar(
+            &dir,
+            "nested-items",
+            &[
+                (
+                    "assets/minecraft/items/clock.json",
+                    r#"{"model":{"type":"minecraft:select","property":"minecraft:time","cases":[
+                        {"model":{"type":"minecraft:range_dispatch","entries":[
+                            {"threshold":0,"model":{"type":"minecraft:model","model":"minecraft:item/clock_00"}}
+                        ]}},
+                        {"model":{"type":"minecraft:model","model":"minecraft:item/clock_01"}}
+                    ]}}"#,
+                ),
+                (
+                    "assets/minecraft/items/player_head.json",
+                    r#"{"model":{"type":"minecraft:special","base":"minecraft:item/template_skull","model":{"type":"minecraft:head","kind":"player"}}}"#,
+                ),
+                (
+                    "assets/minecraft/models/item/clock_00.json",
+                    r#"{"textures":{"layer0":"minecraft:item/clock_00"}}"#,
+                ),
+                (
+                    "assets/minecraft/models/item/template_skull.json",
+                    r#"{"textures":{"layer0":"minecraft:item/template_skull"}}"#,
+                ),
+                (
+                    "assets/minecraft/lang/en_us.json",
+                    r#"{"item.minecraft.clock":"Clock","item.minecraft.player_head":"Player Head"}"#,
+                ),
+            ],
+        );
+        let catalog = AssetCatalogService::new()
+            .build(&source(&path))
+            .expect("catalog");
+        let clock = catalog
+            .items
+            .iter()
+            .find(|item| item.id == "minecraft:clock")
+            .expect("clock");
+        assert!(clock.item_definition);
+        assert_eq!(clock.model_type.as_deref(), Some("minecraft:select"));
+        assert_eq!(clock.model.as_deref(), Some("minecraft:item/clock_00"));
+        assert_eq!(
+            clock.icon_texture.as_deref(),
+            Some("minecraft:item/clock_00")
+        );
+        let head = catalog
+            .items
+            .iter()
+            .find(|item| item.id == "minecraft:player_head")
+            .expect("player head");
+        assert_eq!(head.model_type.as_deref(), Some("minecraft:special"));
+        assert_eq!(head.model.as_deref(), Some("minecraft:item/template_skull"));
+        assert!(
+            head.icon_texture.is_none(),
+            "a special item's particle texture is not its icon"
+        );
+        assert!(!catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("item model reference")));
+    }
+
+    #[test]
+    fn blockstate_defaults_are_known_only_for_a_single_declared_state() {
+        let mut warnings = Vec::new();
+        let single = parse_blockstate(
+            &serde_json::json!({
+                "variants":{"facing=north,waterlogged=false":{"model":"minecraft:block/x"}}
+            }),
+            "x.json",
+            &mut warnings,
+        );
+        assert_eq!(
+            single
+                .default_properties
+                .as_ref()
+                .and_then(|properties| properties.get("facing"))
+                .map(String::as_str),
+            Some("north")
+        );
+        assert!(single.property_values_complete);
+
+        let ambiguous = parse_blockstate(
+            &serde_json::json!({"variants":{
+                "facing=north":{"model":"minecraft:block/x"},
+                "facing=south":{"model":"minecraft:block/x"}
+            }}),
+            "x.json",
+            &mut warnings,
+        );
+        assert!(ambiguous.default_properties.is_none());
+        assert!(ambiguous.property_values_complete);
+
+        let inconsistent = parse_blockstate(
+            &serde_json::json!({"variants":{
+                "facing=north":{"model":"minecraft:block/x"},
+                "facing=south,waterlogged=false":{"model":"minecraft:block/x"}
+            }}),
+            "x.json",
+            &mut warnings,
+        );
+        assert!(inconsistent.default_properties.is_none());
+        assert!(!inconsistent.property_values_complete);
+
+        let multipart = parse_blockstate(
+            &serde_json::json!({"multipart":[
+                {"when":{"north":"true"},"apply":{"model":"minecraft:block/x"}}
+            ]}),
+            "x.json",
+            &mut warnings,
+        );
+        assert!(multipart.default_properties.is_none());
+        assert!(!multipart.property_values_complete);
     }
 
     #[test]

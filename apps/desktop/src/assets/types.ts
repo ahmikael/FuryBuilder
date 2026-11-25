@@ -140,7 +140,9 @@ export interface CatalogBlock {
   displayName: string | null;
   /** Every property key and all values declared by the blockstate file. */
   properties: Record<string, string[]>;
-  /** First declared variant; null for multipart blocks. */
+  /** True when the blockstate file enumerates every value of every property it declares. */
+  propertyValuesComplete: boolean;
+  /** The only declared state; null when several variants exist and the game default applies. */
   defaultProperties: Record<string, string> | null;
   variants: number;
   multipart: boolean;
@@ -155,6 +157,8 @@ export interface CatalogItem {
   id: string;
   displayName: string | null;
   itemDefinition: boolean;
+  /** Top-level item definition model type, for example `minecraft:select`. */
+  modelType: string | null;
   model: string | null;
   iconTexture: string | null;
   block: string | null;

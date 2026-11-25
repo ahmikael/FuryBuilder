@@ -38,7 +38,7 @@ const curatedCatalog: BlockDefinition[] = [
 ];
 
 const projectCatalog: CatalogSnapshot = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   catalogId: "java-1.21.4-0123456789abcdef",
   catalogHash: "a".repeat(64),
   minecraftVersion: "1.21.4",
@@ -52,6 +52,7 @@ const projectCatalog: CatalogSnapshot = {
       id: "minecraft:stone",
       displayName: "Stone",
       properties: {},
+      propertyValuesComplete: false,
       defaultProperties: {},
       variants: 1,
       multipart: false,
@@ -69,12 +70,8 @@ const projectCatalog: CatalogSnapshot = {
         shape: ["straight"],
         waterlogged: ["false", "true"],
       },
-      defaultProperties: {
-        facing: "north",
-        half: "bottom",
-        shape: "straight",
-        waterlogged: "false",
-      },
+      propertyValuesComplete: true,
+      defaultProperties: null,
       variants: 2,
       multipart: false,
       model: "minecraft:block/oak_stairs",
@@ -86,7 +83,8 @@ const projectCatalog: CatalogSnapshot = {
       id: "minecraft:oak_slab",
       displayName: "Oak Slab",
       properties: { type: ["bottom", "top"], waterlogged: ["false", "true"] },
-      defaultProperties: { type: "bottom", waterlogged: "false" },
+      propertyValuesComplete: true,
+      defaultProperties: null,
       variants: 2,
       multipart: false,
       model: "minecraft:block/oak_slab",
@@ -98,6 +96,7 @@ const projectCatalog: CatalogSnapshot = {
       id: "minecraft:chiseled_deepslate",
       displayName: "Chiseled Deepslate",
       properties: {},
+      propertyValuesComplete: false,
       defaultProperties: {},
       variants: 1,
       multipart: false,
@@ -110,6 +109,7 @@ const projectCatalog: CatalogSnapshot = {
       id: "minecraft:oak_fence",
       displayName: "Oak Fence",
       properties: { east: ["true"], north: ["true"], south: ["true"], west: ["true"] },
+      propertyValuesComplete: false,
       defaultProperties: null,
       variants: 0,
       multipart: true,
@@ -188,23 +188,38 @@ describe("block palette", () => {
     expect(screen.queryByText("stone")).not.toBeInTheDocument();
   });
 
-  it("selects catalog defaults and edits individual properties", async () => {
+  it("selects the game default and edits individual properties", async () => {
     const user = userEvent.setup();
     render(<BottomPanel backend={backend} />);
     await screen.findByText("oak_stairs");
     await user.click(screen.getByText("oak_stairs"));
     expect(useToolStore.getState().selectedBlock).toEqual({
       name: "minecraft:oak_stairs",
-      properties: { facing: "north", half: "bottom", shape: "straight", waterlogged: "false" },
+      properties: {},
     });
+    expect(screen.getByLabelText("Property facing")).toHaveValue("");
+    expect(screen.getByLabelText("Property waterlogged")).toHaveValue("");
 
     const facing = screen.getByLabelText("Property facing");
-    await user.clear(facing);
     await user.type(facing, "south");
     expect(useToolStore.getState().selectedBlock.properties?.facing).toBe("south");
 
     await user.click(screen.getByRole("button", { name: /Defaults/ }));
-    expect(useToolStore.getState().selectedBlock.properties?.facing).toBe("north");
+    expect(useToolStore.getState().selectedBlock.properties).toEqual({});
+  });
+
+  it("uses the game default when the blockstate declares no properties", async () => {
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    await screen.findByText("stone");
+    await user.click(screen.getByText("stone"));
+    expect(useToolStore.getState().selectedBlock).toEqual({
+      name: "minecraft:stone",
+      properties: {},
+    });
+    expect(
+      screen.getByText(/declares no properties; the game default is used/i),
+    ).toBeInTheDocument();
   });
 
   it("shows multipart blocks without inventing a default state", async () => {
@@ -217,6 +232,7 @@ describe("block palette", () => {
       properties: {},
     });
     expect(screen.getByText(/multipart states are assembled by the game/i)).toBeInTheDocument();
+    expect(screen.getByText(/declares only part of the state space/i)).toBeInTheDocument();
   });
 
   it("falls back to curated quick picks with an explicit notice", async () => {
@@ -245,7 +261,7 @@ describe("block palette", () => {
     await user.click(screen.getByRole("button", { name: /Use as replace source/ }));
     expect(useToolStore.getState().replaceFrom).toEqual({
       name: "minecraft:oak_slab",
-      properties: { type: "bottom", waterlogged: "false" },
+      properties: {},
     });
   });
 

@@ -829,10 +829,18 @@ fn resolve_project_catalog(
 }
 
 fn catalog_write_registry(catalog: &CatalogSnapshot) -> BlockRegistry {
-    BlockRegistry::from_schema(catalog.blocks.iter().map(|block| BlockSchemaEntry {
-        name: block.id.clone(),
-        properties: block.properties.keys().cloned().collect(),
-        default_properties: block.default_properties.clone().unwrap_or_default(),
+    BlockRegistry::from_schema(catalog.blocks.iter().map(|block| {
+        BlockSchemaEntry {
+            name: block.id.clone(),
+            properties: block.properties.keys().cloned().collect(),
+            values: block
+                .properties
+                .iter()
+                .map(|(key, values)| (key.clone(), values.iter().cloned().collect()))
+                .collect(),
+            property_values_complete: block.property_values_complete,
+            default_properties: block.default_properties.clone().unwrap_or_default(),
+        }
     }))
 }
 

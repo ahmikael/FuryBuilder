@@ -76,6 +76,8 @@ interface PaletteEntry {
   name: string;
   displayName: string | null;
   properties: Record<string, string>;
+  propertyValues: Record<string, string[]>;
+  propertyValuesComplete: boolean;
   multipart: boolean;
 }
 
@@ -158,6 +160,8 @@ function BlocksPanel() {
         name: block.id,
         displayName: block.displayName,
         properties: block.defaultProperties ?? {},
+        propertyValues: block.properties,
+        propertyValuesComplete: block.propertyValuesComplete,
         multipart: block.multipart,
       }));
     }
@@ -166,6 +170,10 @@ function BlocksPanel() {
         name: entry.name,
         displayName: null,
         properties: entry.properties,
+        propertyValues: Object.fromEntries(
+          Object.entries(entry.properties).map(([key, value]) => [key, [value]]),
+        ),
+        propertyValuesComplete: false,
         multipart: false,
       }));
     }
@@ -183,7 +191,10 @@ function BlocksPanel() {
   }, [palette, search]);
 
   const definition = palette.find((entry) => entry.name === selectedBlock.name) ?? null;
-  const properties = Object.entries(selectedBlock.properties ?? {});
+  const overrides = selectedBlock.properties ?? {};
+  const propertyKeys = definition
+    ? Array.from(new Set([...Object.keys(definition.propertyValues), ...Object.keys(overrides)]))
+    : Object.keys(overrides);
   const source = catalog ? "clientJar" : curated ? "curated" : null;
   const loading = !catalog && !curated && !error;
 
@@ -315,33 +326,49 @@ function BlocksPanel() {
           </div>
 
           <div className="space-y-2">
-            {properties.length === 0 ? (
+            {propertyKeys.length === 0 ? (
               <div className="text-xs text-muted-foreground">
                 {definition?.multipart
                   ? "No single JAR default: multipart states are assembled by the game."
-                  : "No state properties."}
+                  : "The blockstate file declares no properties; the game default is used."}
               </div>
             ) : (
-              properties.map(([key, value]) => (
+              propertyKeys.map((key) => (
                 <label key={key} className="grid grid-cols-[1fr_1.4fr] items-center gap-1.5">
                   <span className="truncate font-mono text-xs text-muted-foreground">{key}</span>
                   <Input
                     className="h-8 px-2 font-mono text-xs"
-                    value={value}
+                    value={overrides[key] ?? ""}
+                    placeholder={definition?.propertyValues[key]?.join(" | ") ?? "game default"}
                     aria-label={`Property ${key}`}
-                    onChange={(event) =>
-                      setSelectedBlock({
-                        ...selectedBlock,
-                        properties: {
-                          ...selectedBlock.properties,
-                          [key]: event.target.value,
-                        },
-                      })
-                    }
+                    onChange={(event) => {
+                      const next = { ...overrides };
+                      if (event.target.value === "") {
+                        delete next[key];
+                      } else {
+                        next[key] = event.target.value;
+                      }
+                      setSelectedBlock({ ...selectedBlock, properties: next });
+                    }}
                   />
                 </label>
               ))
             )}
+            {source === "clientJar" &&
+            definition &&
+            !definition.propertyValuesComplete &&
+            propertyKeys.length > 0 ? (
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                This blockstate file declares only part of the state space. Declared keys are
+                checked; undeclared values are accepted.
+              </p>
+            ) : null}
+            {definition?.multipart ? (
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                Multipart states are assembled by the game; an empty selection uses its default
+                state.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-2">

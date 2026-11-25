@@ -249,8 +249,9 @@ the catalog id, catalog hash, client JAR SHA-1, version and `DataVersion` agains
 manifest; a different JAR is a conflict. The rebuilt catalog becomes the write-admission
 registry of the open `WorldService`, while the curated registry remains the quick-pick list
 exposed by `block_catalog` and the explicit fallback when a project uses placeholder assets.
-Validation uses the same write registry, so the palette, command writes and `Validation` panel
-agree on which block names and property keys exist. Multipart defaults, value validation,
+Validation uses the same write registry, so the palette, command writes and `Validation`
+panel agree on which block names and property keys exist, and values are checked whenever
+the blockstate file enumerates them. Multipart defaults, exact per-block value registries,
 creative categories and item browsing remain later catalog stages.
 
 ## Welcome screen

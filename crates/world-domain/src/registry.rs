@@ -206,6 +206,12 @@ pub enum RegistryError {
     UnknownBlock(String),
     #[error("block `{block}` has no property `{property}`")]
     UnknownProperty { block: String, property: String },
+    #[error("block `{block}` property `{property}` has no value `{value}`")]
+    UnknownValue {
+        block: String,
+        property: String,
+        value: String,
+    },
     #[error(transparent)]
     InvalidState(#[from] BlockStateError),
 }
@@ -218,12 +224,15 @@ pub struct BlockDefinition {
     pub properties: BTreeMap<String, String>,
 }
 
-/// One block schema derived from a project catalog. Only the property keys are needed for
-/// write admission; the catalog keeps the full value sets for the state picker.
+/// One block schema derived from a project catalog. Only property keys and the values the
+/// blockstate file declares are needed for write admission; the catalog keeps the full value
+/// sets for the state picker.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BlockSchemaEntry {
     pub name: String,
     pub properties: BTreeSet<String>,
+    pub values: BTreeMap<String, BTreeSet<String>>,
+    pub property_values_complete: bool,
     pub default_properties: BTreeMap<String, String>,
 }
 
@@ -231,12 +240,18 @@ pub struct BlockSchemaEntry {
 struct RegistryEntry {
     defaults: BTreeMap<String, String>,
     properties: BTreeSet<String>,
+    values: BTreeMap<String, BTreeSet<String>>,
+    values_complete: bool,
 }
 
 /// Versioned catalog of known blocks and their default property sets.
 #[derive(Debug, Clone)]
 pub struct BlockRegistry {
     blocks: BTreeMap<String, RegistryEntry>,
+    /// Property keys declared anywhere in a catalog-derived registry. Blockstate files omit
+    /// properties that do not affect a model, so an undeclared but globally known key is
+    /// accepted for writes while an unknown key is still rejected.
+    known_properties: BTreeSet<String>,
 }
 
 impl BlockRegistry {
@@ -253,18 +268,28 @@ impl BlockRegistry {
                 RegistryEntry {
                     defaults,
                     properties,
+                    values: BTreeMap::new(),
+                    values_complete: false,
                 },
             );
         }
-        Self { blocks }
+        Self {
+            blocks,
+            known_properties: BTreeSet::new(),
+        }
     }
 
     /// Builds a registry from an exact project catalog. Catalog blocks may declare no
-    /// default properties (multipart blockstates); their property keys still admit writes.
+    /// default properties (ambiguous or multipart blockstates); their declared property
+    /// keys still admit writes, and values are checked only when the blockstate file
+    /// enumerates all values for the key.
     pub fn from_schema(entries: impl IntoIterator<Item = BlockSchemaEntry>) -> Self {
+        let mut known_properties = BTreeSet::new();
         let blocks = entries
             .into_iter()
             .map(|entry| {
+                known_properties.extend(entry.properties.iter().cloned());
+                known_properties.extend(entry.default_properties.keys().cloned());
                 let mut properties = entry.properties;
                 properties.extend(entry.default_properties.keys().cloned());
                 (
@@ -272,11 +297,16 @@ impl BlockRegistry {
                     RegistryEntry {
                         defaults: entry.default_properties,
                         properties,
+                        values: entry.values,
+                        values_complete: entry.property_values_complete,
                     },
                 )
             })
             .collect();
-        Self { blocks }
+        Self {
+            blocks,
+            known_properties,
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -304,7 +334,8 @@ impl BlockRegistry {
         Ok(BlockState::new(name, properties)?)
     }
 
-    /// Merges supplied properties over the catalog defaults and rejects unknown keys.
+    /// Merges supplied properties over the catalog defaults and rejects unknown keys and,
+    /// when the catalog enumerates them, unknown values.
     pub fn canonicalize(
         &self,
         name: &str,
@@ -314,35 +345,58 @@ impl BlockRegistry {
             .blocks
             .get(name)
             .ok_or_else(|| RegistryError::UnknownBlock(name.to_owned()))?;
-        for key in overrides.keys() {
-            if !entry.properties.contains(key.as_str()) {
-                return Err(RegistryError::UnknownProperty {
-                    block: name.to_owned(),
-                    property: key.clone(),
-                });
-            }
+        for (key, value) in &overrides {
+            self.validate_property(entry, name, key, value)?;
         }
         let mut properties: BTreeMap<String, String> = entry.defaults.clone();
         properties.extend(overrides);
         Ok(BlockState::new(name, properties)?)
     }
 
-    /// Validates a state against the catalog. Missing properties are allowed for
-    /// imported data; unknown blocks/properties are rejected for command writes.
+    /// Validates a state against the catalog. Missing properties are allowed for imported
+    /// data and mean "use the game default". Keys declared by the block are checked against
+    /// the declared value set when that set is complete. A catalog-derived registry also
+    /// accepts a globally known key that this blockstate file omits (for example
+    /// `waterlogged` on stairs), because such properties never affect a model.
     pub fn validate(&self, state: &BlockState) -> Result<(), RegistryError> {
         let entry = self
             .blocks
             .get(state.name())
             .ok_or_else(|| RegistryError::UnknownBlock(state.name().to_owned()))?;
-        for key in state.properties().keys() {
-            if !entry.properties.contains(key.as_str()) {
-                return Err(RegistryError::UnknownProperty {
-                    block: state.name().to_owned(),
-                    property: key.clone(),
-                });
-            }
+        for (key, value) in state.properties() {
+            self.validate_property(entry, state.name(), key, value)?;
         }
         Ok(())
+    }
+
+    fn validate_property(
+        &self,
+        entry: &RegistryEntry,
+        block: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<(), RegistryError> {
+        if entry.properties.contains(key) {
+            if entry.values_complete {
+                if let Some(values) = entry.values.get(key) {
+                    if !values.contains(value) {
+                        return Err(RegistryError::UnknownValue {
+                            block: block.to_owned(),
+                            property: key.to_owned(),
+                            value: value.to_owned(),
+                        });
+                    }
+                }
+            }
+            return Ok(());
+        }
+        if !self.known_properties.is_empty() && self.known_properties.contains(key) {
+            return Ok(());
+        }
+        Err(RegistryError::UnknownProperty {
+            block: block.to_owned(),
+            property: key.to_owned(),
+        })
     }
 
     pub fn names(&self) -> impl Iterator<Item = &str> + '_ {
@@ -457,6 +511,8 @@ mod tests {
             BlockSchemaEntry {
                 name: "minecraft:deepslate_bricks".to_owned(),
                 properties: BTreeSet::new(),
+                values: BTreeMap::new(),
+                property_values_complete: false,
                 default_properties: BTreeMap::new(),
             },
             BlockSchemaEntry {
@@ -465,6 +521,8 @@ mod tests {
                     .into_iter()
                     .map(ToOwned::to_owned)
                     .collect(),
+                values: BTreeMap::new(),
+                property_values_complete: false,
                 default_properties: BTreeMap::new(),
             },
         ]);
@@ -482,5 +540,76 @@ mod tests {
         assert!(registry
             .validate(&"minecraft:oak_stairs".parse().unwrap())
             .is_err());
+    }
+
+    #[test]
+    fn schema_registry_checks_values_only_when_the_blockstate_is_complete() {
+        let mut stairs_values = BTreeMap::new();
+        stairs_values.insert(
+            "facing".to_owned(),
+            ["north", "south"]
+                .into_iter()
+                .map(ToOwned::to_owned)
+                .collect(),
+        );
+        stairs_values.insert(
+            "waterlogged".to_owned(),
+            ["false", "true"]
+                .into_iter()
+                .map(ToOwned::to_owned)
+                .collect(),
+        );
+        let mut fence_values = BTreeMap::new();
+        fence_values.insert(
+            "north".to_owned(),
+            ["true"].into_iter().map(ToOwned::to_owned).collect(),
+        );
+        let registry = BlockRegistry::from_schema([
+            BlockSchemaEntry {
+                name: "minecraft:oak_stairs".to_owned(),
+                properties: stairs_values.keys().cloned().collect(),
+                values: stairs_values,
+                property_values_complete: true,
+                default_properties: BTreeMap::new(),
+            },
+            BlockSchemaEntry {
+                name: "minecraft:oak_fence".to_owned(),
+                properties: ["north"].into_iter().map(ToOwned::to_owned).collect(),
+                values: fence_values,
+                property_values_complete: false,
+                default_properties: BTreeMap::new(),
+            },
+        ]);
+
+        assert!(registry
+            .validate(
+                &"minecraft:oak_stairs[facing=south,waterlogged=true]"
+                    .parse()
+                    .unwrap()
+            )
+            .is_ok());
+        assert!(matches!(
+            registry.validate(&"minecraft:oak_stairs[facing=up]".parse().unwrap()),
+            Err(RegistryError::UnknownValue { .. })
+        ));
+        // Multipart conditions only name `true`, so `false` is valid even though the
+        // blockstate file does not enumerate it.
+        assert!(registry
+            .validate(&"minecraft:oak_fence[north=false]".parse().unwrap())
+            .is_ok());
+        // A key declared by another catalog block is accepted because blockstates omit
+        // properties that do not affect a model.
+        assert!(registry
+            .validate(&"minecraft:oak_fence[waterlogged=true]".parse().unwrap())
+            .is_ok());
+        assert!(matches!(
+            registry.validate(&"minecraft:oak_fence[axis=x]".parse().unwrap()),
+            Err(RegistryError::UnknownProperty { .. })
+        ));
+        let overrides = BTreeMap::from([("facing".to_owned(), "up".to_owned())]);
+        assert!(matches!(
+            registry.canonicalize("minecraft:oak_stairs", overrides),
+            Err(RegistryError::UnknownValue { .. })
+        ));
     }
 }
