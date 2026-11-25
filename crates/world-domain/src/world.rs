@@ -259,6 +259,24 @@ impl World {
 mod tests {
     use super::*;
 
+    #[test]
+    fn clearing_solid_blocks_keeps_existing_explicit_air_states() {
+        let mut world = World::new_empty();
+        let dimension = "minecraft:overworld";
+        let special_pos = BlockPos::new(0, 64, 0);
+        let solid_pos = BlockPos::new(1, 64, 0);
+        let special: BlockState = "minecraft:cave_air[custom=true]".parse().unwrap();
+        let implicit = BlockState::default();
+        world.set_block(dimension, special_pos, &special).unwrap();
+        world.set_block(dimension, solid_pos, &stone()).unwrap();
+        world.set_block(dimension, solid_pos, &implicit).unwrap();
+        assert_eq!(world.block_count(), 0);
+        assert_eq!(world.section_count(), 1);
+        assert_eq!(world.get_block(dimension, special_pos).unwrap(), special);
+        world.set_block(dimension, special_pos, &implicit).unwrap();
+        assert_eq!(world.section_count(), 0);
+    }
+
     fn stone() -> BlockState {
         "minecraft:stone".parse().unwrap()
     }

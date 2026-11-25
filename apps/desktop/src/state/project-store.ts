@@ -295,7 +295,7 @@ function reportError(error: unknown, title: string): void {
 }
 
 function applyPayload(payload: OpenedProjectPayload): void {
-  const { detail, info, recovery, session } = payload;
+  const { blockStateWarning, detail, info, recovery, session } = payload;
   useProjectStore.setState({
     current: session,
     recovery,
@@ -326,6 +326,13 @@ function applyPayload(payload: OpenedProjectPayload): void {
   useToolStore.getState().markSaved();
   void useHistoryStore.getState().refresh();
   reloadViewport();
+  if (blockStateWarning) {
+    pushToast({
+      kind: "warning",
+      title: "Unsupported block states preserved",
+      description: blockStateWarning,
+    });
+  }
 }
 
 export const useProjectStore = create<ProjectUiState>()((set, get) => ({

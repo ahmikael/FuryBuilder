@@ -64,6 +64,27 @@ impl Section {
         &self.palette
     }
 
+    /// Finds a state that is actually used by a block, not a stale palette entry left by an
+    /// edit. Check the predicate once per palette entry; only scan indices when needed.
+    pub fn first_used_state_matching(
+        &self,
+        mut predicate: impl FnMut(&BlockState) -> bool,
+    ) -> Option<&BlockState> {
+        let first = self.palette.iter().position(&mut predicate)?;
+        if self.palette.len() == 1 {
+            return self.palette.first();
+        }
+        let mut matching = vec![false; self.palette.len()];
+        matching[first] = true;
+        for (index, state) in self.palette.iter().enumerate().skip(first + 1) {
+            matching[index] = predicate(state);
+        }
+        (0..SECTION_VOLUME)
+            .map(|index| self.read_index(index) as usize)
+            .find(|index| matching[*index])
+            .map(|index| &self.palette[index])
+    }
+
     /// Rehydrates a section from persisted palette and packed indices.
     ///
     /// Validation is strict: the palette must be non-empty and within the section limit,
@@ -161,9 +182,16 @@ impl Section {
         self.non_air == 0
     }
 
-    /// True when the section has neither blocks nor biome data and can be dropped.
+    /// True when the section has only implicit air and no biome data.
     pub fn is_void(&self) -> bool {
-        self.is_empty() && self.biomes.is_none()
+        self.biomes.is_none() && self.has_only_implicit_air()
+    }
+
+    fn has_only_implicit_air(&self) -> bool {
+        self.is_empty()
+            && self
+                .first_used_state_matching(|state| !state.is_implicit_air())
+                .is_none()
     }
 
     pub fn biomes(&self) -> Option<&BiomeSection> {
@@ -278,7 +306,7 @@ impl Section {
             } else if !previous_air && next_air {
                 self.non_air -= 1;
             }
-            if self.non_air == 0 {
+            if self.has_only_implicit_air() {
                 self.reset_to_air();
             }
             Some(true)
@@ -491,6 +519,25 @@ mod tests {
         }
         assert_eq!(Section::single(stone()).palette_index(4, 5, 6), Some(0));
         assert_eq!(Section::empty().palette_index(16, 0, 0), None);
+    }
+
+    #[test]
+    fn matching_used_states_ignores_stale_palette_entries() {
+        let absent: BlockState = "example:unused".parse().unwrap();
+        let present: BlockState = "example:retained".parse().unwrap();
+        let mut indices = vec![0; SECTION_VOLUME];
+        indices[42] = 2;
+        let mut section =
+            Section::from_palette_indices(vec![stone(), absent.clone(), present.clone()], &indices)
+                .unwrap();
+        let foreign = |state: &BlockState| state.name().starts_with("example:");
+        assert_eq!(section.first_used_state_matching(foreign), Some(&present));
+        assert_eq!(
+            section.first_used_state_matching(|state| state == &absent),
+            None
+        );
+        section.set(10, 0, 2, &stone()).unwrap();
+        assert_eq!(section.first_used_state_matching(foreign), None);
     }
 
     #[test]

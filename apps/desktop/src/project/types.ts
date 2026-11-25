@@ -247,6 +247,7 @@ export interface OpenedProjectPayload {
   info: WorldInfo;
   recovery: RecoveryInfo | null;
   session: SessionStatus;
+  blockStateWarning: string | null;
 }
 
 export interface SaveOutcome {

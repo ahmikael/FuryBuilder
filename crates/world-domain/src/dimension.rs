@@ -176,7 +176,7 @@ impl Dimension {
     ) -> Result<BlockWrite, DimensionError> {
         self.check_y(pos.y)?;
         let chunk_pos = pos.chunk_pos();
-        if state.is_air() {
+        if state.is_implicit_air() {
             let Some(chunk) = self.chunks.get_mut(&chunk_pos) else {
                 return Ok(BlockWrite {
                     previous: BlockState::default(),

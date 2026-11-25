@@ -280,6 +280,10 @@ are stored in the project overlay; the source folder or archive is never written
 chunk data, entities, block entities, heightmaps, light and POI are preserved as raw source
 data rather than recalculated.
 
+If the editor warns that unsupported block states were preserved, those blocks keep their
+original IDs and properties. Use **Analysis → Validation** to locate them. You can replace
+them with a supported block, but you cannot place copies of an unsupported state.
+
 ## 10. Generate a Vanilla World
 
 This is the only mode that claims to use the original Minecraft generator, and it has real

@@ -113,6 +113,22 @@ list is the exact version catalog.
 Exposed as the `assets_catalog` Tauri command and `loadAssetCatalog()` in the desktop client
 for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open project.
 
+## Imported block states
+
+World import preserves original block IDs and properties even when the pinned catalog does
+not admit the state. On import or reopen, the editor warns if any used states fail the same
+registry check that governs writes. The notice gives a count of affected sections and a sample
+state; **Analysis → Validation → Export compatibility** locates issues in a selected area.
+Without a pinned JAR, the notice explicitly refers to the limited write registry, not to a
+complete Minecraft catalog.
+
+Existing unsupported states survive saving and are not mapped to air or to another block.
+They can be read or matched as a replace source, and undo can restore them at their original
+positions. Placing them as new blocks, including through paste, structure insertion or
+template insertion, is refused. Importing a structure as a **new project** instead preserves
+its source states in the initial snapshot. Technical support for carrying stored states through
+same-version export does not guarantee that a vanilla Minecraft client recognizes those states.
+
 ## Honest limits
 
 - `defaultProperties` is the only state declared by the blockstate file. When several

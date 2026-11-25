@@ -113,7 +113,7 @@ impl Chunk {
     pub fn set_local(&mut self, local_x: u8, local_z: u8, y: i32, state: &BlockState) -> bool {
         let section_y = y.div_euclid(16);
         let local_y = y.rem_euclid(16) as u8;
-        if state.is_air() {
+        if state.is_implicit_air() {
             let Some(section) = self.sections.get_mut(&section_y) else {
                 return false;
             };

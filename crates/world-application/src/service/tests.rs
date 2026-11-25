@@ -286,22 +286,56 @@ fn read_only_policy_rejects_writes_but_allows_queries() {
 
 #[test]
 fn unknown_target_states_are_rejected_but_imported_predicates_are_allowed() {
-    let mut service = WorldService::new();
-    let error = service
-        .execute(set_block(
-            BlockPos::new(0, 64, 0),
-            "minecraft:not_a_real_block",
-        ))
-        .unwrap_err();
-    assert_eq!(error.code, ErrorCode::InvalidArgument);
+    let dimension = "minecraft:overworld";
+    let origin = BlockPos::new(0, 64, 0);
+    let adjacent = BlockPos::new(1, 64, 0);
+    let mut imported = World::new_empty();
+    let unknown = "example:machine[powered=true]";
+    let bad_props = "minecraft:stone[invalid=value]";
+    imported
+        .set_block(dimension, origin, &state(unknown))
+        .unwrap();
+    imported
+        .set_block(dimension, adjacent, &state(bad_props))
+        .unwrap();
+    let mut service = WorldService::from_world(imported);
+    assert_eq!(
+        service.world().get_block(dimension, origin).unwrap(),
+        state(unknown)
+    );
+
+    for block in [unknown, bad_props] {
+        let request = set_block(BlockPos::new(2, 64, 0), block);
+        assert_eq!(
+            service
+                .preview("project-1", &request.operation)
+                .unwrap_err()
+                .code,
+            ErrorCode::InvalidArgument,
+        );
+        assert_eq!(
+            service.execute(request).unwrap_err().code,
+            ErrorCode::InvalidArgument,
+        );
+    }
+    assert_eq!(service.world().revision(), 0);
 
     let replace = request(Operation::Replace {
-        dimension: "minecraft:overworld".to_owned(),
-        bounds: BlockBox::single(BlockPos::new(0, 64, 0)),
-        from: state("modded:unknown_block"),
+        dimension: dimension.to_owned(),
+        bounds: BlockBox::single(origin),
+        from: state(unknown),
         to: state("minecraft:stone"),
     });
-    assert_eq!(service.execute(replace).unwrap().changed_blocks, 0);
+    assert_eq!(service.execute(replace).unwrap().changed_blocks, 1);
+    assert_eq!(
+        service.world().get_block(dimension, adjacent).unwrap(),
+        state(bad_props)
+    );
+    service.undo("project-1", actor(), None).unwrap();
+    assert_eq!(
+        service.world().get_block(dimension, origin).unwrap(),
+        state(unknown)
+    );
 }
 
 #[test]

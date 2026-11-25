@@ -602,6 +602,7 @@ pub struct OpenedProjectPayload {
     pub info: WorldInfo,
     pub recovery: Option<project_store::RecoveryInfo>,
     pub session: SessionStatus,
+    pub block_state_warning: Option<String>,
 }
 
 /// The library location shown by the creation wizard. The backend is the only owner of
@@ -715,12 +716,63 @@ fn current_payload(
     recovery: Option<project_store::RecoveryInfo>,
 ) -> Result<OpenedProjectPayload, AppError> {
     let session = session_status(state)?;
+    let block_state_warning = {
+        let service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        let has_exact_catalog = detail
+            .components
+            .assets
+            .as_ref()
+            .is_some_and(|assets| assets.catalog_id.is_some());
+        unsupported_block_state_warning(
+            service.world(),
+            service.write_registry(),
+            has_exact_catalog,
+        )
+    };
     Ok(OpenedProjectPayload {
         detail,
         info: world_info,
         recovery,
         session,
+        block_state_warning,
     })
+}
+
+fn unsupported_block_state_warning(
+    world: &World,
+    registry: &BlockRegistry,
+    has_exact_catalog: bool,
+) -> Option<String> {
+    let mut sections = 0;
+    let mut first_state = None;
+    for dimension in world.dimensions().values() {
+        for chunk in dimension.chunks().values() {
+            for section in chunk.sections().values() {
+                if let Some(state) =
+                    section.first_used_state_matching(|state| registry.validate(state).is_err())
+                {
+                    sections += 1;
+                    first_state.get_or_insert(state);
+                }
+            }
+        }
+    }
+    let state = first_state?.to_string();
+    let mut example: String = state.chars().take(160).collect();
+    if example.len() < state.len() {
+        example.push('…');
+    }
+    let registry_label = if has_exact_catalog {
+        "the project's pinned catalog"
+    } else {
+        "the limited write registry used without a client JAR"
+    };
+    Some(format!(
+        "{sections} section(s) contain block states not admitted by {registry_label}, for example `{example}`. Existing states are preserved in the project but cannot be placed as new blocks. Use Analysis → Validation to inspect an area."
+    ))
 }
 
 /// Replaces the authoritative service for a newly opened world and installs the
@@ -792,9 +844,6 @@ fn resolve_project_catalog(
     let status = report
         .status(ComponentKind::Assets)
         .ok_or_else(|| AppError::internal("missing assets status"))?;
-    if status.mode == Some(ComponentMode::Placeholder) {
-        return Ok(None);
-    }
     if !status.state.is_ready() {
         return Err(AppError::new(
             ErrorCode::Conflict,
@@ -2616,14 +2665,11 @@ fn template_preview_impl(
         prepare_template_insert(state, template_id, dimension, origin, include_air)?;
     let current = current_project(state)?;
     let result = {
-        let mut service = state
+        let service = state
             .service
             .lock()
             .map_err(|_| AppError::internal("world state lock poisoned"))?;
-        service.set_allow_unknown_targets(true);
-        let result = service.preview(&current.project_id, &operation);
-        service.set_allow_unknown_targets(false);
-        result?
+        service.preview(&current.project_id, &operation)?
     };
     Ok(TemplateInsertPreview {
         entry,
@@ -2653,8 +2699,7 @@ fn template_insert_impl(
             .lock()
             .map_err(|_| AppError::internal("world state lock poisoned"))?;
         let operation = if has_changes {
-            service.set_allow_unknown_targets(true);
-            let result = service.execute(OperationRequest {
+            Some(service.execute(OperationRequest {
                 project_id: current.project_id.clone(),
                 operation,
                 expected_revision: None,
@@ -2662,9 +2707,7 @@ fn template_insert_impl(
                 actor: ui_actor(),
                 linked_object_id: None,
                 layer_id,
-            });
-            service.set_allow_unknown_targets(false);
-            Some(result?)
+            })?)
         } else {
             None
         };
@@ -3168,54 +3211,38 @@ pub fn structure_import_project(
     let root = projects.store.root().to_path_buf();
 
     let built = (|| -> Result<(project_store::ProjectDetail, WorldInfo), AppError> {
-        let (_, world, _) = projects.store.open(&folder).map_err(project_error)?;
+        let (_, mut world, _) = projects.store.open(&folder).map_err(project_error)?;
         projects
             .store
             .attach_source_bytes(&folder, &source_name, &bytes)
             .map_err(project_error)?;
-        let mut service = WorldService::from_world(world);
-        // Imported structures may reference vanilla states outside the built-in palette
-        // catalogue. They are preserved verbatim in the world; the catalogue is a UI
-        // convenience, not the authoritative block list.
-        service.set_allow_unknown_targets(true);
-        if !changes.is_empty() {
-            service.execute(OperationRequest {
-                project_id: detail.summary.project_id.clone(),
-                operation: Operation::Batch {
-                    dimension: dimension.clone(),
-                    changes,
-                },
-                expected_revision: None,
-                idempotency_key: None,
-                actor: ui_actor(),
-                linked_object_id: None,
-                layer_id: None,
-            })?;
+        // Decode the verified source into an unpublished world, like a Java world import.
+        // This is initial data, not an edit or a way to admit these states to a live world.
+        let mut changed = false;
+        for change in changes {
+            changed |= world
+                .set_block(&dimension, change.pos, &change.state)
+                .map_err(AppError::from)?
+                .changed;
         }
-        // Unknown states are accepted only for the imported payload. Leaving this flag on
-        // would let later commands write arbitrary block ids through this service.
-        service.set_allow_unknown_targets(false);
+        if changed {
+            world.bump_revision();
+        }
         let outcome = projects
             .store
             .save(
                 &folder,
-                service.world(),
+                &world,
                 editor_state.clone(),
                 project_store::SaveKind::Manual,
             )
             .map_err(project_error)?;
         projects
             .store
-            .begin_session(&folder, service.world().revision())
+            .begin_session(&folder, world.revision())
             .map_err(project_error)?;
-        let info = service.world_info();
-        {
-            let mut current_service = state
-                .service
-                .lock()
-                .map_err(|_| AppError::internal("world state lock poisoned"))?;
-            *current_service = service;
-        }
+        let info = world.info();
+        install_world_service(&state, world, &editor_state, None)?;
         projects.current = Some(CurrentProject {
             folder: folder.clone(),
             project_id: detail.summary.project_id.clone(),
@@ -3285,8 +3312,7 @@ pub fn structure_insert(
         let operation = if changes.is_empty() {
             None
         } else {
-            service.set_allow_unknown_targets(true);
-            let result = service.execute(OperationRequest {
+            Some(service.execute(OperationRequest {
                 project_id: current.project_id.clone(),
                 operation: Operation::Batch {
                     dimension: dimension.clone(),
@@ -3297,9 +3323,7 @@ pub fn structure_insert(
                 actor: ui_actor(),
                 linked_object_id: None,
                 layer_id: None,
-            });
-            service.set_allow_unknown_targets(false);
-            Some(result?)
+            })?)
         };
         (operation, service.world_info())
     };
@@ -4766,6 +4790,40 @@ mod workspace_tests {
     }
 
     #[test]
+    fn template_with_unknown_blocks_cannot_be_previewed_or_placed_in_a_live_world() {
+        let (state, _) = project_state("unknown-template");
+        let name = "example:machine[powered=true]";
+        let structure = Structure::new(
+            default_profile().data_version,
+            [1, 1, 1],
+            vec![name.parse().unwrap()],
+            vec![world_io::StructureBlock {
+                pos: [0, 0, 0],
+                palette_index: 0,
+            }],
+        )
+        .unwrap();
+        let bytes = world_io::write_java_structure(&structure, "test").unwrap();
+        let entry = current_template_library(&state)
+            .unwrap()
+            .save_bytes("Unknown block", &bytes, TemplateSource::Selection)
+            .unwrap();
+        let info = state.service.lock().unwrap().world_info();
+        let dimension = "minecraft:overworld";
+        let origin = [4, 64, 4];
+        for error in [
+            template_preview_impl(&state, &entry.id, dimension, origin, false).unwrap_err(),
+            template_insert_impl(&state, &entry.id, dimension, origin, false, None).unwrap_err(),
+        ] {
+            assert_eq!(error.code, ErrorCode::InvalidArgument);
+            assert!(error.message.contains("example:machine"));
+        }
+        let service = state.service.lock().unwrap();
+        assert_eq!(service.world_info(), info);
+        assert!(service.history().is_empty());
+    }
+
+    #[test]
     fn template_insert_is_one_reversible_batch_on_the_active_layer() {
         let (state, folder) = project_state("template-insert");
         let initial_revision = state.service.lock().expect("service").world_info().revision;
@@ -5294,6 +5352,16 @@ mod component_command_tests {
         manager
             .use_placeholder_assets(&ComponentTarget::from_profile(&default_profile()))
             .unwrap();
+        prepare_import_with_components(root, source, confirmed_version, on_progress, &manager)
+    }
+
+    fn prepare_import_with_components(
+        root: &Path,
+        source: &Path,
+        confirmed_version: ConfirmedImportVersion,
+        on_progress: impl Fn(PrepareProgress),
+        manager: &ComponentManager,
+    ) -> (AppState, Result<OpenedProjectPayload, AppError>) {
         let state = AppState::new(root.join("projects"));
         let staging = ImportStaging::new();
         let prepared = world_io::prepare_world_source(source, staging.path()).unwrap();
@@ -5301,7 +5369,7 @@ mod component_command_tests {
         let result = import_world_project(
             PrepareContext {
                 state: &state,
-                components: &manager,
+                components: manager,
                 catalog: &AssetCatalogService::new(),
                 reporter: &PrepareReporter {
                     sink: &on_progress,
@@ -5321,6 +5389,234 @@ mod component_command_tests {
         );
         drop(lease);
         (state, result)
+    }
+
+    #[test]
+    fn imported_states_round_trip_without_becoming_writable() {
+        use world_io::nbt::{self, NbtFile, NbtValue as Nbt, TAG_COMPOUND, TAG_STRING};
+
+        let root = ImportStaging::new();
+        let profile = default_profile();
+        let source = import_source(
+            root.path(),
+            false,
+            profile.minecraft_version.as_str(),
+            profile.data_version,
+        );
+        let region_path = source.join("region/r.0.0.mca");
+        let sections = [
+            (-4, "example:machine", "powered", "true"),
+            (-3, "minecraft:stone", "invented", "value"),
+        ]
+        .map(|(y, name, key, value)| {
+            Nbt::compound([
+                ("Y", Nbt::Byte(y)),
+                (
+                    "block_states",
+                    Nbt::compound([(
+                        "palette",
+                        Nbt::List {
+                            kind: TAG_COMPOUND,
+                            items: vec![Nbt::compound([
+                                ("Name", Nbt::String(name.to_owned())),
+                                (
+                                    "Properties",
+                                    Nbt::compound([(key, Nbt::String(value.to_owned()))]),
+                                ),
+                            ])],
+                        },
+                    )]),
+                ),
+                (
+                    "biomes",
+                    Nbt::compound([(
+                        "palette",
+                        Nbt::List {
+                            kind: TAG_STRING,
+                            items: vec![Nbt::String("minecraft:plains".to_owned())],
+                        },
+                    )]),
+                ),
+            ])
+        });
+        let chunk = nbt::write_uncompressed(&NbtFile::new(
+            "",
+            Nbt::compound([
+                ("DataVersion", Nbt::Int(profile.data_version)),
+                ("xPos", Nbt::Int(0)),
+                ("zPos", Nbt::Int(0)),
+                ("yPos", Nbt::Int(-4)),
+                ("Status", Nbt::String("minecraft:full".to_owned())),
+                (
+                    "sections",
+                    Nbt::List {
+                        kind: TAG_COMPOUND,
+                        items: sections.into(),
+                    },
+                ),
+            ]),
+        ))
+        .unwrap();
+        let mut region = vec![0; 3 * 4096];
+        region[..4].copy_from_slice(&[0, 0, 2, 1]);
+        region[8192..8196]
+            .copy_from_slice(&(u32::try_from(chunk.len()).unwrap() + 1).to_be_bytes());
+        region[8196] = 3; // Uncompressed Anvil chunk.
+        region[8197..8197 + chunk.len()].copy_from_slice(&chunk);
+        std::fs::write(&region_path, &region).unwrap();
+
+        let jar = root.path().join("client.jar");
+        let mut zip = zip::ZipWriter::new(std::fs::File::create(&jar).unwrap());
+        let options = zip::write::SimpleFileOptions::default();
+        zip.start_file("version.json", options).unwrap();
+        zip.write_all(
+            serde_json::json!({
+                "id": profile.minecraft_version,
+                "name": profile.minecraft_version,
+                "world_version": profile.data_version,
+                "pack_version": {
+                    "resource": profile.resource_pack_format,
+                    "data": profile.datapack_format,
+                },
+            })
+            .to_string()
+            .as_bytes(),
+        )
+        .unwrap();
+        for block in ["air", "stone", "chiseled_deepslate"] {
+            zip.start_file(
+                format!("assets/minecraft/blockstates/{block}.json"),
+                options,
+            )
+            .unwrap();
+            zip.write_all(br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#)
+                .unwrap();
+        }
+        zip.finish().unwrap();
+        let manager = component_test_manager(root.path());
+        manager
+            .relink(
+                ComponentKind::Assets,
+                &jar,
+                &ComponentTarget::from_profile(&profile),
+            )
+            .unwrap();
+        let (state, result) = prepare_import_with_components(
+            root.path(),
+            &source,
+            ConfirmedImportVersion {
+                minecraft_version: profile.minecraft_version.to_string(),
+                data_version: profile.data_version,
+            },
+            |_| {},
+            &manager,
+        );
+        let payload = result.unwrap();
+        let warning = payload.block_state_warning.unwrap();
+        assert!(warning.starts_with("2 section(s)"), "{warning}");
+        assert!(warning.contains("the project's pinned catalog"));
+        assert!(warning.contains("example:machine[powered=true]"));
+        let folder = payload.detail.summary.folder;
+        let dimension = "minecraft:overworld";
+        let edit = BlockPos::new(1, -64, 0);
+        let replacement: BlockState = "minecraft:chiseled_deepslate".parse().unwrap();
+        for (y, name) in [
+            (-64, "example:machine[powered=true]"),
+            (-48, "minecraft:stone[invented=value]"),
+        ] {
+            let mut service = state.service.lock().unwrap();
+            assert_eq!(
+                service
+                    .world()
+                    .get_block(dimension, BlockPos::new(0, y, 0))
+                    .unwrap(),
+                name.parse().unwrap(),
+            );
+            let request = OperationRequest {
+                project_id: payload.detail.summary.project_id.clone(),
+                operation: Operation::SetBlock {
+                    dimension: dimension.to_owned(),
+                    pos: edit,
+                    state: name.parse().unwrap(),
+                },
+                expected_revision: Some(payload.info.revision),
+                idempotency_key: None,
+                actor: ui_actor(),
+                linked_object_id: None,
+                layer_id: None,
+            };
+            assert_eq!(
+                service.execute(request).unwrap_err().code,
+                ErrorCode::InvalidArgument
+            );
+            assert_eq!(service.world().revision(), payload.info.revision);
+        }
+        {
+            let mut service = state.service.lock().unwrap();
+            service
+                .execute(OperationRequest {
+                    project_id: payload.detail.summary.project_id,
+                    operation: Operation::SetBlock {
+                        dimension: dimension.to_owned(),
+                        pos: edit,
+                        state: replacement.clone(),
+                    },
+                    expected_revision: Some(payload.info.revision),
+                    idempotency_key: None,
+                    actor: ui_actor(),
+                    linked_object_id: None,
+                    layer_id: None,
+                })
+                .unwrap();
+        }
+        let projects = state.projects.lock().unwrap();
+        let service = state.service.lock().unwrap();
+        projects
+            .store
+            .save(
+                &folder,
+                service.world(),
+                project_store::EditorState::default(),
+                project_store::SaveKind::Manual,
+            )
+            .unwrap();
+        let (_, reopened, _) = projects.store.open(&folder).unwrap();
+        assert_eq!(reopened.get_block(dimension, edit).unwrap(), replacement);
+        assert_eq!(
+            unsupported_block_state_warning(&reopened, service.write_registry(), true),
+            Some(warning)
+        );
+
+        let copy = projects.store.root().join(&folder).join("source/world");
+        assert_eq!(
+            std::fs::read(copy.join("region/r.0.0.mca")).unwrap(),
+            region
+        );
+        drop(service);
+        drop(projects);
+        let mut overlay = world_io::WorldOverlay::open(copy).unwrap();
+        overlay
+            .set_block(dimension, edit.x, edit.y, edit.z, &replacement)
+            .unwrap();
+        let destination = root.path().join("export");
+        world_io::export_java_world(&overlay, &destination).unwrap();
+        let (exported, _) = world_io::load_java_world(destination).unwrap();
+        for (y, name) in [
+            (-64, "example:machine[powered=true]"),
+            (-48, "minecraft:stone[invented=value]"),
+        ] {
+            let pos = BlockPos::new(0, y, 0);
+            assert_eq!(
+                reopened.get_block(dimension, pos).unwrap(),
+                name.parse().unwrap()
+            );
+            assert_eq!(
+                exported.get_block(dimension, pos).unwrap(),
+                name.parse().unwrap()
+            );
+        }
+        assert_eq!(exported.get_block(dimension, edit).unwrap(), replacement);
+        assert_eq!(std::fs::read(region_path).unwrap(), region);
     }
 
     #[test]
@@ -5654,9 +5950,14 @@ mod component_command_tests {
         manager
             .use_placeholder_assets(&ComponentTarget::from_profile(&profile))
             .expect("placeholder");
+        let error = resolve_project_catalog(&manager, &catalog_service, &target, &pins)
+            .expect_err("global placeholder cannot replace a pinned catalog");
+        assert_eq!(error.code, ErrorCode::Conflict);
+        let placeholder_pins =
+            resolve_project_components(&manager, &catalog_service, &target, None).unwrap();
         assert!(
-            resolve_project_catalog(&manager, &catalog_service, &target, &pins)
-                .expect("placeholder has no catalog")
+            resolve_project_catalog(&manager, &catalog_service, &target, &placeholder_pins)
+                .unwrap()
                 .is_none()
         );
         std::fs::remove_dir_all(root).unwrap();

@@ -121,6 +121,7 @@ function payload(overrides: Partial<OpenedProjectPayload> = {}): OpenedProjectPa
     },
     recovery: null,
     session: session(),
+    blockStateWarning: null,
     ...overrides,
   };
 }
@@ -245,6 +246,20 @@ beforeEach(() => {
 });
 
 describe("project activation", () => {
+  it("opens the project and warns when existing block states cannot be placed", async () => {
+    const blockStateWarning = "Existing example:machine states were preserved.";
+    api.open.mockResolvedValue(payload({ blockStateWarning }));
+    expect(await useProjectStore.getState().open(summary.folder)).toBe(true);
+    expect(useProjectStore.getState().phase).toBe("ready");
+    expect(getToasts()).toContainEqual(
+      expect.objectContaining({
+        kind: "warning",
+        title: "Unsupported block states preserved",
+        description: blockStateWarning,
+      }),
+    );
+  });
+
   it("applies editor state, world summary and reloads the viewport on create", async () => {
     const reload = vi.fn();
     viewportBus.addEventListener("reload-world", reload);

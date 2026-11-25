@@ -82,7 +82,6 @@ pub struct WorldService {
     scene: Scene,
     parametric: ParametricScene,
     writes_enabled: bool,
-    allow_unknown_targets: bool,
     max_history: usize,
 }
 
@@ -107,7 +106,6 @@ impl WorldService {
             scene: Scene::default(),
             parametric: ParametricScene::default(),
             writes_enabled: true,
-            allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
         }
     }
@@ -133,7 +131,6 @@ impl WorldService {
             scene: Scene::default(),
             parametric: ParametricScene::default(),
             writes_enabled: true,
-            allow_unknown_targets: false,
             max_history: DEFAULT_MAX_HISTORY,
         }
     }
@@ -564,10 +561,6 @@ impl WorldService {
     /// write access explicitly by the user (ADR-013).
     pub fn set_writes_enabled(&mut self, enabled: bool) {
         self.writes_enabled = enabled;
-    }
-
-    pub fn set_allow_unknown_targets(&mut self, allow: bool) {
-        self.allow_unknown_targets = allow;
     }
 
     pub fn world_info(&self) -> WorldInfo {
@@ -1583,9 +1576,6 @@ impl WorldService {
     }
 
     fn validate_target_states(&self, operation: &Operation) -> Result<(), AppError> {
-        if self.allow_unknown_targets {
-            return Ok(());
-        }
         match operation {
             Operation::SetBlock { state, .. } => self.write_registry.validate(state)?,
             Operation::Batch { changes, .. } => {

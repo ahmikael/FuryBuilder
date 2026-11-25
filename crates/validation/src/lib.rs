@@ -313,12 +313,9 @@ pub fn validate_with_registry(
         for pos in request.bounds.iter() {
             let state = read_block(dimension, pos)?;
             scanned_blocks += 1;
-            if state.is_air() {
-                continue;
-            }
-
-            if rules.contains(&RuleId::ExportCompatibility)
-                || rules.contains(&RuleId::BlockStateOrientation)
+            if !state.is_implicit_air()
+                && (rules.contains(&RuleId::ExportCompatibility)
+                    || rules.contains(&RuleId::BlockStateOrientation))
             {
                 let key = state.to_string();
                 let sample = states.entry(key).or_insert_with(|| StateSample {
@@ -479,7 +476,7 @@ pub fn validate_with_registry(
             };
             let reason = if unknown {
                 Some(format!(
-                    "`{key}` is not present in the verified target catalog"
+                    "`{key}` is not present in the active write registry"
                 ))
             } else {
                 invalid.map(|error| format!("`{key}` has unsupported properties: {error}"))
@@ -490,7 +487,7 @@ pub fn validate_with_registry(
                     severity: Severity::Error,
                     confidence: Confidence::Certain,
                     message: format!(
-                        "{reason}. The verified export adapters may reject this state."
+                        "{reason}. Existing blocks are left unchanged; the state cannot be placed as a new block and may not be supported by the exported world's target."
                     ),
                     bounds: positions_bounds(&sample.positions).unwrap_or(request.bounds),
                     positions: sample.positions.clone(),

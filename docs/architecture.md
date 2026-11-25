@@ -259,6 +259,12 @@ from direct tags and ids and keeps recent/favorite selections as local UI prefer
 catalog id. Multipart defaults, exact per-block value registries, full creative categories and
 item browsing remain later catalog stages.
 
+Import loads source states into the initial snapshot without using the live write path.
+On open, the service checks used section-palette entries against its write registry and
+reports unsupported states without changing them. An unsupported state can be matched
+by a replace predicate or restored by undo, but live writes (including template or
+structure insertion) use the same admission check regardless of the caller.
+
 ## Welcome screen
 
 The top bar and status bar are always present; the content area switches between the

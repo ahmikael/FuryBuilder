@@ -901,14 +901,11 @@ fn dispatch_inner(
             state.mcp_access.authorize_operation(&operation)?;
             require_revision(state, Some(revision))?;
             let preview = {
-                let mut service = state
+                let service = state
                     .service
                     .lock()
                     .map_err(|_| AppError::internal("world state lock poisoned"))?;
-                service.set_allow_unknown_targets(true);
-                let result = service.preview(&params.project_id, &operation);
-                service.set_allow_unknown_targets(false);
-                result?
+                service.preview(&params.project_id, &operation)?
             };
             let mut confirmed = false;
             if state.mcp_access.require_confirmation() {
@@ -945,7 +942,6 @@ fn dispatch_inner(
                     .service
                     .lock()
                     .map_err(|_| AppError::internal("world state lock poisoned"))?;
-                service.set_allow_unknown_targets(true);
                 let result = service.execute(OperationRequest {
                     project_id: project_id.clone(),
                     operation,
@@ -954,9 +950,7 @@ fn dispatch_inner(
                     actor: Actor::mcp("mcp-bridge"),
                     linked_object_id: None,
                     layer_id: params.layer_id.clone(),
-                });
-                service.set_allow_unknown_targets(false);
-                let result = result?;
+                })?;
                 let change = world_change_payload("apply", &project_id, None, &result);
                 (to_value(result)?, change)
             };

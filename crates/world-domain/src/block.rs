@@ -82,6 +82,11 @@ impl BlockState {
             "minecraft:air" | "minecraft:cave_air" | "minecraft:void_air"
         )
     }
+
+    /// The only state that can be dropped from sparse storage without changing the block.
+    pub fn is_implicit_air(&self) -> bool {
+        self.name == "minecraft:air" && self.properties.is_empty()
+    }
 }
 
 impl fmt::Display for BlockState {
