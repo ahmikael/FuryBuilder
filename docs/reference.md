@@ -1,10 +1,13 @@
 # Reference (Windows beta 0.2.0)
 
-Target: Minecraft Java **1.21.4**, `DataVersion` 4189. Last reviewed: 2026-11-25.
+Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
+the full baseline. Last reviewed: 2026-11-26.
 
-The version picker reads the full official Mojang manifest, but only `1.21.4` has a verified
-write profile in this beta. Other entries, including snapshots and legacy/special ids, are
-visible and are refused at project creation rather than guessed.
+The version picker reads the full official Mojang manifest. Every one of the 27 classic Anvil
+releases from 1.18 through 1.21.11 has a profile that verifies import, block/biome editing and
+project snapshots. Only `1.21.4` additionally has verified region export and generation.
+Snapshots, split 26.1+ releases and legacy/special ids are visible and are refused at project
+creation rather than guessed.
 
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
@@ -31,7 +34,7 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 | Feature                           | Minecraft install | Client JAR                    | Java                                | Official `server.jar` | Network                                           |
 | --------------------------------- | ----------------- | ----------------------------- | ----------------------------------- | --------------------- | ------------------------------------------------- |
 | `Empty Project` / `Flat base`     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
-| `Import World` (1.21.4)           | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
+| `Import World` (1.18–1.21.11)     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
 | Structure `.nbt` import/export    | No                | No                            | No                                  | No                    | No                                                |
 | Real textures / exact catalog     | No                | Yes                           | No                                  | No                    | First download only; cached afterwards            |
 | `Vanilla World` generation        | No                | Optional; `Placeholder` works | Yes, profile major (21 for 1.21.4)  | Yes                   | Downloads; generation can run offline after cache |
@@ -69,9 +72,11 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
 - 8 GB RAM systems, lower-core CPUs and very old drivers.
 - Integrated/discrete switching, multi-GPU laptops, other GPU vendors and remote-desktop
   display capture.
-- Modded servers, data packs, other server versions, Bedrock worlds and Minecraft versions
-  other than 1.21.4 / DV 4189. Other official versions are listed but cannot be created or
-  edited; Java majors other than 21 are not validated in this beta.
+- Modded servers, data packs, other server versions, Bedrock worlds, snapshots, split 26.1+
+  saves, legacy worlds and Minecraft versions outside 1.18–1.21.11. Other official versions
+  are listed but cannot be created or edited. Java majors other than the profile's required
+  major are not validated in this beta.
+- Region export and generation for modern classic releases other than 1.21.4.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -89,15 +94,15 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Only Java 1.21.4 / DV 4189 is write-verified; other official versions are listed but stop at the profile check |
+| KL-05 | Version support  | Java 1.18–1.21.11 classic Anvil is import/edit/snapshot verified; only 1.21.4 is export/generation verified. Split 26.x and legacy versions stop at the profile check |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and legacy import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
 | KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                    |
-| KL-10 | World export     | Complete world-folder export has no one-click UI action                                |
+| KL-10 | World export     | Complete world-folder export is verified for 1.21.4 only and has no one-click UI action |
 | KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                        |
 | KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                       |
-| KL-13 | Vanilla World    | Requires the profile's Java major (21 for 1.21.4), official server JAR, EULA and possibly a download |
+| KL-13 | Vanilla World    | Requires the profile's Java major (21 for 1.18–1.21.11), official server JAR, EULA and possibly a download |
 | KL-14 | Vanilla World    | Generation is bounded; only completed runs can become projects                         |
 | KL-15 | Vanilla parity   | Parity check is untouched-revision block states only, not general parity               |
 | KL-16 | Vanilla settings | Only `generate-structures` is exposed; data-pack behaviour is not tested               |

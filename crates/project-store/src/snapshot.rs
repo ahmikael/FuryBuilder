@@ -416,6 +416,7 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use minecraft_version::profile_for_id;
     use world_domain::{BlockPos, ChunkPos, Section, WorldVersion};
 
     fn stone() -> BlockState {
@@ -470,9 +471,45 @@ mod tests {
     }
 
     #[test]
+    fn modern_classic_snapshots_round_trip_with_profile_bounds() {
+        for id in [
+            "java-classic-1.18.2",
+            "java-classic-1.20.6",
+            "java-classic-1.21.11",
+        ] {
+            let profile = profile_for_id(id).expect("modern classic profile");
+            let mut world = World::for_profile(&profile);
+            world
+                .set_block("minecraft:overworld", BlockPos::new(0, 0, 0), &stone())
+                .expect("set block");
+
+            let bytes = encode_world(&world).expect("encode modern snapshot");
+            let decoded = decode_world(&bytes).expect("decode modern snapshot");
+            assert_eq!(
+                decoded.version().minecraft_version(),
+                profile.minecraft_version.as_str(),
+                "{id}"
+            );
+            assert_eq!(
+                decoded.version().data_version(),
+                profile.data_version,
+                "{id}"
+            );
+            assert_eq!(
+                decoded
+                    .get_block("minecraft:overworld", BlockPos::new(0, 0, 0))
+                    .expect("block"),
+                stone(),
+                "{id}"
+            );
+            assert_eq!(encode_world(&decoded).expect("re-encode"), bytes, "{id}");
+        }
+    }
+
+    #[test]
     fn unsupported_world_versions_cannot_be_encoded() {
         let mut world = World::new_empty();
-        world.set_version(WorldVersion::new("1.20.6", 3839).expect("world version"));
+        world.set_version(WorldVersion::new("26.1", 4786).expect("world version"));
         match encode_world(&world) {
             Err(ProjectError::UnsupportedWorldVersion(_)) => {}
             other => panic!("expected unsupported world version, got {other:?}"),
@@ -541,12 +578,7 @@ mod tests {
             Err(ProjectError::Corrupt(_))
         ));
 
-        let unknown_profile = v3_header(
-            "java-classic-1.21.5",
-            4325,
-            "classic-anvil",
-            "palette-4x4x4",
-        );
+        let unknown_profile = v3_header("java-split-26.1", 4786, "split-anvil", "palette-4x4x4");
         assert!(matches!(
             decode_world(&unknown_profile),
             Err(ProjectError::UnsupportedWorldVersion(_))

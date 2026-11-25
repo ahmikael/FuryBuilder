@@ -314,7 +314,7 @@ impl ProjectTarget {
                     self.profile_id
                 ))
             })?;
-        if !profile.capabilities.write || profile.pack_format_minors.is_some() {
+        if !profile.capabilities.write {
             return Err(ProjectError::UnsupportedWorldVersion(profile.id.clone()));
         }
         if self.minecraft_version != profile.minecraft_version {
@@ -1038,7 +1038,7 @@ mod tests {
 
     #[test]
     fn unknown_world_versions_are_not_retargeted_to_the_default_profile() {
-        let version = WorldVersion::new("1.20.6", 3839).expect("world version");
+        let version = WorldVersion::new("1.16.5", 2586).expect("world version");
         assert!(ProjectTarget::for_world_version(&version).is_err());
     }
 

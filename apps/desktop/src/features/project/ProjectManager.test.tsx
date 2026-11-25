@@ -274,8 +274,49 @@ const versionCatalog: VersionCatalogReport = {
       latestRelease: true,
       latestSnapshot: false,
       recommended: false,
-      profile: null,
-      unavailableReason: "This build has no verified profile for this release yet.",
+      unavailableReason: null,
+      profile: {
+        id: "java-classic-1.21.5",
+        minecraftVersion: "1.21.5",
+        dataVersion: 4325,
+        releaseType: "release",
+        family: "modern",
+        worldLayout: "classic-anvil",
+        chunkFamily: "modern-paletted",
+        biomeFormat: "palette-4x4x4",
+        dimensionProfiles: [
+          {
+            id: "minecraft:overworld",
+            kind: "overworld",
+            minY: -64,
+            height: 384,
+            folder: "region",
+          },
+        ],
+        java: { minimumMajor: 21, recommendedMajor: 21 },
+        resourcePackFormat: 55,
+        datapackFormat: 71,
+        contentCatalog: {
+          registryFormat: "named",
+          blockstateFormat: "json",
+          itemModelFormat: "item-definitions",
+          creativeCategories: true,
+          dataComponents: true,
+        },
+        capabilities: {
+          supportLevel: "read-write-subset",
+          read: true,
+          edit: true,
+          write: true,
+          export: false,
+          generate: false,
+          assets: true,
+        },
+        notes: [
+          "Classic Anvil import, block/biome editing and project snapshots are verified for Minecraft 1.21.5.",
+          "Region export and generation are not enabled for this release yet.",
+        ],
+      },
     },
     {
       id: "26.1-snapshot-3",
@@ -734,11 +775,20 @@ describe("project wizard", () => {
     ).toBeInTheDocument();
     const latest = screen.getByRole("button", { name: /1\.21\.5/ });
     expect(within(latest).getByText("Latest")).toBeInTheDocument();
-    expect(within(latest).getByText("No profile")).toBeInTheDocument();
+    expect(within(latest).getByText("Read + write subset")).toBeInTheDocument();
     const recommended = screen.getByRole("button", { name: /1\.21\.4/ });
     expect(within(recommended).getByText("Recommended")).toBeInTheDocument();
     expect(within(recommended).getByText("Full support")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /26\.1-snapshot-3/ })).not.toBeInTheDocument();
+
+    await user.click(latest);
+    expect(screen.getByRole("heading", { name: "1.21.5" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Read + write subset", { selector: "[data-slot=alert-title]" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Region export and generation are not enabled for this release yet/),
+    ).toBeInTheDocument();
 
     await user.type(search, "1.21.5");
     expect(screen.getByText("1 version shown, grouped by release series.")).toBeInTheDocument();

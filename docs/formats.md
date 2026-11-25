@@ -1,20 +1,22 @@
 # Formats and world support
 
-Target: Minecraft Java **1.21.4**, `DataVersion` 4189. This is the only write-verified
-version. Anything else is detected and refused rather than guessed.
+Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
+the full baseline. Every one of the 27 exact releases in that range can be imported, edited and
+saved through project snapshots. Only 1.21.4 also has verified region export and generation;
+for the other releases those capabilities stay disabled until their own verification.
 
 The version picker lists releases and snapshots from the official Mojang manifest. Project
-creation requires a profile with verified write support, so only 1.21.4 can advance the
-wizard.
+creation requires a profile with verified write support, so the modern classic releases can
+advance the wizard. Snapshots and split 26.1+ releases are listed but stop at the profile check.
 
 FuryBuilder has built-in metadata for all 27 Java releases from 1.18 through 1.21.11. The
 Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
 the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
 client JAR. Starting with 1.21.9, pack formats have both a major and a minor component (for
 example, 1.21.11 uses data pack format `94.1`). For these classic Anvil releases, the vanilla
-Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. Knowing these
-facts does not enable opening, editing, exporting or generating a world for an unverified release.
-The dimension set, vertical bounds and region folder are read from the exact profile's
+Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. These facts
+alone do not create a split or legacy adapter. The dimension set, vertical bounds and region
+folder are read from the exact profile's
 `dimensionProfiles`; the classic reader does not assume fixed `DIM-1`/`DIM1` names. Project
 snapshots encode the same set and reject a dimension whose bounds differ from the profile.
 Render snapshots carry the selected dimension's `minY`/`height`, and the viewport uses them for
@@ -41,7 +43,7 @@ affected sections. No fallback biome is substituted.
 | Version family      | DataVersion | Layout                            | Status                 | Read                        | Edit                      | Write                              | Passthrough     |
 | ------------------- | ----------- | --------------------------------- | ---------------------- | --------------------------- | ------------------------- | ---------------------------------- | --------------- |
 | Java 1.21.4         | 4189        | classic Anvil                     | **supported**          | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
-| Java 1.21.5-1.21.11 | 4325-4671   | classic Anvil                     | `detected_unsupported` | `version_refused`           | `none`                    | `none`                             | `none`          |
+| Java 1.18-1.21.11   | 2860-4671   | classic Anvil                     | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 26.1-26.3      | 4786-5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`                    | `none`                             | `none`          |
 | Java 26.4 snapshots | 5119+       | split                             | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
 | Pre-1.13            | varies      | McRegion (`region/*.mcr`)         | `detected_unsupported` | `legacy_marker`             | `none`                    | `none`                             | `none`          |
@@ -49,7 +51,9 @@ affected sections. No fallback biome is substituted.
 
 A bare `.mca` file or a `region/` directory is not a complete save. The support matrix
 describes analysis and import boundaries. Only a version with a verified profile can be
-selected for a new project.
+selected for a new project. The `1.18-1.21.11` row includes 1.21.4; region export and
+generation are exposed only for the full baseline until P1-17/P1-18 verify them for every
+release.
 
 ## Java 26.1–26.3 split saves: inspection only
 
@@ -73,12 +77,16 @@ the [26.3 palette change](https://www.minecraft.net/en-us/article/minecraft-26-3
 means an Anvil header does not establish classic chunk compatibility. Split saves cannot
 be imported into a project, compared, copied through world passthrough, or exported.
 
-## What is editable (classic 1.21.4)
+## What is editable (classic 1.18–1.21.11)
+
+Import, block/biome editing and project snapshots are enabled for every exact modern classic
+profile. The shared codec below is verified for all 27 releases. Region-container writing and
+world export remain limited to the full 1.21.4 baseline until their own verification.
 
 | Category                             | Read            | Edit                 | Write                       | Passthrough     | Note                                                                                                                         |
 | ------------------------------------ | --------------- | -------------------- | --------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `level.dat` metadata                 | `supported`     | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | `DataVersion`, `Version.Id`, `LevelName`, `WorldGenSettings` are validated; `level.dat` is not rewritten by the block writer |
-| Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; only dirty regions are rebuilt                                               |
+| Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; dirty-region rebuild is verified for 1.21.4, while other modern releases keep the source regions in the immutable source copy |
 | Block states and palettes            | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Only `sections[].block_states` in fully generated `minecraft:full` chunks                                                    |
 | Biomes                               | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Whole 4x4x4 cells are editable; palette <= 64; sections without source biome data are refused; untouched cells are preserved |
 | Block entities                       | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Counted and preserved; missing block entities are not synthesized                                                            |
@@ -181,7 +189,8 @@ id and hash always describe the base client JAR, not these packs.
 
 The backend can export a complete new world folder, not a bare `.mca`:
 
-1. Validate a supported classic 1.21.4 source and a new destination.
+1. Validate a supported classic 1.21.4 source and a new destination. Export for the other
+   modern classic releases stays disabled until P1-17 verifies their staged round trip.
 2. Copy every file byte for byte, skipping only `session.lock`.
 3. Rebuild only dirty regions; untouched records are compared byte for byte.
 4. Reopen and decode every staged region and chunk.
@@ -211,7 +220,7 @@ Before import, export or copy, the selected path is classified:
 
 | Selection                                       | Result                                        |
 | ----------------------------------------------- | --------------------------------------------- |
-| Full classic 1.21.4 save                        | supported import/export path                  |
+| Full classic 1.18–1.21.11 save                 | supported import/edit/snapshot path; export only for the 1.21.4 baseline |
 | Full save, other `DataVersion`                  | version blocker                               |
 | Full 26.1+ split save                           | layout blocker; regions inventoried read-only |
 | Classic `region/` plus split markers            | mixed-layout blocker                          |

@@ -24,7 +24,7 @@ identifier and version from `version.json`.
 - `Vanilla World` additionally needs a Java 21 runtime and the official
   Minecraft 1.21.4 `server.jar`. FuryBuilder offers to locate or download them
   only after explicit consent, verifies checksums and keeps them in its own
-  cache. `Import World` needs a user-owned Java 1.21.4 world folder.
+  cache. `Import World` needs a user-owned classic Java 1.18–1.21.11 world folder.
 
 The supported baseline, memory/disk guidance, tested reference machine and
 configurations that are not validated are in

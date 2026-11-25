@@ -56,8 +56,14 @@ mod tests {
         assert_eq!(profile.minecraft_version.as_str(), "1.21.4");
         assert_eq!(profile.id, "java-classic-1.21.4");
         assert!(supports_data_version(4189));
+        assert!(supports_data_version(2860), "1.18 is importable");
         assert!(!supports_data_version(9999));
-        assert_eq!(supported_data_versions(), vec![4189]);
+        let versions = supported_data_versions();
+        assert!(versions.contains(&4189));
+        assert!(versions.contains(&2860));
+        assert!(versions.contains(&4671));
+        assert_eq!(versions.len(), 27);
+        assert!(!versions.contains(&4786), "split profiles are not classic");
     }
 
     #[test]
@@ -71,8 +77,8 @@ mod tests {
 
     #[test]
     fn known_metadata_does_not_enable_world_decoding() {
-        let profile = profile_for_data_version(3839).expect("known release metadata");
-        assert_eq!(profile.minecraft_version.as_str(), "1.20.6");
+        let profile = profile_for_data_version(4786).expect("known split release metadata");
+        assert_eq!(profile.minecraft_version.as_str(), "26.1");
         assert!(!supports_data_version(profile.data_version));
         assert!(!supported_data_versions().contains(&profile.data_version));
     }

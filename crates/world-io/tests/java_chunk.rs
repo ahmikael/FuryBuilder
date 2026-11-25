@@ -623,7 +623,7 @@ fn decodes_negative_chunk_and_region_coordinates() {
 }
 
 #[test]
-fn decodes_section_palettes_with_each_exact_modern_profile_without_admitting_world_io() {
+fn decodes_section_palettes_with_each_exact_modern_profile() {
     let mut blocks = vec![0; 4096];
     blocks[12] = 16; // First entry of the second padded long at 5 bits.
     let palette = (0..17)
@@ -704,12 +704,12 @@ fn decodes_section_palettes_with_each_exact_modern_profile_without_admitting_wor
     }
     assert_eq!(tested, 27);
 
-    let profile = profile_for_version(&"1.18.2".parse().unwrap()).unwrap();
+    let profile = profile_for_version(&"26.1".parse().unwrap()).unwrap();
     let NbtValue::Compound(root) = &mut fixture.root else {
         unreachable!("fixture root");
     };
     root.insert("DataVersion".into(), NbtValue::Int(profile.data_version));
-    root.insert("Status".into(), NbtValue::String("full".into()));
+    root.insert("Status".into(), NbtValue::String("minecraft:full".into()));
     let dir = TempDir::new("unverified-region");
     let path = write_region(dir.path(), &fixture, 0, 0);
     let region = RegionFile::open(path).unwrap();

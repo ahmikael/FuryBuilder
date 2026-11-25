@@ -409,7 +409,7 @@ fn inspects_full_chunk_derived_fields() {
 fn rejects_unsupported_versions_and_wrong_known_field_types() {
     let mut wrong_version = full_chunk();
     if let NbtValue::Compound(root) = &mut wrong_version.root {
-        root.insert("DataVersion".to_owned(), NbtValue::Int(4325));
+        root.insert("DataVersion".to_owned(), NbtValue::Int(4786));
     }
     assert_eq!(
         inspect_chunk_derived(&wrong_version, 0, 0)

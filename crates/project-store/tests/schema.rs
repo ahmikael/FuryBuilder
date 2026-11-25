@@ -11,8 +11,29 @@ use project_store::{
 mod common;
 
 #[test]
+fn modern_classic_releases_are_writable_project_targets() {
+    for profile in minecraft_version::builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == minecraft_version::VersionFamily::Modern)
+    {
+        let target = ProjectTarget::from_profile(profile);
+        target
+            .validate()
+            .unwrap_or_else(|error| panic!("{} must be a project target: {error}", profile.id));
+        let version = target.world_version().expect("valid world version");
+        let resolved = ProjectTarget::for_world_version(&version).unwrap_or_else(|error| {
+            panic!(
+                "{} must resolve from its world version: {error}",
+                profile.id
+            )
+        });
+        assert_eq!(resolved, target, "{}", profile.id);
+    }
+}
+
+#[test]
 fn metadata_only_release_is_not_a_project_target() {
-    let profile = minecraft_version::profile_for_id("java-classic-1.20.6").expect("known profile");
+    let profile = minecraft_version::profile_for_id("java-split-26.1").expect("known profile");
     let target = ProjectTarget::from_profile(&profile);
     assert!(matches!(
         target.validate(),

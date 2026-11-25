@@ -252,10 +252,10 @@ the Temurin archive — goes through `crates/download-pipeline`:
 
 The project wizard's **Components** step discovers conventional launcher roots and launcher
 profiles, or accepts a manual `.minecraft` folder, a `versions/<id>` folder, a `client.jar` or
-a resource pack. A 1.21.4 client is accepted after its internal `version.json` and
-`DataVersion` 4189 agree. When launcher metadata is present, the declared SHA-1 and size are
-checked too; a declared mismatch is refused, while a correct JAR without metadata is used with
-a warning.
+a resource pack. A client JAR is accepted after its internal `version.json`, exact Minecraft
+version and `DataVersion` agree with the selected profile. When launcher metadata is present,
+the declared SHA-1 and size are checked too; a declared mismatch is refused, while a correct
+JAR without metadata is used with a warning.
 
 Configured resource packs are applied in a saved priority order (up to 16). Blockstates,
 parent models and PNG textures are resolved into a cached atlas. A missing asset shows a
@@ -389,14 +389,16 @@ and avoid treating the tested ceiling as a normal working radius.
   `.litematic` and legacy `.schematic` are not enabled.
 - Structure export/import refuses entities, block entities and unknown tags instead of
   silently dropping them.
-- Import World supports classic Java 1.21.4 layouts. A bare `.mca` or `region/` directory is
-  not a world. Split, mixed and legacy layouts are detected but not supported.
+- Import World supports classic Java 1.18–1.21.11 layouts. A bare `.mca` or `region/` directory
+  is not a world. Split, mixed and legacy layouts are detected but not supported.
 - Edits to imported worlds preserve untouched raw data. Heightmaps, light, ticks, block
   entities, entities and POI are not semantically recalculated after an edit; the optional
   `VanillaRebuild` writer policy invalidates some derived data for the vanilla engine to
   rebuild, as documented in the format notes.
-- The complete world-folder export is verified in the backend/test path. This alpha does not
-  expose it as a one-click user action; the user-facing export is a structure `.nbt`.
+- The complete world-folder export is verified for 1.21.4 in the backend/test path. This alpha
+  does not expose it as a one-click user action; the user-facing export is a structure `.nbt`.
+  Export and generation for the other modern classic releases stay disabled until their own
+  staged verification.
 - Reference overlays (PNG blueprint plane and `.nbt` schematic ghost) were researched only.
   The overlay UI is intentionally not enabled; do not expect reference guides in the editor.
 - MCP has no scene-graph write tools and no direct file/shell access. Semantic and parametric

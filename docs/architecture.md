@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | First and only write-verified target is Minecraft Java **1.21.4**, `DataVersion` 4189. Other versions are detected and refused.           |
+| ADR-001 | Classic Anvil **1.18–1.21.11** is admitted for import, block/biome editing and project snapshots; **1.21.4**, `DataVersion` 4189, is the full baseline with export and generation. Split 26.x and legacy versions are detected and refused. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -333,7 +333,9 @@ The 1.18–1.21.x profiles share the modern classic section layout. The adapter 
 the fully generated `Status` spelling from exact release facts; the raw value is kept.
 The same release facts supply the vanilla biome registry for import diagnostics, not as
 an allowlist for source biome palettes. Raw chunk decoding is separate from save
-admission: Minecraft Java 1.21.4 remains the only admitted version.
+admission: every modern classic profile admits import, editing and snapshots through its
+`capabilities`, while export and generation remain limited to the full 1.21.4 baseline and
+split/legacy profiles remain refused.
 A loaded overlay uses that same profile to patch the original NBT's palette lists
 and packed indices. Section order, unrelated container tags and opaque block-entity
 payloads are verified before and after the region write. NBT equality compares
@@ -373,7 +375,7 @@ wizard and exporter still refuse these releases until the P2 adapter verifies th
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.
 
-- World import accepts classic Anvil 1.21.4 only: bounded `level.dat`, region files and
+- World import accepts classic Anvil 1.18–1.21.11 only: bounded `level.dat`, region files and
   chunk counts; external `.mcc`, LZ4 and custom compression are refused; offsets and
   sector lengths are validated.
 - World `.zip` archives are extracted into a unique temporary staging folder and removed

@@ -196,7 +196,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn cataloged_classic_releases_select_the_shared_format_without_enabling_io() {
+    fn cataloged_classic_releases_select_the_shared_format() {
         for profile in builtin_profiles().iter().filter(|profile| {
             profile.world_layout == WorldLayout::ClassicAnvil
                 && profile.chunk_family == ChunkFamily::ModernPaletted

@@ -236,20 +236,20 @@ fn level_dat_reads_target_version_and_requires_agreeing_versions() {
         nbt::read_gzip(&fs::read(&path).expect("read bytes")).expect("decode NBT")
     );
 
-    fs::write(&path, level_dat_bytes(TARGET, 4325, "1.21.5")).expect("write mismatch");
+    fs::write(&path, level_dat_bytes(TARGET, 4786, "26.1")).expect("write mismatch");
     assert!(matches!(
         LevelDat::read(&path),
         Err(AnvilError::InvalidLevel(message)) if message.contains("does not match")
     ));
 
-    fs::write(&path, level_dat_bytes(4325, 4325, "1.21.5")).expect("write other version");
+    fs::write(&path, level_dat_bytes(4786, 4786, "26.1")).expect("write other version");
     let other = LevelDat::read(&path).expect("inspect other version");
     assert!(matches!(
         other.ensure_supported(),
         Err(AnvilError::UnsupportedDataVersion {
-            found: 4325,
+            found: 4786,
             supported
-        }) if supported == vec![TARGET]
+        }) if !supported.contains(&4786)
     ));
 
     fs::write(&path, b"not a gzip stream").expect("write garbage");
@@ -580,11 +580,11 @@ fn java_world_refuses_unsupported_versions_layouts_and_mixed_markers() {
     let dir = TempDir::new("layouts");
 
     let other = dir.path().join("other");
-    write_level_dat(&other, 4325, 4325, "1.21.5");
+    write_level_dat(&other, 4786, 4786, "26.1");
     fs::create_dir_all(other.join("region")).expect("create region");
     assert!(matches!(
         JavaWorld::open(&other),
-        Err(AnvilError::UnsupportedDataVersion { found: 4325, .. })
+        Err(AnvilError::UnsupportedDataVersion { found: 4786, .. })
     ));
 
     let modern = dir.path().join("modern");

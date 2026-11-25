@@ -4880,7 +4880,7 @@ mod version_catalog_tests {
     }
 
     #[test]
-    fn report_marks_latest_and_recommended_without_promising_unsupported_profiles() {
+    fn report_marks_latest_and_recommended_and_exposes_subset_profiles() {
         let report = report();
         assert_eq!(report.source, "network");
         assert_eq!(report.latest_release, "1.21.5");
@@ -4892,12 +4892,14 @@ mod version_catalog_tests {
         assert_eq!(latest.id, "1.21.5");
         assert!(latest.latest_release);
         assert!(!latest.recommended);
-        assert!(profile_for_id("java-classic-1.21.5").is_some());
-        assert!(latest.profile.is_none());
-        assert!(latest
-            .unavailable_reason
-            .as_deref()
-            .is_some_and(|reason| reason.contains("no verified profile")));
+        let latest_profile = latest.profile.as_ref().expect("subset profile");
+        assert_eq!(
+            latest_profile.capabilities.support_level,
+            minecraft_version::SupportLevel::ReadWriteSubset
+        );
+        assert!(!latest_profile.capabilities.export);
+        assert!(!latest_profile.capabilities.generate);
+        assert!(latest.unavailable_reason.is_none());
 
         let snapshot = &report.versions[1];
         assert_eq!(snapshot.id, "26.1-snapshot-3");
@@ -5848,47 +5850,56 @@ mod component_command_tests {
 
     #[test]
     fn folder_and_archive_import_pin_the_confirmed_profile_in_the_manifest() {
-        let profile = default_profile();
-        let expected = project_store::ProjectTarget::from_profile(&profile);
-        for archive in [false, true] {
-            let root = ImportStaging::new();
-            let source = import_source(
-                root.path(),
-                archive,
-                profile.minecraft_version.as_str(),
-                profile.data_version,
-            );
-            let preview = world_import_preview(source.display().to_string());
-            assert!(preview.supported, "{:?}", preview.blockers);
-            let (state, result) = prepare_import_for_test(
-                root.path(),
-                &source,
-                ConfirmedImportVersion {
-                    minecraft_version: preview.version_name.unwrap(),
-                    data_version: preview.data_version.unwrap(),
-                },
-                |_| {},
-            );
-            let payload = result.expect("import confirmed world");
-            assert_eq!(payload.detail.target, expected);
-            let projects = state.projects.lock().unwrap();
-            let (reopened, world, _) = projects.store.open(&payload.detail.summary.folder).unwrap();
-            assert_eq!(reopened.target, expected);
-            assert_eq!(world.version().data_version(), expected.data_version);
-            let level = world_io::LevelDat::read(
-                projects
-                    .store
-                    .root()
-                    .join(&reopened.summary.folder)
-                    .join(project_store::SOURCE_DIR)
-                    .join("world/level.dat"),
-            )
-            .unwrap();
-            assert_eq!(
-                level.version_name.as_deref(),
-                Some(expected.minecraft_version.as_str())
-            );
-            assert_eq!(level.data_version, expected.data_version);
+        let profiles = [
+            default_profile(),
+            minecraft_version::profile_for_id("java-classic-1.18.2").expect("1.18.2 profile"),
+            minecraft_version::profile_for_id("java-classic-1.20.6").expect("1.20.6 profile"),
+            minecraft_version::profile_for_id("java-classic-1.21.11").expect("1.21.11 profile"),
+        ];
+        for profile in profiles {
+            let expected = project_store::ProjectTarget::from_profile(&profile);
+            expected.validate().expect("writable project target");
+            for archive in [false, true] {
+                let root = ImportStaging::new();
+                let source = import_source(
+                    root.path(),
+                    archive,
+                    profile.minecraft_version.as_str(),
+                    profile.data_version,
+                );
+                let preview = world_import_preview(source.display().to_string());
+                assert!(preview.supported, "{:?}", preview.blockers);
+                let (state, result) = prepare_import_for_test(
+                    root.path(),
+                    &source,
+                    ConfirmedImportVersion {
+                        minecraft_version: preview.version_name.unwrap(),
+                        data_version: preview.data_version.unwrap(),
+                    },
+                    |_| {},
+                );
+                let payload = result.expect("import confirmed world");
+                assert_eq!(payload.detail.target, expected);
+                let projects = state.projects.lock().unwrap();
+                let (reopened, world, _) =
+                    projects.store.open(&payload.detail.summary.folder).unwrap();
+                assert_eq!(reopened.target, expected);
+                assert_eq!(world.version().data_version(), expected.data_version);
+                let level = world_io::LevelDat::read(
+                    projects
+                        .store
+                        .root()
+                        .join(&reopened.summary.folder)
+                        .join(project_store::SOURCE_DIR)
+                        .join("world/level.dat"),
+                )
+                .unwrap();
+                assert_eq!(
+                    level.version_name.as_deref(),
+                    Some(expected.minecraft_version.as_str())
+                );
+                assert_eq!(level.data_version, expected.data_version);
+            }
         }
     }
 

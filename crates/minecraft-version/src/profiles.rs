@@ -6,8 +6,8 @@
 use std::sync::LazyLock;
 
 use crate::{
-    build_version_profile, PackFormatMinors, ProfileBuildInput, SupportLevel, VersionId,
-    VersionProfile, WorldCapabilities,
+    build_version_profile, PackFormatMinors, ProfileBuildInput, SupportLevel, VersionFamily,
+    VersionId, VersionProfile, WorldCapabilities,
 };
 
 /// Stable id of the verified 1.21.4 classic Anvil profile.
@@ -46,12 +46,23 @@ impl ReleaseFacts {
     }
 
     fn profile(&self) -> VersionProfile {
-        let verified = self.version == "1.21.4";
-        let notes = if verified {
+        let version_id = version(self.version);
+        let full = self.version == "1.21.4";
+        let modern_classic = version_id.family() == VersionFamily::Modern;
+        let notes = if full {
             vec![
                 "Block-state and biome writes are verified for classic Anvil 1.21.4.".to_owned(),
                 "The client JAR is the source of the full block and item catalog.".to_owned(),
                 "Heightmaps and light are preserved or invalidated, never recalculated.".to_owned(),
+            ]
+        } else if modern_classic {
+            vec![
+                format!(
+                    "Classic Anvil import, block/biome editing and project snapshots are verified for Minecraft {}.",
+                    self.version
+                ),
+                "Region export and generation are not enabled for this release yet.".to_owned(),
+                "The client JAR is the source of the full block and item catalog.".to_owned(),
             ]
         } else {
             vec![
@@ -59,26 +70,45 @@ impl ReleaseFacts {
                     .to_owned(),
             ]
         };
+        let capabilities = if full {
+            WorldCapabilities {
+                support_level: SupportLevel::Full,
+                read: true,
+                edit: true,
+                write: true,
+                export: true,
+                generate: true,
+                assets: true,
+            }
+        } else if modern_classic {
+            WorldCapabilities {
+                support_level: SupportLevel::ReadWriteSubset,
+                read: true,
+                edit: true,
+                write: true,
+                export: false,
+                generate: false,
+                assets: true,
+            }
+        } else {
+            WorldCapabilities {
+                support_level: SupportLevel::Unverified,
+                read: false,
+                edit: false,
+                write: false,
+                export: false,
+                generate: false,
+                assets: false,
+            }
+        };
         build_version_profile(ProfileBuildInput {
-            version: version(self.version),
+            version: version_id,
             data_version: self.data_version,
             java_major: self.java_major,
             resource_pack_format: Some(self.resource_pack_format),
             datapack_format: Some(self.datapack_format),
             pack_format_minors: self.pack_format_minors,
-            capabilities: WorldCapabilities {
-                support_level: if verified {
-                    SupportLevel::Full
-                } else {
-                    SupportLevel::Unverified
-                },
-                read: verified,
-                edit: verified,
-                write: verified,
-                export: verified,
-                generate: verified,
-                assets: verified,
-            },
+            capabilities,
             notes,
         })
         .expect("built-in Minecraft release facts must be valid")
@@ -438,10 +468,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_metadata_does_not_grant_editor_capabilities() {
+    fn metadata_only_releases_do_not_grant_editor_capabilities() {
         for profile in builtin_profiles()
             .iter()
-            .filter(|profile| profile.id != JAVA_CLASSIC_1_21_4_ID)
+            .filter(|profile| profile.family == VersionFamily::Split)
         {
             assert_eq!(profile.capabilities.support_level, SupportLevel::Unverified);
             assert!(profile.capabilities.validate().is_ok());
@@ -452,6 +482,44 @@ mod tests {
             assert!(!profile.server.generation.flat);
             assert!(!profile.server.generation.large_biomes);
             assert!(!profile.server.generation.amplified);
+        }
+    }
+
+    #[test]
+    fn modern_classic_releases_admit_import_editing_and_snapshots() {
+        for profile in builtin_profiles()
+            .iter()
+            .filter(|profile| profile.family == VersionFamily::Modern)
+        {
+            assert!(profile.capabilities.validate().is_ok(), "{}", profile.id);
+            assert!(profile.capabilities.read, "{} read", profile.id);
+            assert!(profile.capabilities.edit, "{} edit", profile.id);
+            assert!(profile.capabilities.write, "{} write", profile.id);
+            assert!(profile.capabilities.assets, "{} assets", profile.id);
+            if profile.id == JAVA_CLASSIC_1_21_4_ID {
+                assert_eq!(profile.capabilities.support_level, SupportLevel::Full);
+                assert!(profile.capabilities.export);
+                assert!(profile.capabilities.generate);
+                assert!(profile.structure_formats.java_nbt.import);
+                assert!(profile.structure_formats.java_nbt.export);
+            } else {
+                assert_eq!(
+                    profile.capabilities.support_level,
+                    SupportLevel::ReadWriteSubset
+                );
+                assert!(!profile.capabilities.export, "{} export", profile.id);
+                assert!(!profile.capabilities.generate, "{} generate", profile.id);
+                assert!(
+                    !profile.structure_formats.java_nbt.import,
+                    "{} structures stay in P2",
+                    profile.id
+                );
+                assert!(
+                    !profile.structure_formats.java_nbt.export,
+                    "{} structures stay in P2",
+                    profile.id
+                );
+            }
         }
     }
 

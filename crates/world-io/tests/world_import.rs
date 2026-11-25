@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use minecraft_version::builtin_profiles;
 use world_domain::BlockPos;
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::world_import::{
@@ -49,6 +50,10 @@ impl Drop for TempDir {
 }
 
 fn level_dat_bytes(data_version: i32) -> Vec<u8> {
+    level_dat_bytes_for(data_version, "test")
+}
+
+fn level_dat_bytes_for(data_version: i32, version_name: &str) -> Vec<u8> {
     let file = NbtFile::new(
         "",
         NbtValue::compound([(
@@ -59,7 +64,7 @@ fn level_dat_bytes(data_version: i32) -> Vec<u8> {
                     "Version",
                     NbtValue::compound([
                         ("Id", NbtValue::Int(data_version)),
-                        ("Name", NbtValue::String("test".to_owned())),
+                        ("Name", NbtValue::String(version_name.to_owned())),
                     ]),
                 ),
                 ("LevelName", NbtValue::String("Import test".to_owned())),
@@ -119,14 +124,24 @@ fn section(y: i8, name: &str, properties: &[(&str, &str)]) -> NbtValue {
 }
 
 fn chunk_nbt(x: i32, z: i32, sections: Vec<NbtValue>) -> NbtFile {
+    chunk_nbt_for(TARGET, "minecraft:full", x, z, sections)
+}
+
+fn chunk_nbt_for(
+    data_version: i32,
+    status: &str,
+    x: i32,
+    z: i32,
+    sections: Vec<NbtValue>,
+) -> NbtFile {
     NbtFile::new(
         "",
         NbtValue::compound([
-            ("DataVersion", NbtValue::Int(TARGET)),
+            ("DataVersion", NbtValue::Int(data_version)),
             ("xPos", NbtValue::Int(x)),
             ("zPos", NbtValue::Int(z)),
             ("yPos", NbtValue::Int(-4)),
-            ("Status", NbtValue::String("minecraft:full".to_owned())),
+            ("Status", NbtValue::String(status.to_owned())),
             (
                 "sections",
                 NbtValue::List {
@@ -211,6 +226,46 @@ fn write_world(root: &Path, data_version: i32) {
         ],
     );
     let second = chunk_nbt(1, 0, vec![section(-4, "minecraft:dirt", &[])]);
+    fs::write(
+        root.join("region").join("r.0.0.mca"),
+        region_bytes(&[(0, 0, first), (1, 0, second)]),
+    )
+    .expect("write region");
+    fs::write(root.join("custom-unknown.dat"), b"keep me").expect("write unknown file");
+}
+
+fn write_world_for_profile(root: &Path, profile: &minecraft_version::VersionProfile) {
+    fs::create_dir_all(root.join("region")).expect("create region");
+    fs::write(
+        root.join("level.dat"),
+        level_dat_bytes_for(profile.data_version, profile.minecraft_version.as_str()),
+    )
+    .expect("write level.dat");
+    fs::write(root.join("session.lock"), b"1234567890123456").expect("write session lock");
+
+    let version = profile.minecraft_version.as_str();
+    let status = if version.starts_with("1.18") || version.starts_with("1.19") {
+        "full"
+    } else {
+        "minecraft:full"
+    };
+    let first = chunk_nbt_for(
+        profile.data_version,
+        status,
+        0,
+        0,
+        vec![
+            section(-4, "minecraft:unknown_machine", &[("powered", "true")]),
+            section(-3, "minecraft:stone", &[]),
+        ],
+    );
+    let second = chunk_nbt_for(
+        profile.data_version,
+        status,
+        1,
+        0,
+        vec![section(-4, "minecraft:dirt", &[])],
+    );
     fs::write(
         root.join("region").join("r.0.0.mca"),
         region_bytes(&[(0, 0, first), (1, 0, second)]),
@@ -385,6 +440,54 @@ fn load_imports_block_states_and_preserves_the_source() {
 }
 
 #[test]
+fn imports_every_modern_classic_release_end_to_end() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == minecraft_version::VersionFamily::Modern)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("modern-{label}"));
+        let root = dir.path().join("world");
+        write_world_for_profile(&root, profile);
+        let before = snapshot(&root);
+
+        let analysis = analyze_java_world(&root);
+        assert!(analysis.supported, "{label}: {:?}", analysis.blockers);
+        assert_eq!(analysis.data_version, Some(profile.data_version), "{label}");
+        assert_eq!(analysis.version_name.as_deref(), Some(label), "{label}");
+
+        let (world, report) =
+            load_java_world(&root).unwrap_or_else(|error| panic!("{label}: {error}"));
+        assert_eq!(
+            world.version().data_version(),
+            profile.data_version,
+            "{label}"
+        );
+        assert_eq!(
+            world.version().minecraft_version(),
+            label,
+            "{label} version identity"
+        );
+        let expected = profile
+            .dimension_profiles
+            .iter()
+            .find(|dimension| dimension.kind == minecraft_version::DimensionKind::Overworld)
+            .expect("overworld profile");
+        let dimension = world.dimension(OVERWORLD).expect("overworld");
+        assert_eq!(
+            (dimension.min_y(), dimension.height()),
+            (expected.min_y, expected.height),
+            "{label} bounds"
+        );
+        assert_eq!(report.chunks, 2, "{label}");
+        assert_eq!(snapshot(&root), before, "{label}: import must not write");
+        tested += 1;
+    }
+    assert_eq!(tested, 27, "every modern classic release must be covered");
+}
+
+#[test]
 fn load_preserves_non_vanilla_biomes_and_reports_one_bounded_warning() {
     let dir = TempDir::new("non-vanilla-biomes");
     let root = dir.path().join("world");
@@ -456,15 +559,15 @@ fn chunk_limit_is_enforced_before_partial_import_is_returned() {
 fn unsupported_data_version_is_blocked_before_import() {
     let dir = TempDir::new("version");
     let root = dir.path().join("world");
-    write_world(&root, 4325);
+    write_world(&root, 2730);
 
     let analysis = analyze_java_world(&root);
     assert!(!analysis.supported);
-    assert_eq!(analysis.data_version, Some(4325));
+    assert_eq!(analysis.data_version, Some(2730));
     assert!(analysis
         .blockers
         .iter()
-        .any(|blocker| blocker.contains("DataVersion 4325")));
+        .any(|blocker| blocker.contains("DataVersion 2730")));
     let error = load_java_world(&root).expect_err("unsupported version");
     assert_eq!(error.code(), "unsupported_version");
 }

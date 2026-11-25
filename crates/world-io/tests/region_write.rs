@@ -474,7 +474,7 @@ fn accepts_biome_changes_and_refuses_other_fields() {
 
     let mut changed_version = source.nbt.clone();
     if let NbtValue::Compound(root) = &mut changed_version.root {
-        root.insert("DataVersion".to_owned(), NbtValue::Int(4325));
+        root.insert("DataVersion".to_owned(), NbtValue::Int(4786));
     }
     assert_eq!(
         write_verified_region(

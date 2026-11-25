@@ -102,18 +102,21 @@ fn versions() -> Vec<VersionSupport> {
             ),
         },
         VersionSupport {
-            id: "java-1.21.5-1.21.11-classic".to_owned(),
-            minecraft_versions: "1.21.5-1.21.11".to_owned(),
-            data_versions: "4325-4671".to_owned(),
+            id: "java-classic-1.18-1.21.11-subset".to_owned(),
+            minecraft_versions: format!(
+                "1.18-1.21.11 (except {})",
+                target.minecraft_version
+            ),
+            data_versions: "2860-4671".to_owned(),
             layout: "classic_anvil".to_owned(),
-            status: "detected_unsupported".to_owned(),
-            read: "version_refused".to_owned(),
-            edit: "none".to_owned(),
-            write: "none".to_owned(),
-            passthrough: "none".to_owned(),
+            status: "supported_subset".to_owned(),
+            read: "supported_subset".to_owned(),
+            edit: "block_states_and_biomes".to_owned(),
+            write: "verified_block_states_and_biomes".to_owned(),
+            passthrough: "byte_for_byte".to_owned(),
             note: format!(
-                "Classic folder markers can be recognised, but the fixed-version reader refuses every DataVersion except {}.",
-                target.data_version
+                "Classic Anvil import, block/biome editing and project snapshots are verified for every exact release in this range. Region export and generation remain disabled until their own verification; Minecraft {} has full support.",
+                target.minecraft_version
             ),
         },
         VersionSupport {
@@ -339,7 +342,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_one_version_is_supported_and_it_matches_the_catalog() {
+    fn full_support_is_limited_to_the_verified_baseline() {
         let matrix = support_matrix();
         let supported = matrix
             .versions
@@ -357,10 +360,23 @@ mod tests {
     }
 
     #[test]
-    fn every_other_version_claims_no_block_writes() {
+    fn modern_classic_releases_admit_block_writes_as_a_subset() {
+        let matrix = support_matrix();
+        let subset = matrix
+            .versions
+            .iter()
+            .find(|version| version.status == "supported_subset")
+            .expect("modern classic subset row");
+        assert_eq!(subset.edit, "block_states_and_biomes");
+        assert_eq!(subset.write, "verified_block_states_and_biomes");
+        assert_eq!(subset.passthrough, "byte_for_byte");
+    }
+
+    #[test]
+    fn unsupported_versions_claim_no_block_writes() {
         let matrix = support_matrix();
         for version in &matrix.versions {
-            if version.status == "supported" {
+            if version.status == "supported" || version.status == "supported_subset" {
                 continue;
             }
             assert_eq!(version.write, "none", "{}", version.id);
