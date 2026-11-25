@@ -75,6 +75,7 @@ async function refreshWorldSummary(): Promise<void> {
       blockCount: info.blockCount,
       sectionCount: info.sectionCount,
       chunkCount: info.chunkCount,
+      dimensions: info.dimensions,
     });
   } catch {
     // The write already succeeded; a stale summary is preferable to a false error toast.

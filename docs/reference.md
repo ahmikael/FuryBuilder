@@ -112,7 +112,7 @@ checkpoint and keep the original world untouched.
 | KL-25 | Semantic objects | Metadata only; no MCP write path and no automatic recognition                          |
 | KL-26 | Policy           | One active mask; no multi-select layers/masks                                          |
 | KL-27 | References       | PNG/schematic reference overlays are researched but not enabled                        |
-| KL-28 | Rendering        | Nether/End are listed but only the overworld is streamed                               |
+| KL-28 | Rendering        | Any reported dimension can be selected and streamed; only imported chunks are present |
 | KL-29 | Assets           | Mojang assets are not bundled; managed client JAR, manual selection or explicit placeholder |
 | KL-30 | Assets           | Model subset: no entity/block-entity models, fluid flow or animations                  |
 | KL-31 | Performance      | Large-scene envelope is machine-specific; radius 32 is stress-only                     |

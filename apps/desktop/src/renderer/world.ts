@@ -70,6 +70,8 @@ export class RenderWorld {
   private chunks = new Map<string, DecodedChunk>();
   private currentRevision = 0;
   private currentDimension = "minecraft:overworld";
+  private currentMinY = 0;
+  private currentHeight = 256;
 
   get revision(): number {
     return this.currentRevision;
@@ -79,13 +81,35 @@ export class RenderWorld {
     return this.currentDimension;
   }
 
+  /** Inclusive bottom of the current dimension. */
+  get minY(): number {
+    return this.currentMinY;
+  }
+
+  /** Number of blocks between the inclusive bottom and exclusive top. */
+  get height(): number {
+    return this.currentHeight;
+  }
+
+  /** Inclusive top of the current dimension. */
+  get maxY(): number {
+    return this.currentMinY + this.currentHeight - 1;
+  }
+
   setSnapshot(snapshot: RenderSnapshot): void {
     this.chunks.clear();
     this.currentRevision = snapshot.revision;
     this.currentDimension = snapshot.dimension;
+    this.currentMinY = snapshot.minY;
+    this.currentHeight = snapshot.height;
     for (const chunk of snapshot.chunks) {
       this.upsertChunk(chunk);
     }
+  }
+
+  setBounds(minY: number, height: number): void {
+    this.currentMinY = minY;
+    this.currentHeight = height;
   }
 
   upsertChunk(snapshot: ChunkSnapshot): void {

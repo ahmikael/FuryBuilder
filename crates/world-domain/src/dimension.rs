@@ -9,13 +9,24 @@ use crate::chunk::Chunk;
 use crate::coords::{BlockPos, ChunkPos};
 use crate::section::Section;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DimensionKind {
     Overworld,
     Nether,
     End,
     Custom,
+}
+
+impl From<minecraft_version::DimensionKind> for DimensionKind {
+    fn from(kind: minecraft_version::DimensionKind) -> Self {
+        match kind {
+            minecraft_version::DimensionKind::Overworld => Self::Overworld,
+            minecraft_version::DimensionKind::Nether => Self::Nether,
+            minecraft_version::DimensionKind::End => Self::End,
+            minecraft_version::DimensionKind::Custom => Self::Custom,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -89,18 +100,14 @@ impl Dimension {
         })
     }
 
-    pub fn overworld() -> Self {
-        Self::new("minecraft:overworld", DimensionKind::Overworld, -64, 384)
-            .expect("valid overworld bounds")
-    }
-
-    pub fn nether() -> Self {
-        Self::new("minecraft:the_nether", DimensionKind::Nether, 0, 256)
-            .expect("valid nether bounds")
-    }
-
-    pub fn end() -> Self {
-        Self::new("minecraft:the_end", DimensionKind::End, 0, 256).expect("valid end bounds")
+    pub fn from_profile(profile: &minecraft_version::DimensionProfile) -> Self {
+        Self::new(
+            profile.id.as_str(),
+            profile.kind.into(),
+            profile.min_y,
+            profile.height,
+        )
+        .expect("verified version profiles declare section-aligned dimension bounds")
     }
 
     pub fn id(&self) -> &str {
@@ -305,13 +312,18 @@ impl Dimension {
 mod tests {
     use super::*;
 
+    fn overworld() -> Dimension {
+        Dimension::new("minecraft:overworld", DimensionKind::Overworld, -64, 384)
+            .expect("valid test bounds")
+    }
+
     fn stone() -> BlockState {
         "minecraft:stone".parse().unwrap()
     }
 
     #[test]
     fn overworld_bounds_and_negative_y() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         assert_eq!(dimension.min_y(), -64);
         assert_eq!(dimension.max_y(), 319);
         assert!(dimension
@@ -331,7 +343,7 @@ mod tests {
 
     #[test]
     fn neighbours_at_chunk_boundary_are_preserved() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         dimension
             .set_block(BlockPos::new(15, 64, 15), &stone())
             .unwrap();
@@ -358,7 +370,7 @@ mod tests {
 
     #[test]
     fn setting_air_never_creates_chunks() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         let write = dimension
             .set_block(BlockPos::new(100, 64, 100), &BlockState::default())
             .unwrap();
@@ -368,7 +380,7 @@ mod tests {
 
     #[test]
     fn install_section_supports_undo_snapshots() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         dimension
             .set_block(BlockPos::new(0, 0, 0), &stone())
             .unwrap();

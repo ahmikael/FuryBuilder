@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use minecraft_version::{default_profile, profile_for_id, VersionProfile};
 use sha2::{Digest, Sha256};
-use world_domain::{BlockPos, ChunkPos, World, WorldVersion};
+use world_domain::{BlockPos, ChunkPos, World};
 
 use crate::error::ProjectError;
 use crate::flat::{build_flat_base, FlatPreset};
@@ -377,10 +377,7 @@ pub fn build_world(
     flat: Option<&FlatPreset>,
     profile: &VersionProfile,
 ) -> Result<World, ProjectError> {
-    let mut world = World::new_empty();
-    let version = WorldVersion::new(profile.minecraft_version.as_str(), profile.data_version)
-        .map_err(|error| ProjectError::UnsupportedWorldVersion(error.to_string()))?;
-    world.set_version(version);
+    let mut world = World::for_profile(profile);
     if mode == CreationMode::Flat {
         let default_preset;
         let preset = match flat {

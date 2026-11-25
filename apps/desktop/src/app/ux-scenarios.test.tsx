@@ -7,6 +7,7 @@ import { viewportBus } from "@/features/viewport/viewport-bus";
 import { useEditorStore } from "@/state/editor-store";
 import { useProjectStore } from "@/state/project-store";
 import { useUiStore } from "@/state/ui-store";
+import { useWorldStore } from "@/state/world-store";
 import type { BlockPosition } from "@/renderer/types";
 
 const defaultStore = {
@@ -25,6 +26,41 @@ function resetUi() {
     settingsOpen: false,
     mcpAccessOpen: false,
     commandPaletteOpen: false,
+  });
+  useWorldStore.setState({
+    dimensions: [
+      {
+        id: "minecraft:overworld",
+        kind: "overworld",
+        minY: -64,
+        maxY: 319,
+        height: 384,
+        chunkCount: 9,
+        sectionCount: 27,
+        blockCount: 288_000,
+      },
+      {
+        id: "minecraft:the_nether",
+        kind: "nether",
+        minY: 0,
+        maxY: 255,
+        height: 256,
+        chunkCount: 0,
+        sectionCount: 0,
+        blockCount: 0,
+      },
+      {
+        id: "minecraft:the_end",
+        kind: "end",
+        minY: 0,
+        maxY: 255,
+        height: 256,
+        chunkCount: 0,
+        sectionCount: 0,
+        blockCount: 0,
+      },
+    ],
+    dimension: "minecraft:overworld",
   });
   useProjectStore.getState().reset();
   useProjectStore.setState({

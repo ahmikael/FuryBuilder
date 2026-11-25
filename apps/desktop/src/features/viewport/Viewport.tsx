@@ -64,9 +64,11 @@ import {
   MAX_LOAD_RADIUS,
   MIN_LOAD_RADIUS,
   clampLoadRadius,
+  resolveDimension,
   useWorldStore,
 } from "@/state/world-store";
 import { useToolStore } from "@/state/tool-store";
+import { useEditorStore } from "@/state/editor-store";
 import { projectAllowsEditor, useProjectStore } from "@/state/project-store";
 import {
   applyActiveTool,
@@ -142,6 +144,7 @@ async function loadPreview(renderer: ViewportRenderer): Promise<void> {
   if (!worldCallsAllowed()) return;
   const snapshot = createDemoSnapshot(useWorldStore.getState().loadRadius);
   const summary = previewSummary(snapshot);
+  const loadedChunks = snapshot.chunks.filter((chunk) => chunk.loaded).length;
   renderer.setSnapshot(snapshot);
   useWorldStore.getState().applySummary({
     source: "preview",
@@ -149,14 +152,31 @@ async function loadPreview(renderer: ViewportRenderer): Promise<void> {
     revision: snapshot.revision,
     blockCount: summary.blockCount,
     sectionCount: summary.sectionCount,
-    chunkCount: snapshot.chunks.filter((chunk) => chunk.loaded).length,
+    chunkCount: loadedChunks,
+    dimensions: [
+      {
+        id: snapshot.dimension,
+        kind: "overworld",
+        minY: snapshot.minY,
+        maxY: snapshot.minY + snapshot.height - 1,
+        height: snapshot.height,
+        chunkCount: loadedChunks,
+        sectionCount: summary.sectionCount,
+        blockCount: summary.blockCount,
+      },
+    ],
   });
 }
 
 async function loadCore(renderer: ViewportRenderer, radius: number): Promise<void> {
   if (!worldCallsAllowed()) return;
-  const dimension = useWorldStore.getState().dimension;
   const info = await invokeCommand<WorldInfo>("world_info");
+  const requested = useWorldStore.getState().dimension;
+  const dimension = resolveDimension(requested, info.dimensions);
+  if (dimension !== requested) {
+    useWorldStore.getState().setDimension(dimension);
+    useEditorStore.getState().setSelectedDimension(dimension);
+  }
   const snapshot = await invokeCommand<RenderSnapshot>("render_snapshot", {
     dimension,
     center: { x: 0, z: 0 },
@@ -170,6 +190,7 @@ async function loadCore(renderer: ViewportRenderer, radius: number): Promise<voi
     blockCount: info.blockCount,
     sectionCount: info.sectionCount,
     chunkCount: info.chunkCount,
+    dimensions: info.dimensions,
   });
 }
 

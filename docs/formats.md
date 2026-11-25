@@ -14,6 +14,11 @@ client JAR. Starting with 1.21.9, pack formats have both a major and a minor com
 example, 1.21.11 uses data pack format `94.1`). For these classic Anvil releases, the vanilla
 Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. Knowing these
 facts does not enable opening, editing, exporting or generating a world for an unverified release.
+The dimension set, vertical bounds and region folder are read from the exact profile's
+`dimensionProfiles`; the classic reader does not assume fixed `DIM-1`/`DIM1` names. Project
+snapshots encode the same set and reject a dimension whose bounds differ from the profile.
+Render snapshots carry the selected dimension's `minY`/`height`, and the viewport uses them for
+chunk borders instead of a fixed Y range.
 
 ## Differences within modern classic Anvil
 

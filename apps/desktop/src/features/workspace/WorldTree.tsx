@@ -18,38 +18,64 @@ import {
 } from "@/components/ui/empty";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { DimensionInfo } from "@/lib/contracts";
 import { useEditorStore } from "@/state/editor-store";
 import { useProjectStore } from "@/state/project-store";
+import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
+import { reloadViewport } from "@/features/viewport/viewport-bus";
 import { cn } from "@/lib/utils";
 
-const dimensions = [
-  {
-    id: "minecraft:overworld",
-    label: "Overworld",
-    yRange: "-64 … 319",
-    loaded: true,
-  },
-  { id: "minecraft:the_nether", label: "The Nether", yRange: "0 … 255", loaded: false },
-  { id: "minecraft:the_end", label: "The End", yRange: "0 … 255", loaded: false },
-];
+function dimensionLabel(dimension: DimensionInfo): string {
+  switch (dimension.kind) {
+    case "overworld":
+      return "Overworld";
+    case "nether":
+      return "The Nether";
+    case "end":
+      return "The End";
+    default: {
+      const path = dimension.id.includes(":")
+        ? dimension.id.split(":").slice(1).join(":")
+        : dimension.id;
+      const words = path.replaceAll("_", " ").trim();
+      return words ? words.replace(/\b\w/g, (letter) => letter.toUpperCase()) : dimension.id;
+    }
+  }
+}
+
+function dimensionStatus(dimension: DimensionInfo): string {
+  return dimension.chunkCount > 0
+    ? `${dimension.chunkCount.toLocaleString()} ${dimension.chunkCount === 1 ? "chunk" : "chunks"}`
+    : "Empty";
+}
 
 export function WorldTree() {
   const [expanded, setExpanded] = useState(true);
   const [search, setSearch] = useState("");
+  const dimensions = useWorldStore((state) => state.dimensions);
   const selectedDimension = useEditorStore((state) => state.selectedDimension);
   const setSelectedDimension = useEditorStore((state) => state.setSelectedDimension);
   const setPanelOpen = useEditorStore((state) => state.setPanelOpen);
-  const chunkCount = useWorldStore((state) => state.chunkCount);
   const source = useWorldStore((state) => state.source);
   const project = useProjectStore((state) => state.current);
   const needle = search.trim().toLowerCase();
   const visibleDimensions = dimensions.filter(
     (dimension) =>
       !needle ||
-      dimension.label.toLowerCase().includes(needle) ||
+      dimensionLabel(dimension).toLowerCase().includes(needle) ||
       dimension.id.toLowerCase().includes(needle),
   );
+  const selected = dimensions.find((dimension) => dimension.id === selectedDimension) ?? null;
+
+  const selectDimension = (dimension: DimensionInfo): void => {
+    if (dimension.id === selectedDimension) return;
+    setSelectedDimension(dimension.id);
+    useWorldStore.getState().setDimension(dimension.id);
+    useToolStore.getState().setSelection(null);
+    reloadViewport();
+  };
+
   return (
     <aside className="flex min-h-0 w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
       <div className="flex h-12 items-center gap-2 border-b px-4">
@@ -101,33 +127,35 @@ export function WorldTree() {
           {expanded ? (
             <div className="mt-1 ml-3 border-l pl-3">
               {visibleDimensions.map((dimension) => {
-                const selected = selectedDimension === dimension.id;
+                const isSelected = selectedDimension === dimension.id;
+                const status = dimensionStatus(dimension);
                 return (
                   <button
                     key={dimension.id}
                     type="button"
-                    onClick={() => setSelectedDimension(dimension.id)}
+                    onClick={() => selectDimension(dimension)}
+                    title={`${dimension.id} · Y ${dimension.minY}…${dimension.maxY}`}
                     className={cn(
                       "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                      selected
+                      isSelected
                         ? "bg-accent text-accent-foreground"
                         : "hover:bg-accent/60 hover:text-accent-foreground",
-                      !dimension.loaded && "opacity-60",
+                      dimension.chunkCount === 0 && !isSelected && "opacity-60",
                     )}
                   >
                     <Layers className="size-3.5" />
-                    <span className="truncate">{dimension.label}</span>
+                    <span className="truncate">{dimensionLabel(dimension)}</span>
                     <span className="ml-auto font-mono text-xs text-muted-foreground">
-                      {dimension.id === "minecraft:overworld" && source
-                        ? `${chunkCount} chunks`
-                        : "—"}
+                      {status}
                     </span>
                   </button>
                 );
               })}
-              <div className="mt-2 px-2 font-mono text-xs text-muted-foreground">
-                Y range {dimensions[0]?.yRange}
-              </div>
+              {selected ? (
+                <div className="mt-2 px-2 font-mono text-xs text-muted-foreground">
+                  Y {selected.minY} … {selected.maxY}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -137,8 +165,12 @@ export function WorldTree() {
                 <EmptyMedia variant="icon">
                   <Search />
                 </EmptyMedia>
-                <EmptyTitle>No matches</EmptyTitle>
-                <EmptyDescription>Nothing in the world tree matches “{search}”.</EmptyDescription>
+                <EmptyTitle>{dimensions.length === 0 ? "No dimensions" : "No matches"}</EmptyTitle>
+                <EmptyDescription>
+                  {dimensions.length === 0
+                    ? "The project world has not reported its dimensions yet."
+                    : `Nothing in the world tree matches “${search}”.`}
+                </EmptyDescription>
               </EmptyHeader>
             </Empty>
           ) : null}

@@ -204,6 +204,9 @@ pub struct ChunkSnapshot {
 pub struct ChunkSnapshotBatch {
     pub dimension: String,
     pub revision: u64,
+    /// Inclusive bottom of the dimension; renderer chunk borders use the real bounds.
+    pub min_y: i32,
+    pub height: i32,
     pub chunks: Vec<ChunkSnapshot>,
 }
 
@@ -214,6 +217,9 @@ pub struct ChunkSnapshotBatch {
 pub struct RenderSnapshot {
     pub dimension: String,
     pub revision: u64,
+    /// Inclusive bottom of the dimension; renderer chunk borders use the real bounds.
+    pub min_y: i32,
+    pub height: i32,
     pub center: ChunkPos,
     pub radius: u32,
     pub chunks: Vec<ChunkSnapshot>,

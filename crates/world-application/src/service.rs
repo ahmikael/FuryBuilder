@@ -594,6 +594,8 @@ impl WorldService {
         Ok(RenderSnapshot {
             dimension: dimension.to_owned(),
             revision: self.world.revision(),
+            min_y: dim.min_y(),
+            height: dim.height(),
             center,
             radius,
             chunks,
@@ -626,6 +628,8 @@ impl WorldService {
         Ok(ChunkSnapshotBatch {
             dimension: dimension.to_owned(),
             revision: self.world.revision(),
+            min_y: dim.min_y(),
+            height: dim.height(),
             chunks,
         })
     }

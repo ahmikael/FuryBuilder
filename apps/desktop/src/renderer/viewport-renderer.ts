@@ -446,6 +446,7 @@ export class ViewportRenderer {
   /** Updates a set of chunks and rebuilds neighbours whose faces can change. */
   updateChunks(snapshot: ChunkSnapshotBatch): void {
     this.world.setRevision(snapshot.revision);
+    this.world.setBounds(snapshot.minY, snapshot.height);
     const dirty = new Map<string, ChunkPos>();
     let chunkSetChanged = false;
     for (const chunk of snapshot.chunks) {
@@ -779,8 +780,8 @@ export class ViewportRenderer {
   private rebuildBorders(): void {
     this.clearBorders();
     const points: number[] = [];
-    const yBottom = -64;
-    const yTop = 72;
+    const yBottom = this.world.minY;
+    const yTop = this.world.maxY + 1;
     for (const chunk of this.world.loadedChunks()) {
       const x = chunk.x * 16;
       const z = chunk.z * 16;

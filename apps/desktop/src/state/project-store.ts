@@ -45,7 +45,7 @@ import { useEditorStore } from "@/state/editor-store";
 import { useHistoryStore } from "@/state/history-store";
 import { pushToast } from "@/state/toast-store";
 import { useToolStore } from "@/state/tool-store";
-import { useWorldStore } from "@/state/world-store";
+import { resolveDimension, useWorldStore } from "@/state/world-store";
 import { useWorkspaceStore } from "@/state/workspace-store";
 import { useSceneStore } from "@/state/scene-store";
 import { useParametricStore } from "@/state/parametric-store";
@@ -308,18 +308,20 @@ function applyPayload(payload: OpenedProjectPayload): void {
     ...readyState(),
   });
   const editorState = detail.editorState;
-  useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
+  const selectedDimension = resolveDimension(editorState.selectedDimension, info.dimensions);
+  useEditorStore.getState().setSelectedDimension(selectedDimension);
   useWorldStore.getState().setLoadRadius(editorState.loadRadius);
   useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
   useSceneStore.getState().reset(editorState.scene ?? defaultScene());
   void useParametricStore.getState().refresh();
   useWorldStore.getState().applySummary({
     source: "core",
-    dimension: editorState.selectedDimension,
+    dimension: selectedDimension,
     revision: info.revision,
     blockCount: info.blockCount,
     sectionCount: info.sectionCount,
     chunkCount: info.chunkCount,
+    dimensions: info.dimensions,
   });
   useToolStore.getState().resetTransient();
   useToolStore.getState().setSelection(null);
@@ -443,18 +445,20 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
       const info = await fetchProjectWorldInfo();
       set({ current: session, ...readyState() });
       const editorState = session.editorState ?? currentEditorState();
-      useEditorStore.getState().setSelectedDimension(editorState.selectedDimension);
+      const selectedDimension = resolveDimension(editorState.selectedDimension, info.dimensions);
+      useEditorStore.getState().setSelectedDimension(selectedDimension);
       useWorldStore.getState().setLoadRadius(editorState.loadRadius);
       useWorkspaceStore.getState().reset(editorState.workspace ?? defaultWorkspacePolicy());
       useSceneStore.getState().reset(editorState.scene ?? defaultScene());
       void useParametricStore.getState().refresh();
       useWorldStore.getState().applySummary({
         source: "core",
-        dimension: editorState.selectedDimension,
+        dimension: selectedDimension,
         revision: info.revision,
         blockCount: info.blockCount,
         sectionCount: info.sectionCount,
         chunkCount: info.chunkCount,
+        dimensions: info.dimensions,
       });
       void useHistoryStore.getState().refresh();
       reloadViewport();
@@ -654,6 +658,7 @@ export const useProjectStore = create<ProjectUiState>()((set, get) => ({
         blockCount: result.info.blockCount,
         sectionCount: result.info.sectionCount,
         chunkCount: result.info.chunkCount,
+        dimensions: result.info.dimensions,
       });
       set({ current: result.session, loading: false, managerOpen: false });
       useToolStore.getState().markModified();

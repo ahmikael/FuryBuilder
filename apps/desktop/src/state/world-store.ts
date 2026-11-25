@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { DimensionInfo } from "@/lib/contracts";
 import type { CameraPose, ChunkPos, RenderMetrics } from "@/renderer/types";
 import type { BlockSelection } from "@/renderer/types";
 import type { CaptureMetadata } from "@/renderer/observation";
@@ -18,6 +19,8 @@ interface WorldUiState extends WorldSummary {
   status: WorldStatus;
   source: WorldSource | null;
   error: string | null;
+  /** Dimensions reported by the authoritative world, in profile order. */
+  dimensions: DimensionInfo[];
   loadRadius: number;
   selection: BlockSelection | null;
   metrics: RenderMetrics | null;
@@ -26,7 +29,10 @@ interface WorldUiState extends WorldSummary {
   gridVisible: boolean;
   chunkBordersVisible: boolean;
   setStatus: (status: WorldStatus, error?: string | null) => void;
-  applySummary: (summary: Partial<WorldSummary> & { source?: WorldSource }) => void;
+  applySummary: (
+    summary: Partial<WorldSummary> & { source?: WorldSource; dimensions?: DimensionInfo[] },
+  ) => void;
+  setDimension: (dimension: string) => void;
   setLoadRadius: (radius: number) => void;
   setSelection: (selection: BlockSelection | null) => void;
   setMetrics: (metrics: RenderMetrics) => void;
@@ -45,10 +51,25 @@ export function clampLoadRadius(radius: number): number {
   return Math.min(MAX_LOAD_RADIUS, Math.max(MIN_LOAD_RADIUS, Math.round(radius)));
 }
 
+/**
+ * Keeps a persisted dimension selection valid after the authoritative world reports its
+ * dimensions. Unknown selections fall back to the Overworld, then to the first dimension.
+ */
+export function resolveDimension(requested: string, dimensions: readonly DimensionInfo[]): string {
+  if (dimensions.length === 0) return requested;
+  if (dimensions.some((dimension) => dimension.id === requested)) return requested;
+  return (
+    dimensions.find((dimension) => dimension.kind === "overworld")?.id ??
+    dimensions[0]?.id ??
+    requested
+  );
+}
+
 export const useWorldStore = create<WorldUiState>()((set) => ({
   status: "idle",
   source: null,
   error: null,
+  dimensions: [],
   dimension: "minecraft:overworld",
   revision: 0,
   blockCount: 0,
@@ -63,6 +84,7 @@ export const useWorldStore = create<WorldUiState>()((set) => ({
   chunkBordersVisible: true,
   setStatus: (status, error = null) => set({ status, error }),
   applySummary: (summary) => set(summary),
+  setDimension: (dimension) => set({ dimension }),
   setLoadRadius: (radius) => set({ loadRadius: clampLoadRadius(radius) }),
   setSelection: (selection) => set({ selection }),
   setMetrics: (metrics) => set({ metrics }),
@@ -75,6 +97,7 @@ export const useWorldStore = create<WorldUiState>()((set) => ({
       status: "idle",
       source: null,
       error: null,
+      dimensions: [],
       dimension: "minecraft:overworld",
       revision: 0,
       blockCount: 0,

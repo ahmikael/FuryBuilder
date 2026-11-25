@@ -1,7 +1,6 @@
 use minecraft_version::{profile_for_data_version, BiomeFormat, VersionProfile, WorldLayout};
 use world_domain::{
-    BiomeSection, BiomeState, BlockState, ChunkPos, Section, World, WorldVersion, BIOME_CELLS,
-    MAX_BIOME_PALETTE,
+    BiomeSection, BiomeState, BlockState, ChunkPos, Section, World, BIOME_CELLS, MAX_BIOME_PALETTE,
 };
 
 use crate::error::ProjectError;
@@ -156,11 +155,40 @@ fn snapshot_profile(world: &World) -> Result<VersionProfile, ProjectError> {
         })
 }
 
+/// A snapshot can only be written when its dimension set and vertical bounds are exactly
+/// those declared by the project's version profile.
+fn validate_world_dimensions(world: &World, profile: &VersionProfile) -> Result<(), ProjectError> {
+    if world.dimensions().len() != profile.dimension_profiles.len() {
+        return Err(ProjectError::corrupt(format!(
+            "world has {} dimensions but profile `{}` declares {}",
+            world.dimensions().len(),
+            profile.id,
+            profile.dimension_profiles.len()
+        )));
+    }
+    for expected in &profile.dimension_profiles {
+        let dimension = world.dimension(&expected.id).map_err(|_| {
+            ProjectError::corrupt(format!(
+                "world is missing profile dimension `{}`",
+                expected.id
+            ))
+        })?;
+        if dimension.min_y() != expected.min_y || dimension.height() != expected.height {
+            return Err(ProjectError::corrupt(format!(
+                "dimension `{}` bounds do not match profile `{}`",
+                expected.id, profile.id
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Deterministic binary encoding used by project snapshots. BTreeMap iteration makes the
 /// byte stream stable for the same world, which lets save verification compare a decode
 /// and re-encode byte-for-byte.
 pub fn encode_world(world: &World) -> Result<Vec<u8>, ProjectError> {
     let profile = snapshot_profile(world)?;
+    validate_world_dimensions(world, &profile)?;
     let mut writer = Writer::new();
     writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
     writer.u16(SNAPSHOT_FORMAT_VERSION);
@@ -262,15 +290,12 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
             profile.id
         )));
     }
-    let world_version = WorldVersion::new(profile.minecraft_version.to_string(), data_version)
-        .map_err(|error| ProjectError::corrupt(error.to_string()))?;
     let dimensions = reader.u32()?;
     if dimensions > MAX_DIMENSIONS {
         return Err(ProjectError::corrupt("snapshot has too many dimensions"));
     }
 
-    let mut world = World::new_empty();
-    world.set_version(world_version);
+    let mut world = World::for_profile(&profile);
     world.restore_revision(revision);
     for _ in 0..dimensions {
         let dimension_id = reader.string()?;
@@ -391,7 +416,7 @@ pub fn decode_world(bytes: &[u8]) -> Result<World, ProjectError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use world_domain::{BlockPos, ChunkPos, Section};
+    use world_domain::{BlockPos, ChunkPos, Section, WorldVersion};
 
     fn stone() -> BlockState {
         "minecraft:stone".parse().expect("stone state")
@@ -452,6 +477,44 @@ mod tests {
             Err(ProjectError::UnsupportedWorldVersion(_)) => {}
             other => panic!("expected unsupported world version, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn snapshot_dimension_bounds_must_match_the_profile() {
+        let header = |dimension: &str, min_y: i32, height: i32| {
+            let mut writer = Writer::new();
+            writer.bytes.extend_from_slice(SNAPSHOT_MAGIC);
+            writer.u16(3);
+            writer.u64(0);
+            writer.string("java-classic-1.21.4").expect("profile id");
+            writer.i32(4189);
+            writer.string("classic-anvil").expect("layout");
+            writer.string("palette-4x4x4").expect("biome mode");
+            writer.u32(1);
+            writer.string(dimension).expect("dimension id");
+            writer.i32(min_y);
+            writer.i32(height);
+            writer.u32(0);
+            writer.finish()
+        };
+
+        let valid = decode_world(&header("minecraft:overworld", -64, 384)).expect("valid bounds");
+        assert_eq!(
+            valid
+                .dimension("minecraft:overworld")
+                .expect("overworld")
+                .max_y(),
+            319
+        );
+
+        assert!(matches!(
+            decode_world(&header("minecraft:overworld", 0, 256)),
+            Err(ProjectError::Corrupt(_))
+        ));
+        assert!(matches!(
+            decode_world(&header("custom:missing", -64, 384)),
+            Err(ProjectError::Corrupt(_))
+        ));
     }
 
     #[test]

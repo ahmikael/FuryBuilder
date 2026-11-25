@@ -344,6 +344,16 @@ both derived-data policies, masking only the edited chunk's write timestamp.
 Light-only records one section below or above the terrain remain in raw NBT;
 they never enter the editable block or biome model.
 
+The editable domain is built from the profile's `dimensionProfiles`: `World::for_profile`
+creates exactly those dimension IDs with their `minY`/`height`, and snapshot encoding rejects
+a world whose dimension set or bounds differ from the profile. `WorldInfo` reports dimensions
+in profile order (Overworld, Nether, End, then custom), not in map order. Classic import
+discovers region folders from `dimensionProfiles[].folder` instead of fixed `DIM-1`/`DIM1`
+names. Render snapshots and dirty-chunk batches carry the selected dimension's `minY`/`height`,
+so chunk borders follow the real vertical extent. The desktop WorldTree reads
+`WorldInfo.dimensions`, shows each dimension's stored chunk count or `Empty`, and switches the
+streamed dimension; an unknown persisted selection falls back to the Overworld.
+
 `world_selection` routes newer storage to `split_anvil` for metadata and header inspection.
 The inspector uses the same bounded MCA header reader but does not call the classic chunk
 decoder. It inventories namespaced terrain directories, the split world-generation sidecar

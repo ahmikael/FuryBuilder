@@ -37,6 +37,8 @@ fn render_snapshot_returns_requested_chunks_and_revision() {
         .unwrap();
     assert_eq!(snapshot.dimension, "minecraft:overworld");
     assert_eq!(snapshot.revision, 1);
+    assert_eq!(snapshot.min_y, -64);
+    assert_eq!(snapshot.height, 384);
     assert_eq!(snapshot.radius, 1);
     assert_eq!(snapshot.chunks.len(), 9);
     assert!(snapshot.chunks.iter().all(|chunk| chunk.loaded));
@@ -65,6 +67,31 @@ fn render_snapshot_marks_unloaded_chunks() {
     assert_eq!(snapshot.chunks.len(), 1);
     assert!(!snapshot.chunks[0].loaded);
     assert!(snapshot.chunks[0].sections.is_empty());
+}
+
+#[test]
+fn render_snapshot_uses_the_selected_dimension_bounds() {
+    let service = WorldService::new();
+    let overworld = service
+        .render_snapshot("minecraft:overworld", ChunkPos::new(0, 0), 0)
+        .unwrap();
+    assert_eq!((overworld.min_y, overworld.height), (-64, 384));
+
+    let nether = service
+        .render_snapshot("minecraft:the_nether", ChunkPos::new(0, 0), 0)
+        .unwrap();
+    assert_eq!(nether.dimension, "minecraft:the_nether");
+    assert_eq!((nether.min_y, nether.height), (0, 256));
+    assert!(!nether.chunks[0].loaded);
+}
+
+#[test]
+fn render_chunks_carries_the_selected_dimension_bounds() {
+    let service = WorldService::new();
+    let batch = service
+        .render_chunks("minecraft:the_nether", &[ChunkPos::new(0, 0)])
+        .unwrap();
+    assert_eq!((batch.min_y, batch.height), (0, 256));
 }
 
 #[test]

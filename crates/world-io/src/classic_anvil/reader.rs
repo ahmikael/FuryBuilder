@@ -284,26 +284,16 @@ impl JavaWorld {
             )));
         }
 
-        let mut dimensions = vec![discover_dimension(
-            root,
-            &profile,
-            "minecraft:overworld",
-            Path::new("."),
-            DimensionKind::Overworld,
-        )?];
-        for (folder, id, kind) in [
-            ("DIM-1", "minecraft:the_nether", DimensionKind::Nether),
-            ("DIM1", "minecraft:the_end", DimensionKind::End),
-        ] {
-            if require_directory(&root.join(folder))? {
-                dimensions.push(discover_dimension(
-                    root,
-                    &profile,
-                    id,
-                    Path::new(folder),
-                    kind,
-                )?);
+        let mut dimensions = Vec::new();
+        for spec in &profile.dimension_profiles {
+            let dimension_root = Path::new(&spec.folder)
+                .parent()
+                .unwrap_or_else(|| Path::new(""));
+            let is_overworld = spec.kind == minecraft_version::DimensionKind::Overworld;
+            if !is_overworld && !require_directory(&root.join(dimension_root))? {
+                continue;
             }
+            dimensions.push(discover_dimension(root, spec)?);
         }
 
         Ok(Self {
@@ -833,32 +823,23 @@ fn optional_string(
 
 fn discover_dimension(
     root: &Path,
-    profile: &VersionProfile,
-    id: &str,
-    relative_folder: &Path,
-    kind: DimensionKind,
+    spec: &minecraft_version::DimensionProfile,
 ) -> Result<JavaWorldDimension, AnvilError> {
-    let bounds = profile
-        .dimension_profiles
-        .iter()
-        .find(|p| p.id == id)
-        .ok_or_else(|| {
-            AnvilError::UnsupportedLayout(format!(
-                "profile `{}` has no bounds for dimension `{id}`",
-                profile.id
-            ))
-        })?;
-    let folder = if relative_folder == Path::new(".") {
-        root.to_path_buf()
-    } else {
-        root.join(relative_folder)
-    };
-    let region_folder = folder.join("region");
+    let region_folder = root.join(&spec.folder);
+    let folder = region_folder
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| root.to_path_buf());
     Ok(JavaWorldDimension {
-        id: id.to_owned(),
-        kind,
-        min_y: bounds.min_y,
-        height: bounds.height,
+        id: spec.id.clone(),
+        kind: match spec.kind {
+            minecraft_version::DimensionKind::Overworld => DimensionKind::Overworld,
+            minecraft_version::DimensionKind::Nether => DimensionKind::Nether,
+            minecraft_version::DimensionKind::End => DimensionKind::End,
+            minecraft_version::DimensionKind::Custom => DimensionKind::Custom,
+        },
+        min_y: spec.min_y,
+        height: spec.height,
         folder,
         region_files: count_region_files(&region_folder)?,
         region_folder,

@@ -5,6 +5,7 @@ import type { RenderSnapshot } from "@/renderer/types";
 import { snapshotFromBlocks } from "@/renderer/builders";
 import { useToolStore } from "@/state/tool-store";
 import { useProjectStore } from "@/state/project-store";
+import { useEditorStore } from "@/state/editor-store";
 import { useWorldStore } from "@/state/world-store";
 import { viewportBus } from "@/features/viewport/viewport-bus";
 
@@ -82,7 +83,28 @@ const worldInfo = {
   targetMinecraftVersion: "1.21.4",
   targetDataVersion: 4189,
   revision: 1,
-  dimensions: [],
+  dimensions: [
+    {
+      id: "minecraft:overworld",
+      kind: "overworld" as const,
+      minY: -64,
+      maxY: 319,
+      height: 384,
+      chunkCount: 9,
+      sectionCount: 27,
+      blockCount: 288_000,
+    },
+    {
+      id: "minecraft:the_nether",
+      kind: "nether" as const,
+      minY: 0,
+      maxY: 255,
+      height: 256,
+      chunkCount: 0,
+      sectionCount: 0,
+      blockCount: 0,
+    },
+  ],
   chunkCount: 9,
   sectionCount: 27,
   blockCount: 288_000,
@@ -131,6 +153,7 @@ describe("Viewport", () => {
       status: "idle",
       source: null,
       error: null,
+      dimensions: [],
       revision: 0,
       blockCount: 0,
       chunkCount: 0,
@@ -141,6 +164,7 @@ describe("Viewport", () => {
       metrics: null,
       lastCapture: null,
     });
+    useEditorStore.setState({ selectedDimension: "minecraft:overworld" });
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
       {} as unknown as WebGL2RenderingContext,
     );
@@ -241,6 +265,32 @@ describe("Viewport", () => {
     expect(state.revision).toBe(1);
     expect(state.chunkCount).toBe(9);
     expect(state.blockCount).toBe(288_000);
+  });
+
+  it("falls back to the profile overworld when a saved dimension no longer exists", async () => {
+    ipc.tauri = true;
+    useWorldStore.setState({ dimension: "minecraft:removed" });
+    ipc.invoke.mockImplementation(async (command: string) => {
+      if (command === "world_info") return worldInfo;
+      if (command === "render_snapshot") return snapshot;
+      if (command === "history_state") {
+        return { canUndo: false, canRedo: false, revision: 1, entries: [] };
+      }
+      if (command === "project_status") return useProjectStore.getState().current;
+      if (command === "renderer_ready") return undefined;
+      throw new Error(`unexpected command ${command}`);
+    });
+
+    render(<Viewport />);
+
+    await waitFor(() => expect(useWorldStore.getState().status).toBe("ready"));
+    expect(ipc.invoke).toHaveBeenCalledWith("render_snapshot", {
+      dimension: "minecraft:overworld",
+      center: { x: 0, z: 0 },
+      radius: 1,
+    });
+    expect(useWorldStore.getState().dimension).toBe("minecraft:overworld");
+    expect(useEditorStore.getState().selectedDimension).toBe("minecraft:overworld");
   });
 
   it("renders nothing and touches no world API without a ready project", async () => {

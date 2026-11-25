@@ -200,6 +200,7 @@ export function TemplateLibraryPanel() {
         blockCount: outcome.info.blockCount,
         sectionCount: outcome.info.sectionCount,
         chunkCount: outcome.info.chunkCount,
+        dimensions: outcome.info.dimensions,
       });
       useToolStore.getState().markModified();
       useToolStore.getState().setSelection(null);

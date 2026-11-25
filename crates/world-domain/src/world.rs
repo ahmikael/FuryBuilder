@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use minecraft_version::{default_profile, VersionProfile};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -46,10 +47,9 @@ impl WorldVersion {
     ///
     /// Imported and generated worlds always replace this with their own verified version.
     pub fn empty_project_default() -> Self {
-        Self {
-            minecraft_version: "1.21.4".to_owned(),
-            data_version: 4189,
-        }
+        let profile = default_profile();
+        Self::new(profile.minecraft_version.as_str(), profile.data_version)
+            .expect("the default version profile carries a valid identity")
     }
 
     pub fn minecraft_version(&self) -> &str {
@@ -111,17 +111,27 @@ impl Default for World {
 }
 
 impl World {
+    /// Empty world with the default profile's dimensions.
+    ///
+    /// Versioned creation, import and snapshot decoding use [`World::for_profile`] so the
+    /// dimension set and vertical bounds always come from the project's exact profile.
     pub fn new_empty() -> Self {
-        let mut dimensions = BTreeMap::new();
-        for dimension in [
-            Dimension::overworld(),
-            Dimension::nether(),
-            Dimension::end(),
-        ] {
-            dimensions.insert(dimension.id().to_owned(), dimension);
-        }
+        Self::for_profile(&default_profile())
+    }
+
+    /// Builds an empty world with exactly the dimensions declared by a verified profile.
+    pub fn for_profile(profile: &VersionProfile) -> Self {
+        let dimensions = profile
+            .dimension_profiles
+            .iter()
+            .map(|spec| {
+                let dimension = Dimension::from_profile(spec);
+                (dimension.id().to_owned(), dimension)
+            })
+            .collect();
         Self {
-            version: WorldVersion::empty_project_default(),
+            version: WorldVersion::new(profile.minecraft_version.as_str(), profile.data_version)
+                .expect("verified version profiles carry a valid identity"),
             dimensions,
             revision: 0,
         }
@@ -243,11 +253,18 @@ impl World {
     }
 
     pub fn info(&self) -> WorldInfo {
+        let mut dimensions: Vec<DimensionInfo> =
+            self.dimensions.values().map(Dimension::info).collect();
+        dimensions.sort_by(|left, right| {
+            left.kind
+                .cmp(&right.kind)
+                .then_with(|| left.id.cmp(&right.id))
+        });
         WorldInfo {
             target_minecraft_version: self.version.minecraft_version.clone(),
             target_data_version: self.version.data_version,
             revision: self.revision,
-            dimensions: self.dimensions.values().map(Dimension::info).collect(),
+            dimensions,
             chunk_count: self.chunk_count(),
             section_count: self.section_count(),
             block_count: self.block_count(),
@@ -295,6 +312,43 @@ mod tests {
             world.dimension("custom:missing"),
             Err(WorldError::UnknownDimension(_))
         ));
+        let ids: Vec<_> = world
+            .info()
+            .dimensions
+            .into_iter()
+            .map(|dimension| dimension.id)
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                "minecraft:overworld",
+                "minecraft:the_nether",
+                "minecraft:the_end"
+            ],
+            "WorldInfo lists dimensions in profile order, not BTreeMap order"
+        );
+    }
+
+    #[test]
+    fn dimensions_and_bounds_come_from_the_exact_profile() {
+        let mut profile = minecraft_version::default_profile();
+        profile.minecraft_version = "1.16.5".parse().expect("version id");
+        profile.data_version = 2586;
+        profile.dimension_profiles[0].min_y = 0;
+        profile.dimension_profiles[0].height = 256;
+        let mut world = World::for_profile(&profile);
+        let info = world.info();
+
+        assert_eq!(info.target_minecraft_version, "1.16.5");
+        assert_eq!(info.dimensions.len(), 3);
+        assert_eq!(info.dimensions[0].id, "minecraft:overworld");
+        assert_eq!(info.dimensions[0].min_y, 0);
+        assert_eq!(info.dimensions[0].max_y, 255);
+        assert_eq!(info.dimensions[1].id, "minecraft:the_nether");
+        assert_eq!(info.dimensions[1].height, 256);
+        assert!(world
+            .set_block("minecraft:overworld", BlockPos::new(0, -1, 0), &stone())
+            .is_err());
     }
 
     #[test]

@@ -783,6 +783,16 @@ mod tests {
     use std::io::Cursor;
     use world_domain::{BiomeSection, ChunkPos, Dimension};
 
+    fn overworld() -> Dimension {
+        Dimension::new(
+            "minecraft:overworld",
+            world_domain::DimensionKind::Overworld,
+            -64,
+            384,
+        )
+        .expect("valid test bounds")
+    }
+
     fn state(value: &str) -> BlockState {
         value.parse().expect("valid block state")
     }
@@ -807,7 +817,7 @@ mod tests {
 
     #[test]
     fn surface_maps_are_deterministic_and_match_top_blocks() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         dimension
             .set_block(BlockPos::new(0, 64, 0), &state("minecraft:stone"))
             .unwrap();
@@ -834,7 +844,7 @@ mod tests {
 
     #[test]
     fn heightmap_uses_elevation_buckets() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         dimension
             .set_block(BlockPos::new(0, 64, 0), &state("minecraft:stone"))
             .unwrap();
@@ -867,7 +877,7 @@ mod tests {
 
     #[test]
     fn biome_map_reports_missing_and_present_data() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         dimension
             .set_block(BlockPos::new(0, 64, 0), &state("minecraft:grass_block"))
             .unwrap();
@@ -887,7 +897,7 @@ mod tests {
 
     #[test]
     fn cross_section_renders_an_upright_plane() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         dimension
             .set_block(BlockPos::new(0, 64, 0), &state("minecraft:stone"))
             .unwrap();
@@ -938,7 +948,7 @@ mod tests {
 
     #[test]
     fn budgets_are_fail_closed() {
-        let dimension = Dimension::overworld();
+        let dimension = overworld();
         let wide = BlockBox::new(BlockPos::new(0, 60, 0), BlockPos::new(512, 60, 0)).unwrap();
         assert!(matches!(
             render_surface(&dimension, wide, ObservationMode::TopDown),
@@ -968,7 +978,7 @@ mod tests {
 
     #[test]
     fn legend_is_bounded_and_metadata_is_stable() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         for x in 0..20 {
             let block = format!("minecraft:test_block_{x}");
             // The registry in the domain only validates syntax, not known block ids.

@@ -10,6 +10,21 @@ function loadedWorld(snapshot: RenderSnapshot): RenderWorld {
 }
 
 describe("RenderWorld", () => {
+  it("tracks the selected dimension bounds from snapshots", () => {
+    const builder = new SnapshotBuilder();
+    builder.setBlock(0, 0, 0, "minecraft:stone");
+    const world = loadedWorld(builder.build("minecraft:the_nether", 1, 0, 0, 256));
+
+    expect(world.dimension).toBe("minecraft:the_nether");
+    expect(world.minY).toBe(0);
+    expect(world.maxY).toBe(255);
+    expect(world.height).toBe(256);
+
+    world.setBounds(-64, 384);
+    expect(world.minY).toBe(-64);
+    expect(world.maxY).toBe(319);
+  });
+
   it("decodes blocks from palette snapshots", () => {
     const world = loadedWorld(snapshotFromBlocks([{ x: 0, y: 64, z: 0, name: "minecraft:stone" }]));
     expect(world.blockAt({ x: 0, y: 64, z: 0 })?.name).toBe("minecraft:stone");

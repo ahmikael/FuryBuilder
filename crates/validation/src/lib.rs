@@ -1105,6 +1105,16 @@ mod tests {
         .expect("valid bounds")
     }
 
+    fn overworld() -> Dimension {
+        Dimension::new(
+            "minecraft:overworld",
+            world_domain::DimensionKind::Overworld,
+            -64,
+            384,
+        )
+        .expect("valid test bounds")
+    }
+
     fn place(dimension: &mut Dimension, pos: (i32, i32, i32), value: &str) {
         dimension
             .set_block(BlockPos::new(pos.0, pos.1, pos.2), &state(value))
@@ -1113,7 +1123,7 @@ mod tests {
 
     #[test]
     fn floating_clusters_are_grouped_and_offer_a_support_fix() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         place(&mut dimension, (0, 64, 0), "minecraft:stone");
         place(&mut dimension, (1, 64, 0), "minecraft:stone");
         place(&mut dimension, (3, 64, 0), "minecraft:stone");
@@ -1157,7 +1167,7 @@ mod tests {
 
     #[test]
     fn out_of_bounds_is_exact_and_fails_closed_without_an_envelope() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         place(&mut dimension, (0, 64, 0), "minecraft:stone");
         place(&mut dimension, (1, 64, 0), "minecraft:dirt");
         place(&mut dimension, (2, 64, 0), "minecraft:sand");
@@ -1187,7 +1197,7 @@ mod tests {
 
     #[test]
     fn path_continuity_reports_gaps_and_obstructions() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         place(&mut dimension, (0, 64, 0), "minecraft:stone");
         place(&mut dimension, (2, 64, 0), "minecraft:stone");
         place(&mut dimension, (2, 65, 0), "minecraft:oak_fence");
@@ -1231,7 +1241,7 @@ mod tests {
 
     #[test]
     fn palette_rule_uses_the_configured_surface_guideline() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         place(&mut dimension, (0, 64, 0), "minecraft:stone");
         place(&mut dimension, (1, 64, 0), "minecraft:dirt");
         place(&mut dimension, (2, 64, 0), "minecraft:sand");
@@ -1256,7 +1266,7 @@ mod tests {
 
     #[test]
     fn export_and_orientation_rules_are_catalog_based() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         place(&mut dimension, (0, 64, 0), "minecraft:test_block_0");
         place(
             &mut dimension,
@@ -1291,7 +1301,7 @@ mod tests {
 
     #[test]
     fn protected_regions_are_reported_by_the_core_side_context() {
-        let dimension = Dimension::overworld();
+        let dimension = overworld();
         let mut request = ValidationRequest::new(bounds((0, 64, 0), (4, 70, 4)));
         request.rules = vec![RuleId::ProtectedRegion];
         request.protected_regions.push(ProtectedArea {
@@ -1311,7 +1321,7 @@ mod tests {
 
     #[test]
     fn limits_and_inputs_fail_closed_before_scanning() {
-        let dimension = Dimension::overworld();
+        let dimension = overworld();
         let huge = bounds((0, 0, 0), (130, 129, 129));
         let request = ValidationRequest::new(huge);
         assert!(matches!(
@@ -1361,7 +1371,7 @@ mod tests {
 
     #[test]
     fn findings_are_deterministic_and_serialize_with_stable_keys() {
-        let mut dimension = Dimension::overworld();
+        let mut dimension = overworld();
         place(&mut dimension, (0, 64, 0), "minecraft:stone");
         let mut request = ValidationRequest::new(bounds((0, 63, 0), (0, 64, 0)));
         request.rules = vec![RuleId::FloatingBlocks];

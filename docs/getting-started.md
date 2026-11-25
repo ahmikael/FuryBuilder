@@ -132,8 +132,9 @@ files while the app is running.
   the current block lives in the Inspector and Blocks tab. Core status lives only in the status
   bar. Save lives in the toolbar chip; the viewport performance panel reports rendering metrics
   and the last operation only.
-- **World panel.** Switch the displayed dimension and filter the tree. The current alpha
-  loads the overworld; the Nether and End are listed but not streamed yet.
+- **World panel.** Switch the displayed dimension and filter the tree. Dimensions and their
+  Y bounds come from the project's exact version profile; each row reports its stored chunk
+  count or `Empty`, and selecting a dimension streams that dimension into the viewport.
 - **Viewport.** The 3D scene, selection box, chunk borders, grid and the bottom input hint.
   Camera and editing controls are in section 5.
 - **Inspector.** Shows the picked block and its properties, the current box selection, copy

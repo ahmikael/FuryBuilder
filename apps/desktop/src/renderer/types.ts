@@ -26,6 +26,9 @@ export interface ChunkSnapshot {
 export interface RenderSnapshot {
   dimension: string;
   revision: number;
+  /** Inclusive bottom of the dimension. */
+  minY: number;
+  height: number;
   center: ChunkPos;
   radius: number;
   chunks: ChunkSnapshot[];
@@ -86,5 +89,8 @@ export interface RenderMetrics {
 export interface ChunkSnapshotBatch {
   dimension: string;
   revision: number;
+  /** Inclusive bottom of the dimension. */
+  minY: number;
+  height: number;
   chunks: ChunkSnapshot[];
 }

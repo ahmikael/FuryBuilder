@@ -260,6 +260,47 @@ describe("project activation", () => {
     );
   });
 
+  it("falls back to the reported overworld when the saved dimension is gone", async () => {
+    api.open.mockResolvedValue(
+      payload({
+        detail: {
+          ...payload().detail,
+          editorState: { selectedDimension: "minecraft:removed", loadRadius: 1 },
+        },
+        info: {
+          ...payload().info,
+          dimensions: [
+            {
+              id: "minecraft:overworld",
+              kind: "overworld",
+              minY: -64,
+              maxY: 319,
+              height: 384,
+              chunkCount: 4,
+              sectionCount: 12,
+              blockCount: 1_024,
+            },
+            {
+              id: "minecraft:the_nether",
+              kind: "nether",
+              minY: 0,
+              maxY: 255,
+              height: 256,
+              chunkCount: 0,
+              sectionCount: 0,
+              blockCount: 0,
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(await useProjectStore.getState().open(summary.folder)).toBe(true);
+    expect(useEditorStore.getState().selectedDimension).toBe("minecraft:overworld");
+    expect(useWorldStore.getState().dimension).toBe("minecraft:overworld");
+    expect(useWorldStore.getState().dimensions).toHaveLength(2);
+  });
+
   it("applies editor state, world summary and reloads the viewport on create", async () => {
     const reload = vi.fn();
     viewportBus.addEventListener("reload-world", reload);

@@ -11,6 +11,7 @@ name = "world_domain"
 [dependencies]
 serde = { workspace = true }
 thiserror = { workspace = true }
+minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
 
 [dev-dependencies]
 serde_json = { workspace = true }

@@ -75,7 +75,13 @@ export class SnapshotBuilder {
     return this.chunks.has(`${pos.x},${pos.z}`);
   }
 
-  build(dimension = "minecraft:overworld", revision = 1, radius = 1): RenderSnapshot {
+  build(
+    dimension = "minecraft:overworld",
+    revision = 1,
+    radius = 1,
+    minY = -64,
+    height = 384,
+  ): RenderSnapshot {
     const chunks: ChunkSnapshot[] = [];
     for (const [key, sections] of this.chunks) {
       const [cx, cz] = key.split(",").map(Number) as [number, number];
@@ -116,7 +122,7 @@ export class SnapshotBuilder {
       }
     }
     chunks.sort((a, b) => a.chunk.x - b.chunk.x || a.chunk.z - b.chunk.z);
-    return { dimension, revision, center: { x: 0, z: 0 }, radius, chunks };
+    return { dimension, revision, minY, height, center: { x: 0, z: 0 }, radius, chunks };
   }
 }
 

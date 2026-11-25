@@ -24,7 +24,6 @@ use world_domain::{ChunkPos, DimensionKind, World};
 use crate::passthrough::{is_link_like, PassthroughError};
 use crate::split_anvil;
 use crate::support_matrix::{support_matrix, SupportMatrix};
-use crate::version_support;
 use crate::world_codec::world_codec;
 use crate::world_selection::classify_world_selection;
 use crate::world_source::{ArchiveReport, WorldSourceKind};
@@ -378,8 +377,7 @@ pub(super) fn load_world(
         dimensions: Vec::new(),
         warnings: Vec::new(),
     };
-    let mut editable = World::new_empty();
-    editable.set_version(version_support::world_version(&world.profile));
+    let mut editable = World::for_profile(&world.profile);
 
     for dimension in &world.dimensions {
         report.dimensions.push(dimension.id.clone());
