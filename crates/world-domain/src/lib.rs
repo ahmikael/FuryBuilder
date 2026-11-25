@@ -24,7 +24,7 @@ pub use coords::{
 pub use dimension::{
     BiomeWrite, BlockWrite, Dimension, DimensionError, DimensionInfo, DimensionKind,
 };
-pub use registry::{BlockDefinition, BlockRegistry, RegistryError};
+pub use registry::{BlockDefinition, BlockRegistry, BlockSchemaEntry, RegistryError};
 pub use section::Section;
 pub use world::{World, WorldError, WorldInfo, WorldVersion, WorldVersionError};
 

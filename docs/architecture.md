@@ -242,6 +242,17 @@ identified by the component manager and that a Vanilla server pin matches the co
 The project store writes these path-free records together with the first v2 manifest, not in a
 follow-up save. No component download is started by project creation.
 
+## Content catalog authority
+
+The client-JAR catalog is not a preview-only artifact. Opening a project rebuilds it and checks
+the catalog id, catalog hash, client JAR SHA-1, version and `DataVersion` against the pinned
+manifest; a different JAR is a conflict. The rebuilt catalog becomes the write-admission
+registry of the open `WorldService`, while the curated registry remains the quick-pick list
+exposed by `block_catalog` and the explicit fallback when a project uses placeholder assets.
+Validation uses the same write registry, so the palette, command writes and `Validation` panel
+agree on which block names and property keys exist. Multipart defaults, value validation,
+creative categories and item browsing remain later catalog stages.
+
 ## Welcome screen
 
 The top bar and status bar are always present; the content area switches between the

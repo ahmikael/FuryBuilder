@@ -70,3 +70,11 @@ export function loadAssetCatalog(override?: {
     override ? { sourceKind: override.sourceKind, sourcePath: override.sourcePath } : {},
   );
 }
+
+/**
+ * Rebuilds the catalog pinned by the open project and verifies it against `project.json`.
+ * Returns null for an explicit placeholder project, which has no client JAR catalog.
+ */
+export function loadProjectCatalog(): Promise<CatalogSnapshot | null> {
+  return invokeCommand<CatalogSnapshot | null>("project_catalog");
+}

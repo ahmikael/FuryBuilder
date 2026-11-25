@@ -141,9 +141,11 @@ files while the app is running.
 - **Bottom panel.** Twelve tabs: `Blocks`, `Terrain`, `Heightmap`, `Biomes`, `Generators`,
   `Layers`, `Templates`, `Objects`, `Parametric`, `Build DSL`, `Analysis`, `Activity`.
   `Analysis` groups `Observation` and `Validation`; `Activity` groups `Console` and `History`.
-  The `Blocks` tab uses the curated quick-pick list in this beta; the exact-version catalog is
-  built and pinned for the project, and its counts are shown in Components and Review, but the
-  full palette/search is a later stage.
+  The `Blocks` tab uses the project's exact-version client-JAR catalog: every blockstate entry
+  is searchable, selecting one applies its first declared variant (multipart entries have no
+  single default), and command writes are admitted by the same catalog. Placeholder projects
+  show curated quick picks with an explicit `Curated fallback` notice. Categories, items and
+  the full state picker remain later stages.
   Your active tab and panel visibility are remembered between launches. A layout saved by an
   older panel format is discarded once; the default `Blocks` tab and open panels are used.
 - **Status bar.** Backend state, project, dimension, active job or tool, revision, chunk and
@@ -323,8 +325,9 @@ official server JAR; `Empty Project` does not.
 
 Placeholder textures are an explicit mode, not an error and not a hidden fallback. The
 viewport labels them and block data is never changed. Selecting a client source replaces
-placeholder mode. The `Blocks` tab remains on curated quick picks in this beta for every asset
-mode; a verified client JAR still builds and pins the exact-version catalog for the project.
+placeholder mode. A project with a verified client JAR rebuilds and verifies its pinned catalog
+when opened; a placeholder project shows curated quick picks with a visible `Curated fallback`
+notice instead of pretending the curated list is the exact-version catalog.
 
 ## 12. Quick troubleshooting
 

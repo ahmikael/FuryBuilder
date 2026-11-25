@@ -43,7 +43,8 @@ use world_application::{
     WorldService,
 };
 use world_domain::{
-    BiomeState, BlockBox, BlockDefinition, BlockPos, BlockState, ChunkPos, World, WorldInfo,
+    BiomeState, BlockBox, BlockDefinition, BlockPos, BlockRegistry, BlockSchemaEntry, BlockState,
+    ChunkPos, World, WorldInfo,
 };
 use world_io::{
     self, CopyObserver, JavaStructureError, JavaWorldAnalysis, PaletteCount, Structure,
@@ -729,8 +730,12 @@ fn install_world_service(
     state: &AppState,
     world: World,
     editor_state: &project_store::EditorState,
+    write_registry: Option<BlockRegistry>,
 ) -> Result<(), AppError> {
     let mut replacement = WorldService::from_world(world);
+    if let Some(registry) = write_registry {
+        replacement.set_write_registry(registry);
+    }
     replacement.set_workspace_policy(editor_state.workspace.clone())?;
     replacement.set_scene(editor_state.scene.clone())?;
     replacement.set_parametric_scene(editor_state.parametric.clone())?;
@@ -740,6 +745,95 @@ fn install_world_service(
         .map_err(|_| AppError::internal("world state lock poisoned"))?;
     *service = replacement;
     Ok(())
+}
+
+fn component_target_for(target: &project_store::ProjectTarget) -> ComponentTarget {
+    ComponentTarget {
+        profile_id: target.profile_id.clone(),
+        minecraft_version: target.minecraft_version.clone(),
+        data_version: target.data_version,
+        java_major: target.java_major,
+    }
+}
+
+/// Rebuilds the catalog pinned by a project and verifies every identity field. A project
+/// with explicit placeholder assets has no catalog; a different client JAR is a conflict,
+/// never a silent substitution.
+fn resolve_project_catalog(
+    manager: &ComponentManager,
+    catalog: &AssetCatalogService,
+    target: &project_store::ProjectTarget,
+    components: &project_store::ProjectComponents,
+) -> Result<Option<CatalogSnapshot>, AppError> {
+    let Some(assets) = components.assets.as_ref() else {
+        return Ok(None);
+    };
+    if assets.mode == ComponentMode::Placeholder {
+        return Ok(None);
+    }
+    let expected_id = assets
+        .catalog_id
+        .as_deref()
+        .ok_or_else(|| AppError::internal("installed assets have no catalog id"))?;
+    let expected_hash = assets
+        .catalog_hash
+        .as_deref()
+        .ok_or_else(|| AppError::internal("installed assets have no catalog hash"))?;
+    let expected_sha1 = assets
+        .client_jar_sha1
+        .as_deref()
+        .ok_or_else(|| AppError::internal("installed assets have no client JAR SHA-1"))?;
+    let report = manager
+        .status(
+            &component_target_for(target),
+            &ComponentRequirements::EDITOR,
+        )
+        .map_err(component_error)?;
+    let status = report
+        .status(ComponentKind::Assets)
+        .ok_or_else(|| AppError::internal("missing assets status"))?;
+    if status.mode == Some(ComponentMode::Placeholder) {
+        return Ok(None);
+    }
+    if !status.state.is_ready() {
+        return Err(AppError::new(
+            ErrorCode::Conflict,
+            status.error.clone().unwrap_or_else(|| {
+                "the project client assets are not available; relink the original client JAR"
+                    .to_owned()
+            }),
+        ));
+    }
+    let path = status
+        .path
+        .as_deref()
+        .ok_or_else(|| AppError::internal("ready client assets have no resolved JAR"))?;
+    let snapshot = catalog
+        .catalog(&AssetSourceSetting {
+            kind: AssetSelectionKind::ClientJar.as_str().to_owned(),
+            path: path.to_owned(),
+        })
+        .map_err(asset_catalog_error)?;
+    if snapshot.catalog_id != expected_id
+        || snapshot.catalog_hash != expected_hash
+        || snapshot.client_jar_sha1.as_deref() != Some(expected_sha1)
+        || snapshot.minecraft_version != target.minecraft_version.as_str()
+        || snapshot.data_version != target.data_version
+    {
+        return Err(AppError::new(
+            ErrorCode::Conflict,
+            "the selected client JAR does not reproduce the catalog pinned by this project; relink the original client JAR",
+        ));
+    }
+    Ok(Some(snapshot))
+}
+
+fn catalog_write_registry(catalog: &CatalogSnapshot) -> BlockRegistry {
+    BlockRegistry::from_schema(catalog.blocks.iter().map(|block| BlockSchemaEntry {
+        name: block.id.clone(),
+        properties: block.properties.keys().cloned().collect(),
+        default_properties: block.default_properties.clone().unwrap_or_default(),
+    }))
 }
 
 fn current_project(state: &AppState) -> Result<CurrentProject, AppError> {
@@ -852,12 +946,7 @@ fn resolve_project_components(
     target: &project_store::ProjectTarget,
     generated: Option<&project_store::VanillaProvenance>,
 ) -> Result<project_store::ProjectComponents, AppError> {
-    let component_target = ComponentTarget {
-        profile_id: target.profile_id.clone(),
-        minecraft_version: target.minecraft_version.clone(),
-        data_version: target.data_version,
-        java_major: target.java_major,
-    };
+    let component_target = component_target_for(target);
     let report = manager
         .status(
             &component_target,
@@ -1060,7 +1149,13 @@ fn create_project_inner(
     ensure_current_closed(state, &mut projects)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    install_world_service(state, world, &args.editor_state)?;
+    let project_catalog = resolve_project_catalog(manager, catalog, &target, &detail.components)?;
+    install_world_service(
+        state,
+        world,
+        &args.editor_state,
+        project_catalog.as_ref().map(catalog_write_registry),
+    )?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -1098,6 +1193,8 @@ pub fn project_prepare_cancel(state: State<'_, AppState>, job_id: String) -> boo
 #[tauri::command]
 pub fn project_open(
     state: State<'_, AppState>,
+    components: State<'_, ComponentManager>,
+    catalog: State<'_, AssetCatalogService>,
     folder: String,
 ) -> Result<OpenedProjectPayload, AppError> {
     let mut projects = state
@@ -1112,7 +1209,18 @@ pub fn project_open(
         .map_err(project_error)?;
     let info = world.info();
     state.jobs.cancel_all("the open project changed");
-    install_world_service(&state, world, &detail.editor_state)?;
+    let project_catalog = resolve_project_catalog(
+        components.inner(),
+        catalog.inner(),
+        &detail.target,
+        &detail.components,
+    )?;
+    install_world_service(
+        &state,
+        world,
+        &detail.editor_state,
+        project_catalog.as_ref().map(catalog_write_registry),
+    )?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -1298,6 +1406,8 @@ pub fn project_checkpoints(
 #[tauri::command]
 pub fn project_open_checkpoint(
     state: State<'_, AppState>,
+    components: State<'_, ComponentManager>,
+    catalog: State<'_, AssetCatalogService>,
     folder: Option<String>,
     revision: u64,
 ) -> Result<WorldInfo, AppError> {
@@ -1319,11 +1429,23 @@ pub fn project_open_checkpoint(
         .store
         .open_checkpoint(&folder, revision)
         .map_err(project_error)?;
+    let detail = projects.store.detail(&folder).map_err(project_error)?;
+    let project_catalog = resolve_project_catalog(
+        components.inner(),
+        catalog.inner(),
+        &detail.target,
+        &detail.components,
+    )?;
     let info = opened.world.info();
     state
         .jobs
         .cancel_all("the world was replaced by a checkpoint");
-    install_world_service(&state, opened.world, &opened.meta.editor_state)?;
+    install_world_service(
+        &state,
+        opened.world,
+        &opened.meta.editor_state,
+        project_catalog.as_ref().map(catalog_write_registry),
+    )?;
     if let Some(current) = projects.current.as_mut() {
         if current.folder == folder {
             current.editor_state = opened.meta.editor_state;
@@ -1817,7 +1939,14 @@ fn import_world_project(
     attempt.begin_publish()?;
     ensure_current_closed(state, &mut projects)?;
     state.jobs.cancel_all("the open project changed");
-    install_world_service(state, world, &editor_state)?;
+    let project_catalog =
+        resolve_project_catalog(manager, catalog, &detail.target, &detail.components)?;
+    install_world_service(
+        state,
+        world,
+        &editor_state,
+        project_catalog.as_ref().map(catalog_write_registry),
+    )?;
     projects.current = Some(CurrentProject {
         folder: folder.clone(),
         project_id: detail.summary.project_id.clone(),
@@ -3500,6 +3629,34 @@ pub fn assets_catalog(
     service.catalog(&source).map_err(asset_catalog_error)
 }
 
+/// Builds the catalog pinned by the open project. The catalog is rebuilt from the exact
+/// client JAR and every identity field is checked against `project.json`; a different JAR
+/// is reported as a conflict instead of silently replacing the palette. Placeholder projects
+/// return `None`, and the UI may then use curated quick picks with an explicit notice.
+#[tauri::command]
+pub fn project_catalog(
+    state: State<'_, AppState>,
+    components: State<'_, ComponentManager>,
+    catalog: State<'_, AssetCatalogService>,
+) -> Result<Option<CatalogSnapshot>, AppError> {
+    let (target, pins) = {
+        let projects = state
+            .projects
+            .lock()
+            .map_err(|_| AppError::internal("project state lock poisoned"))?;
+        let current = projects
+            .current
+            .as_ref()
+            .ok_or_else(|| AppError::new(ErrorCode::NotFound, "no project is open"))?;
+        let detail = projects
+            .store
+            .detail(&current.folder)
+            .map_err(project_error)?;
+        (detail.target, detail.components)
+    };
+    resolve_project_catalog(components.inner(), catalog.inner(), &target, &pins)
+}
+
 #[tauri::command]
 pub fn assets_clear_cache(
     service: State<'_, AssetBundleService>,
@@ -4502,7 +4659,7 @@ mod workspace_tests {
             (folder, detail, world)
         };
         let _ = detail;
-        install_world_service(&state, world, &project_store::EditorState::default())
+        install_world_service(&state, world, &project_store::EditorState::default(), None)
             .expect("service");
         (state, folder)
     }
@@ -5345,6 +5502,98 @@ mod component_command_tests {
             )
             .expect("save without replacing component pins");
         assert_eq!(store.open(folder).unwrap().0.components, pins);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn project_catalog_is_rebuilt_only_from_the_pinned_client_jar() {
+        let root = std::env::temp_dir().join(format!(
+            "furybuilder-project-catalog-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir(&root).unwrap();
+        let profile = default_profile();
+        let target = project_store::ProjectTarget::from_profile(&profile);
+        let write_jar = |name: &str, extra_blockstate: bool| {
+            let path = root.join(name);
+            let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
+            let options = zip::write::SimpleFileOptions::default();
+            let version = serde_json::json!({
+                "id": profile.minecraft_version,
+                "name": profile.minecraft_version,
+                "world_version": profile.data_version,
+                "pack_version": {
+                    "resource": profile.resource_pack_format,
+                    "data": profile.datapack_format,
+                },
+            });
+            for (entry, text) in [
+                ("version.json", version.to_string()),
+                (
+                    "assets/minecraft/blockstates/stone.json",
+                    r#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#.to_owned(),
+                ),
+            ] {
+                zip.start_file(entry, options).unwrap();
+                zip.write_all(text.as_bytes()).unwrap();
+            }
+            if extra_blockstate {
+                zip.start_file(
+                    "assets/minecraft/blockstates/chiseled_deepslate.json",
+                    options,
+                )
+                .unwrap();
+                zip.write_all(
+                    br#"{"variants":{"":{"model":"minecraft:block/chiseled_deepslate"}}}"#,
+                )
+                .unwrap();
+            }
+            zip.finish().unwrap();
+            path
+        };
+
+        let jar = write_jar("first.jar", false);
+        let manager = component_test_manager(&root);
+        manager
+            .relink(
+                ComponentKind::Assets,
+                &jar,
+                &ComponentTarget::from_profile(&profile),
+            )
+            .expect("verify first jar");
+        let catalog_service = AssetCatalogService::new();
+        let pins =
+            resolve_project_components(&manager, &catalog_service, &target, None).expect("pins");
+        let catalog = resolve_project_catalog(&manager, &catalog_service, &target, &pins)
+            .expect("catalog")
+            .expect("client jar catalog");
+        let assets = pins.assets.as_ref().expect("assets");
+        assert_eq!(Some(&catalog.catalog_id), assets.catalog_id.as_ref());
+        assert_eq!(Some(&catalog.catalog_hash), assets.catalog_hash.as_ref());
+        let registry = catalog_write_registry(&catalog);
+        assert!(registry.is_known("minecraft:stone"));
+        assert!(!registry.is_known("minecraft:chiseled_deepslate"));
+
+        let replacement = write_jar("replacement.jar", true);
+        manager
+            .relink(
+                ComponentKind::Assets,
+                &replacement,
+                &ComponentTarget::from_profile(&profile),
+            )
+            .expect("verify replacement jar");
+        let error = resolve_project_catalog(&manager, &catalog_service, &target, &pins)
+            .expect_err("a different jar is not the pinned catalog");
+        assert_eq!(error.code, ErrorCode::Conflict);
+
+        manager
+            .use_placeholder_assets(&ComponentTarget::from_profile(&profile))
+            .expect("placeholder");
+        assert!(
+            resolve_project_catalog(&manager, &catalog_service, &target, &pins)
+                .expect("placeholder has no catalog")
+                .is_none()
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 

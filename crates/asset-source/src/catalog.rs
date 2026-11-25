@@ -514,10 +514,18 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         item_icons.insert(id.clone(), icon);
     }
 
-    let (block_tags, block_tag_files) =
-        parse_tag_folders(&mut archive, &entry_names, "tags/block", &mut warnings);
-    let (item_tags, item_tag_files) =
-        parse_tag_folders(&mut archive, &entry_names, "tags/item", &mut warnings);
+    let (block_tags, block_tag_files) = parse_tag_folders(
+        &mut archive,
+        &entry_names,
+        &["tags/block", "tags/blocks"],
+        &mut warnings,
+    );
+    let (item_tags, item_tag_files) = parse_tag_folders(
+        &mut archive,
+        &entry_names,
+        &["tags/item", "tags/items"],
+        &mut warnings,
+    );
     let (atlases, atlas_sources) = read_atlases(&mut archive, &entry_names, &mut warnings);
 
     let mut item_entries: Vec<CatalogItem> = items
@@ -656,9 +664,26 @@ fn collect_asset_entries(
     folder: &str,
     extension: &str,
 ) -> Vec<(String, String)> {
+    collect_entries(entries, "assets", folder, extension)
+}
+
+fn collect_data_entries(
+    entries: &[String],
+    folder: &str,
+    extension: &str,
+) -> Vec<(String, String)> {
+    collect_entries(entries, "data", folder, extension)
+}
+
+fn collect_entries(
+    entries: &[String],
+    root: &str,
+    folder: &str,
+    extension: &str,
+) -> Vec<(String, String)> {
     let mut collected = Vec::new();
     for name in entries {
-        if let Some((namespace, path)) = parse_asset_entry(name, folder, extension) {
+        if let Some((namespace, path)) = parse_namespaced_entry(name, root, folder, extension) {
             let id = format!("{namespace}:{path}");
             if crate::bundle::valid_id(&id) {
                 collected.push((id, name.clone()));
@@ -669,8 +694,13 @@ fn collect_asset_entries(
     collected
 }
 
-fn parse_asset_entry(name: &str, folder: &str, extension: &str) -> Option<(String, String)> {
-    let rest = name.strip_prefix("assets/")?;
+fn parse_namespaced_entry(
+    name: &str,
+    root: &str,
+    folder: &str,
+    extension: &str,
+) -> Option<(String, String)> {
+    let rest = name.strip_prefix(root)?.strip_prefix('/')?;
     let (namespace, rest) = rest.split_once('/')?;
     let rest = rest.strip_prefix(folder)?.strip_prefix('/')?;
     let path = rest.strip_suffix(extension)?;
@@ -866,14 +896,25 @@ fn tags_for(tags: &BTreeMap<String, BTreeSet<String>>, id: &str) -> Vec<String> 
 fn parse_tag_folders(
     archive: &mut Archive,
     entries: &[String],
-    folder: &str,
+    folders: &[&str],
     warnings: &mut Vec<String>,
 ) -> (BTreeMap<String, BTreeSet<String>>, usize) {
-    let tag_files = collect_asset_entries(entries, folder, ".json");
+    // Block/item tags are data-pack content. 1.21+ uses the singular `block`/`item`
+    // directories; older releases use `blocks`/`items`. Only one layout exists in a real
+    // JAR, but reading both keeps the extractor honest across the supported releases.
+    let mut tag_files: BTreeMap<String, String> = BTreeMap::new();
+    for folder in folders {
+        for (tag_id, entry) in collect_data_entries(entries, folder, ".json") {
+            tag_files.entry(tag_id).or_insert(entry);
+        }
+    }
     if tag_files.len() > MAX_CATALOG_TAGS {
         push_warning(
             warnings,
-            format!("{folder} has more than {MAX_CATALOG_TAGS} tags; the rest were ignored"),
+            format!(
+                "{} tag files exceed the {MAX_CATALOG_TAGS} limit; the rest were ignored",
+                folders.join("/")
+            ),
         );
     }
     let mut by_entry: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
@@ -1338,12 +1379,12 @@ mod tests {
         );
         text(
             &mut zip,
-            "assets/minecraft/tags/block/mineable/pickaxe.json",
+            "data/minecraft/tags/block/mineable/pickaxe.json",
             r#"{"values":["minecraft:stone","minecraft:oak_stairs","example:ruby_block"]}"#,
         );
         text(
             &mut zip,
-            "assets/minecraft/tags/item/swords.json",
+            "data/minecraft/tags/item/swords.json",
             r#"{"values":["minecraft:diamond_sword"]}"#,
         );
         text(
@@ -1363,6 +1404,27 @@ mod tests {
             kind: "client_jar".to_owned(),
             path: path.display().to_string(),
         }
+    }
+
+    fn write_minimal_jar(dir: &TempDir, label: &str, files: &[(&str, &str)]) -> PathBuf {
+        let path = dir.path.join(format!("{label}.jar"));
+        let file = fs::File::create(&path).expect("create jar");
+        let mut zip = zip::ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("version.json", options)
+            .expect("version entry");
+        zip.write_all(&version_json()).expect("write version.json");
+        zip.start_file("assets/minecraft/blockstates/stone.json", options)
+            .expect("blockstate entry");
+        zip.write_all(br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#)
+            .expect("write blockstate");
+        for (name, text) in files {
+            zip.start_file(*name, options).expect("start file");
+            zip.write_all(text.as_bytes()).expect("write file");
+        }
+        zip.finish().expect("finish jar");
+        path
     }
 
     #[test]
@@ -1620,5 +1682,140 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("is not valid JSON")));
+    }
+
+    #[test]
+    fn tags_are_read_from_data_pack_singular_folders() {
+        let dir = TempDir::new("data-tags");
+        let path = write_minimal_jar(
+            &dir,
+            "data-tags",
+            &[
+                (
+                    "data/minecraft/tags/block/mineable/pickaxe.json",
+                    r##"{"values":["minecraft:stone","#minecraft:needs_stone_tool"]}"##,
+                ),
+                (
+                    "data/minecraft/tags/item/tools.json",
+                    r#"{"values":["minecraft:stone"]}"#,
+                ),
+            ],
+        );
+        let catalog = AssetCatalogService::new()
+            .build(&source(&path))
+            .expect("catalog");
+        assert_eq!(catalog.counts.block_tags, 1);
+        assert_eq!(catalog.counts.item_tags, 1);
+        let stone = catalog
+            .blocks
+            .iter()
+            .find(|block| block.id == "minecraft:stone")
+            .expect("stone");
+        assert_eq!(stone.tags, vec!["minecraft:mineable/pickaxe"]);
+        assert!(!stone.has_item);
+        assert!(catalog
+            .warnings
+            .iter()
+            .all(|warning| !warning.contains("tags/block")));
+    }
+
+    #[test]
+    fn tags_are_read_from_legacy_plural_data_folders() {
+        let dir = TempDir::new("legacy-tags");
+        let path = write_minimal_jar(
+            &dir,
+            "legacy-tags",
+            &[
+                (
+                    "data/minecraft/tags/blocks/mineable/pickaxe.json",
+                    r#"{"values":["minecraft:stone"]}"#,
+                ),
+                (
+                    "data/minecraft/tags/items/tools.json",
+                    r#"{"values":["minecraft:stone"]}"#,
+                ),
+            ],
+        );
+        let catalog = AssetCatalogService::new()
+            .build(&source(&path))
+            .expect("catalog");
+        assert_eq!(catalog.counts.block_tags, 1);
+        assert_eq!(catalog.counts.item_tags, 1);
+        let stone = catalog
+            .blocks
+            .iter()
+            .find(|block| block.id == "minecraft:stone")
+            .expect("stone");
+        assert_eq!(stone.tags, vec!["minecraft:mineable/pickaxe"]);
+    }
+
+    #[test]
+    fn item_models_are_the_fallback_when_item_definitions_are_absent() {
+        let dir = TempDir::new("item-models");
+        let path = write_minimal_jar(
+            &dir,
+            "item-models",
+            &[
+                (
+                    "assets/minecraft/models/item/diamond_sword.json",
+                    r#"{"parent":"minecraft:item/handheld","textures":{"layer0":"minecraft:item/diamond_sword"}}"#,
+                ),
+                (
+                    "assets/minecraft/models/item/handheld.json",
+                    r#"{"textures":{"layer0":"minecraft:item/handheld"}}"#,
+                ),
+                (
+                    "assets/minecraft/lang/en_us.json",
+                    r#"{"item.minecraft.diamond_sword":"Diamond Sword"}"#,
+                ),
+                (
+                    "data/minecraft/tags/item/swords.json",
+                    r#"{"values":["minecraft:diamond_sword"]}"#,
+                ),
+            ],
+        );
+        let catalog = AssetCatalogService::new()
+            .build(&source(&path))
+            .expect("catalog");
+        assert_eq!(catalog.counts.item_definitions, 0);
+        let sword = catalog
+            .items
+            .iter()
+            .find(|item| item.id == "minecraft:diamond_sword")
+            .expect("sword");
+        assert!(!sword.item_definition);
+        assert!(sword.block.is_none());
+        assert_eq!(sword.display_name.as_deref(), Some("Diamond Sword"));
+        assert_eq!(sword.tags, vec!["minecraft:swords"]);
+    }
+
+    #[test]
+    fn malformed_tag_and_atlas_files_warn_without_dropping_the_catalog() {
+        let dir = TempDir::new("malformed-extra");
+        let path = write_minimal_jar(
+            &dir,
+            "malformed-extra",
+            &[
+                (
+                    "data/minecraft/tags/block/valid.json",
+                    r#"{"values":["minecraft:stone"]}"#,
+                ),
+                ("data/minecraft/tags/block/broken.json", "{"),
+                ("assets/minecraft/atlases/broken.json", "{"),
+            ],
+        );
+        let catalog = AssetCatalogService::new()
+            .build(&source(&path))
+            .expect("catalog");
+        assert_eq!(catalog.blocks.len(), 1);
+        assert_eq!(catalog.counts.block_tags, 2);
+        assert!(catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("tags/block/broken.json")));
+        assert!(catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("atlases/broken.json")));
     }
 }

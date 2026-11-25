@@ -162,6 +162,7 @@ pub fn run() {
             commands::assets_clear_pack_stack,
             commands::assets_render_bundle,
             commands::assets_catalog,
+            commands::project_catalog,
             commands::assets_clear_cache,
             commands::components_status,
             commands::components_resolve,

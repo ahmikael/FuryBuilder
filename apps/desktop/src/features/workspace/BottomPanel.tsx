@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
   Blocks,
@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -44,6 +45,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { BackendState } from "@/hooks/use-backend";
+import type { CatalogSnapshot } from "@/assets/types";
 import type { BlockDefinition } from "@/editor/types";
 import { BOTTOM_PANEL_TABS, isBottomPanelTabId, type BottomPanelTabId } from "@/editor/layout";
 import { redoWorld, undoWorld } from "@/editor/commands";
@@ -59,6 +61,7 @@ import { BuildDslPanel } from "@/features/workspace/BuildDslPanel";
 import { ObservationPanel } from "@/features/workspace/ObservationPanel";
 import { ValidationPanel } from "@/features/workspace/ValidationPanel";
 import { isTauriRuntime } from "@/lib/ipc";
+import { loadProjectCatalog } from "@/lib/assets-api";
 import { fetchMcpActivity, type McpActivityEntry } from "@/lib/mcp-access";
 import { fetchBlockCatalog } from "@/lib/world-api";
 import { blockColor } from "@/renderer/assets";
@@ -69,8 +72,53 @@ import { useToolStore } from "@/state/tool-store";
 import { useWorldStore } from "@/state/world-store";
 import { cn } from "@/lib/utils";
 
+interface PaletteEntry {
+  name: string;
+  displayName: string | null;
+  properties: Record<string, string>;
+  multipart: boolean;
+}
+
+interface PaletteLoad {
+  catalog: CatalogSnapshot | null;
+  curated: BlockDefinition[] | null;
+  fallbackReason: string | null;
+  error: string | null;
+}
+
+const PLACEHOLDER_REASON =
+  "This project uses placeholder textures, so it has no client JAR catalog. Showing curated quick picks instead.";
+
+async function loadPalette(): Promise<PaletteLoad> {
+  let fallbackReason: string;
+  try {
+    const snapshot = await loadProjectCatalog();
+    if (snapshot) {
+      return { catalog: snapshot, curated: null, fallbackReason: null, error: null };
+    }
+    fallbackReason = PLACEHOLDER_REASON;
+  } catch (reason: unknown) {
+    fallbackReason = `The project catalog could not be rebuilt: ${
+      reason instanceof Error ? reason.message : String(reason)
+    }. Showing curated quick picks instead.`;
+  }
+  try {
+    const curated = await fetchBlockCatalog();
+    return { catalog: null, curated, fallbackReason, error: null };
+  } catch (reason: unknown) {
+    return {
+      catalog: null,
+      curated: null,
+      fallbackReason,
+      error: reason instanceof Error ? reason.message : String(reason),
+    };
+  }
+}
+
 function BlocksPanel() {
-  const [catalog, setCatalog] = useState<BlockDefinition[] | null>(null);
+  const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
+  const [curated, setCurated] = useState<BlockDefinition[] | null>(null);
+  const [fallbackReason, setFallbackReason] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const selectedBlock = useToolStore((state) => state.selectedBlock);
@@ -78,30 +126,66 @@ function BlocksPanel() {
   const setReplaceFrom = useToolStore((state) => state.setReplaceFrom);
   const replaceFrom = useToolStore((state) => state.replaceFrom);
 
+  const apply = useCallback((result: PaletteLoad) => {
+    setCatalog(result.catalog);
+    setCurated(result.curated);
+    setFallbackReason(result.fallbackReason);
+    setError(result.error);
+  }, []);
+
   useEffect(() => {
     if (!isTauriRuntime()) return;
     let cancelled = false;
-    fetchBlockCatalog()
-      .then((definitions) => {
-        if (!cancelled) setCatalog(definitions);
-      })
-      .catch((reason: unknown) => {
-        if (!cancelled) setError(reason instanceof Error ? reason.message : String(reason));
-      });
+    void loadPalette().then((result) => {
+      if (!cancelled) apply(result);
+    });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [apply]);
+
+  const retry = () => {
+    setCatalog(null);
+    setCurated(null);
+    setFallbackReason(null);
+    setError(null);
+    void loadPalette().then(apply);
+  };
+
+  const palette = useMemo<PaletteEntry[]>(() => {
+    if (catalog) {
+      return catalog.blocks.map((block) => ({
+        name: block.id,
+        displayName: block.displayName,
+        properties: block.defaultProperties ?? {},
+        multipart: block.multipart,
+      }));
+    }
+    if (curated) {
+      return curated.map((entry) => ({
+        name: entry.name,
+        displayName: null,
+        properties: entry.properties,
+        multipart: false,
+      }));
+    }
+    return [];
+  }, [catalog, curated]);
 
   const filtered = useMemo(() => {
-    if (!catalog) return [];
     const needle = search.trim().toLowerCase();
-    if (!needle) return catalog;
-    return catalog.filter((entry) => entry.name.toLowerCase().includes(needle));
-  }, [catalog, search]);
+    if (!needle) return palette;
+    return palette.filter(
+      (entry) =>
+        entry.name.toLowerCase().includes(needle) ||
+        (entry.displayName?.toLowerCase().includes(needle) ?? false),
+    );
+  }, [palette, search]);
 
-  const definition = catalog?.find((entry) => entry.name === selectedBlock.name) ?? null;
+  const definition = palette.find((entry) => entry.name === selectedBlock.name) ?? null;
   const properties = Object.entries(selectedBlock.properties ?? {});
+  const source = catalog ? "clientJar" : curated ? "curated" : null;
+  const loading = !catalog && !curated && !error;
 
   if (!isTauriRuntime()) {
     return (
@@ -127,18 +211,7 @@ function BlocksPanel() {
           <EmptyTitle>Block catalog unavailable</EmptyTitle>
           <EmptyDescription>{error}</EmptyDescription>
         </EmptyHeader>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => {
-            setError(null);
-            fetchBlockCatalog()
-              .then(setCatalog)
-              .catch((reason: unknown) =>
-                setError(reason instanceof Error ? reason.message : String(reason)),
-              );
-          }}
-        >
+        <Button size="sm" variant="outline" onClick={retry}>
           Retry
         </Button>
       </Empty>
@@ -148,26 +221,43 @@ function BlocksPanel() {
   return (
     <div className="flex min-h-0 flex-1 gap-4">
       <div className="flex min-h-0 w-80 flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge variant={source === "clientJar" ? "secondary" : "outline"}>
+            {source === "clientJar"
+              ? `Client JAR · ${catalog?.minecraftVersion ?? ""}`
+              : "Curated quick picks"}
+          </Badge>
+          {catalog ? (
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {catalog.counts.blocks} blocks · {catalog.catalogId}
+            </span>
+          ) : null}
+        </div>
+        {fallbackReason ? (
+          <Alert>
+            <AlertTriangle />
+            <AlertTitle>Curated fallback</AlertTitle>
+            <AlertDescription>{fallbackReason}</AlertDescription>
+          </Alert>
+        ) : null}
         <div className="relative">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             className="h-9 pl-9"
-            placeholder={catalog ? `Search ${catalog.length} blocks…` : "Loading catalog…"}
+            placeholder={loading ? "Loading catalog…" : `Search ${palette.length} blocks…`}
             value={search}
-            disabled={!catalog}
+            disabled={loading}
             onChange={(event) => setSearch(event.target.value)}
             aria-label="Search blocks"
           />
         </div>
         <div className="scrollbar-thin flex min-h-0 flex-1 flex-wrap content-start gap-1.5 overflow-y-auto">
-          {!catalog ? (
+          {loading ? (
             <div className="flex items-center gap-1.5 p-1 text-xs text-muted-foreground">
-              <Loader2 className="size-3 animate-spin" /> Reading block registry…
+              <Loader2 className="size-3 animate-spin" /> Reading project catalog…
             </div>
           ) : filtered.length === 0 ? (
-            <div className="p-1 text-xs text-muted-foreground">
-              No curated block matches “{search}”.
-            </div>
+            <div className="p-1 text-xs text-muted-foreground">No block matches “{search}”.</div>
           ) : (
             filtered.map((entry) => {
               const active = entry.name === selectedBlock.name;
@@ -175,7 +265,7 @@ function BlocksPanel() {
                 <button
                   key={entry.name}
                   type="button"
-                  title={entry.name}
+                  title={entry.displayName ? `${entry.displayName} · ${entry.name}` : entry.name}
                   aria-pressed={active}
                   onClick={() =>
                     setSelectedBlock({
@@ -212,14 +302,25 @@ function BlocksPanel() {
             <div className="min-w-0">
               <div className="truncate font-mono text-sm">{selectedBlock.name}</div>
               <div className="text-xs text-muted-foreground">
-                {definition ? "Curated state" : "Custom state"} · brush/paste target
+                {definition
+                  ? source === "clientJar"
+                    ? definition.multipart
+                      ? "Client JAR multipart state"
+                      : "Client JAR state"
+                    : "Curated quick pick"
+                  : "Custom state"}{" "}
+                · brush/paste target
               </div>
             </div>
           </div>
 
           <div className="space-y-2">
             {properties.length === 0 ? (
-              <div className="text-xs text-muted-foreground">No state properties.</div>
+              <div className="text-xs text-muted-foreground">
+                {definition?.multipart
+                  ? "No single JAR default: multipart states are assembled by the game."
+                  : "No state properties."}
+              </div>
             ) : (
               properties.map(([key, value]) => (
                 <label key={key} className="grid grid-cols-[1fr_1.4fr] items-center gap-1.5">
@@ -282,7 +383,9 @@ function BlocksPanel() {
               </Button>
             ) : null}
             <div className="mt-1.5">
-              Unknown property values are rejected by the Rust registry, never silently coerced.
+              {source === "clientJar"
+                ? "Block names and property keys come from the project's pinned client JAR catalog."
+                : "Curated quick picks are shown because this project has no client JAR catalog."}
             </div>
           </div>
         </CardContent>

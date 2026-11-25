@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами. Чтение NBT чанка и запись правок привязаны к ожидаемому профилю; учитываются различия `Status` и ванильного реестра биомов, содержимое block entities сохраняется. Запись по-прежнему проверена только для 1.21.4. Добавлены конвертация биомов 1.13–1.17 и диагностика split layout 26.1–26.3 без допуска этих версий к импорту и записи. Следующий шаг — каталог из client JAR; прогресс и проверки в §21.
+> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами. Чтение NBT чанка и запись правок привязаны к ожидаемому профилю; учитываются различия `Status` и ванильного реестра биомов, содержимое block entities сохраняется. Запись по-прежнему проверена только для 1.21.4. Добавлены конвертация биомов 1.13–1.17 и диагностика split layout 26.1–26.3 без допуска этих версий к импорту и записи. Каталог блоков/предметов из client JAR стал источником истины для палитры и записи; curated список остался quick picks/fallback. Следующий шаг — состояния и значения свойств; прогресс и проверки в §21.
 > Дата: 2026-11-22; обновлено 2026-11-25 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -42,7 +42,7 @@
 | Рендер | `MeshBasicMaterial`, тёмный фон, нет освещения; `GridHelper` 256×256 на y=64.04 | `renderer/viewport-renderer.ts` |
 | Границы чанков | Жёстко `yBottom = -64`, `yTop = 72` | `renderer/viewport-renderer.ts` |
 | Дерево мира | Три захардкоженных измерения, Overworld всегда “loaded” | `features/workspace/WorldTree.tsx` |
-| Блоки и предметы | Курируемый каталог ~60 блоков остаётся fallback/quick picks и для валидации; `asset-source::catalog` строит полный каталог точной версии из client JAR (blockstates, item definitions/models, textures, lang, tags, atlases) | `crates/asset-source/src/catalog.rs`, `crates/world-domain/src/registry.rs` |
+| Блоки и предметы | Курируемый каталог ~60 блоков остаётся quick picks/fallback; `asset-source::catalog` строит полный каталог точной версии из client JAR (blockstates, item definitions/models, textures, lang, tags, atlases), палитра и допуск записи используют закреплённый в проекте каталог | `crates/asset-source/src/catalog.rs`, `crates/world-domain/src/registry.rs` |
 
 Вывод: проблема не в одном экране. Нужно ввести **версию как сквозную модель**, затем аккуратно провести её через backend, компоненты, проект, UI и рендер.
 
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P1-09` — Извлечение каталога из client JAR, curated список только для quick picks/fallback. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P1-10` — Property keys/defaults/validation по blockstates; item definitions/models. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P1-10`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P1-11`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1543,7 +1543,7 @@ UI:
 
 #### B. Ассеты и каталог
 
-- [ ] `P1-09` Извлекать из client JAR blockstates, block/item models, item definitions, textures, lang и tags для каталога; curated список — quick picks/fallback.
+- [x] `P1-09` Извлекать из client JAR blockstates, block/item models, item definitions, textures, lang и tags для каталога; curated список — quick picks/fallback.
 - [ ] `P1-10` Property keys/defaults/validation по blockstates; item definitions/models.
 - [ ] `P1-11` Atlas + кэш `version + jarSha1 + packStackHash + catalogSchema`.
 - [ ] `P1-12` Version-aware палитра: поиск, недавние, избранное, базовые категории.
@@ -1691,6 +1691,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | Каталог из client JAR | Каталог, пересобранный из закреплённого client JAR, стал источником истины для палитры и допуска записи: открытие проекта сверяет `catalogId`, `catalogHash`, SHA-1 JAR, версию и `DataVersion` с манифестом и при расхождении возвращает конфликт без подмены; тот же реестр установлен в `WorldService` и используется `Validation`. Палитра ищет по id и отображаемому имени, применяет первый вариант blockstate, multipart не выдумывает default. Placeholder-проект и сбой пересборки показывают curated quick picks с явным `Curated fallback`; curated `BlockRegistry` больше не участвует в допуске записи. Теги читаются из `data/<ns>/tags/block|item` с fallback на plural-раскладку. Реальный 1.21.4 JAR: 1,097 блоков, 1,385 предметов, 186/173 файлов block/item tags, 14 atlases. Точные defaults и валидация значений остаются в P1-10 | см. `git log` | 733 Rust tests (72 suites), 377 TS tests + 1 skipped (378), clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Split layout Java 26.1–26.3 | Добавлены 5 точных профилей без допуска к world I/O. Отдельная диагностика читает `level.dat`, split worldgen metadata и заголовки `.mca`, обнаруживает измерения и папки игроков, отличает неполные и смешанные сохранения. Не подсчитывает сущности и не выдумывает границы Y. Нативный codec, включая новую палитру 26.3, ждёт проверки на реальных фикстурах в P3. shadcn: существующие `Alert` и `Badge`, стили не менялись | см. `git log` | Синтетические сохранения для 5 релизов, неизменность источника, отказ при битом заголовке и junction, блокировка мастера, 2 golden-эталона; 726 Rust tests (72 suites), 374 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format; shadcn audit |
 | 2026-11-25 | Различия современных релизов | По точному профилю проверяется исходное значение `Status`: `full` для 1.18–1.19, `minecraft:full` с 1.20. Чтение не переписывает поле; импорт, запись, анализ производных данных и parity используют одно правило. Ванильные реестры биомов (61/63/64/65 записей) сверены для всех 27 релизов. Биомы вне реестра сохраняются без подмены, в отчёте импорта и диагностике есть предупреждение. Формат секций общий, допуск world I/O не расширен | см. `git log` | Проверены границы `Status`, хэши всех наборов биомов, сохранение нестандартных ID при импорте и 2 golden-эталона экспорта; 720 Rust tests (72 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | NBT чанков по профилю | Декодер и overlay используют ожидаемый профиль; другой `DataVersion` отклоняется, даже если формат секций совпадает. Общий layout задаёт поля чанка, секций, палитр и списков сущностей. Патч меняет только палитру и упакованные индексы, сохраняя соседние теги контейнера. Оба режима записи проверяют полный NBT block entities (включая вложенные предметы и неизвестные данные); сравнение NBT различает биты NaN и знакового нуля. Допуск миров не расширен | см. `git log` | Синтетический чанк под 27 профилями и отказ при несовпадении версии; round-trip и отказ при подмене NBT; 2 golden-эталона без изменений; 715 Rust tests (72 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |

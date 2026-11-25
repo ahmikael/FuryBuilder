@@ -128,5 +128,5 @@ checkpoint and keep the original world untouched.
 | KL-41 | Diagnostics      | Logs are local, bounded and redacted; no telemetry or crash upload                     |
 | KL-42 | Project storage  | No project deletion or folder relocation in the UI; rename is display-only             |
 | KL-43 | Release evidence | No external beta-user field data yet; checks use internal harnesses and one machine    |
-| KL-44 | Catalog          | The exact-version catalog is built and pinned, but the Blocks tab still uses curated quick picks |
+| KL-44 | Catalog          | The exact-version catalog drives the Blocks palette and writes; categories, item browsing and multipart defaults are still incomplete |
 | KL-45 | Project formats  | Projects with older manifest, snapshot or checkpoint schemas are refused, not migrated |

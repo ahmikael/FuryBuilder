@@ -70,6 +70,50 @@ fn execute_updates_revision_query_and_audit() {
 }
 
 #[test]
+fn catalog_write_registry_admits_catalog_blocks_while_quick_picks_stay_curated() {
+    let mut service = WorldService::new();
+    service.set_write_registry(BlockRegistry::from_schema([
+        world_domain::BlockSchemaEntry {
+            name: "minecraft:stone".to_owned(),
+            properties: Default::default(),
+            default_properties: Default::default(),
+        },
+        world_domain::BlockSchemaEntry {
+            name: "minecraft:chiseled_deepslate".to_owned(),
+            properties: Default::default(),
+            default_properties: Default::default(),
+        },
+    ]));
+    assert!(service.registry().is_known("minecraft:stone"));
+    assert!(!service.registry().is_known("minecraft:chiseled_deepslate"));
+
+    service
+        .execute(set_block(
+            BlockPos::new(1, 64, 1),
+            "minecraft:chiseled_deepslate",
+        ))
+        .expect("catalog block is writable");
+    let query = service
+        .query(Query::GetBlock {
+            dimension: "minecraft:overworld".to_owned(),
+            pos: BlockPos::new(1, 64, 1),
+        })
+        .unwrap();
+    match query {
+        QueryResult::Block { state, .. } => {
+            assert_eq!(state, self::state("minecraft:chiseled_deepslate"))
+        }
+        other => panic!("unexpected query result: {other:?}"),
+    }
+
+    let bounds = BlockBox::new(BlockPos::new(1, 64, 1), BlockPos::new(1, 64, 1)).unwrap();
+    let mut validation = validation_query(bounds);
+    validation.rules = vec![ValidationRuleId::ExportCompatibility];
+    let report = service.validate_region(&validation).unwrap();
+    assert!(report.findings.is_empty(), "{:?}", report.findings);
+}
+
+#[test]
 fn preview_never_mutates_world_or_history() {
     let service = WorldService::new();
     let preview = service

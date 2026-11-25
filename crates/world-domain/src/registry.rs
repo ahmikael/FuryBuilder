@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::block::{BlockState, BlockStateError};
 use thiserror::Error;
@@ -218,19 +218,64 @@ pub struct BlockDefinition {
     pub properties: BTreeMap<String, String>,
 }
 
+/// One block schema derived from a project catalog. Only the property keys are needed for
+/// write admission; the catalog keeps the full value sets for the state picker.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockSchemaEntry {
+    pub name: String,
+    pub properties: BTreeSet<String>,
+    pub default_properties: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone)]
+struct RegistryEntry {
+    defaults: BTreeMap<String, String>,
+    properties: BTreeSet<String>,
+}
+
 /// Versioned catalog of known blocks and their default property sets.
 #[derive(Debug, Clone)]
 pub struct BlockRegistry {
-    blocks: BTreeMap<&'static str, BTreeMap<&'static str, &'static str>>,
+    blocks: BTreeMap<String, RegistryEntry>,
 }
 
 impl BlockRegistry {
     pub fn target_1_21_4() -> Self {
         let mut blocks = BTreeMap::new();
         for (name, defaults) in CATALOG {
-            let map = defaults.iter().copied().collect();
-            blocks.insert(*name, map);
+            let defaults: BTreeMap<String, String> = defaults
+                .iter()
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect();
+            let properties = defaults.keys().cloned().collect();
+            blocks.insert(
+                (*name).to_owned(),
+                RegistryEntry {
+                    defaults,
+                    properties,
+                },
+            );
         }
+        Self { blocks }
+    }
+
+    /// Builds a registry from an exact project catalog. Catalog blocks may declare no
+    /// default properties (multipart blockstates); their property keys still admit writes.
+    pub fn from_schema(entries: impl IntoIterator<Item = BlockSchemaEntry>) -> Self {
+        let blocks = entries
+            .into_iter()
+            .map(|entry| {
+                let mut properties = entry.properties;
+                properties.extend(entry.default_properties.keys().cloned());
+                (
+                    entry.name,
+                    RegistryEntry {
+                        defaults: entry.default_properties,
+                        properties,
+                    },
+                )
+            })
+            .collect();
         Self { blocks }
     }
 
@@ -247,13 +292,14 @@ impl BlockRegistry {
     }
 
     pub fn default_state(&self, name: &str) -> Result<BlockState, RegistryError> {
-        let defaults = self
+        let defaults = &self
             .blocks
             .get(name)
-            .ok_or_else(|| RegistryError::UnknownBlock(name.to_owned()))?;
+            .ok_or_else(|| RegistryError::UnknownBlock(name.to_owned()))?
+            .defaults;
         let properties = defaults
             .iter()
-            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .map(|(key, value)| (key.clone(), value.clone()))
             .collect();
         Ok(BlockState::new(name, properties)?)
     }
@@ -264,22 +310,19 @@ impl BlockRegistry {
         name: &str,
         overrides: BTreeMap<String, String>,
     ) -> Result<BlockState, RegistryError> {
-        let defaults = self
+        let entry = self
             .blocks
             .get(name)
             .ok_or_else(|| RegistryError::UnknownBlock(name.to_owned()))?;
         for key in overrides.keys() {
-            if !defaults.contains_key(key.as_str()) {
+            if !entry.properties.contains(key.as_str()) {
                 return Err(RegistryError::UnknownProperty {
                     block: name.to_owned(),
                     property: key.clone(),
                 });
             }
         }
-        let mut properties: BTreeMap<String, String> = defaults
-            .iter()
-            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
-            .collect();
+        let mut properties: BTreeMap<String, String> = entry.defaults.clone();
         properties.extend(overrides);
         Ok(BlockState::new(name, properties)?)
     }
@@ -287,12 +330,12 @@ impl BlockRegistry {
     /// Validates a state against the catalog. Missing properties are allowed for
     /// imported data; unknown blocks/properties are rejected for command writes.
     pub fn validate(&self, state: &BlockState) -> Result<(), RegistryError> {
-        let defaults = self
+        let entry = self
             .blocks
             .get(state.name())
             .ok_or_else(|| RegistryError::UnknownBlock(state.name().to_owned()))?;
         for key in state.properties().keys() {
-            if !defaults.contains_key(key.as_str()) {
+            if !entry.properties.contains(key.as_str()) {
                 return Err(RegistryError::UnknownProperty {
                     block: state.name().to_owned(),
                     property: key.clone(),
@@ -302,20 +345,17 @@ impl BlockRegistry {
         Ok(())
     }
 
-    pub fn names(&self) -> impl Iterator<Item = &'static str> + '_ {
-        self.blocks.keys().copied()
+    pub fn names(&self) -> impl Iterator<Item = &str> + '_ {
+        self.blocks.keys().map(String::as_str)
     }
 
     /// Full curated catalog with canonical defaults, ordered by block id.
     pub fn definitions(&self) -> Vec<BlockDefinition> {
         self.blocks
             .iter()
-            .map(|(name, defaults)| BlockDefinition {
-                name: (*name).to_owned(),
-                properties: defaults
-                    .iter()
-                    .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
-                    .collect(),
+            .map(|(name, entry)| BlockDefinition {
+                name: name.clone(),
+                properties: entry.defaults.clone(),
             })
             .collect()
     }
@@ -409,5 +449,38 @@ mod tests {
             stairs.properties.get("waterlogged").map(String::as_str),
             Some("false")
         );
+    }
+
+    #[test]
+    fn schema_registry_admits_catalog_blocks_and_property_keys() {
+        let registry = BlockRegistry::from_schema([
+            BlockSchemaEntry {
+                name: "minecraft:deepslate_bricks".to_owned(),
+                properties: BTreeSet::new(),
+                default_properties: BTreeMap::new(),
+            },
+            BlockSchemaEntry {
+                name: "minecraft:oak_fence".to_owned(),
+                properties: ["east", "north", "south", "west"]
+                    .into_iter()
+                    .map(ToOwned::to_owned)
+                    .collect(),
+                default_properties: BTreeMap::new(),
+            },
+        ]);
+        assert!(registry.is_known("minecraft:deepslate_bricks"));
+        assert!(registry
+            .validate(&"minecraft:deepslate_bricks".parse().unwrap())
+            .is_ok());
+        assert!(registry
+            .validate(&"minecraft:oak_fence[north=true]".parse().unwrap())
+            .is_ok());
+        assert!(matches!(
+            registry.validate(&"minecraft:oak_fence[axis=x]".parse().unwrap()),
+            Err(RegistryError::UnknownProperty { .. })
+        ));
+        assert!(registry
+            .validate(&"minecraft:oak_stairs".parse().unwrap())
+            .is_err());
     }
 }

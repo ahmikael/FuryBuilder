@@ -1,7 +1,8 @@
 # Content catalog
 
-Status: baseline client-JAR catalog and explicit placeholder mode. One project has one
-Minecraft version, and its block/item catalog is built from that version's exact client JAR.
+Status: the project-pinned client-JAR catalog is authoritative for the `Blocks` palette and
+command writes. The curated `BlockRegistry` is only a quick-pick list and the explicit fallback
+when a project has no client JAR catalog (for example, placeholder assets).
 
 ## Source and licensing
 
@@ -28,11 +29,12 @@ copies, edits or deletes the selected file.
 ## Placeholder mode
 
 Placeholder textures are an explicit selection, not a silent fallback. Placeholder mode has no
-client JAR, so FuryBuilder cannot build a block/item catalog for it: the palette stays on the
-curated quick picks, the viewport uses original FuryBuilder textures, and the component status
-reports `placeholder`/`unverified` with a warning. Block names, states and world data are
-unchanged. Selecting a real client source replaces placeholder mode; choosing placeholder
-clears the resource-pack stack because packs require a client JAR.
+client JAR, so FuryBuilder cannot build a block/item catalog for it: the `Blocks` palette shows
+curated quick picks with a visible `Curated fallback` notice, the viewport uses original
+FuryBuilder textures, and the component status reports `placeholder`/`unverified` with a warning.
+Block names, states and world data are unchanged. Selecting a real client source replaces
+placeholder mode; choosing placeholder clears the resource-pack stack because packs require a
+client JAR.
 
 ## What is read
 
@@ -45,8 +47,8 @@ clears the resource-pack stack because packs require a client JAR.
 | `assets/<ns>/items/<item>.json` | Item ids and item model references (1.21.4+) |
 | `assets/<ns>/textures/**/*.png` | Texture existence and counts (catalog does not decode images) |
 | `assets/<ns>/lang/en_us.json` | Display names; other languages are counted |
-| `assets/<ns>/tags/block/**/*.json` | Direct block tag membership |
-| `assets/<ns>/tags/item/**/*.json` | Direct item tag membership |
+| `data/<ns>/tags/block/**/*.json` | Direct block tag membership (1.21+; `tags/blocks` on older releases) |
+| `data/<ns>/tags/item/**/*.json` | Direct item tag membership (1.21+; `tags/items` on older releases) |
 | `assets/<ns>/atlases/*.json` | Atlas ids and source descriptors |
 
 Only the `minecraft` namespace is vanilla. Other namespaces found in a modified JAR are
@@ -66,17 +68,34 @@ reported as entries with an explicit warning; they are not silently presented as
 `DataVersion` and the client JAR SHA-1. `catalogId` is
 `java-<version>-<first 16 hex of catalogHash>`. The catalog cache is process-local and keyed
 by the JAR path, size, modification time and catalog schema. A project pins `catalogId` and
-`catalogHash` in its schema-2 manifest; a persistent catalog cache and the full palette/search
-remain later stages.
+`catalogHash` in its schema-2 manifest.
 
-Exposed as the `assets_catalog` Tauri command and `loadAssetCatalog()` in the desktop client.
+## Project authority
+
+Opening a project rebuilds the catalog from the selected client JAR and checks the catalog id,
+catalog hash, client JAR SHA-1, Minecraft version and `DataVersion` against the manifest. A
+different JAR is a conflict, not a silent substitution. The resulting catalog is installed as
+the write-admission registry for the open world, so every block placed, filled, painted or
+generated through the command API must exist in the same catalog. The `Validation` rules use
+that registry too.
+
+`project_catalog` (desktop) / `loadProjectCatalog()` (UI) returns the rebuilt catalog. If the
+project explicitly uses placeholder assets, it returns `null`; the palette then loads
+`block_catalog` curated quick picks and displays the fallback reason. A rebuild failure is also
+shown as a fallback notice with the underlying error; the palette never pretends the curated
+list is the exact version catalog.
+
+Exposed as the `assets_catalog` Tauri command and `loadAssetCatalog()` in the desktop client
+for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open project.
 
 ## Honest limits
 
 - `defaultProperties` is the first declared blockstate variant. For multipart blocks it is
   `null`, because the real default state lives in game code, not in the JAR. Exact registry
-  defaults remain a later catalog task.
+  defaults and value validation remain a later catalog task.
 - Creative categories, technical/creative-only flags and item components are not assigned yet.
+- The palette lists blocks only. Item definitions are extracted and counted, but the item
+  browser and placeable-item duplication are later stages.
 - Tag membership is direct. Transitive `#tag` references remain available in the JAR and are
   not flattened into each entry.
 - A texture missing from the JAR produces a null icon and a warning. The asset-index fallback
@@ -84,7 +103,9 @@ Exposed as the `assets_catalog` Tauri command and `loadAssetCatalog()` in the de
 - Versions before item definitions fall back to item models and language keys. Numeric ids and
   pre-1.8 registries are outside the baseline catalog and belong to the legacy stage.
 - Tests use a synthetic 1.21.4 client JAR. The real-JAR matrix and captured catalog snapshots
-  belong to the full fixture stage; manual QA downloads a real JAR.
+  belong to the full fixture stage; manual QA downloads a real JAR. A real 1.21.4 client JAR
+  currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
+  173 item tag files and 14 atlases.
 
 ## Safety bounds
 

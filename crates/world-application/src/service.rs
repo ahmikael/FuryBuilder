@@ -69,6 +69,9 @@ struct StoredOutcome {
 #[derive(Debug)]
 pub struct WorldService {
     registry: BlockRegistry,
+    /// Catalog-derived admission for command writes. The curated registry remains the
+    /// quick-pick list exposed to the UI and the fallback when no project catalog exists.
+    write_registry: BlockRegistry,
     world: World,
     history: Vec<HistoryEntry>,
     redo: Vec<HistoryEntry>,
@@ -93,6 +96,7 @@ impl WorldService {
     pub fn new() -> Self {
         Self {
             registry: BlockRegistry::target_1_21_4(),
+            write_registry: BlockRegistry::target_1_21_4(),
             world: World::new_empty(),
             history: Vec::new(),
             redo: Vec::new(),
@@ -118,6 +122,7 @@ impl WorldService {
     pub fn from_world(world: World) -> Self {
         Self {
             registry: BlockRegistry::target_1_21_4(),
+            write_registry: BlockRegistry::target_1_21_4(),
             world,
             history: Vec::new(),
             redo: Vec::new(),
@@ -139,6 +144,16 @@ impl WorldService {
 
     pub fn registry(&self) -> &BlockRegistry {
         &self.registry
+    }
+
+    /// Replaces the catalog used to admit command writes. Callers install the project's
+    /// exact client-JAR catalog here; the curated quick-pick registry is left untouched.
+    pub fn set_write_registry(&mut self, registry: BlockRegistry) {
+        self.write_registry = registry;
+    }
+
+    pub fn write_registry(&self) -> &BlockRegistry {
+        &self.write_registry
     }
 
     /// Returns the persisted workspace policy currently enforced by this service.
@@ -753,7 +768,8 @@ impl WorldService {
             support_state: None,
             protected_regions,
         };
-        let outcome = validation::validate(dimension, &request)?;
+        let outcome =
+            validation::validate_with_registry(dimension, &request, &self.write_registry)?;
         let counts =
             outcome
                 .findings
@@ -1571,29 +1587,29 @@ impl WorldService {
             return Ok(());
         }
         match operation {
-            Operation::SetBlock { state, .. } => self.registry.validate(state)?,
+            Operation::SetBlock { state, .. } => self.write_registry.validate(state)?,
             Operation::Batch { changes, .. } => {
                 for change in changes {
-                    self.registry.validate(&change.state)?;
+                    self.write_registry.validate(&change.state)?;
                 }
             }
-            Operation::FillCuboid { state, .. } => self.registry.validate(state)?,
+            Operation::FillCuboid { state, .. } => self.write_registry.validate(state)?,
             Operation::Replace { to, .. } => {
-                self.registry.validate(to)?;
+                self.write_registry.validate(to)?;
                 // `from` is a predicate; accept any syntactically valid state, including
                 // imported unknown block states.
             }
-            Operation::TerrainBrush { material, .. } => self.registry.validate(material)?,
+            Operation::TerrainBrush { material, .. } => self.write_registry.validate(material)?,
             Operation::GenerateHeightmap {
                 surface, filler, ..
             } => {
-                self.registry.validate(surface)?;
-                self.registry.validate(filler)?;
+                self.write_registry.validate(surface)?;
+                self.write_registry.validate(filler)?;
             }
-            Operation::GenerateRoad { surface, .. } => self.registry.validate(surface)?,
+            Operation::GenerateRoad { surface, .. } => self.write_registry.validate(surface)?,
             Operation::GenerateRiver { water, bed, .. } => {
-                self.registry.validate(water)?;
-                self.registry.validate(bed)?;
+                self.write_registry.validate(water)?;
+                self.write_registry.validate(bed)?;
             }
             Operation::GenerateVegetation {
                 plant,
@@ -1601,9 +1617,9 @@ impl WorldService {
                 leaves,
                 ..
             } => {
-                self.registry.validate(plant)?;
-                self.registry.validate(trunk)?;
-                self.registry.validate(leaves)?;
+                self.write_registry.validate(plant)?;
+                self.write_registry.validate(trunk)?;
+                self.write_registry.validate(leaves)?;
             }
             // `BiomeState` is validated by its own deserializer; there is no block registry
             // entry to check and no biomes are fabricated here.

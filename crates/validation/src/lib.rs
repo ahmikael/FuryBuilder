@@ -233,6 +233,17 @@ pub fn validate(
     dimension: &Dimension,
     request: &ValidationRequest,
 ) -> Result<ValidationOutcome, ValidationError> {
+    let registry = BlockRegistry::default();
+    validate_with_registry(dimension, request, &registry)
+}
+
+/// Runs validation against an explicit project catalog. The default entry point keeps the
+/// curated quick-pick registry for callers that have no project catalog.
+pub fn validate_with_registry(
+    dimension: &Dimension,
+    request: &ValidationRequest,
+    registry: &BlockRegistry,
+) -> Result<ValidationOutcome, ValidationError> {
     let requested = request.bounds.volume();
     if requested > MAX_VALIDATION_BLOCKS {
         return Err(ValidationError::TooManyBlocks {
@@ -284,7 +295,6 @@ pub fn validate(
         validate_path_input(dimension, path)?;
     }
 
-    let registry = BlockRegistry::default();
     let mut sink = FindingSink::default();
     let mut warnings = Vec::new();
     let mut scanned_blocks = 0u64;

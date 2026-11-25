@@ -264,8 +264,8 @@ action that clears only the derived cache; it does not touch projects or user re
 
 Placeholder textures are an explicit mode, not a silent fallback. Placeholder mode has no
 client JAR, so no block/item catalog or resource-pack stack is available: the viewport shows
-original FuryBuilder textures and labels them, while the palette stays on the curated quick
-picks. Selecting a client source replaces placeholder mode.
+original FuryBuilder textures and labels them, while the palette shows curated quick picks with
+a visible `Curated fallback` notice. Selecting a client source replaces placeholder mode.
 
 Settings' **Components** tab lists each managed client JAR with its version, DataVersion, size
 and cache path. `Verify` re-hashes the JAR and compares it with the cache manifest, `Remove`
