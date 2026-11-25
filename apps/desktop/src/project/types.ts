@@ -273,8 +273,8 @@ export interface CheckpointMeta {
 export interface ImportDimensionAnalysis {
   id: string;
   kind: "overworld" | "nether" | "end" | "custom" | string;
-  minY: number;
-  height: number;
+  minY: number | null;
+  height: number | null;
   regionFiles: number;
   chunks: number;
 }
@@ -357,8 +357,8 @@ export interface JavaWorldAnalysis {
   dimensions: ImportDimensionAnalysis[];
   regions: number;
   chunks: number;
-  blockEntities: number;
-  entities: number;
+  blockEntities: number | null;
+  entities: number | null;
   sourceBytes: number;
   sourcePath: string;
   sourceKind: ImportSourceKind;

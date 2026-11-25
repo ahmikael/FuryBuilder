@@ -15,6 +15,7 @@ pub mod java_structure;
 pub mod nbt;
 pub mod parity;
 pub mod passthrough;
+mod split_anvil;
 pub mod structure;
 pub mod support_matrix;
 pub mod version_support;

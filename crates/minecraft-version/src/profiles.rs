@@ -88,7 +88,7 @@ impl ReleaseFacts {
 // Exact release ids and Java majors come from Mojang's version manifest and
 // per-release launcher JSON; DataVersion and pack formats come from version.json
 // inside each official client JAR. No JAR content is bundled.
-const CLASSIC_RELEASES: &[ReleaseFacts] = &[
+const RELEASES: &[ReleaseFacts] = &[
     //                          id        DataVersion  Java  resource  data
     ReleaseFacts::new("1.18", 2860, 17, 8, 8),
     ReleaseFacts::new("1.18.1", 2865, 17, 8, 8),
@@ -117,12 +117,18 @@ const CLASSIC_RELEASES: &[ReleaseFacts] = &[
     ReleaseFacts::new("1.21.9", 4554, 21, 69, 88).with_pack_minors(0, 0),
     ReleaseFacts::new("1.21.10", 4556, 21, 69, 88).with_pack_minors(0, 0),
     ReleaseFacts::new("1.21.11", 4671, 21, 75, 94).with_pack_minors(0, 1),
+    // Split save layout. Pack/DataVersion metadata cross-checked with mcmeta.
+    ReleaseFacts::new("26.1", 4786, 25, 84, 101).with_pack_minors(0, 1),
+    ReleaseFacts::new("26.1.1", 4788, 25, 84, 101).with_pack_minors(0, 1),
+    ReleaseFacts::new("26.1.2", 4790, 25, 84, 101).with_pack_minors(0, 1),
+    ReleaseFacts::new("26.2", 4903, 25, 88, 107).with_pack_minors(0, 1),
+    ReleaseFacts::new("26.3", 5023, 25, 97, 121).with_pack_minors(1, 0),
 ];
 
 /// All built-in profiles, including releases whose adapters are not verified.
 pub fn builtin_profiles() -> &'static [VersionProfile] {
     static PROFILES: LazyLock<Vec<VersionProfile>> =
-        LazyLock::new(|| CLASSIC_RELEASES.iter().map(ReleaseFacts::profile).collect());
+        LazyLock::new(|| RELEASES.iter().map(ReleaseFacts::profile).collect());
     &PROFILES
 }
 
@@ -255,7 +261,13 @@ mod tests {
     #[test]
     fn classic_release_metadata_covers_every_exact_version() {
         let profiles = builtin_profiles();
-        assert_eq!(profiles.len(), 27);
+        assert_eq!(
+            profiles
+                .iter()
+                .filter(|p| p.family == VersionFamily::Modern)
+                .count(),
+            27
+        );
         for (minor, last_patch) in [(18, 2), (19, 4), (20, 6), (21, 11)] {
             for patch in 0..=last_patch {
                 let release = if patch == 0 {
@@ -293,8 +305,43 @@ mod tests {
                 );
             }
         }
-        for id in ["1.18.0", "1.21.4-pre1", "1.21.12", "26.1"] {
+        for id in [
+            "1.18.0",
+            "1.21.4-pre1",
+            "1.21.12",
+            "26.1-snapshot-6",
+            "26.4",
+        ] {
             assert!(profile_for_version(&version(id)).is_none(), "{id}");
+        }
+    }
+
+    #[test]
+    fn split_release_metadata_does_not_admit_world_io() {
+        for (id, dv, pack, data, resource_minor, data_minor) in [
+            ("26.1", 4786, 84, 101, 0, 1),
+            ("26.1.1", 4788, 84, 101, 0, 1),
+            ("26.1.2", 4790, 84, 101, 0, 1),
+            ("26.2", 4903, 88, 107, 0, 1),
+            ("26.3", 5023, 97, 121, 1, 0),
+        ] {
+            let profile = profile_for_version(&version(id)).expect(id);
+            assert_eq!(profile_for_data_version(dv).as_ref(), Some(&profile));
+            assert_eq!(profile.id, format!("java-split-{id}"));
+            assert_eq!(profile.world_layout, WorldLayout::SplitAnvil);
+            assert_eq!(profile.java.minimum_major, 25);
+            assert_eq!(profile.resource_pack_format, Some(pack));
+            assert_eq!(profile.datapack_format, Some(data));
+            assert_eq!(
+                profile.pack_format_minors,
+                Some(PackFormatMinors {
+                    resource: resource_minor,
+                    data: data_minor
+                })
+            );
+            assert_eq!(profile.capabilities.support_level, SupportLevel::Unverified);
+            assert!(!profile.capabilities.read);
+            assert!(!profile.capabilities.write);
         }
     }
 

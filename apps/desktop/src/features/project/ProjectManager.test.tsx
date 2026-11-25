@@ -978,6 +978,39 @@ describe("project wizard", () => {
     await waitFor(() => expect(useProjectStore.getState().managerOpen).toBe(false));
   });
 
+  it("shows split terrain inventory without claiming entity counts or allowing import", async () => {
+    const source = "C:\\saves\\Split";
+    api.analyze.mockResolvedValue({
+      ...worldAnalysis,
+      root: source,
+      sourcePath: source,
+      layout: "split_26_1_plus",
+      supported: false,
+      dataVersion: 5023,
+      versionId: 5023,
+      versionName: "26.3",
+      dimensions: [{ ...worldAnalysis.dimensions[0], minY: null, height: null }],
+      blockEntities: null,
+      entities: null,
+      blockers: ["Split chunk decoding is not verified."],
+    });
+    const user = userEvent.setup();
+    openWizard("import");
+    render(<ProjectManager />);
+    await user.type(screen.getByLabelText("Project name"), "Split World");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(screen.getByLabelText("Java world folder"), source);
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
+
+    expect(await screen.findByText("Split chunk decoding is not verified.")).toBeInTheDocument();
+    expect(screen.getByText("minecraft:overworld")).toBeVisible();
+    expect(screen.getAllByText("Not inspected")).toHaveLength(2);
+    expect(screen.queryByText(/Y .*\\.\\./)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("heading", { name: "Source" })).toBeInTheDocument();
+    expect(api.importWorld).not.toHaveBeenCalled();
+  });
+
   it("analyzes a world archive and keeps conversion unavailable", async () => {
     const archiveAnalysis: JavaWorldAnalysis = {
       ...worldAnalysis,

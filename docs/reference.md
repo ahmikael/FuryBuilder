@@ -90,7 +90,7 @@ checkpoint and keep the original world untouched.
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
 | KL-05 | Version support  | Only Java 1.21.4 / DV 4189 is write-verified; other official versions are listed but stop at the profile check |
-| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split/legacy refused               |
+| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and legacy import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
 | KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                    |

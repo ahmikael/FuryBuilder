@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами. Чтение NBT чанка и запись правок привязаны к ожидаемому профилю; учитываются различия `Status` и ванильного реестра биомов, содержимое block entities сохраняется. Запись по-прежнему проверена только для 1.21.4. Добавлена конвертация биомов 1.13–1.17 в нормализованные секции без допуска этих версий к world I/O. Следующий шаг — split layout 26.1–26.3; прогресс и проверки в §21.
+> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами. Чтение NBT чанка и запись правок привязаны к ожидаемому профилю; учитываются различия `Status` и ванильного реестра биомов, содержимое block entities сохраняется. Запись по-прежнему проверена только для 1.21.4. Добавлены конвертация биомов 1.13–1.17 и диагностика split layout 26.1–26.3 без допуска этих версий к импорту и записи. Следующий шаг — каталог из client JAR; прогресс и проверки в §21.
 > Дата: 2026-11-22; обновлено 2026-11-25 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P1-08` — Split layout 26.1–26.3: `dimensions/`, `players/`, split region (если готово). Статус: следующий шаг, не начат.
+**Текущий фокус:** `P1-09` — Извлечение каталога из client JAR, curated список только для quick picks/fallback. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P1-09`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P1-10`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1539,7 +1539,7 @@ UI:
 - [x] `P1-05` Section biomes 1.15–1.17 + column biomes 1.13–1.14 и conversion.
 - [x] `P1-06` Version-aware chunk NBT: секции, палитры, block entities preserve.
 - [x] `P1-07` Minor adapters 1.18/1.19/1.20/1.21 (отличия полей и registry).
-- [ ] `P1-08` Split layout 26.1–26.3: `dimensions/`, `players/`, split region (если готово).
+- [x] `P1-08` Split layout 26.1–26.3: диагностика `dimensions/`, `players/` и заголовков регионов. Декодирование и запись чанков не допущены без реальных фикстур; нативный split-адаптер — в P3.
 
 #### B. Ассеты и каталог
 
@@ -1614,6 +1614,7 @@ UI:
 - [ ] `P3-15` Project archive export/import.
 - [ ] `P3-16` Snapshots: read-only/convert + advanced toggle.
 - [ ] `P3-17` Фикстуры legacy + проверка numeric ID/metadata mapping в каталог + тесты.
+- [ ] `P3-17a` Нативный `SplitAnvilCodec` для точных релизов 26.1–26.3: форматы палитр до/с 26.3, сохранение sidecars и неизвестного NBT, реальные фикстуры и same-version round trip до допуска импорта и записи.
 - [ ] `P3-18` Обновить матрицу/docs + коммит P3.
 
 ### 21.6. P4 — UI/UX и сцена
@@ -1690,6 +1691,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | Split layout Java 26.1–26.3 | Добавлены 5 точных профилей без допуска к world I/O. Отдельная диагностика читает `level.dat`, split worldgen metadata и заголовки `.mca`, обнаруживает измерения и папки игроков, отличает неполные и смешанные сохранения. Не подсчитывает сущности и не выдумывает границы Y. Нативный codec, включая новую палитру 26.3, ждёт проверки на реальных фикстурах в P3. shadcn: существующие `Alert` и `Badge`, стили не менялись | см. `git log` | Синтетические сохранения для 5 релизов, неизменность источника, отказ при битом заголовке и junction, блокировка мастера, 2 golden-эталона; 726 Rust tests (72 suites), 374 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format; shadcn audit |
 | 2026-11-25 | Различия современных релизов | По точному профилю проверяется исходное значение `Status`: `full` для 1.18–1.19, `minecraft:full` с 1.20. Чтение не переписывает поле; импорт, запись, анализ производных данных и parity используют одно правило. Ванильные реестры биомов (61/63/64/65 записей) сверены для всех 27 релизов. Биомы вне реестра сохраняются без подмены, в отчёте импорта и диагностике есть предупреждение. Формат секций общий, допуск world I/O не расширен | см. `git log` | Проверены границы `Status`, хэши всех наборов биомов, сохранение нестандартных ID при импорте и 2 golden-эталона экспорта; 720 Rust tests (72 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | NBT чанков по профилю | Декодер и overlay используют ожидаемый профиль; другой `DataVersion` отклоняется, даже если формат секций совпадает. Общий layout задаёт поля чанка, секций, палитр и списков сущностей. Патч меняет только палитру и упакованные индексы, сохраняя соседние теги контейнера. Оба режима записи проверяют полный NBT block entities (включая вложенные предметы и неизвестные данные); сравнение NBT различает биты NaN и знакового нуля. Допуск миров не расширен | см. `git log` | Синтетический чанк под 27 профилями и отказ при несовпадении версии; round-trip и отказ при подмене NBT; 2 golden-эталона без изменений; 715 Rust tests (72 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |
 | 2026-11-25 | Биомы 1.13–1.17 | Добавлен точный numeric registry для 1.13–1.17: 73/75/75/79/81 биомов, ID 8 — `minecraft:nether` до 1.16 и `minecraft:nether_wastes` с 1.16; неизвестные ID не подменяются. Chunk-level конвертер читает `Level.Biomes` (256 колонок в 1.13–1.14, 1024 YZX-ячейки в 1.15–1.17) в нормализованные 16 секций и патчит только этот массив, сохраняя остальной NBT. Смешанные 4×4 footprints требуют явного `SampleCenter` с выбором `(4x+2, 4z+2)`; `RequireUniform` отказывает, неизменённые footprints сохраняют исходные колонки. Проверяются несовпадение версии/длины, вертикальная вариация и невыразимые биомы. Версии не допущены к region reader, wizard или экспорту; граница описана в `docs/formats.md` и `docs/architecture.md` | см. `git log` | 5 integration + 1 unit тест конвертации; 713 Rust tests (72 suites), 373 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format |

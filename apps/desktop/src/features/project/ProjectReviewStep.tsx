@@ -162,7 +162,12 @@ export function ProjectReviewStep({
   }
   if (mode === "import") {
     addWarning("The detected version is never downgraded; conversion needs a verified converter.");
-    if (analysis && (analysis.blockEntities > 0 || analysis.entities > 0)) {
+    if (
+      analysis &&
+      analysis.blockEntities !== null &&
+      analysis.entities !== null &&
+      (analysis.blockEntities > 0 || analysis.entities > 0)
+    ) {
       addWarning(
         `${analysis.blockEntities} block entit${analysis.blockEntities === 1 ? "y" : "ies"} and ${analysis.entities} entit${analysis.entities === 1 ? "y" : "ies"} stay in the immutable source copy and are not editable here.`,
       );

@@ -246,8 +246,8 @@ fn blocked_archive_analysis(source: &Path, error: WorldSourceError) -> JavaWorld
         dimensions: Vec::new(),
         regions: 0,
         chunks: 0,
-        block_entities: 0,
-        entities: 0,
+        block_entities: None,
+        entities: None,
         source_bytes: fs::metadata(source)
             .map(|metadata| metadata.len())
             .unwrap_or(0),

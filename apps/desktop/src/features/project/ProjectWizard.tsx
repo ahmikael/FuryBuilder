@@ -544,8 +544,9 @@ function ImportSourceStep({
           </Button>
         </div>
         <FieldDescription>
-          Read-only analysis validates level.dat, the layout and every chunk before import. Archive
-          contents are extracted to a temporary folder and removed after analysis.
+          Read-only analysis checks level.dat and the storage layout. Chunk data is validated for
+          supported versions before import. Archive contents are extracted to a temporary folder and
+          removed after analysis.
         </FieldDescription>
       </Field>
 
@@ -573,11 +574,13 @@ function ImportSourceStep({
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Block entities</p>
-              <p className="font-medium tabular-nums">{analysis.blockEntities}</p>
+              <p className="font-medium tabular-nums">
+                {analysis.blockEntities ?? "Not inspected"}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Entities</p>
-              <p className="font-medium tabular-nums">{analysis.entities}</p>
+              <p className="font-medium tabular-nums">{analysis.entities ?? "Not inspected"}</p>
             </div>
           </div>
 
@@ -597,9 +600,11 @@ function ImportSourceStep({
                   className="flex flex-wrap items-center gap-2 rounded-lg border bg-background px-3 py-2 font-mono text-xs"
                 >
                   <span className="truncate">{dimension.id}</span>
-                  <span className="text-muted-foreground">
-                    Y {dimension.minY}..{dimension.minY + dimension.height - 1}
-                  </span>
+                  {dimension.minY !== null && dimension.height !== null ? (
+                    <span className="text-muted-foreground">
+                      Y {dimension.minY}..{dimension.minY + dimension.height - 1}
+                    </span>
+                  ) : null}
                   <span className="ml-auto text-muted-foreground">
                     {dimension.regionFiles} region(s) · {dimension.chunks} chunk(s)
                   </span>

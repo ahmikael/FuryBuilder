@@ -251,16 +251,8 @@ impl JavaWorld {
         let profile = level.profile()?;
         let declared_dimensions = level.declared_dimensions()?;
 
-        let modern_overworld = root.join("dimensions").join("minecraft").join("overworld");
-        let split_data = root
-            .join("data")
-            .join("minecraft")
-            .join("world_gen_settings.dat");
-        let modern_players = root.join("players");
-        let modern_markers = is_real_dir(&modern_overworld)
-            || (is_real_dir(&modern_players) && is_real_file(&split_data));
-        if modern_markers {
-            if is_real_dir(&root.join("region")) {
+        if crate::split_anvil::has_markers(root) {
+            if crate::world_selection::has_classic_dimension_markers(root) {
                 return Err(AnvilError::UnsupportedLayout(
                     "mixed classic region/ and 26.1+ split markers".to_owned(),
                 ));
@@ -946,18 +938,6 @@ pub(crate) fn parse_region_file_name(path: &Path) -> Result<(i32, i32), AnvilErr
     Ok((x, z))
 }
 
-fn is_real_dir(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
-        .unwrap_or(false)
-}
-
-fn is_real_file(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
-        .unwrap_or(false)
-}
-
 /// Returns `true` for a real directory, `false` when the path is absent.
 /// Symlinks and non-directories are refused instead of being treated as absent.
 fn require_directory(path: &Path) -> Result<bool, AnvilError> {
@@ -1033,7 +1013,7 @@ fn file_len_checked(path: &Path, limit: u64) -> Result<u64, AnvilError> {
     Ok(metadata.len())
 }
 
-fn read_file_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, AnvilError> {
+pub(crate) fn read_file_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, AnvilError> {
     let len = file_len_checked(path, limit)?;
     let file = File::open(path).map_err(|error| io_error(path, &error))?;
     let mut bytes = Vec::with_capacity(len.min(1 << 20) as usize);

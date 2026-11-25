@@ -284,8 +284,8 @@ fn analysis_reports_supported_world_and_never_writes() {
     assert_eq!(analysis.level_name.as_deref(), Some("Import test"));
     assert_eq!(analysis.regions, 1);
     assert_eq!(analysis.chunks, 2);
-    assert_eq!(analysis.block_entities, 2);
-    assert_eq!(analysis.entities, 2);
+    assert_eq!(analysis.block_entities, Some(2));
+    assert_eq!(analysis.entities, Some(2));
     assert_eq!(analysis.dimensions.len(), 1);
     assert_eq!(analysis.dimensions[0].id, OVERWORLD);
     assert_eq!(analysis.dimensions[0].region_files, 1);

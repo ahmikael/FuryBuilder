@@ -318,6 +318,14 @@ both derived-data policies, masking only the edited chunk's write timestamp.
 Light-only records one section below or above the terrain remain in raw NBT;
 they never enter the editable block or biome model.
 
+`world_selection` routes newer storage to `split_anvil` for metadata and header inspection.
+The inspector uses the same bounded MCA header reader but does not call the classic chunk
+decoder. It inventories namespaced terrain directories, the split world-generation sidecar
+and optional player storage paths. Known `DataVersion` values identify incomplete split
+saves too; mixed layouts are rejected before terrain inventory. The five exact split profiles
+are unverified; they cannot open a `JavaWorld`, create an overlay, or admit a project. A
+full split `WorldCodec` requires payload and write verification on real saves.
+
 Biome conversion for 1.13–1.17 sits beside the codec in
 `classic_anvil/flattened_biomes.rs`. It reads and patches only one chunk's `Level.Biomes`
 array: 256 columns before 1.15 and 1024 YZX cells from 1.15, mapped through the exact

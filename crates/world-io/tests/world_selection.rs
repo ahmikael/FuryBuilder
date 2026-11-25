@@ -13,8 +13,8 @@ use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::{
-    analyze_java_world, classify_world_selection, passthrough_java_world, region_file_name,
-    WorldSelectionKind,
+    analyze_java_world, classify_world_selection, load_java_world, passthrough_java_world,
+    region_file_name, WorldOverlay, WorldSelectionKind,
 };
 
 const TARGET: i32 = 4189;
@@ -50,6 +50,10 @@ impl Drop for TempDir {
 }
 
 fn level_dat_bytes(data_version: i32) -> Vec<u8> {
+    level_dat_bytes_named(data_version, "1.21.4")
+}
+
+fn level_dat_bytes_named(data_version: i32, version_name: &str) -> Vec<u8> {
     let file = NbtFile::new(
         "",
         NbtValue::compound([(
@@ -60,7 +64,7 @@ fn level_dat_bytes(data_version: i32) -> Vec<u8> {
                     "Version",
                     NbtValue::compound([
                         ("Id", NbtValue::Int(data_version)),
-                        ("Name", NbtValue::String("1.21.4".to_owned())),
+                        ("Name", NbtValue::String(version_name.to_owned())),
                     ]),
                 ),
                 ("LevelName", NbtValue::String("Selection test".to_owned())),
@@ -166,6 +170,41 @@ fn write_classic_world(root: &Path) {
     fs::write(root.join("poi").join(region_file_name(0, 0)), []).expect("poi");
     fs::write(root.join("entities").join(region_file_name(0, 0)), []).expect("entities");
     fs::write(root.join("session.lock"), b"lock").expect("session.lock");
+}
+
+fn write_split_world(root: &Path, data_version: i32, version: &str) {
+    fs::create_dir_all(root.join("dimensions/minecraft/overworld/region")).expect("overworld");
+    fs::write(
+        root.join("level.dat"),
+        level_dat_bytes_named(data_version, version),
+    )
+    .expect("level.dat");
+    let data = root.join("data/minecraft");
+    fs::create_dir_all(&data).expect("shared data");
+    let world_gen = NbtFile::new(
+        "",
+        NbtValue::compound([
+            ("DataVersion", NbtValue::Int(data_version)),
+            (
+                "data",
+                NbtValue::compound([
+                    ("seed", NbtValue::Long(42)),
+                    (
+                        "dimensions",
+                        NbtValue::compound([
+                            ("example:deep/caves", NbtValue::Compound(BTreeMap::new())),
+                            ("minecraft:overworld", NbtValue::Compound(BTreeMap::new())),
+                        ]),
+                    ),
+                ]),
+            ),
+        ]),
+    );
+    fs::write(
+        data.join("world_gen_settings.dat"),
+        nbt::write_gzip(&world_gen).unwrap(),
+    )
+    .unwrap();
 }
 
 fn snapshot(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
@@ -290,18 +329,7 @@ fn layouts_are_distinguished_before_import() {
     let dir = TempDir::new("layouts");
 
     let split = dir.path().join("split");
-    fs::create_dir_all(split.join("dimensions").join("minecraft").join("overworld"))
-        .expect("split dimensions");
-    fs::write(split.join("level.dat"), level_dat_bytes(5023)).expect("split level.dat");
-    fs::write(
-        split
-            .join("dimensions")
-            .join("minecraft")
-            .join("overworld")
-            .join(region_file_name(0, 0)),
-        region_bytes(&[(0, 0)]),
-    )
-    .expect("split region");
+    write_split_world(&split, 5023, "26.3");
     let selection = classify_world_selection(&split);
     assert_eq!(selection.kind, WorldSelectionKind::WorldFolder);
     assert!(selection.complete_save);
@@ -318,6 +346,8 @@ fn layouts_are_distinguished_before_import() {
         .expect("mixed split marker");
     let selection = classify_world_selection(&mixed);
     assert_eq!(selection.layout, "mixed");
+    assert!(!selection.complete_save);
+    assert!(selection.dimensions.is_empty());
     assert!(!selection.supported);
 
     let legacy = dir.path().join("legacy");
@@ -372,9 +402,7 @@ fn passthrough_refuses_incomplete_and_unsupported_selections_without_publishing(
     assert!(!dir.path().join("from-region-dir").exists());
 
     let split = dir.path().join("split");
-    fs::create_dir_all(split.join("dimensions").join("minecraft").join("overworld"))
-        .expect("split dimensions");
-    fs::write(split.join("level.dat"), level_dat_bytes(5023)).expect("split level.dat");
+    write_split_world(&split, 5023, "26.3");
     let split_before = snapshot(&split);
     let error = passthrough_java_world(&split, dir.path().join("from-split"))
         .expect_err("split layout is not supported");
@@ -392,4 +420,250 @@ fn passthrough_refuses_incomplete_and_unsupported_selections_without_publishing(
     assert_eq!(error.code(), "unsupported_version", "{error}");
     assert_eq!(snapshot(&legacy), legacy_before);
     assert!(!dir.path().join("from-legacy").exists());
+}
+
+#[test]
+fn split_inventory_reports_paths_and_terrain_headers_without_admitting_world_io() {
+    for (version, data_version) in [
+        ("26.1", 4786),
+        ("26.1.1", 4788),
+        ("26.1.2", 4790),
+        ("26.2", 4903),
+        ("26.3", 5023),
+    ] {
+        let dir = TempDir::new(version);
+        let root = dir.path().join("world");
+        write_split_world(&root, data_version, version);
+        for folder in [
+            "dimensions/minecraft/the_nether/region",
+            "dimensions/minecraft/the_end/region",
+            "dimensions/example/deep/caves/region",
+            "dimensions/minecraft/overworld/entities",
+            "dimensions/minecraft/overworld/poi",
+            "players/data",
+            "players/advancements",
+            "players/stats",
+        ] {
+            fs::create_dir_all(root.join(folder)).unwrap();
+        }
+        let mut terrain = region_bytes(&[(0, 0), (1, 0)]);
+        // An allocated slot with deliberately undecodable data still counts in a header-only report.
+        terrain[8192 + 4] = 0;
+        fs::write(
+            root.join("dimensions/minecraft/overworld/region/r.0.0.mca"),
+            &terrain,
+        )
+        .unwrap();
+        fs::write(
+            root.join("dimensions/example/deep/caves/region/r.-1.0.mca"),
+            region_bytes(&[(-1, 0)]),
+        )
+        .unwrap();
+        fs::write(
+            root.join("dimensions/minecraft/overworld/entities/r.0.0.mca"),
+            b"opaque",
+        )
+        .unwrap();
+        fs::write(
+            root.join("dimensions/minecraft/overworld/poi/r.0.0.mca"),
+            b"opaque",
+        )
+        .unwrap();
+        fs::write(root.join("players/data/player.dat"), b"opaque").unwrap();
+        let before = snapshot(&root);
+
+        let selection = classify_world_selection(&root);
+        assert!(
+            selection.complete_save && !selection.supported,
+            "{:?}",
+            selection.blockers
+        );
+        assert_eq!((selection.region_files, selection.chunks), (2, 3));
+        assert_eq!(
+            selection.related_folders,
+            [
+                "dimensions",
+                "data",
+                "players",
+                "players/data",
+                "players/advancements",
+                "players/stats"
+            ]
+        );
+        assert_eq!(
+            selection.dimensions[0].folder,
+            "dimensions/example/deep/caves"
+        );
+        let analysis = analyze_java_world(&root);
+        assert!(analysis.complete_save && !analysis.supported);
+        assert_eq!(analysis.version_id, Some(data_version));
+        assert_eq!(analysis.version_name.as_deref(), Some(version));
+        assert_eq!(
+            analysis.declared_dimensions,
+            ["example:deep/caves", "minecraft:overworld"]
+        );
+        assert_eq!((analysis.regions, analysis.chunks), (2, 3));
+        assert_eq!(analysis.dimensions.len(), 4);
+        assert_eq!(analysis.dimensions[0].id, "example:deep/caves");
+        assert_eq!(
+            analysis.dimensions[0].kind,
+            world_domain::DimensionKind::Custom
+        );
+        assert_eq!(analysis.dimensions[0].min_y, None);
+        assert_eq!(analysis.block_entities, None);
+        assert_eq!(analysis.entities, None);
+        assert!(analysis
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("players/data")));
+        assert_eq!(
+            load_java_world(&root).unwrap_err().code(),
+            "unsupported_version"
+        );
+        assert_eq!(
+            WorldOverlay::open(&root)
+                .expect_err("split overlay is blocked")
+                .code(),
+            "unsupported_version"
+        );
+        assert_eq!(snapshot(&root), before);
+    }
+}
+
+#[test]
+fn split_incomplete_and_contradictory_saves_are_not_complete() {
+    let dir = TempDir::new("split-invalid");
+    let root = dir.path().join("world");
+    write_split_world(&root, 5023, "26.3");
+    let overworld = root.join("dimensions/minecraft/overworld");
+    let region = overworld.join("region");
+    fs::remove_dir(&region).unwrap();
+    fs::write(overworld.join("r.0.0.mca"), region_bytes(&[(0, 0)])).unwrap();
+    let report = classify_world_selection(&root);
+    assert!(!report.complete_save);
+    assert_eq!(report.chunks, 0);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("Overworld terrain folder")));
+
+    fs::create_dir(&region).unwrap();
+    fs::write(region.join("r.0.0.mca"), b"broken header").unwrap();
+    let report = classify_world_selection(&root);
+    assert!(!report.complete_save);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("region file is invalid")));
+
+    fs::remove_file(region.join("r.0.0.mca")).unwrap();
+    fs::write(root.join("level.dat"), level_dat_bytes_named(5023, "26.2")).unwrap();
+    let report = classify_world_selection(&root);
+    assert!(!report.complete_save);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("identity disagree")));
+
+    fs::write(root.join("level.dat"), level_dat_bytes_named(5023, "26.3")).unwrap();
+    fs::remove_file(root.join("data/minecraft/world_gen_settings.dat")).unwrap();
+    let report = classify_world_selection(&root);
+    assert!(!report.complete_save);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("world_gen_settings.dat")));
+
+    fs::write(
+        root.join("data/minecraft/world_gen_settings.dat"),
+        b"not NBT",
+    )
+    .unwrap();
+    let report = classify_world_selection(&root);
+    assert!(!report.complete_save);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("world_gen_settings.dat")));
+}
+
+#[test]
+fn split_metadata_prevents_classic_admission_even_without_split_folders() {
+    let dir = TempDir::new("split-metadata");
+    fs::write(
+        dir.path().join("level.dat"),
+        level_dat_bytes_named(4786, "26.1"),
+    )
+    .unwrap();
+    let report = classify_world_selection(dir.path());
+    assert_eq!(report.layout, "split_26_1_plus");
+    assert!(!report.complete_save);
+    fs::create_dir(dir.path().join("DIM-1")).unwrap();
+    let report = classify_world_selection(dir.path());
+    assert_eq!(report.layout, "mixed");
+    assert!(!report.complete_save);
+    assert!(!report.supported);
+}
+
+#[test]
+fn split_terrain_inventory_rejects_conflicting_region_names_and_overdeep_paths() {
+    let dir = TempDir::new("split-limits");
+    let root = dir.path();
+    write_split_world(root, 4786, "26.1");
+    let region = root.join("dimensions/minecraft/overworld/region");
+    let empty_header = region_bytes(&[]);
+    fs::write(region.join("r.0.0.mca"), &empty_header).unwrap();
+    fs::write(region.join("r.00.0.mca"), &empty_header).unwrap();
+    let report = classify_world_selection(root);
+    assert!(!report.complete_save);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("duplicate region coordinates")));
+
+    fs::remove_file(region.join("r.00.0.mca")).unwrap();
+    let deep = root.join("dimensions/example").join("a/".repeat(20));
+    fs::create_dir_all(deep).unwrap();
+    let report = classify_world_selection(root);
+    assert!(!report.complete_save);
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("split dimension path is too deep")));
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn split_inventory_does_not_follow_a_linked_dimension_parent() {
+    let dir = TempDir::new("split-link");
+    let target = dir.path().join("outside");
+    write_split_world(&target, 5023, "26.3");
+    let root = dir.path().join("world");
+    fs::create_dir_all(root.join("data")).unwrap();
+    fs::copy(target.join("level.dat"), root.join("level.dat")).unwrap();
+    let link = root.join("dimensions");
+    let target = target.join("dimensions");
+    #[cfg(windows)]
+    assert!(std::process::Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&link)
+        .arg(&target)
+        .output()
+        .unwrap()
+        .status
+        .success());
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&target, &link).unwrap();
+    let report = classify_world_selection(&root);
+    assert_eq!(report.layout, "split_26_1_plus");
+    assert!(!report.complete_save);
+    assert!(report.dimensions.is_empty());
+    assert!(report
+        .blockers
+        .iter()
+        .any(|b| b.contains("link or reparse point")));
+    #[cfg(windows)]
+    fs::remove_dir(link).unwrap();
+    #[cfg(unix)]
+    fs::remove_file(link).unwrap();
 }

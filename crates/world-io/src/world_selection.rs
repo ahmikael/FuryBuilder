@@ -6,17 +6,18 @@
 //! explicitly instead of letting a region file or a region folder look like an empty world.
 //!
 //! The classifier is read-only and never decodes chunk payloads. It validates `level.dat`,
-//! the layout markers and every region header so the wizard can block an unsupported
-//! selection with a concrete reason. Full chunk validation remains the job of
+//! the layout markers and checks terrain headers for recognized layouts so the wizard can
+//! block an unsupported selection with a concrete reason. Full chunk validation remains the job of
 //! [`crate::analyze_java_world`].
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Serialize;
 
 use crate::anvil::{parse_region_file_name, JavaWorld, LevelDat, RegionFile};
-use crate::version_support;
+use crate::passthrough::is_link_like;
+use crate::{split_anvil, version_support};
 
 /// Layout identifier used by the supported classic Anvil reader.
 pub const CLASSIC_ANVIL_LAYOUT: &str = "classic_anvil";
@@ -37,6 +38,7 @@ const KNOWN_FOLDERS: &[&str] = &[
     "advancements",
     "structures",
     "serverconfig",
+    "resourcepacks",
 ];
 
 /// What the selected path actually is.
@@ -98,7 +100,7 @@ pub struct WorldSelectionReport {
     pub path: String,
     pub kind: WorldSelectionKind,
     pub layout: String,
-    /// True only for a folder that has `level.dat` and classic/split world markers.
+    /// True only for a folder that has readable `level.dat` and the required layout.
     ///
     /// This is structural completeness, not support. A complete 26.1+ split save still
     /// reports `supported = false`.
@@ -107,8 +109,10 @@ pub struct WorldSelectionReport {
     pub supported: bool,
     pub has_level_dat: bool,
     pub data_version: Option<i32>,
+    pub version_id: Option<i32>,
     pub version_name: Option<String>,
     pub level_name: Option<String>,
+    pub declared_dimensions: Vec<String>,
     pub dimensions: Vec<SelectionDimension>,
     pub related_folders: Vec<String>,
     pub region_file: Option<SelectionRegionFile>,
@@ -129,8 +133,10 @@ pub fn classify_world_selection(path: impl AsRef<Path>) -> WorldSelectionReport 
         supported: false,
         has_level_dat: false,
         data_version: None,
+        version_id: None,
         version_name: None,
         level_name: None,
+        declared_dimensions: Vec::new(),
         dimensions: Vec::new(),
         related_folders: Vec::new(),
         region_file: None,
@@ -157,7 +163,7 @@ pub fn classify_world_selection(path: impl AsRef<Path>) -> WorldSelectionReport 
             return report;
         }
     };
-    if metadata.file_type().is_symlink() {
+    if is_link_like(&metadata) {
         report.kind = WorldSelectionKind::UnsafeLink;
         report.blockers.push(
             "the selection is a symlink, junction or reparse point; select the real world folder"
@@ -244,41 +250,45 @@ fn classify_file(path: &Path, bytes: u64, report: &mut WorldSelectionReport) {
 }
 
 fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
-    report.has_level_dat = is_file(&root.join("level.dat"));
+    let level_path = root.join("level.dat");
+    let level_entry = level_path.symlink_metadata().ok();
+    report.has_level_dat = level_entry
+        .as_ref()
+        .is_some_and(|metadata| !is_link_like(metadata) && metadata.is_file());
     report.related_folders = KNOWN_FOLDERS
         .iter()
         .filter(|name| is_dir(&root.join(name)))
         .map(|name| (*name).to_owned())
         .collect();
-    let direct_mca = count_direct_files(root, "mca");
-    let direct_mcr = count_direct_files(root, "mcr");
-    let layout = detect_layout(root);
-
-    if !report.has_level_dat && direct_mca > 0 && direct_mcr == 0 {
-        report.kind = WorldSelectionKind::RegionDirectory;
-        report.layout = "region_directory".to_owned();
-        report.region_files = direct_mca;
-        report.blockers.push(format!(
-            "the selected folder contains {direct_mca} region file(s) but no level.dat; it looks like a region/ directory. Select its parent world folder instead."
-        ));
-        report.warnings.push(
-            "a region directory is only a part of a save; metadata, dimensions and sidecars live next to it"
-                .to_owned(),
-        );
-        return;
+    if level_entry.is_none() {
+        let (direct_mca, direct_mcr) = count_direct_regions(root);
+        if direct_mcr > 0 {
+            report.kind = WorldSelectionKind::RegionDirectory;
+            report.layout = "legacy_mcr".to_owned();
+            report.region_files = direct_mcr;
+            report.blockers.push(
+                "the selected folder contains legacy .mcr region files and no level.dat; the legacy format is not supported"
+                    .to_owned(),
+            );
+            return;
+        }
+        if direct_mca > 0 {
+            report.kind = WorldSelectionKind::RegionDirectory;
+            report.layout = "region_directory".to_owned();
+            report.region_files = direct_mca;
+            report.blockers.push(format!(
+                "the selected folder contains {direct_mca} region file(s) but no level.dat; it looks like a region/ directory. Select its parent world folder instead."
+            ));
+            report.warnings.push(
+                "a region directory is only a part of a save; metadata, dimensions and sidecars live next to it"
+                    .to_owned(),
+            );
+            return;
+        }
     }
-    if !report.has_level_dat && direct_mcr > 0 {
-        report.kind = WorldSelectionKind::RegionDirectory;
-        report.layout = "legacy_mcr".to_owned();
-        report.region_files = direct_mcr;
-        report.blockers.push(
-            "the selected folder contains legacy .mcr region files and no level.dat; the legacy format is not supported"
-                .to_owned(),
-        );
-        return;
-    }
 
-    if !report.has_level_dat && !has_any_world_marker(root) {
+    let split_markers = split_anvil::has_markers(root);
+    if level_entry.is_none() && !has_classic_dimension_markers(root) && !split_markers {
         report
             .blockers
             .push("the selected folder is not a Java world save: no level.dat, region/ or split dimension markers were found".to_owned());
@@ -286,42 +296,53 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
     }
 
     report.kind = WorldSelectionKind::WorldFolder;
+    let level = if level_entry.as_ref().is_some_and(is_link_like) {
+        report
+            .blockers
+            .push("level.dat is a link or reparse point".to_owned());
+        None
+    } else {
+        match LevelDat::read(&level_path) {
+            Ok(level) => {
+                report.data_version = Some(level.data_version);
+                report.version_id = Some(level.version_id);
+                report.version_name = level.version_name.clone();
+                report.level_name = level.level_name.clone();
+                Some(level)
+            }
+            Err(error) => {
+                report
+                    .blockers
+                    .push(format!("level.dat is missing or unreadable: {error}"));
+                None
+            }
+        }
+    };
+    let split = split_markers || level.as_ref().is_some_and(split_anvil::matches_release);
+    let layout = detect_layout(root, split);
     report.layout = layout.to_owned();
 
-    match LevelDat::read(root.join("level.dat")) {
-        Ok(level) => {
-            report.data_version = Some(level.data_version);
-            report.version_name = level.version_name.clone();
-            report.level_name = level.level_name.clone();
-        }
-        Err(error) => report
-            .blockers
-            .push(format!("level.dat is missing or unreadable: {error}")),
-    }
-
-    if layout == CLASSIC_ANVIL_LAYOUT {
-        match JavaWorld::open(root) {
+    match layout {
+        CLASSIC_ANVIL_LAYOUT if level.is_some() => match JavaWorld::open(root) {
             Ok(world) => {
                 report.complete_save = report.has_level_dat;
+                report.declared_dimensions = world.declared_dimensions.clone();
                 inventory_classic(&world, root, report);
             }
             Err(error) => report
                 .blockers
                 .push(format!("the classic world cannot be opened: {error}")),
+        },
+        CLASSIC_ANVIL_LAYOUT => {}
+        split_anvil::LAYOUT => split_anvil::inspect(root, level.as_ref(), report),
+        "mixed" => report.blockers.push(
+            "the world mixes classic terrain folders with 26.1+ split layout markers or metadata".to_owned(),
+        ),
+        "legacy_mcr" => {
+            report.complete_save = level.is_some();
+            report.blockers
+                .push("the legacy McRegion layout is detected but not supported".to_owned());
         }
-    } else {
-        report.complete_save =
-            report.has_level_dat && matches!(layout, "split_26_1_plus" | "mixed" | "legacy_mcr");
-        match layout {
-            "split_26_1_plus" => report
-                .blockers
-                .push("26.1+ split world layout is not supported".to_owned()),
-            "mixed" => report.blockers.push(
-                "the world mixes classic region/ files with 26.1+ split layout markers".to_owned(),
-            ),
-            "legacy_mcr" => report
-                .blockers
-                .push("the legacy McRegion layout is detected but not supported".to_owned()),
             "level_dat_only" => report.blockers.push(
                 "level.dat exists but no classic region/ or split dimension folders were found; this is not a complete save"
                     .to_owned(),
@@ -329,8 +350,6 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
             _ => report
                 .blockers
                 .push("the world layout is not recognised".to_owned()),
-        }
-        inventory_best_effort(root, report);
     }
 
     if !report.complete_save {
@@ -386,82 +405,7 @@ fn inventory_classic(world: &JavaWorld, root: &Path, report: &mut WorldSelection
     }
 }
 
-fn inventory_best_effort(root: &Path, report: &mut WorldSelectionReport) {
-    let candidates = vec![
-        ("minecraft:overworld", PathBuf::from("region")),
-        (
-            "minecraft:the_nether",
-            PathBuf::from("DIM-1").join("region"),
-        ),
-        ("minecraft:the_end", PathBuf::from("DIM1").join("region")),
-        (
-            "minecraft:overworld",
-            PathBuf::from("dimensions")
-                .join("minecraft")
-                .join("overworld")
-                .join("region"),
-        ),
-        (
-            "minecraft:the_nether",
-            PathBuf::from("dimensions")
-                .join("minecraft")
-                .join("the_nether")
-                .join("region"),
-        ),
-        (
-            "minecraft:the_end",
-            PathBuf::from("dimensions")
-                .join("minecraft")
-                .join("the_end")
-                .join("region"),
-        ),
-    ];
-    for (id, relative) in candidates {
-        let folder = root.join(&relative);
-        if !is_dir(&folder) {
-            continue;
-        }
-        let (region_files, chunks) = count_region_folder(&folder, report);
-        report.region_files += region_files;
-        report.chunks += chunks;
-        report.dimensions.push(SelectionDimension {
-            id: id.to_owned(),
-            folder: relative_folder(root, &folder),
-            region_files,
-            chunks,
-        });
-    }
-}
-
-fn count_region_folder(folder: &Path, report: &mut WorldSelectionReport) -> (usize, usize) {
-    let mut files = 0usize;
-    let mut chunks = 0usize;
-    let Ok(entries) = fs::read_dir(folder) else {
-        return (0, 0);
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let extension = path
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        if extension != "mca" {
-            continue;
-        }
-        files += 1;
-        match RegionFile::open(&path) {
-            Ok(region) => chunks += region.entries().len(),
-            Err(error) => report.blockers.push(format!(
-                "region file {} is unreadable: {error}",
-                path.display()
-            )),
-        }
-    }
-    (files, chunks)
-}
-
-fn relative_folder(root: &Path, folder: &Path) -> String {
+pub(crate) fn relative_folder(root: &Path, folder: &Path) -> String {
     let relative = folder.strip_prefix(root).unwrap_or(folder);
     if relative.as_os_str().is_empty() {
         return ".".to_owned();
@@ -469,72 +413,53 @@ fn relative_folder(root: &Path, folder: &Path) -> String {
     relative.to_string_lossy().replace('\\', "/")
 }
 
-fn count_direct_files(root: &Path, extension: &str) -> usize {
+fn count_direct_regions(root: &Path) -> (usize, usize) {
     let Ok(entries) = fs::read_dir(root) else {
-        return 0;
+        return (0, 0);
     };
-    entries
-        .flatten()
-        .filter(|entry| {
-            entry
-                .path()
-                .extension()
-                .and_then(|value| value.to_str())
-                .is_some_and(|value| value.eq_ignore_ascii_case(extension))
-        })
-        .count()
+    let mut mca = 0;
+    let mut mcr = 0;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        match path.extension().and_then(|ext| ext.to_str()) {
+            Some(ext) if ext.eq_ignore_ascii_case("mca") => mca += 1,
+            Some(ext) if ext.eq_ignore_ascii_case("mcr") => mcr += 1,
+            _ => {}
+        }
+    }
+    (mca, mcr)
 }
 
-/// Detects the world layout from folder markers only; no `level.dat` is decoded.
-pub(crate) fn detect_layout(root: &Path) -> &'static str {
+fn detect_layout(root: &Path, split: bool) -> &'static str {
     let region_dir = is_dir(&root.join("region"));
-    let classic = region_dir && has_region_file(&root.join("region"), "mca");
-    let split = has_split_marker(root);
-    let legacy = region_dir && has_legacy_region_file(&root.join("region"));
-    if classic && split {
+    if split && has_classic_dimension_markers(root) {
         "mixed"
     } else if split {
-        "split_26_1_plus"
-    } else if legacy && !classic {
+        split_anvil::LAYOUT
+    } else if region_dir
+        && has_region_file(&root.join("region"), "mcr")
+        && !has_region_file(&root.join("region"), "mca")
+    {
         "legacy_mcr"
     } else if region_dir {
         CLASSIC_ANVIL_LAYOUT
-    } else if is_file(&root.join("level.dat")) {
+    } else if root.join("level.dat").symlink_metadata().is_ok() {
         "level_dat_only"
     } else {
         "unknown"
     }
 }
 
-fn has_any_world_marker(root: &Path) -> bool {
-    is_dir(&root.join("region")) || has_split_marker(root)
-}
-
-fn has_split_marker(root: &Path) -> bool {
-    is_dir(&root.join("dimensions").join("minecraft").join("overworld"))
-        || (is_dir(&root.join("players"))
-            && is_file(
-                &root
-                    .join("data")
-                    .join("minecraft")
-                    .join("world_gen_settings.dat"),
-            ))
+pub(crate) fn has_classic_dimension_markers(root: &Path) -> bool {
+    ["region", "DIM-1", "DIM1"]
+        .iter()
+        .any(|folder| is_dir(&root.join(folder)))
 }
 
 fn is_dir(path: &Path) -> bool {
     fs::symlink_metadata(path)
-        .map(|metadata| metadata.is_dir())
+        .map(|metadata| metadata.is_dir() && !is_link_like(&metadata))
         .unwrap_or(false)
-}
-
-fn is_file(path: &Path) -> bool {
-    fs::symlink_metadata(path)
-        .map(|metadata| metadata.is_file())
-        .unwrap_or(false)
-}
-
-fn has_legacy_region_file(region_dir: &Path) -> bool {
-    has_region_file(region_dir, "mcr")
 }
 
 fn has_region_file(region_dir: &Path, extension: &str) -> bool {

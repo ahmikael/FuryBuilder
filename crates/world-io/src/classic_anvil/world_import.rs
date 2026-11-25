@@ -3,8 +3,8 @@
 //! This is the format layer behind the `Import World` project mode. It never writes to
 //! the selected world:
 //!
-//! - [`analyze_java_world`] validates `level.dat`, the layout, every region table and every
-//!   allocated chunk, then returns counts and explicit blockers;
+//! - [`analyze_java_world`] reports the selection and validates allocated chunks for admitted
+//!   classic worlds; split saves get metadata and header inspection only;
 //! - [`load_java_world`] decodes block states and 4x4x4 biome cells into the sparse
 //!   `world_domain::World` used by the editor, under hard chunk/section/block limits.
 //!
@@ -21,15 +21,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{ChunkPos, DimensionKind, World};
 
-use crate::passthrough::PassthroughError;
+use crate::passthrough::{is_link_like, PassthroughError};
+use crate::split_anvil;
 use crate::support_matrix::{support_matrix, SupportMatrix};
 use crate::version_support;
 use crate::world_codec::world_codec;
-use crate::world_selection::{classify_world_selection, WorldSelectionKind};
+use crate::world_selection::classify_world_selection;
 use crate::world_source::{ArchiveReport, WorldSourceKind};
 
 use super::format::ClassicChunkFormat;
-use super::reader::{AnvilError, JavaWorld, LevelDat};
+use super::reader::{AnvilError, JavaWorld};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
 pub const MAX_IMPORT_CHUNKS: usize = 20_000;
@@ -45,8 +46,9 @@ pub const SUPPORTED_LAYOUT: &str = crate::world_selection::CLASSIC_ANVIL_LAYOUT;
 pub struct ImportDimensionAnalysis {
     pub id: String,
     pub kind: DimensionKind,
-    pub min_y: i32,
-    pub height: i32,
+    /// Null when only storage paths and region headers were inspected.
+    pub min_y: Option<i32>,
+    pub height: Option<i32>,
     pub region_files: usize,
     pub chunks: usize,
 }
@@ -69,9 +71,10 @@ pub struct JavaWorldAnalysis {
     pub dimensions: Vec<ImportDimensionAnalysis>,
     pub regions: usize,
     pub chunks: usize,
-    pub block_entities: usize,
-    pub entities: usize,
-    /// Total size of the selected world folder or extracted archive staging folder.
+    /// Null when chunk payload inspection did not complete.
+    pub block_entities: Option<usize>,
+    pub entities: Option<usize>,
+    /// Size estimate for an admitted world folder or extracted archive staging folder.
     pub source_bytes: u64,
     /// The original selection path, preserved for archive sources whose
     /// analyzed folder is a temporary extraction.
@@ -165,83 +168,61 @@ pub(super) fn inspect_root(root: &Path) -> JavaWorldAnalysis {
         complete_save: selection.complete_save,
         supported: false,
         data_version: selection.data_version,
-        version_id: None,
+        version_id: selection.version_id,
         version_name: selection.version_name.clone(),
         level_name: selection.level_name.clone(),
-        declared_dimensions: Vec::new(),
+        declared_dimensions: selection.declared_dimensions,
         dimensions: Vec::new(),
         regions: 0,
         chunks: 0,
-        block_entities: 0,
-        entities: 0,
-        source_bytes: source_size(root),
+        block_entities: None,
+        entities: None,
+        source_bytes: if selection.supported {
+            source_size(root)
+        } else {
+            0
+        },
         source_path: root.display().to_string(),
         source_kind: WorldSourceKind::Folder,
         archive: None,
         warnings: selection.warnings.clone(),
-        blockers: Vec::new(),
+        blockers: selection.blockers,
         support_matrix: support_matrix(),
     };
-    for blocker in &selection.blockers {
-        push_unique(&mut analysis.blockers, blocker.clone());
-    }
-
-    // A region file, a region directory or an unknown folder is not a complete save.
-    // Stop before trying to decode `level.dat` inside a file path.
-    if !matches!(selection.kind, WorldSelectionKind::WorldFolder) {
-        finish_analysis(&mut analysis);
+    if analysis.layout == split_anvil::LAYOUT {
+        analysis.regions = selection.region_files;
+        analysis.chunks = selection.chunks;
+        analysis.dimensions = selection
+            .dimensions
+            .into_iter()
+            .map(|dimension| ImportDimensionAnalysis {
+                kind: match dimension.id.as_str() {
+                    "minecraft:overworld" => DimensionKind::Overworld,
+                    "minecraft:the_nether" => DimensionKind::Nether,
+                    "minecraft:the_end" => DimensionKind::End,
+                    _ => DimensionKind::Custom,
+                },
+                id: dimension.id,
+                min_y: None,
+                height: None,
+                region_files: dimension.region_files,
+                chunks: dimension.chunks,
+            })
+            .collect();
         return analysis;
     }
 
-    let level = LevelDat::read(root.join("level.dat"));
-    match &level {
-        Ok(level) => {
-            analysis.data_version = Some(level.data_version);
-            analysis.version_id = Some(level.version_id);
-            analysis.version_name = level.version_name.clone();
-            analysis.level_name = level.level_name.clone();
-        }
-        Err(error) => push_unique(
-            &mut analysis.blockers,
-            format!("level.dat is missing or unreadable: {error}"),
-        ),
+    if !selection.supported {
+        return analysis;
     }
-
     match JavaWorld::open(root) {
         Ok(world) => {
-            analysis.layout = SUPPORTED_LAYOUT.to_owned();
             analysis.declared_dimensions = world.declared_dimensions.clone();
             if let Err(error) = inspect_world(&world, &mut analysis) {
                 analysis.blockers.push(error.to_string());
             }
         }
-        Err(error) => {
-            if analysis.layout == "mixed" {
-                push_unique(
-                    &mut analysis.blockers,
-                    "the world mixes classic region/ files with 26.1+ split layout markers"
-                        .to_owned(),
-                );
-            } else if analysis.layout == "split_26_1_plus" {
-                push_unique(
-                    &mut analysis.blockers,
-                    "26.1+ split world layout is not supported".to_owned(),
-                );
-            }
-            analysis.blockers.push(match &error {
-                AnvilError::UnsupportedDataVersion { found, supported } => format!(
-                    "DataVersion {found} is not supported; this build edits DataVersions {supported:?}"
-                ),
-                other => other.to_string(),
-            });
-        }
-    }
-
-    if analysis.chunks > MAX_IMPORT_CHUNKS {
-        analysis.blockers.push(format!(
-            "the world has {} allocated chunks; the editable import limit is {MAX_IMPORT_CHUNKS}",
-            analysis.chunks
-        ));
+        Err(error) => analysis.blockers.push(error.to_string()),
     }
     if analysis.chunks == 0 && analysis.blockers.is_empty() {
         analysis
@@ -253,18 +234,15 @@ pub(super) fn inspect_root(root: &Path) -> JavaWorldAnalysis {
     analysis
 }
 
-fn push_unique(blockers: &mut Vec<String>, blocker: String) {
-    if !blockers.contains(&blocker) {
-        blockers.push(blocker);
-    }
-}
-
 /// Sums regular files below a world folder without following symlinks. This is a size hint
 /// for the Review step, not a validation pass; unreadable entries are skipped.
 fn source_size(path: &Path) -> u64 {
     let Ok(metadata) = fs::symlink_metadata(path) else {
         return 0;
     };
+    if is_link_like(&metadata) {
+        return 0;
+    }
     if metadata.is_file() {
         return metadata.len();
     }
@@ -278,18 +256,17 @@ fn source_size(path: &Path) -> u64 {
             continue;
         };
         for entry in entries.flatten() {
-            let Ok(file_type) = entry.file_type() else {
+            let path = entry.path();
+            let Ok(metadata) = path.symlink_metadata() else {
                 continue;
             };
-            if file_type.is_symlink() {
+            if is_link_like(&metadata) {
                 continue;
             }
-            if file_type.is_dir() {
-                stack.push(entry.path());
-            } else if file_type.is_file() {
-                if let Ok(metadata) = entry.metadata() {
-                    total = total.saturating_add(metadata.len());
-                }
+            if metadata.is_dir() {
+                stack.push(path);
+            } else if metadata.is_file() {
+                total = total.saturating_add(metadata.len());
             }
         }
     }
@@ -305,18 +282,16 @@ fn finish_analysis(analysis: &mut JavaWorldAnalysis) {
         "block states and 4x4x4 biome cells become editable; block entities, entities, ticks, heightmaps, lighting, POI and unknown tags stay in the immutable source copy"
             .to_owned(),
     );
-    if analysis.block_entities > 0 || analysis.entities > 0 {
-        analysis.warnings.push(format!(
-            "{} block entit{} and {} entit{} found; they remain unchanged in the source copy",
-            analysis.block_entities,
-            if analysis.block_entities == 1 {
-                "y"
-            } else {
-                "ies"
-            },
-            analysis.entities,
-            if analysis.entities == 1 { "y" } else { "ies" },
-        ));
+    if let (Some(block_entities), Some(entities)) = (analysis.block_entities, analysis.entities) {
+        if block_entities > 0 || entities > 0 {
+            analysis.warnings.push(format!(
+                "{} block entit{} and {} entit{} found; they remain unchanged in the source copy",
+                block_entities,
+                if block_entities == 1 { "y" } else { "ies" },
+                entities,
+                if entities == 1 { "y" } else { "ies" },
+            ));
+        }
     }
     analysis.warnings.push(format!(
         "editable import limits: {MAX_IMPORT_CHUNKS} chunks, {MAX_IMPORT_SECTIONS} sections, {MAX_IMPORT_NON_AIR_BLOCKS} non-air blocks"
@@ -327,6 +302,8 @@ fn finish_analysis(analysis: &mut JavaWorldAnalysis) {
 }
 
 fn inspect_world(world: &JavaWorld, analysis: &mut JavaWorldAnalysis) -> Result<(), AnvilError> {
+    let mut block_entities = 0;
+    let mut entities = 0;
     for dimension in &world.dimensions {
         let coordinates = world.region_coordinates(&dimension.id)?;
         let mut dimension_chunks = 0usize;
@@ -341,20 +318,22 @@ fn inspect_world(world: &JavaWorld, analysis: &mut JavaWorldAnalysis) -> Result<
                 return Ok(());
             }
             for summary in region.summarize_all()? {
-                analysis.block_entities += summary.block_entities;
-                analysis.entities += summary.entities;
+                block_entities += summary.block_entities;
+                entities += summary.entities;
             }
         }
         analysis.regions += coordinates.len();
         analysis.dimensions.push(ImportDimensionAnalysis {
             id: dimension.id.clone(),
             kind: dimension.kind,
-            min_y: dimension.min_y,
-            height: dimension.height,
+            min_y: Some(dimension.min_y),
+            height: Some(dimension.height),
             region_files: coordinates.len(),
             chunks: dimension_chunks,
         });
     }
+    analysis.block_entities = Some(block_entities);
+    analysis.entities = Some(entities);
     Ok(())
 }
 

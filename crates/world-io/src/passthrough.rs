@@ -539,7 +539,7 @@ fn hex(bytes: &[u8]) -> String {
     output
 }
 
-fn is_link_like(metadata: &fs::Metadata) -> bool {
+pub(crate) fn is_link_like(metadata: &fs::Metadata) -> bool {
     #[cfg(windows)]
     {
         use std::os::windows::fs::MetadataExt;

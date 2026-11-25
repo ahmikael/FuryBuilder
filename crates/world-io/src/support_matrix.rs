@@ -126,7 +126,7 @@ fn versions() -> Vec<VersionSupport> {
             edit: "none".to_owned(),
             write: "none".to_owned(),
             passthrough: "none".to_owned(),
-            note: "M8.11 classifies the layout and inventories split region headers read-only; no split chunk decoding or writing is implemented.".to_owned(),
+            note: "Inspects level.dat, world generation settings, dimension folders, player storage paths and terrain region headers. Chunk payloads, project import, passthrough and export are not supported.".to_owned(),
         },
         VersionSupport {
             id: "java-26.4-snapshots".to_owned(),

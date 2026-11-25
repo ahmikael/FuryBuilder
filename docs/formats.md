@@ -42,10 +42,31 @@ affected sections. No fallback biome is substituted.
 | Pre-1.13            | varies      | McRegion (`region/*.mcr`)         | `detected_unsupported` | `legacy_marker`             | `none`                    | `none`                             | `none`          |
 | Bedrock Edition     | n/a         | Bedrock                           | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
 
-A complete 26.1+ split save is structurally complete but not readable, editable or
-comparable. A bare `.mca` file or a `region/` directory is not a complete save at all. The
-support matrix describes analysis and import boundaries; it does not add project profiles.
-Only a version with a verified profile can be selected for a new project.
+A bare `.mca` file or a `region/` directory is not a complete save. The support matrix
+describes analysis and import boundaries. Only a version with a verified profile can be
+selected for a new project.
+
+## Java 26.1–26.3 split saves: inspection only
+
+The built-in metadata identifies Java 26.1 (`4786`), 26.1.1 (`4788`), 26.1.2 (`4790`),
+26.2 (`4903`), and 26.3 (`5023`); each requires Java 25. Snapshots are not admitted.
+The [26.1 storage layout](https://www.minecraft.net/en-us/article/minecraft-java-edition-26-1)
+moves terrain to `dimensions/<namespace>/<path>/region/` and player files to
+`players/data/`, `players/advancements/`, and `players/stats/`. The inspector:
+
+- Reads `level.dat` and lists saved dimension declarations from
+  `data/minecraft/world_gen_settings.dat`. It does not resolve datapacks or infer height
+  bounds for the save.
+- Counts allocated terrain slots from `.mca` headers, separately from `entities/` and
+  `poi/`. It lists player storage folders when present but does not read the player files.
+- Requires readable metadata and the split Overworld terrain directory for a structurally
+  complete selection. A classic terrain folder alongside split markers is reported as
+  mixed, not as two copies of the same dimension.
+
+The preview does not decode blocks, biomes, entities, or compression records. In particular,
+the [26.3 palette change](https://www.minecraft.net/en-us/article/minecraft-26-3-snapshot-7)
+means an Anvil header does not establish classic chunk compatibility. Split saves cannot
+be imported into a project, compared, copied through world passthrough, or exported.
 
 ## What is editable (classic 1.21.4)
 

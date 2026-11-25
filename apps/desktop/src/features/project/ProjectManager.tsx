@@ -683,9 +683,11 @@ export function ProjectManager() {
                                 className="flex flex-wrap items-center gap-2 rounded-lg border bg-card px-3 py-2 font-mono text-xs"
                               >
                                 <span className="truncate">{dimension.id}</span>
-                                <span className="text-muted-foreground">
-                                  y {dimension.minY}..{dimension.minY + dimension.height - 1}
-                                </span>
+                                {dimension.minY !== null && dimension.height !== null ? (
+                                  <span className="text-muted-foreground">
+                                    y {dimension.minY}..{dimension.minY + dimension.height - 1}
+                                  </span>
+                                ) : null}
                                 <span className="ml-auto text-muted-foreground">
                                   {dimension.regionFiles} region(s) · {dimension.chunks} chunk(s)
                                 </span>
