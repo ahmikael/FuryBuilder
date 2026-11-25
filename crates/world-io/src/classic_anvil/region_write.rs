@@ -8,7 +8,7 @@
 //! - the only changed chunk fields are `sections[].block_states` and
 //!   `sections[].biomes`;
 //! - every source chunk decodes with the same strict reader used for import;
-//! - the edited chunk has `Status = minecraft:full`;
+//! - the edited chunk has the profile's fully generated `Status`;
 //! - the destination file does not exist and is not the source file.
 //!
 //! Untouched chunk records are copied byte for byte, including their timestamps. A new
@@ -333,7 +333,7 @@ pub(super) fn write_region(
     for entry in &source_entries {
         let source = region.read_chunk(entry.x, entry.z)?;
         if let Some(replacement) = pending.get(&(entry.x, entry.z)) {
-            if source.summary.status.as_deref() != Some("minecraft:full") {
+            if !format.is_full(source.summary.status.as_deref()) {
                 return Err(RegionWriteError::UnsupportedCombination(format!(
                     "chunk ({}, {}) has status {:?}; editing requires a fully generated chunk",
                     entry.x, entry.z, source.summary.status

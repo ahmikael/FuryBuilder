@@ -14,7 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use minecraft_version::VersionProfile;
-use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
+use world_domain::{BiomeState, BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::world_codec::world_codec;
@@ -493,10 +493,9 @@ fn decode_biomes(
         let name = item
             .as_string()
             .ok_or_else(|| invalid(x, z, "biome palette entry is not a string"))?;
-        if !valid_resource_location(name) {
-            return Err(invalid(x, z, format!("invalid biome id `{name}`")));
-        }
-        palette.push(name.to_owned());
+        let biome = BiomeState::new(name)
+            .map_err(|_| invalid(x, z, format!("invalid biome id `{name}`")))?;
+        palette.push(biome.into());
     }
 
     let cells = decode_indices(layout, biomes, "biome", palette.len(), x, z)?;
@@ -572,18 +571,6 @@ fn chunk_int(
         Some(_) => Err(invalid(x, z, format!("{key} is not an int"))),
         None => Err(invalid(x, z, format!("{key} is missing"))),
     }
-}
-
-fn valid_resource_location(value: &str) -> bool {
-    let Some((namespace, path)) = value.split_once(':') else {
-        return false;
-    };
-    [namespace, path].iter().all(|part| {
-        !part.is_empty()
-            && part.bytes().all(|b| {
-                b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_' || b == b'.' || b == b'-'
-            })
-    })
 }
 
 fn invalid(x: i32, z: i32, message: impl Into<String>) -> AnvilError {

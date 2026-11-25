@@ -173,7 +173,7 @@ pub fn reference_chunks(
 /// Reads the reference world and compares the sampled chunks against the editable world.
 ///
 /// The reference world is opened read-only. A missing reference chunk or a chunk that is
-/// not `minecraft:full` refuses the check instead of comparing an incomplete generator
+/// not fully generated refuses the check instead of comparing an incomplete generator
 /// output. A missing project chunk is a real difference: the reference blocks are compared
 /// against air.
 pub fn compare_java_world_to_world(
@@ -202,6 +202,7 @@ pub fn compare_java_world_to_world(
 
     let root = root.as_ref();
     let reference = JavaWorld::open(root)?;
+    let format = crate::classic_anvil::format::ClassicChunkFormat::for_profile(&reference.profile)?;
     let dimension = reference.dimension(PARITY_DIMENSION).ok_or_else(|| {
         ParityError::Invalid(format!(
             "the reference world has no {PARITY_DIMENSION} classic region folder"
@@ -266,12 +267,13 @@ pub fn compare_java_world_to_world(
         }
         let chunk = region.read_chunk(position.x, position.z)?;
         let decoded = chunk.decode(dimension, &reference.profile)?;
-        if decoded.status.as_deref() != Some("minecraft:full") {
+        if !format.is_full(decoded.status.as_deref()) {
             report.refusals.push(format!(
-                "reference chunk ({}, {}) has status `{}` instead of `minecraft:full`",
+                "reference chunk ({}, {}) has status `{}` instead of `{}`",
                 position.x,
                 position.z,
-                decoded.status.as_deref().unwrap_or("missing")
+                decoded.status.as_deref().unwrap_or("missing"),
+                format.full_status
             ));
             continue;
         }

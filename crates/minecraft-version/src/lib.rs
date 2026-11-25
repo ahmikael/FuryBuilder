@@ -9,6 +9,7 @@
 
 pub mod catalog;
 pub mod flattened_biomes;
+pub mod modern_classic;
 pub mod profile_builder;
 pub mod profiles;
 pub mod version_json;

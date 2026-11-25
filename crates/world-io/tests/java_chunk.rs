@@ -666,10 +666,18 @@ fn decodes_section_palettes_with_each_exact_modern_profile_without_admitting_wor
             "DataVersion".to_owned(),
             NbtValue::Int(profile.data_version),
         );
+        let version = profile.minecraft_version.as_str();
+        let status = if version.starts_with("1.18") || version.starts_with("1.19") {
+            "full"
+        } else {
+            "minecraft:full"
+        };
+        root.insert("Status".to_owned(), NbtValue::String(status.to_owned()));
         let nbt = NbtFile::new("", NbtValue::Compound(root));
         let region_chunk = region_chunk(nbt, 0, 0, -4, 1);
         let decoded = region_chunk.decode(&dim, profile).unwrap();
         assert_eq!(decoded.data_version, profile.data_version);
+        assert_eq!(decoded.status.as_deref(), Some(status), "{version}");
         assert_eq!(decoded.block_entities, 1);
         assert_eq!(
             decoded
@@ -698,6 +706,7 @@ fn decodes_section_palettes_with_each_exact_modern_profile_without_admitting_wor
         unreachable!("fixture root");
     };
     root.insert("DataVersion".into(), NbtValue::Int(profile.data_version));
+    root.insert("Status".into(), NbtValue::String("full".into()));
     let dir = TempDir::new("unverified-region");
     let path = write_region(dir.path(), &fixture, 0, 0);
     let region = RegionFile::open(path).unwrap();

@@ -15,6 +15,22 @@ example, 1.21.11 uses data pack format `94.1`). For these classic Anvil releases
 Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. Knowing these
 facts does not enable opening, editing, exporting or generating a world for an unverified release.
 
+## Differences within modern classic Anvil
+
+The 1.18–1.21.11 releases share the section and palette layout, but the on-disk `Status`
+value for a fully generated chunk is `full` in 1.18–1.19 and `minecraft:full` from 1.20
+onward. The adapter compares against the exact profile's spelling. It does not rewrite
+the status or treat an unfamiliar value as fully generated. Block-entity payloads,
+including the change from item tags to data components in 1.20.5, remain opaque.
+
+The vanilla biome registry contains 61 IDs in 1.18, 63 from 1.19 (adding `deep_dark` and
+`mangrove_swamp`), 64 from 1.20 (adding `cherry_grove`), and 65 from 1.21.4
+(adding `pale_garden`). The sets were cross-checked for all 27 releases against the
+[vanilla registry reports mirrored by mcmeta](https://github.com/misode/mcmeta/tree/registries).
+Import preserves biome IDs outside the vanilla registry, including datapack names.
+The import report and desktop diagnostics include a warning with the number of
+affected sections. No fallback biome is substituted.
+
 ## Supported versions
 
 | Version family      | DataVersion | Layout                            | Status                 | Read                        | Edit                      | Write                              | Passthrough     |

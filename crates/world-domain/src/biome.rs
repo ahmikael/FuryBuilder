@@ -31,7 +31,12 @@ impl BiomeState {
             return Err(BiomeStateError::NotNamespaced(value));
         }
         let (namespace, path) = value.split_once(':').expect("checked above");
-        if !is_lower_snake(namespace) || !is_lower_snake(path) || path.contains(':') {
+        if !is_lower_snake(namespace)
+            || path.is_empty()
+            || !path
+                .split('/')
+                .all(|part| part.is_empty() || is_lower_snake(part))
+        {
             return Err(BiomeStateError::InvalidCharacters(value));
         }
         Ok(Self(value))
@@ -173,6 +178,8 @@ mod tests {
     #[test]
     fn validates_namespaced_biomes() {
         assert_eq!(biome("minecraft:plains").as_str(), "minecraft:plains");
+        assert_eq!(biome("example:caves/deep").as_str(), "example:caves/deep");
+        assert!("example/foo:bar".parse::<BiomeState>().is_err());
         assert!("plains".parse::<BiomeState>().is_err());
         assert!("minecraft:".parse::<BiomeState>().is_err());
         assert!("minecraft:Bad Biome".parse::<BiomeState>().is_err());

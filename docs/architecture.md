@@ -303,8 +303,11 @@ region writer, import, and export. It selects the on-disk section, palette,
 heightmap and light layout from the version profile's format family and takes
 vertical bounds from the selected dimension. The chunk decoder takes the expected
 profile and rejects a different `DataVersion` even if the NBT layout is identical.
-The 1.18–1.21.x profiles share the modern classic layout. Raw chunk decoding is
-separate from save admission: Minecraft Java 1.21.4 remains the only admitted version.
+The 1.18–1.21.x profiles share the modern classic section layout. The adapter selects
+the fully generated `Status` spelling from exact release facts; the raw value is kept.
+The same release facts supply the vanilla biome registry for import diagnostics, not as
+an allowlist for source biome palettes. Raw chunk decoding is separate from save
+admission: Minecraft Java 1.21.4 remains the only admitted version.
 A loaded overlay uses that same profile to patch the original NBT's palette lists
 and packed indices. Section order, unrelated container tags and opaque block-entity
 payloads are verified before and after the region write. NBT equality compares

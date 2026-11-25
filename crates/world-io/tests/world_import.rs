@@ -385,6 +385,56 @@ fn load_imports_block_states_and_preserves_the_source() {
 }
 
 #[test]
+fn load_preserves_non_vanilla_biomes_and_reports_one_bounded_warning() {
+    let dir = TempDir::new("non-vanilla-biomes");
+    let root = dir.path().join("world");
+    write_world(&root, TARGET);
+    let sections = [
+        (-4, "example:caves/deep"),
+        (-3, "minecraft:mountains"),
+        (-2, "minecraft:pale_garden"),
+    ]
+    .map(|(y, biome)| {
+        let NbtValue::Compound(mut fields) = section(y, "minecraft:stone", &[]) else {
+            panic!("fixture section must be a compound");
+        };
+        fields.insert("biomes".to_owned(), biome_palette(biome));
+        NbtValue::Compound(fields)
+    });
+    fs::write(
+        root.join("region/r.0.0.mca"),
+        region_bytes(&[(0, 0, chunk_nbt(0, 0, sections.into()))]),
+    )
+    .unwrap();
+    let before = snapshot(&root);
+
+    let (world, report) = load_java_world(&root).unwrap();
+    for (y, expected) in [
+        (-64, "example:caves/deep"),
+        (-48, "minecraft:mountains"),
+        (-32, "minecraft:pale_garden"),
+    ] {
+        assert_eq!(
+            world
+                .get_biome(OVERWORLD, BlockPos::new(0, y, 0))
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            expected
+        );
+    }
+    let warnings: Vec<_> = report
+        .warnings
+        .iter()
+        .filter(|warning| warning.contains("biome IDs outside the vanilla"))
+        .collect();
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].starts_with("2 section(s)"));
+    assert!(warnings[0].contains("example:caves/deep"));
+    assert_eq!(snapshot(&root), before, "import must not write the source");
+}
+
+#[test]
 fn chunk_limit_is_enforced_before_partial_import_is_returned() {
     let dir = TempDir::new("limit");
     let root = dir.path().join("world");

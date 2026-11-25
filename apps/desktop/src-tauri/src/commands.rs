@@ -1699,7 +1699,7 @@ fn import_world_project(
     );
     ensure_not_cancelled(attempt)?;
     reporter.running("world", "Reading editable blocks and biomes");
-    let (mut world, _load_report) =
+    let (mut world, load_report) =
         world_io::load_java_world(world_root).map_err(world_import_error)?;
     if let Some(confirmed) = &confirmed_version {
         confirmed.ensure_matches(
@@ -1831,6 +1831,14 @@ fn import_world_project(
     unpublished.0 = None;
     drop(projects);
     reporter.done("verify", "Source copy verified and project opened");
+    state.diagnostics.write(
+        "info",
+        "project.import",
+        serde_json::json!({
+            "dataVersion": load_report.data_version,
+            "warnings": load_report.warnings,
+        }),
+    );
     reporter.done("ready", "Project ready");
     current_payload(state, detail, info, None)
 }

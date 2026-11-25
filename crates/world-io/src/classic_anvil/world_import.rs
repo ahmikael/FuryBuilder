@@ -16,6 +16,7 @@
 use std::fs;
 use std::path::Path;
 
+use minecraft_version::modern_classic::ModernClassicRelease;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{ChunkPos, DimensionKind, World};
@@ -27,6 +28,7 @@ use crate::world_codec::world_codec;
 use crate::world_selection::{classify_world_selection, WorldSelectionKind};
 use crate::world_source::{ArchiveReport, WorldSourceKind};
 
+use super::format::ClassicChunkFormat;
 use super::reader::{AnvilError, JavaWorld, LevelDat};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
@@ -379,6 +381,10 @@ pub(super) fn load_world(
     options: WorldImportOptions,
 ) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
     let world = JavaWorld::open(root)?;
+    let format = ClassicChunkFormat::for_profile(&world.profile)?;
+    let biome_registry = ModernClassicRelease::for_profile(&world.profile);
+    let mut non_vanilla_biome_sections = 0;
+    let mut first_non_vanilla_biome = None;
     let mut report = JavaWorldLoadReport {
         minecraft_version: world.profile.minecraft_version.to_string(),
         data_version: world.profile.data_version,
@@ -412,7 +418,7 @@ pub(super) fn load_world(
                 report.chunks += 1;
                 report.block_entities += decoded.block_entities;
                 report.entities += decoded.entities;
-                if decoded.status.as_deref() != Some("minecraft:full") {
+                if !format.is_full(decoded.status.as_deref()) {
                     report.non_full_chunks += 1;
                 }
                 if decoded
@@ -445,6 +451,23 @@ pub(super) fn load_world(
                             options.max_non_air_blocks
                         )));
                     }
+                    if let Some(registry) = biome_registry {
+                        if let Some(id) = section
+                            .biomes
+                            .palette()
+                            .iter()
+                            .find(|id| !registry.contains_biome(id))
+                        {
+                            non_vanilla_biome_sections += 1;
+                            first_non_vanilla_biome.get_or_insert_with(|| {
+                                let mut sample = id.chars().take(96).collect::<String>();
+                                if sample.len() < id.len() {
+                                    sample.push('…');
+                                }
+                                sample
+                            });
+                        }
+                    }
                     let biomes = section.biomes.to_domain().ok_or_else(|| {
                         WorldImportError::VerificationFailed(format!(
                             "section {section_y} in chunk ({}, {}) has biome data that cannot be represented",
@@ -462,8 +485,14 @@ pub(super) fn load_world(
 
     if report.non_full_chunks > 0 {
         report.warnings.push(format!(
-            "{} chunk(s) do not have status minecraft:full; their stored blocks are imported as-is",
-            report.non_full_chunks
+            "{} chunk(s) do not have status {}; their stored blocks are imported as-is",
+            report.non_full_chunks, format.full_status
+        ));
+    }
+    if let Some(id) = first_non_vanilla_biome {
+        report.warnings.push(format!(
+            "{non_vanilla_biome_sections} section(s) contain biome IDs outside the vanilla {} registry (e.g. `{id}`); their original IDs were preserved",
+            world.profile.minecraft_version
         ));
     }
     report.warnings.push(

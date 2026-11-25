@@ -114,9 +114,9 @@ pub struct DerivedCounters {
 }
 
 impl DerivedCounters {
-    fn add(&mut self, chunk: &ChunkDerivedData) {
+    fn add(&mut self, chunk: &ChunkDerivedData, format: &ClassicChunkFormat) {
         self.chunks += 1;
-        if chunk.status.as_deref() == Some("minecraft:full") {
+        if format.is_full(chunk.status.as_deref()) {
             self.full_chunks += 1;
         }
         for key in chunk.root_fields.keys() {
@@ -526,8 +526,8 @@ pub fn analyze_java_world_derived(
                     .values()
                     .filter(|map| map.words != expected_words)
                     .count();
-                dimension_counters.add(&chunk);
-                counters.add(&chunk);
+                dimension_counters.add(&chunk, format);
+                counters.add(&chunk, format);
             }
         }
         dimensions.push(DimensionDerivedData {

@@ -1,10 +1,10 @@
 //! On-disk chunk layout, selected independently of a profile's support level.
-//! All currently cataloged modern classic releases share this layout; their
-//! dimension bounds are supplied separately.
+//! Modern classic releases share section storage, but not every field's
+//! encoding or registry. Dimension bounds are supplied separately.
 
 use std::ops::Range;
 
-use minecraft_version::{BiomeFormat, ChunkFamily, VersionProfile, WorldLayout};
+use minecraft_version::{modern_classic::ModernClassicRelease, VersionProfile};
 use world_domain::SECTION_SIZE;
 
 use super::reader::AnvilError;
@@ -17,6 +17,7 @@ pub(crate) struct ClassicChunkFormat {
     pub z_pos: &'static str,
     pub chunk_y: &'static str,
     pub status: &'static str,
+    pub full_status: &'static str,
     pub sections: &'static str,
     pub section_y: &'static str,
     pub blocks: PaletteLayout,
@@ -49,6 +50,7 @@ const MODERN_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
     z_pos: "zPos",
     chunk_y: "yPos",
     status: "Status",
+    full_status: "minecraft:full",
     sections: "sections",
     section_y: "Y",
     blocks: PaletteLayout {
@@ -78,6 +80,12 @@ const MODERN_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
     },
 };
 
+// 1.18–1.19 store the chunk status registry path without its namespace.
+const BARE_STATUS_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
+    full_status: "full",
+    ..MODERN_CLASSIC
+};
+
 impl ClassicChunkFormat {
     pub(crate) fn for_read(data_version: i32) -> Result<&'static Self, AnvilError> {
         let profile = version_support::read_profile(data_version).ok_or_else(|| {
@@ -90,19 +98,21 @@ impl ClassicChunkFormat {
     }
 
     pub(crate) fn for_profile(profile: &VersionProfile) -> Result<&'static Self, AnvilError> {
-        match (
-            profile.world_layout,
-            profile.chunk_family,
-            profile.biome_format,
-        ) {
-            (WorldLayout::ClassicAnvil, ChunkFamily::ModernPaletted, BiomeFormat::Palette4x4x4) => {
-                Ok(&MODERN_CLASSIC)
-            }
-            _ => Err(AnvilError::UnsupportedLayout(format!(
+        let release = ModernClassicRelease::for_profile(profile).ok_or_else(|| {
+            AnvilError::UnsupportedLayout(format!(
                 "no classic chunk format for profile `{}`",
                 profile.id
-            ))),
-        }
+            ))
+        })?;
+        Ok(if release.uses_namespaced_chunk_status() {
+            &MODERN_CLASSIC
+        } else {
+            &BARE_STATUS_CLASSIC
+        })
+    }
+
+    pub(crate) fn is_full(&self, status: Option<&str>) -> bool {
+        status == Some(self.full_status)
     }
 
     pub(crate) fn section_range(&self, min_y: i32, height: i32) -> Option<Range<i32>> {
@@ -181,7 +191,7 @@ impl PaddedLongs {
 
 #[cfg(test)]
 mod tests {
-    use minecraft_version::{builtin_profiles, default_profile};
+    use minecraft_version::{builtin_profiles, default_profile, ChunkFamily, WorldLayout};
 
     use super::*;
 
@@ -221,6 +231,30 @@ mod tests {
         profile.world_layout = WorldLayout::ClassicAnvil;
         profile.chunk_family = ChunkFamily::SectionBiomes;
         assert!(ClassicChunkFormat::for_profile(&profile).is_err());
+    }
+
+    #[test]
+    fn only_the_releases_own_status_spelling_is_fully_generated() {
+        for (version, full, wrong) in [
+            ("1.18.2", "full", "minecraft:full"),
+            ("1.19.4", "full", "minecraft:full"),
+            ("1.20", "minecraft:full", "full"),
+            ("1.21.11", "minecraft:full", "full"),
+        ] {
+            let profile =
+                minecraft_version::profile_for_version(&version.parse().unwrap()).unwrap();
+            let format = ClassicChunkFormat::for_profile(&profile).unwrap();
+            assert_eq!(format.status, "Status");
+            assert!(format.is_full(Some(full)), "{version}");
+            for status in [
+                None,
+                Some(wrong),
+                Some("example:full"),
+                Some("minecraft:light"),
+            ] {
+                assert!(!format.is_full(status), "{version}: {status:?}");
+            }
+        }
     }
 
     #[test]
