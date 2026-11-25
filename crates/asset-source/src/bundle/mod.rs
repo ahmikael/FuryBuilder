@@ -19,6 +19,8 @@ use thiserror::Error;
 use crate::settings::AssetSourceSetting;
 
 pub use stack::BundlePack;
+pub(crate) use stack::ResourceStack;
+pub(crate) use texture::build_atlas_with_limit;
 pub use texture::BundleTexture;
 
 pub const ASSET_BUNDLE_SCHEMA_VERSION: u32 = 1;

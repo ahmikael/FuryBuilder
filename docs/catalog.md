@@ -45,7 +45,7 @@ client JAR.
 | `assets/<ns>/models/block/*.json` | Model parent chain and block icon texture |
 | `assets/<ns>/models/item/*.json` | Item icon textures and the pre-item-definition fallback |
 | `assets/<ns>/items/<item>.json` | Item ids and item model references (1.21.4+) |
-| `assets/<ns>/textures/**/*.png` | Texture existence and counts (catalog does not decode images) |
+| `assets/<ns>/textures/**/*.png` | Texture existence and counts; the icon atlas decodes only referenced icons |
 | `assets/<ns>/lang/en_us.json` | Display names; other languages are counted |
 | `data/<ns>/tags/block/**/*.json` | Direct block tag membership (1.21+; `tags/blocks` on older releases) |
 | `data/<ns>/tags/item/**/*.json` | Direct item tag membership (1.21+; `tags/items` on older releases) |
@@ -69,9 +69,31 @@ reported as entries with an explicit warning; they are not silently presented as
 
 `catalogHash` is SHA-256 over the canonical blocks/items/atlases, the version, the
 `DataVersion` and the client JAR SHA-1. `catalogId` is
-`java-<version>-<first 16 hex of catalogHash>`. The catalog cache is process-local and keyed
+`java-<version>-<first 16 hex of catalogHash>`. The registry cache is process-local and keyed
 by the JAR path, size, modification time and catalog schema. A project pins `catalogId` and
 `catalogHash` in its schema-2 manifest.
+
+## Icon atlas
+
+`CatalogIconAtlas` is the presentation companion to the registry snapshot: a packed PNG plus
+the rectangle of every icon texture. It contains only the distinct textures referenced by
+`iconTexture` on catalog blocks and items, so a palette can draw an icon without decoding
+individual files in the WebView. The render atlas used by the viewport is separate and only
+contains the block states currently visible.
+
+- The atlas is built from the exact client JAR and the ordered resource-pack stack. Packs may
+  replace a texture, but they never add or remove catalog entries.
+- The cache key is exactly
+  `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema`; changing the JAR,
+  any pack in the stack, the version or the catalog/atlas schema rebuilds it. The cache is
+  process-local, bounded to four entries and 64 MiB, and is cleared by `assets_clear_cache`.
+- `assets_catalog_atlas`/`loadAssetCatalogAtlas()` build the atlas for the wizard source;
+  `project_catalog_atlas`/`loadProjectCatalogAtlas()` use the catalog pinned by the open
+  project and return `null` for placeholder projects.
+- Missing or malformed textures use the same marked checker as the render atlas. Animated
+  textures use their first frame. The atlas never changes block names, states or world data.
+- The atlas is not part of `catalogHash`; changing a resource pack must not invalidate the
+  catalog identity pinned by a project.
 
 ## Project authority
 
@@ -111,6 +133,9 @@ for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open
   `range_dispatch`, `condition` and `composite` shapes; `modelType` records the top-level
   dispatcher. The full definition stays in the JAR; item components and stack data are not
   modelled.
+- The icon atlas is exposed through `assets_catalog_atlas` and `project_catalog_atlas`, but
+  the `Blocks` palette still draws flat colour chips. Wiring the atlas into the virtualized
+  palette and adding 3D previews belong to the palette/UI stages.
 - Tag membership is direct. Transitive `#tag` references remain available in the JAR and are
   not flattened into each entry.
 - A texture missing from the JAR produces a null icon and a warning. The asset-index fallback
@@ -122,7 +147,8 @@ for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open
 - Tests use a synthetic 1.21.4 client JAR. The real-JAR matrix and captured catalog snapshots
   belong to the full fixture stage; manual QA downloads a real JAR. A real 1.21.4 client JAR
   currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
-  173 item tag files and 14 atlases.
+  173 item tag files and 14 atlases. Its icon atlas packs 1,105 textures (including the
+  missing checker) into a 256×2048 PNG of 684,731 bytes; a repeated request is a cache hit.
 
 ## Safety bounds
 
@@ -130,5 +156,7 @@ for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open
 - At most 65,536 textures and 65,536 `en_us` keys.
 - At most 16,384 tag files, 256 atlas sources per atlas and 256 warnings.
 - One catalog JSON document is capped at 4 MiB.
+- The icon atlas is capped at 4,096 distinct textures and 32 million pixels; one decoded
+  texture is capped at 1024×1024.
 - A malformed file is skipped with a warning; a JAR without blockstates is refused instead of
   being reported as an empty catalog.

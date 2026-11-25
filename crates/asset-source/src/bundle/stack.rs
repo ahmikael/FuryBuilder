@@ -46,6 +46,9 @@ pub struct ResourceStack {
     pub packs_info: Vec<BundlePack>,
     pub warnings: Vec<String>,
     pub fingerprint: String,
+    /// Stable fingerprint of the ordered resource-pack stack only. The base JAR is not part
+    /// of it, so catalog caches can combine it with the exact version and JAR SHA-1.
+    pub pack_stack_hash: String,
 }
 
 impl ResourceStack {
@@ -66,6 +69,7 @@ impl ResourceStack {
             packs_info: Vec::new(),
             warnings: Vec::new(),
             fingerprint: String::new(),
+            pack_stack_hash: String::new(),
         };
         let mut source_pack: Option<PathBuf> = None;
         if let Some(source) = source {
@@ -178,6 +182,7 @@ impl ResourceStack {
                 "select a Minecraft client JAR or at least one resource pack".to_owned(),
             ));
         }
+        stack.pack_stack_hash = stack.compute_pack_stack_hash()?;
         stack.fingerprint = stack.compute_fingerprint()?;
         Ok(stack)
     }
@@ -317,6 +322,14 @@ impl ResourceStack {
                 hasher.update(sha1.as_bytes());
             }
         }
+        hasher.update(b"packs");
+        hasher.update(self.pack_stack_hash.as_bytes());
+        Ok(hex(&hasher.finalize()))
+    }
+
+    fn compute_pack_stack_hash(&self) -> Result<String, BundleError> {
+        let mut hasher = Sha256::new();
+        hasher.update(b"furybuilder-pack-stack-v1");
         for pack in &self.packs {
             hasher.update(b"pack");
             match pack {

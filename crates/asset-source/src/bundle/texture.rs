@@ -62,15 +62,23 @@ pub(crate) fn build_atlas(
     stack: &mut ResourceStack,
     keys: &std::collections::BTreeSet<String>,
 ) -> Result<BuiltAtlas, BundleError> {
+    build_atlas_with_limit(stack, keys, MAX_TEXTURES)
+}
+
+pub(crate) fn build_atlas_with_limit(
+    stack: &mut ResourceStack,
+    keys: &std::collections::BTreeSet<String>,
+    max_textures: usize,
+) -> Result<BuiltAtlas, BundleError> {
     let mut warnings = Vec::new();
     let mut textures: Vec<DecodedTexture> = Vec::new();
     let mut ordered: Vec<String> = keys.iter().cloned().collect();
     ordered.push("__missing__".to_owned());
     ordered.sort();
     ordered.dedup();
-    if ordered.len() > MAX_TEXTURES {
+    if ordered.len() > max_textures {
         return Err(BundleError::LimitExceeded(format!(
-            "a bundle references more than {MAX_TEXTURES} textures"
+            "an atlas references more than {max_textures} textures"
         )));
     }
     let missing_checker = missing_texture("__missing__", None);

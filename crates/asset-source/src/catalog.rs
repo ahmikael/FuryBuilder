@@ -1315,6 +1315,10 @@ mod tests {
     }
 
     fn tiny_png() -> Vec<u8> {
+        colored_png([255, 0, 255, 255])
+    }
+
+    fn colored_png(color: [u8; 4]) -> Vec<u8> {
         let mut bytes = Vec::new();
         {
             let mut encoder = png::Encoder::new(&mut bytes, 16, 16);
@@ -1323,11 +1327,48 @@ mod tests {
             let mut writer = encoder.write_header().expect("png header");
             let mut pixels = vec![0u8; 16 * 16 * 4];
             for pixel in pixels.as_chunks_mut::<4>().0 {
-                pixel.copy_from_slice(&[255, 0, 255, 255]);
+                pixel.copy_from_slice(&color);
             }
             writer.write_image_data(&pixels).expect("png pixels");
         }
         bytes
+    }
+
+    fn write_pack(dir: &TempDir, label: &str, stone: &[u8]) -> PathBuf {
+        let path = dir.path.join(format!("{label}.zip"));
+        let file = fs::File::create(&path).expect("create pack");
+        let mut zip = zip::ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        zip.start_file("pack.mcmeta", options).expect("pack meta");
+        zip.write_all(br#"{"pack":{"pack_format":46,"description":"test pack"}}"#)
+            .expect("write pack meta");
+        zip.start_file("assets/minecraft/textures/block/stone.png", options)
+            .expect("pack texture");
+        zip.write_all(stone).expect("write pack texture");
+        zip.finish().expect("finish pack");
+        path
+    }
+
+    fn atlas_pixel(
+        atlas: &crate::CatalogIconAtlas,
+        texture: &crate::CatalogAtlasTexture,
+        x: u32,
+        y: u32,
+    ) -> [u8; 4] {
+        use base64::Engine as _;
+        let png = base64::engine::general_purpose::STANDARD
+            .decode(&atlas.png_base64)
+            .expect("atlas base64");
+        let decoder = png::Decoder::new(std::io::Cursor::new(png));
+        let mut reader = decoder.read_info().expect("atlas png");
+        let mut buffer = vec![0u8; reader.output_buffer_size()];
+        let frame = reader.next_frame(&mut buffer).expect("atlas frame");
+        let index = (((texture.y + y) * atlas.width + texture.x + x) * 4) as usize;
+        let mut pixel = [0u8; 4];
+        pixel.copy_from_slice(&buffer[index..index + 4]);
+        assert_eq!(frame.color_type, png::ColorType::Rgba);
+        pixel
     }
 
     fn version_json() -> Vec<u8> {
@@ -2036,5 +2077,67 @@ mod tests {
             .warnings
             .iter()
             .any(|warning| warning.contains("atlases/broken.json")));
+    }
+
+    #[test]
+    fn catalog_icon_atlas_is_keyed_by_jar_and_pack_stack() {
+        use crate::catalog_atlas::{CatalogIconAtlasService, CATALOG_ATLAS_SCHEMA_VERSION};
+
+        let dir = TempDir::new("atlas");
+        let path = write_jar(&dir);
+        let catalog = AssetCatalogService::new()
+            .build(&source(&path))
+            .expect("catalog");
+        let service = CatalogIconAtlasService::new();
+
+        let first = service
+            .atlas(&source(&path), &[], &catalog)
+            .expect("first atlas");
+        assert!(!first.cache_hit);
+        assert_eq!(first.schema_version, CATALOG_ATLAS_SCHEMA_VERSION);
+        assert_eq!(first.catalog_id, catalog.catalog_id);
+        assert_eq!(first.catalog_hash, catalog.catalog_hash);
+        assert_eq!(first.minecraft_version, "1.21.4");
+        assert_eq!(
+            first.client_jar_sha1,
+            catalog.client_jar_sha1.clone().expect("jar sha1")
+        );
+        assert_eq!(first.cache_key.split('|').count(), 4);
+        assert!(first.cache_key.contains(&first.pack_stack_hash));
+        let stone = first
+            .textures
+            .iter()
+            .find(|texture| texture.key == "minecraft:block/stone")
+            .expect("stone icon");
+        assert!(!stone.missing);
+        assert_eq!((stone.width, stone.height), (16, 16));
+        assert_eq!(atlas_pixel(&first, stone, 0, 0), [255, 0, 255, 255]);
+
+        let second = service
+            .atlas(&source(&path), &[], &catalog)
+            .expect("second atlas");
+        assert!(second.cache_hit);
+        assert_eq!(second.cache_key, first.cache_key);
+
+        let pack = write_pack(&dir, "green-stone", &colored_png([0, 255, 0, 255]));
+        let pack_path = pack.display().to_string();
+        let third = service
+            .atlas(&source(&path), std::slice::from_ref(&pack_path), &catalog)
+            .expect("pack atlas");
+        assert!(!third.cache_hit);
+        assert_ne!(third.cache_key, first.cache_key);
+        assert_ne!(third.pack_stack_hash, first.pack_stack_hash);
+        let stone = third
+            .textures
+            .iter()
+            .find(|texture| texture.key == "minecraft:block/stone")
+            .expect("pack stone icon");
+        assert_eq!(atlas_pixel(&third, stone, 0, 0), [0, 255, 0, 255]);
+
+        let fourth = service
+            .atlas(&source(&path), &[pack_path], &catalog)
+            .expect("pack cache hit");
+        assert!(fourth.cache_hit);
+        assert_eq!(fourth.cache_key, third.cache_key);
     }
 }

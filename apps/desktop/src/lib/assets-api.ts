@@ -3,6 +3,7 @@ import type {
   AssetDiscoveryReport,
   AssetPathReport,
   AssetSourceKind,
+  CatalogIconAtlas,
   CatalogSnapshot,
   SavedAssetSource,
 } from "@/assets/types";
@@ -72,9 +73,31 @@ export function loadAssetCatalog(override?: {
 }
 
 /**
+ * Builds the palette icon atlas for the selected client JAR and the saved resource-pack
+ * stack. The atlas is presentation only; it does not change the pinned catalog.
+ */
+export function loadAssetCatalogAtlas(override?: {
+  sourceKind: AssetSourceKind;
+  sourcePath: string;
+}): Promise<CatalogIconAtlas> {
+  return invokeCommand<CatalogIconAtlas>(
+    "assets_catalog_atlas",
+    override ? { sourceKind: override.sourceKind, sourcePath: override.sourcePath } : {},
+  );
+}
+
+/**
  * Rebuilds the catalog pinned by the open project and verifies it against `project.json`.
  * Returns null for an explicit placeholder project, which has no client JAR catalog.
  */
 export function loadProjectCatalog(): Promise<CatalogSnapshot | null> {
   return invokeCommand<CatalogSnapshot | null>("project_catalog");
+}
+
+/**
+ * Builds the icon atlas for the catalog pinned by the open project and the saved resource-pack
+ * stack. Returns null for an explicit placeholder project, matching `loadProjectCatalog`.
+ */
+export function loadProjectCatalogAtlas(): Promise<CatalogIconAtlas | null> {
+  return invokeCommand<CatalogIconAtlas | null>("project_catalog_atlas");
 }

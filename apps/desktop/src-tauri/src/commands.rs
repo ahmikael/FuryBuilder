@@ -7,8 +7,8 @@ use std::time::{Duration, Instant};
 
 use asset_source::{
     AssetBundle, AssetBundleService, AssetCatalogService, AssetDiscoveryReport, AssetPathReport,
-    AssetSelectionKind, AssetSettingsStore, AssetSourceSetting, BlockStateRequest, CatalogSnapshot,
-    SavedAssetSource,
+    AssetSelectionKind, AssetSettingsStore, AssetSourceSetting, BlockStateRequest,
+    CatalogIconAtlas, CatalogIconAtlasService, CatalogSnapshot, SavedAssetSource,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -3620,21 +3620,25 @@ pub fn assets_catalog(
     source_kind: Option<String>,
     source_path: Option<String>,
 ) -> Result<CatalogSnapshot, AppError> {
-    let saved = components.assets().saved_source();
-    let source = resolve_asset_source(components.assets(), source_kind, source_path)?.ok_or_else(
-        || {
-            if saved.placeholder {
-                AppError::invalid_argument(
-                    "placeholder textures have no block/item catalog; select or download a Minecraft client JAR",
-                )
-            } else {
-                AppError::invalid_argument(
-                    "select Minecraft client assets before building a block/item catalog",
-                )
-            }
-        },
-    )?;
+    let source = resolve_catalog_source(components.inner(), source_kind, source_path)?;
     service.catalog(&source).map_err(asset_catalog_error)
+}
+
+/// Builds the palette icon atlas for the selected client JAR and the current resource-pack
+/// stack. The atlas is presentation only; registry contents still come from the base JAR.
+#[tauri::command]
+pub fn assets_catalog_atlas(
+    components: State<'_, ComponentManager>,
+    catalog: State<'_, AssetCatalogService>,
+    atlas: State<'_, CatalogIconAtlasService>,
+    source_kind: Option<String>,
+    source_path: Option<String>,
+) -> Result<CatalogIconAtlas, AppError> {
+    let source = resolve_catalog_source(components.inner(), source_kind, source_path)?;
+    let snapshot = catalog.catalog(&source).map_err(asset_catalog_error)?;
+    atlas
+        .atlas(&source, &components.assets().pack_stack(), &snapshot)
+        .map_err(asset_bundle_error)
 }
 
 /// Builds the catalog pinned by the open project. The catalog is rebuilt from the exact
@@ -3646,6 +3650,38 @@ pub fn project_catalog(
     state: State<'_, AppState>,
     components: State<'_, ComponentManager>,
     catalog: State<'_, AssetCatalogService>,
+) -> Result<Option<CatalogSnapshot>, AppError> {
+    project_catalog_snapshot(state.inner(), components.inner(), catalog.inner())
+}
+
+/// Builds the icon atlas for the catalog pinned by the open project. Placeholder projects
+/// return `None`, matching `project_catalog`.
+#[tauri::command]
+pub fn project_catalog_atlas(
+    state: State<'_, AppState>,
+    components: State<'_, ComponentManager>,
+    catalog: State<'_, AssetCatalogService>,
+    atlas: State<'_, CatalogIconAtlasService>,
+) -> Result<Option<CatalogIconAtlas>, AppError> {
+    let Some(snapshot) =
+        project_catalog_snapshot(state.inner(), components.inner(), catalog.inner())?
+    else {
+        return Ok(None);
+    };
+    let source = AssetSourceSetting {
+        kind: AssetSelectionKind::ClientJar.as_str().to_owned(),
+        path: snapshot.client_jar.clone(),
+    };
+    atlas
+        .atlas(&source, &components.assets().pack_stack(), &snapshot)
+        .map(Some)
+        .map_err(asset_bundle_error)
+}
+
+fn project_catalog_snapshot(
+    state: &AppState,
+    components: &ComponentManager,
+    catalog: &AssetCatalogService,
 ) -> Result<Option<CatalogSnapshot>, AppError> {
     let (target, pins) = {
         let projects = state
@@ -3662,16 +3698,18 @@ pub fn project_catalog(
             .map_err(project_error)?;
         (detail.target, detail.components)
     };
-    resolve_project_catalog(components.inner(), catalog.inner(), &target, &pins)
+    resolve_project_catalog(components, catalog, &target, &pins)
 }
 
 #[tauri::command]
 pub fn assets_clear_cache(
     service: State<'_, AssetBundleService>,
     catalog: State<'_, AssetCatalogService>,
+    atlas: State<'_, CatalogIconAtlasService>,
 ) {
     service.clear_cache();
     catalog.clear();
+    atlas.clear();
 }
 
 fn resolve_asset_source(
@@ -3686,6 +3724,25 @@ fn resolve_asset_source(
             "sourceKind and sourcePath must be provided together",
         )),
     }
+}
+
+fn resolve_catalog_source(
+    components: &ComponentManager,
+    source_kind: Option<String>,
+    source_path: Option<String>,
+) -> Result<AssetSourceSetting, AppError> {
+    let saved = components.assets().saved_source();
+    resolve_asset_source(components.assets(), source_kind, source_path)?.ok_or_else(|| {
+        if saved.placeholder {
+            AppError::invalid_argument(
+                "placeholder textures have no block/item catalog; select or download a Minecraft client JAR",
+            )
+        } else {
+            AppError::invalid_argument(
+                "select Minecraft client assets before building a block/item catalog",
+            )
+        }
+    })
 }
 
 /// Event payload for a completed mutation. The legacy kind-specific events are emitted too

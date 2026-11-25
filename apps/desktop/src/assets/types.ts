@@ -213,3 +213,38 @@ export interface CatalogSnapshot {
   warnings: string[];
   cacheHit: boolean;
 }
+
+/** One decoded palette icon placed in a catalog icon atlas. */
+export interface CatalogAtlasTexture {
+  key: string;
+  path: string | null;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  missing: boolean;
+  hasAlpha: boolean;
+}
+
+/**
+ * Packed PNG atlas for palette icons. The cache key is
+ * `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema`.
+ */
+export interface CatalogIconAtlas {
+  schemaVersion: number;
+  cacheKey: string;
+  cacheHit: boolean;
+  catalogId: string;
+  catalogHash: string;
+  catalogSchemaVersion: number;
+  minecraftVersion: string;
+  clientJarSha1: string;
+  packStackHash: string;
+  width: number;
+  height: number;
+  pngBase64: string;
+  textures: CatalogAtlasTexture[];
+  warnings: string[];
+}

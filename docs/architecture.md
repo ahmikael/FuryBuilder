@@ -251,8 +251,11 @@ registry of the open `WorldService`, while the curated registry remains the quic
 exposed by `block_catalog` and the explicit fallback when a project uses placeholder assets.
 Validation uses the same write registry, so the palette, command writes and `Validation`
 panel agree on which block names and property keys exist, and values are checked whenever
-the blockstate file enumerates them. Multipart defaults, exact per-block value registries,
-creative categories and item browsing remain later catalog stages.
+the blockstate file enumerates them. A separate icon atlas packs the catalog's referenced
+textures for presentation; it is cached by exact version, client JAR SHA-1, ordered pack-stack
+hash and catalog schema, so a resource-pack change cannot silently alter the pinned registry.
+Multipart defaults, exact per-block value registries, creative categories and item browsing
+remain later catalog stages.
 
 ## Welcome screen
 
