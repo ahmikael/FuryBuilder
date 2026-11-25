@@ -142,10 +142,14 @@ files while the app is running.
   `Layers`, `Templates`, `Objects`, `Parametric`, `Build DSL`, `Analysis`, `Activity`.
   `Analysis` groups `Observation` and `Validation`; `Activity` groups `Console` and `History`.
   The `Blocks` tab uses the project's exact-version client-JAR catalog: every blockstate entry
-  is searchable, selecting one applies its first declared variant (multipart entries have no
-  single default), and command writes are admitted by the same catalog. Placeholder projects
-  show curated quick picks with an explicit `Curated fallback` notice. Categories, items and
-  the full state picker remain later stages.
+  is searchable and grouped by basic `All`/`Recent`/`Favorites` and
+  `Building`/`Natural`/`Functional`/`Redstone`/`Technical`/`Other` filters. Those groups are
+  derived from the catalog's direct tags and ids, not from the creative inventory. Recent
+  selections and starred favorites are local UI preferences keyed by `catalogId`; they are not
+  project data. Selecting a block uses the sole declared state when available and otherwise
+  leaves properties unset for the game default. Command writes use the same catalog. Placeholder projects
+  show curated quick picks with an explicit `Curated fallback` notice. Full creative categories,
+  items and the full state picker remain later stages.
   Your active tab and panel visibility are remembered between launches. A layout saved by an
   older panel format is discarded once; the default `Blocks` tab and open panels are used.
 - **Status bar.** Backend state, project, dimension, active job or tool, revision, chunk and

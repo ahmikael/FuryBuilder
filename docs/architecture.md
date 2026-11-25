@@ -254,8 +254,10 @@ panel agree on which block names and property keys exist, and values are checked
 the blockstate file enumerates them. A separate icon atlas packs the catalog's referenced
 textures for presentation; it is cached by exact version, client JAR SHA-1, ordered pack-stack
 hash and catalog schema, so a resource-pack change cannot silently alter the pinned registry.
-Multipart defaults, exact per-block value registries, creative categories and item browsing
-remain later catalog stages.
+The Blocks palette derives basic Building/Natural/Functional/Redstone/Technical/Other groups
+from direct tags and ids and keeps recent/favorite selections as local UI preferences keyed by
+catalog id. Multipart defaults, exact per-block value registries, full creative categories and
+item browsing remain later catalog stages.
 
 ## Welcome screen
 

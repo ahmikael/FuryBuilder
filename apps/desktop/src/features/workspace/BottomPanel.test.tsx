@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as IpcModule from "@/lib/ipc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -7,7 +7,9 @@ import type { BlockDefinition } from "@/editor/types";
 import { BOTTOM_PANEL_TABS } from "@/editor/layout";
 import { BottomPanel } from "@/features/workspace/BottomPanel";
 import { useEditorStore } from "@/state/editor-store";
+import { usePaletteStore } from "@/state/palette-store";
 import { useToolStore } from "@/state/tool-store";
+import { chooseSelectOption } from "@/test-utils/select";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
 const catalogApi = vi.hoisted(() => ({ fetch: vi.fn(), project: vi.fn() }));
@@ -58,7 +60,7 @@ const projectCatalog: CatalogSnapshot = {
       multipart: false,
       model: "minecraft:block/stone",
       iconTexture: "minecraft:block/stone",
-      tags: [],
+      tags: ["minecraft:base_stone_overworld"],
       hasItem: true,
     },
     {
@@ -76,7 +78,7 @@ const projectCatalog: CatalogSnapshot = {
       multipart: false,
       model: "minecraft:block/oak_stairs",
       iconTexture: "minecraft:block/oak_planks",
-      tags: [],
+      tags: ["minecraft:wooden_stairs"],
       hasItem: true,
     },
     {
@@ -89,7 +91,7 @@ const projectCatalog: CatalogSnapshot = {
       multipart: false,
       model: "minecraft:block/oak_slab",
       iconTexture: "minecraft:block/oak_planks",
-      tags: [],
+      tags: ["minecraft:wooden_slabs"],
       hasItem: true,
     },
     {
@@ -115,6 +117,58 @@ const projectCatalog: CatalogSnapshot = {
       multipart: true,
       model: "minecraft:block/oak_fence_post",
       iconTexture: "minecraft:block/oak_planks",
+      tags: ["minecraft:wooden_fences"],
+      hasItem: true,
+    },
+    {
+      id: "minecraft:oak_log",
+      displayName: "Oak Log",
+      properties: {},
+      propertyValuesComplete: false,
+      defaultProperties: {},
+      variants: 1,
+      multipart: false,
+      model: "minecraft:block/oak_log",
+      iconTexture: "minecraft:block/oak_log",
+      tags: ["minecraft:oak_logs"],
+      hasItem: true,
+    },
+    {
+      id: "minecraft:redstone_lamp",
+      displayName: "Redstone Lamp",
+      properties: {},
+      propertyValuesComplete: false,
+      defaultProperties: {},
+      variants: 1,
+      multipart: false,
+      model: "minecraft:block/redstone_lamp",
+      iconTexture: "minecraft:block/redstone_lamp",
+      tags: [],
+      hasItem: true,
+    },
+    {
+      id: "minecraft:crafting_table",
+      displayName: "Crafting Table",
+      properties: {},
+      propertyValuesComplete: false,
+      defaultProperties: {},
+      variants: 1,
+      multipart: false,
+      model: "minecraft:block/crafting_table",
+      iconTexture: "minecraft:block/crafting_table",
+      tags: [],
+      hasItem: true,
+    },
+    {
+      id: "minecraft:command_block",
+      displayName: "Command Block",
+      properties: {},
+      propertyValuesComplete: false,
+      defaultProperties: {},
+      variants: 1,
+      multipart: false,
+      model: "minecraft:block/command_block",
+      iconTexture: "minecraft:block/command_block",
       tags: [],
       hasItem: true,
     },
@@ -122,18 +176,18 @@ const projectCatalog: CatalogSnapshot = {
   items: [],
   atlases: [],
   counts: {
-    blocks: 5,
+    blocks: 9,
     items: 0,
-    blocksWithItems: 5,
+    blocksWithItems: 9,
     itemOnly: 0,
-    blockstateFiles: 5,
-    blockModels: 5,
+    blockstateFiles: 9,
+    blockModels: 9,
     itemModels: 0,
     itemDefinitions: 0,
     textures: 0,
     languages: 1,
-    langEntries: 5,
-    blockTags: 0,
+    langEntries: 9,
+    blockTags: 4,
     itemTags: 0,
     atlases: 0,
     atlasSources: 0,
@@ -155,6 +209,8 @@ const backend = {
 
 beforeEach(() => {
   runtime.tauri = true;
+  localStorage.clear();
+  usePaletteStore.setState({ catalogs: {} });
   catalogApi.fetch.mockReset();
   catalogApi.project.mockReset();
   catalogApi.fetch.mockResolvedValue(curatedCatalog);
@@ -186,6 +242,77 @@ describe("block palette", () => {
     await user.type(search, "Oak Stairs");
     expect(screen.getByText("oak_stairs")).toBeInTheDocument();
     expect(screen.queryByText("stone")).not.toBeInTheDocument();
+  });
+
+  it("filters by basic category and keeps recent and favorite blocks", async () => {
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    const list = await screen.findByRole("list", { name: "Block palette" });
+
+    expect(within(list).getByText("redstone_lamp")).toBeInTheDocument();
+    expect(within(list).getByText("oak_log")).toBeInTheDocument();
+    expect(within(list).getByText("command_block")).toBeInTheDocument();
+
+    await chooseSelectOption(user, "Block category", /^Redstone/);
+    expect(within(list).getByText("redstone_lamp")).toBeInTheDocument();
+    expect(within(list).queryByText("oak_log")).not.toBeInTheDocument();
+    expect(within(list).queryByText("stone")).not.toBeInTheDocument();
+
+    await chooseSelectOption(user, "Block category", /^All/);
+    await user.click(within(list).getByText("oak_log"));
+    expect(usePaletteStore.getState().catalogs[projectCatalog.catalogId]?.recent).toEqual([
+      "minecraft:oak_log",
+    ]);
+
+    await chooseSelectOption(user, "Block category", /^Recent/);
+    expect(within(list).getByText("oak_log")).toBeInTheDocument();
+    expect(within(list).queryByText("redstone_lamp")).not.toBeInTheDocument();
+
+    await chooseSelectOption(user, "Block category", /^All/);
+    await user.click(screen.getByRole("button", { name: "Favorite oak_log", pressed: false }));
+    expect(usePaletteStore.getState().catalogs[projectCatalog.catalogId]?.favorites).toEqual([
+      "minecraft:oak_log",
+    ]);
+
+    await chooseSelectOption(user, "Block category", /^Favorites/);
+    expect(within(list).getByText("oak_log")).toBeInTheDocument();
+    expect(within(list).queryByText("stone")).not.toBeInTheDocument();
+    const search = screen.getByRole("textbox", { name: "Search blocks" });
+    await user.type(search, "stone");
+    expect(within(list).getByRole("status")).toHaveTextContent("No block matches");
+    await user.clear(search);
+    await user.click(screen.getByRole("button", { name: "Favorite oak_log", pressed: true }));
+    expect(within(list).getByRole("status")).toHaveTextContent("No favorites yet");
+  });
+
+  it("isolates palette history between pinned catalogs and hides ids missing from the current one", async () => {
+    const user = userEvent.setup();
+    const olderCatalog = {
+      ...projectCatalog,
+      catalogId: "java-1.20.6-fedcba9876543210",
+      minecraftVersion: "1.20.6",
+      blocks: projectCatalog.blocks.filter((block) => block.id === "minecraft:stone"),
+      counts: { ...projectCatalog.counts, blocks: 1 },
+    };
+    const { recordRecent, toggleFavorite } = usePaletteStore.getState();
+    recordRecent(projectCatalog.catalogId, "minecraft:stone");
+    toggleFavorite(projectCatalog.catalogId, "minecraft:stone");
+    toggleFavorite(olderCatalog.catalogId, "minecraft:oak_log");
+
+    const current = render(<BottomPanel backend={backend} />);
+    await screen.findByText("Client JAR · 1.21.4");
+    await chooseSelectOption(user, "Block category", /^Favorites/);
+    expect(screen.getByRole("button", { name: "Favorite stone", pressed: true })).toBeVisible();
+    current.unmount();
+
+    catalogApi.project.mockResolvedValue(olderCatalog);
+    render(<BottomPanel backend={backend} />);
+    await screen.findByText("Client JAR · 1.20.6");
+    expect(screen.getByRole("button", { name: "Favorite stone", pressed: false })).toBeVisible();
+    await chooseSelectOption(user, "Block category", /^Favorites/);
+    expect(screen.getByText(/No favorites yet/)).toBeVisible();
+    await chooseSelectOption(user, "Block category", /^Recent/);
+    expect(screen.getByText(/No recent blocks yet/)).toBeVisible();
   });
 
   it("selects the game default and edits individual properties", async () => {

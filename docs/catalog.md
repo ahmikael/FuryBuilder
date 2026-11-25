@@ -126,7 +126,15 @@ for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open
   blockstate files omit properties that do not affect a model (for example `waterlogged` on
   stairs); such values are not checked. A key that is unknown across the catalog is
   rejected. Exact per-block property registries remain a later catalog stage.
-- Creative categories, technical/creative-only flags and item components are not assigned yet.
+- Basic palette groups (`Building`, `Natural`, `Functional`, `Redstone`, `Technical`, `Other`)
+  are derived in the desktop UI from direct block tags and conservative id patterns. They do
+  not change `catalogHash` and are not Minecraft creative-inventory categories. Full creative
+  categories, technical/creative-only flags and item components remain later stages.
+- Recent selections and starred favorites are local UI preferences keyed by `catalogId`; they
+  are not part of the project manifest, do not authorize writes, and are filtered against the
+  current catalog when shown. Preferences retain up to 24 recent selections and 256 favorites
+  per catalog across the eight most recently updated catalogs. Curated quick picks use a
+  separate history.
 - The palette lists blocks only. Item definitions are extracted and counted, but the item
   browser and placeable-item duplication are later stages.
 - Item definitions resolve the first concrete model from `model`, `base`, `select`,
@@ -135,7 +143,7 @@ for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open
   modelled.
 - The icon atlas is exposed through `assets_catalog_atlas` and `project_catalog_atlas`, but
   the `Blocks` palette still draws flat colour chips. Wiring the atlas into the virtualized
-  palette and adding 3D previews belong to the palette/UI stages.
+  palette and adding 3D previews remain later UI stages.
 - Tag membership is direct. Transitive `#tag` references remain available in the JAR and are
   not flattened into each entry.
 - A texture missing from the JAR produces a null icon and a warning. The asset-index fallback
