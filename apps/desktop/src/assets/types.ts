@@ -130,9 +130,31 @@ export interface SavedAssetSource {
   /** True when the user explicitly chose original placeholder textures. */
   placeholder: boolean;
   loadWarning: string | null;
-  /** Saved packs in priority order, highest priority first. */
-  packs: ResourcePackReport[];
 }
+
+export interface ProjectPackStatus {
+  path: string;
+  sha1: string;
+  name: string;
+  state: "ready" | "missing" | "changed" | "incompatible" | "invalid";
+  message: string | null;
+  packFormat: number | null;
+  supportedFormats: string | null;
+}
+
+export interface ProjectPackStack {
+  minecraftVersion: string;
+  targetFormat: string | null;
+  enabled: boolean;
+  maxPacks: number;
+  /** Highest priority first, including unavailable pins. */
+  packs: ProjectPackStatus[];
+}
+
+export type ProjectPackEdit =
+  | { kind: "add"; path: string }
+  | { kind: "remove"; sha1: string }
+  | { kind: "move"; sha1: string; earlier: boolean };
 
 /** One block from the client JAR's blockstate files. */
 export interface CatalogBlock {
@@ -247,4 +269,5 @@ export interface CatalogIconAtlas {
   pngBase64: string;
   textures: CatalogAtlasTexture[];
   warnings: string[];
+  packIssues: string[];
 }

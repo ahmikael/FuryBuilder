@@ -289,10 +289,11 @@ export class ViewportRenderer {
    * The atlas is decoded by the WebView; malformed PNG data rejects and the caller keeps
    * the placeholder fallback.
    */
-  async setAssetBundle(bundle: AssetBundle): Promise<void> {
+  async setAssetBundle(bundle: AssetBundle, isCurrent: () => boolean): Promise<void> {
     const image = new Image();
     image.src = `data:image/png;base64,${bundle.atlasPngBase64}`;
     await image.decode();
+    if (!isCurrent()) return;
     const previous = this.atlas;
     this.atlas = new CanvasTexture(image);
     this.configureAtlas(this.atlas);

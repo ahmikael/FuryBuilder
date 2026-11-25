@@ -435,6 +435,25 @@ impl ProjectStore {
         write_json(&dir.join(PROJECT_FILE), &manifest)
     }
 
+    /// Updates presentation settings without rewriting the world or the catalog pins.
+    pub fn update_pack_stack(
+        &self,
+        folder: &str,
+        pack_stack: Vec<crate::AssetsPack>,
+    ) -> Result<(), ProjectError> {
+        let dir = self.project_dir(folder)?;
+        let mut manifest = self.manifest(&dir)?;
+        let assets = manifest
+            .components
+            .assets
+            .as_mut()
+            .ok_or_else(|| ProjectError::invalid_manifest("project has no client assets"))?;
+        assets.pack_stack = pack_stack;
+        manifest.updated_at_ms = now_ms();
+        manifest.validate()?;
+        write_json(&dir.join(PROJECT_FILE), &manifest)
+    }
+
     fn manifest(&self, dir: &Path) -> Result<ProjectManifest, ProjectError> {
         let path = dir.join(PROJECT_FILE);
         let raw: serde_json::Value = read_json(&path).map_err(|error| match error {

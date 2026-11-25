@@ -91,13 +91,14 @@ function teardownSessionState(): void {
 export type ProjectPhase = "closed" | "preparing" | "ready" | "saving" | "error";
 
 /** Tabs of the project manager dialog. */
-export type ManagerTab = "projects" | "create" | "checkpoints" | "exchange";
+export type ManagerTab = "projects" | "create" | "checkpoints" | "exchange" | "settings";
 
 export const MANAGER_TABS: readonly ManagerTab[] = [
   "projects",
   "create",
   "checkpoints",
   "exchange",
+  "settings",
 ];
 
 export function isManagerTab(value: string): value is ManagerTab {

@@ -52,7 +52,7 @@ import {
 
 import { invokeCommand, isTauriRuntime } from "@/lib/ipc";
 import { listenForRendererRequests } from "@/lib/renderer-bridge";
-import { loadAssetBundle, savedMinecraftAssets } from "@/lib/assets-api";
+import { loadProjectAssetBundle } from "@/lib/assets-api";
 import { blockStateKey, type AssetStats } from "@/assets/model-assets";
 import type { WorldInfo } from "@/lib/contracts";
 import { createDemoSnapshot } from "@/renderer/demo";
@@ -271,12 +271,13 @@ export function Viewport() {
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
   const [assetStats, setAssetStats] = useState<AssetStats | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
+  const [packIssues, setPackIssues] = useState<string[]>([]);
   const [placeholderActive, setPlaceholderActive] = useState<boolean | null>(null);
   const [sceneEpoch, setSceneEpoch] = useState(0);
-  const assetSignature = useRef("");
-  const assetBusy = useRef(false);
+  const assetRequest = useRef({ signature: "", busy: false, pending: false, epoch: 0 });
   const tauri = isTauriRuntime();
   const project = useProjectStore((state) => state.current);
+  const folder = project?.folder;
   const phase = useProjectStore((state) => state.phase);
   const canRender = projectAllowsEditor(phase, project);
   const editingEnabled = tauri && canRender;
@@ -306,52 +307,75 @@ export function Viewport() {
   const canUndo = useHistoryStore((state) => state.canUndo);
   const canRedo = useHistoryStore((state) => state.canRedo);
 
-  const refreshAssets = useCallback(async (force = false): Promise<void> => {
+  const refreshAssets = useCallback(async function refresh(force = false): Promise<void> {
+    const request = assetRequest.current;
+    if (force) {
+      request.epoch += 1;
+      request.signature = "";
+    }
     const renderer = rendererRef.current;
-    if (!renderer || !isTauriRuntime() || assetBusy.current) return;
+    const folder = useProjectStore.getState().current?.folder;
+    if (!renderer || !folder || !isTauriRuntime() || useWorldStore.getState().status !== "ready")
+      return;
+    if (request.busy) {
+      request.pending = true;
+      return;
+    }
     const states = renderer.world.uniqueBlockStates();
     if (states.length === 0) return;
-    const signature = states.map(blockStateKey).sort().join("|");
-    if (!force && signature === assetSignature.current) return;
-    assetBusy.current = true;
+    const signature = JSON.stringify([folder, ...states.map(blockStateKey).sort()]);
+    if (signature === request.signature) return;
+    const epoch = request.epoch;
+    const isCurrent = () =>
+      request.epoch === epoch &&
+      rendererRef.current === renderer &&
+      useProjectStore.getState().current?.folder === folder;
+    request.busy = true;
     try {
-      const saved = await savedMinecraftAssets();
-      if (saved.placeholder || !saved.source) {
-        // Placeholder mode is explicit: never ask the Rust bundle service to fabricate
-        // Minecraft models from an absent client JAR. The renderer keeps its own atlas.
-        assetSignature.current = signature;
-        renderer.clearAssetBundle();
-        setAssetStats(null);
-        setAssetError(null);
-        setPlaceholderActive(true);
-        return;
-      }
-      const bundle = await loadAssetBundle(
+      const bundle = await loadProjectAssetBundle(
+        folder,
         states.map((state) => ({
           name: state.name,
           properties: state.properties ?? {},
         })),
       );
-      await renderer.setAssetBundle(bundle);
-      assetSignature.current = signature;
+      if (!isCurrent()) return;
+      if (bundle === null) {
+        renderer.clearAssetBundle();
+      } else {
+        await renderer.setAssetBundle(bundle, isCurrent);
+      }
+      if (!isCurrent()) return;
+      request.signature = signature;
       setAssetStats(renderer.assetStats);
+      setPackIssues(bundle?.packIssues ?? []);
       setAssetError(null);
-      setPlaceholderActive(false);
+      setPlaceholderActive(bundle === null);
     } catch (cause) {
-      // Keep the documented placeholder fallback; never invent Minecraft textures.
-      assetSignature.current = signature;
+      if (!isCurrent()) return;
+      request.signature = signature;
       renderer.clearAssetBundle();
       setAssetStats(null);
+      setPackIssues([]);
       setPlaceholderActive(true);
       setAssetError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      assetBusy.current = false;
+      request.busy = false;
+      if (request.pending) {
+        request.pending = false;
+        void refresh();
+      }
     }
   }, []);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !webgl2 || !canRender) return;
+    assetRequest.current.signature = "";
+    setAssetStats(null);
+    setPackIssues([]);
+    setAssetError(null);
+    setPlaceholderActive(null);
 
     let renderer: ViewportRenderer;
     try {
@@ -454,7 +478,7 @@ export function Viewport() {
       }
       useWorldStore.getState().setStatus("idle");
     };
-  }, [webgl2, tauri, canRender]);
+  }, [webgl2, tauri, canRender, folder]);
 
   useEffect(() => {
     if (!contextMenu) return;
@@ -481,30 +505,38 @@ export function Viewport() {
 
   useEffect(() => {
     if (!tauri || status !== "ready") return;
-    void (async () => {
-      await refreshAssets();
-    })();
-  }, [tauri, status, revision, sceneEpoch, refreshAssets]);
+    void refreshAssets();
+  }, [tauri, status, revision, sceneEpoch, folder, refreshAssets]);
 
   useEffect(() => {
     if (!tauri) return;
     let disposed = false;
-    let unlisten: (() => void) | null = null;
-    void listen("furybuilder-assets-changed", () => {
-      if (disposed) return;
-      assetSignature.current = "";
-      void refreshAssets(true);
-    })
-      .then((stop) => {
-        if (disposed) stop();
-        else unlisten = stop;
-      })
-      .catch(() => {
-        // The event API is only present inside Tauri; the placeholder stays usable.
-      });
+    const stops: Array<() => void> = [];
+    const track = (subscription: Promise<() => void>) => {
+      void subscription
+        .then((stop) => {
+          if (disposed) stop();
+          else stops.push(stop);
+        })
+        .catch(() => {
+          // The event API is only present inside Tauri; the placeholder stays usable.
+        });
+    };
+    track(
+      listen("furybuilder-assets-changed", () => {
+        if (!disposed) void refreshAssets(true);
+      }),
+    );
+    track(
+      listen<string>("furybuilder-project-packs-changed", ({ payload }) => {
+        if (!disposed && payload === useProjectStore.getState().current?.folder) {
+          void refreshAssets(true);
+        }
+      }),
+    );
     return () => {
       disposed = true;
-      unlisten?.();
+      for (const stop of stops) stop();
     };
   }, [tauri, refreshAssets]);
 
@@ -774,6 +806,12 @@ export function Viewport() {
           >
             <ImageOff />
             Placeholder textures
+          </Badge>
+        ) : null}
+        {packIssues.length > 0 ? (
+          <Badge variant="outline" className="pointer-events-auto" title={packIssues.join("\n")}>
+            <TriangleAlert /> {packIssues.length} resource{" "}
+            {packIssues.length === 1 ? "pack" : "packs"} skipped
           </Badge>
         ) : null}
       </div>

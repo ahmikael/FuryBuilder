@@ -61,6 +61,7 @@ import {
 } from "@/components/ui/select";
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
+import { ProjectResourcePacks } from "@/features/project/ProjectResourcePacks";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { ProjectWizard } from "@/features/project/ProjectWizard";
@@ -396,7 +397,7 @@ export function ProjectManager() {
               }}
               className="min-h-0"
             >
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="projects">
                   <FolderOpen data-icon="inline-start" />
                   Projects ({projects.length})
@@ -413,6 +414,7 @@ export function ProjectManager() {
                   <ArrowLeftRight data-icon="inline-start" />
                   Import / Export
                 </TabsTrigger>
+                <TabsTrigger value="settings">Project Settings</TabsTrigger>
               </TabsList>
 
               <TabsContent value="projects" className="m-0 space-y-4 pt-4">
@@ -940,6 +942,11 @@ export function ProjectManager() {
 
               <TabsContent value="exchange" className="m-0 space-y-4 pt-4">
                 <StructureExchange />
+              </TabsContent>
+              <TabsContent value="settings" className="m-0 pt-4">
+                {desktop && activeFolder ? (
+                  <ProjectResourcePacks key={activeFolder} folder={activeFolder} />
+                ) : null}
               </TabsContent>
             </Tabs>
 

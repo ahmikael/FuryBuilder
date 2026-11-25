@@ -12,11 +12,12 @@ mod texture;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Mutex;
 
+use minecraft_version::VersionProfile;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::settings::AssetSourceSetting;
+use crate::{AssetSourceSetting, ResourcePackInput};
 
 pub use stack::BundlePack;
 pub(crate) use stack::ResourceStack;
@@ -45,6 +46,7 @@ pub struct AssetBundle {
     pub base_jar: Option<String>,
     pub base_jar_sha1: Option<String>,
     pub packs: Vec<BundlePack>,
+    pub pack_issues: Vec<String>,
     pub atlas_width: u32,
     pub atlas_height: u32,
     pub atlas_png_base64: String,
@@ -123,16 +125,6 @@ impl BundleError {
             BundleError::LimitExceeded(_) => "limit_exceeded",
             BundleError::UnsupportedFormat(_) => "unsupported_format",
             BundleError::Io(_) => "io_error",
-        }
-    }
-}
-
-impl From<BundleError> for crate::AssetSettingsError {
-    fn from(error: BundleError) -> Self {
-        match error {
-            BundleError::InvalidArgument(message) => crate::AssetSettingsError::Invalid(message),
-            BundleError::Io(message) => crate::AssetSettingsError::Io(message),
-            other => crate::AssetSettingsError::UnsupportedPack(other.to_string()),
         }
     }
 }
@@ -220,8 +212,10 @@ impl AssetBundleService {
 
     pub fn bundle(
         &self,
+        profile: &VersionProfile,
         source: Option<&AssetSourceSetting>,
-        pack_paths: &[String],
+        expected_sha1: Option<&str>,
+        packs: &[ResourcePackInput],
         states: &[BlockStateRequest],
     ) -> Result<AssetBundle, BundleError> {
         if states.is_empty() {
@@ -237,39 +231,47 @@ impl AssetBundleService {
         for state in states {
             validate_state(state)?;
         }
-        let mut stack = stack::ResourceStack::open(source, pack_paths)?;
+        let mut stack = stack::ResourceStack::open(profile, source, expected_sha1, packs)?;
         let states_hash = states_fingerprint(states);
         let cache_key = format!("{}:{states_hash}", stack.fingerprint);
-        if let Some(bundle) = self.cache.get(&cache_key) {
+        if let Some(mut bundle) = self.cache.get(&cache_key) {
+            bundle.packs = stack.packs_info;
+            bundle.pack_issues = stack.pack_issues;
+            bundle.warnings.splice(..0, stack.warnings);
             return Ok(bundle);
         }
 
         let mut blocks = Vec::with_capacity(states.len());
         let mut texture_keys = std::collections::BTreeSet::new();
         let mut model_cache = std::collections::HashMap::new();
-        let mut warnings = stack.warnings.clone();
         for state in states {
             let resolved = model::resolve_block(&mut stack, state, &mut model_cache)?;
             texture_keys.extend(resolved.textures);
             blocks.push(resolved.block);
         }
         let atlas = texture::build_atlas(&mut stack, &texture_keys)?;
-        warnings.extend(atlas.warnings);
-        let bundle = AssetBundle {
-            schema_version: ASSET_BUNDLE_SCHEMA_VERSION,
-            cache_key,
-            cache_hit: false,
-            base_jar: stack.base_jar_path().map(|path| path.display().to_string()),
-            base_jar_sha1: stack.base_jar_sha1().map(ToOwned::to_owned),
-            packs: stack.packs_info.clone(),
-            atlas_width: atlas.width,
-            atlas_height: atlas.height,
-            atlas_png_base64: atlas.png_base64,
-            textures: atlas.textures,
-            blocks,
-            warnings,
-        };
-        Ok(self.cache.insert(bundle.cache_key.clone(), bundle))
+        let mut bundle = self.cache.insert(
+            cache_key.clone(),
+            AssetBundle {
+                schema_version: ASSET_BUNDLE_SCHEMA_VERSION,
+                cache_key,
+                cache_hit: false,
+                base_jar: stack.base_jar_path().map(|path| path.display().to_string()),
+                base_jar_sha1: stack.base_jar_sha1().map(ToOwned::to_owned),
+                packs: Vec::new(),
+                pack_issues: Vec::new(),
+                atlas_width: atlas.width,
+                atlas_height: atlas.height,
+                atlas_png_base64: atlas.png_base64,
+                textures: atlas.textures,
+                blocks,
+                warnings: atlas.warnings,
+            },
+        );
+        bundle.packs = stack.packs_info;
+        bundle.pack_issues = stack.pack_issues;
+        bundle.warnings.splice(..0, stack.warnings);
+        Ok(bundle)
     }
 }
 

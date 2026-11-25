@@ -21,6 +21,20 @@
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Maximum number of user resource packs in one project, highest priority first.
+pub const MAX_RESOURCE_PACKS: usize = 16;
+/// Reserved directory next to the managed client versions in the asset cache.
+pub const RESOURCE_PACK_CACHE_DIR: &str = "resource-packs";
+
+/// A resource pack pinned by content in the local asset cache.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssetsPack {
+    /// Logical path below the assets cache root, never a path to the original user file.
+    pub path: String,
+    pub sha1: String,
+}
+
 /// The three component kinds a project can reference.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

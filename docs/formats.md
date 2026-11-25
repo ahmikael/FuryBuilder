@@ -166,9 +166,11 @@ placeholder records only its mode. Vanilla projects also record the server versi
 SHA-1; the checksum must agree with the completed generation run.
 
 These records contain no absolute component paths and are preserved across saves and
-reopens. The manifest records the vanilla catalog, not the global resource pack stack.
-Per-project pack selection and resolving pinned components for rendering on reopen are
-separate from writing the manifest.
+reopens. `components.assets.packStack` is a separate, highest-priority-first list of
+`{path, sha1}` pins, limited to 16 entries. Paths are relative to the local asset cache
+(`resource-packs/<sha1>/pack-<name>.zip`); the original paths and pack bytes aren't stored
+in the project. Removing a pack from a stack does not delete the cache copy. The catalog
+id and hash always describe the base client JAR, not these packs.
 
 ## Complete world-folder export
 

@@ -32,9 +32,27 @@ Placeholder textures are an explicit selection, not a silent fallback. Placehold
 client JAR, so FuryBuilder cannot build a block/item catalog for it: the `Blocks` palette shows
 curated quick picks with a visible `Curated fallback` notice, the viewport uses original
 FuryBuilder textures, and the component status reports `placeholder`/`unverified` with a warning.
-Block names, states and world data are unchanged. Selecting a real client source replaces
-placeholder mode; choosing placeholder clears the resource-pack stack because packs require a
-client JAR.
+Block names, states and world data are unchanged. Placeholder projects have no resource-pack
+stack because packs require a pinned client JAR. Changing the global asset selection does not
+edit any project's pins.
+
+## Project resource packs
+
+In **Project Manager → Project Settings → Resource packs**, add a local ZIP or folder,
+move it up or down, or remove it. Highest priority comes first; the client JAR supplies any
+assets the stack does not override. Adding a pack explicitly copies it into the local asset
+cache; a folder is snapshotted as a deterministic ZIP. It is not a live link to the selected
+file, and the pack is not bundled into the project or exported with the world.
+
+FuryBuilder verifies the cached SHA-1 and the resource pack format declared by `pack.mcmeta`
+against the project's exact profile. Missing, changed, invalid or incompatible packs remain in
+the stack but are skipped and reported. **Check pack files** verifies them again and refreshes
+the viewport. Re-add the original bytes to restore a missing or changed snapshot without
+duplicating the pin (if the stack is full, remove the unavailable entry first). To use an
+updated version of a pack, remove the old entry and add the new file.
+
+Format compatibility does not imply full Minecraft rendering parity: FuryBuilder resolves
+the pack's root `assets/` entries. It does not apply `pack.mcmeta` overlays.
 
 ## What is read
 
@@ -85,11 +103,12 @@ contains the block states currently visible.
   replace a texture, but they never add or remove catalog entries.
 - The cache key is exactly
   `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema`; changing the JAR,
-  any pack in the stack, the version or the catalog/atlas schema rebuilds it. The cache is
-  process-local, bounded to four entries and 64 MiB, and is cleared by `assets_clear_cache`.
-- `assets_catalog_atlas`/`loadAssetCatalogAtlas()` build the atlas for the wizard source;
-  `project_catalog_atlas`/`loadProjectCatalogAtlas()` use the catalog pinned by the open
-  project and return `null` for placeholder projects.
+  the order or bytes of usable packs, the version or the catalog/atlas schema changes the key.
+  The cache is process-local, bounded to four entries and 64 MiB, and is cleared by
+  `assets_clear_cache`.
+- `assets_catalog_atlas`/`loadAssetCatalogAtlas()` build the vanilla atlas for the selected
+  client JAR. `project_catalog_atlas`/`loadProjectCatalogAtlas()` and `project_render_bundle`
+  use the JAR and pack stack pinned by the open project, and return `null` for placeholder projects.
 - Missing or malformed textures use the same marked checker as the render atlas. Animated
   textures use their first frame. The atlas never changes block names, states or world data.
 - The atlas is not part of `catalogHash`; changing a resource pack must not invalidate the

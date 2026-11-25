@@ -31,7 +31,10 @@ pub(crate) struct ClientJarInspection {
 
 /// Hashes a file with SHA-1, streaming and without loading it into memory.
 pub(crate) fn file_sha1(path: &Path) -> std::io::Result<String> {
-    let mut file = File::open(path)?;
+    reader_sha1(File::open(path)?)
+}
+
+pub(crate) fn reader_sha1(mut file: impl Read) -> std::io::Result<String> {
     let mut hasher = Sha1::new();
     let mut buffer = [0u8; HASH_BUFFER_BYTES];
     loop {

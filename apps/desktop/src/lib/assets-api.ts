@@ -5,6 +5,8 @@ import type {
   AssetSourceKind,
   CatalogIconAtlas,
   CatalogSnapshot,
+  ProjectPackEdit,
+  ProjectPackStack,
   SavedAssetSource,
 } from "@/assets/types";
 import { invokeCommand } from "@/lib/ipc";
@@ -37,23 +39,28 @@ export function clearMinecraftAssets(): Promise<SavedAssetSource> {
   return invokeCommand<SavedAssetSource>("assets_clear_source");
 }
 
-/** Saves the ordered pack stack, highest priority first. */
-export function saveMinecraftPackStack(paths: string[]): Promise<SavedAssetSource> {
-  return invokeCommand<SavedAssetSource>("assets_save_pack_stack", { paths });
+export function loadProjectPackStack(
+  folder: string,
+  refreshRender = false,
+): Promise<ProjectPackStack> {
+  return invokeCommand<ProjectPackStack>("project_resource_packs", { folder, refreshRender });
 }
 
-export function clearMinecraftPackStack(): Promise<SavedAssetSource> {
-  return invokeCommand<SavedAssetSource>("assets_clear_pack_stack");
+export function updateProjectPackStack(
+  folder: string,
+  edit: ProjectPackEdit,
+): Promise<ProjectPackStack> {
+  return invokeCommand<ProjectPackStack>("project_update_resource_packs", { folder, edit });
 }
 
-/** Builds a read-only, verified render bundle for the requested block states. */
-export function loadAssetBundle(
+/** Uses only the open project's pinned assets; null means original placeholder textures. */
+export function loadProjectAssetBundle(
+  folder: string,
   blockStates: BlockStateRequest[],
-  override?: { sourceKind: AssetSourceKind; sourcePath: string },
-): Promise<AssetBundle> {
-  return invokeCommand<AssetBundle>("assets_render_bundle", {
+): Promise<AssetBundle | null> {
+  return invokeCommand<AssetBundle | null>("project_render_bundle", {
+    folder,
     blockStates,
-    ...(override ? { sourceKind: override.sourceKind, sourcePath: override.sourcePath } : {}),
   });
 }
 
@@ -73,8 +80,7 @@ export function loadAssetCatalog(override?: {
 }
 
 /**
- * Builds the palette icon atlas for the selected client JAR and the saved resource-pack
- * stack. The atlas is presentation only; it does not change the pinned catalog.
+ * Builds the unmodified palette icon atlas for the selected client JAR, outside a project.
  */
 export function loadAssetCatalogAtlas(override?: {
   sourceKind: AssetSourceKind;
@@ -95,7 +101,7 @@ export function loadProjectCatalog(): Promise<CatalogSnapshot | null> {
 }
 
 /**
- * Builds the icon atlas for the catalog pinned by the open project and the saved resource-pack
+ * Builds the icon atlas for the catalog pinned by the open project and its own resource-pack
  * stack. Returns null for an explicit placeholder project, matching `loadProjectCatalog`.
  */
 export function loadProjectCatalogAtlas(): Promise<CatalogIconAtlas | null> {

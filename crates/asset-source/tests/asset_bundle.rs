@@ -8,8 +8,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use asset_source::{
-    AssetBundle, AssetBundleService, AssetSettingsError, AssetSettingsStore, AssetSourceSetting,
-    BlockStateRequest, BundleError, ASSET_SETTINGS_SCHEMA_VERSION,
+    target_profile, AssetBundle, AssetBundleService, AssetSourceSetting, BlockStateRequest,
+    BundleError, PackState, ResourcePackInput, ResourcePackStore,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -303,11 +303,16 @@ fn service_bundle(
 ) -> AssetBundle {
     service
         .bundle(
+            target_profile(),
             Some(&AssetSourceSetting {
                 kind: "client_jar".to_owned(),
                 path: jar.display().to_string(),
             }),
-            packs,
+            None,
+            &packs
+                .iter()
+                .map(ResourcePackInput::local)
+                .collect::<Vec<_>>(),
             states,
         )
         .expect("bundle")
@@ -512,11 +517,13 @@ fn pack_priority_cache_key_and_fail_closed_validation_work() {
     fs::write(&wrong, pack_zip([0, 0, 0, 255], 15)).expect("wrong pack");
     let error = service
         .bundle(
+            target_profile(),
             Some(&AssetSourceSetting {
                 kind: "client_jar".to_owned(),
                 path: jar.display().to_string(),
             }),
-            &[wrong.display().to_string()],
+            None,
+            &[ResourcePackInput::local(wrong)],
             &states,
         )
         .expect_err("wrong pack format must fail");
@@ -543,11 +550,13 @@ fn pack_priority_cache_key_and_fail_closed_validation_work() {
     .expect("malformed pack");
     let error = service
         .bundle(
+            target_profile(),
             Some(&AssetSourceSetting {
                 kind: "client_jar".to_owned(),
                 path: jar.display().to_string(),
             }),
-            &[malformed.display().to_string()],
+            None,
+            &[ResourcePackInput::local(malformed)],
             &states,
         )
         .expect_err("malformed model JSON must fail");
@@ -558,67 +567,110 @@ fn pack_priority_cache_key_and_fail_closed_validation_work() {
 }
 
 #[test]
-fn pack_stack_validates_dedupes_limits_and_persists_schema() {
-    let dir = TempDir::new("settings");
-    let settings_path = dir.path().join("appdata").join("assets.json");
-    fs::create_dir_all(settings_path.parent().expect("settings parent")).expect("settings dir");
-
-    // Schema 1 stored only the source. It must read as an empty stack and upgrade to
-    // schema 2 on the next explicit save; no silent rewrite happens on load.
-    fs::write(&settings_path, br#"{"schemaVersion":1,"source":null}"#).expect("legacy settings");
-    let store = AssetSettingsStore::new(&settings_path);
-    assert!(store.pack_stack().is_empty());
-    assert!(store.saved_source().packs.is_empty());
-
+fn pinned_pack_priority_and_health_are_isolated_even_on_cache_hits() {
+    let dir = TempDir::new("pack-stack");
+    let cache = dir.path().join("cache");
+    let store = ResourcePackStore::new(&cache);
+    let profile = target_profile();
     let green = dir.path().join("green.zip");
     let blue = dir.path().join("blue.zip");
-    fs::write(&green, pack_zip([20, 200, 40, 255], 46)).expect("green pack");
-    fs::write(&blue, pack_zip([20, 40, 220, 255], 46)).expect("blue pack");
-    let green_canonical = fs::canonicalize(&green)
-        .expect("canonical green")
-        .display()
-        .to_string();
-    let blue_canonical = fs::canonicalize(&blue)
-        .expect("canonical blue")
-        .display()
-        .to_string();
-
-    let saved = store
-        .save_pack_stack(vec![
-            green.display().to_string(),
-            blue.display().to_string(),
-        ])
-        .expect("save pack stack");
+    let green_png = [20, 200, 40, 255];
+    let blue_png = [20, 40, 220, 255];
+    fs::write(&green, pack_zip(green_png, 46)).expect("green pack");
+    fs::write(&blue, pack_zip(blue_png, 46)).expect("blue pack");
+    let green_pin = store.import(&green, profile).expect("pin green");
+    let blue_pin = store.import(&blue, profile).expect("pin blue");
+    let jar = dir.path().join("client.jar");
+    write_jar(&jar, &base_jar([180, 40, 40, 255]));
+    let service = AssetBundleService::new();
+    let source = AssetSourceSetting {
+        kind: "client_jar".to_owned(),
+        path: jar.display().to_string(),
+    };
+    let resolve = |pins: &[component_model::AssetsPack]| {
+        service
+            .bundle(
+                profile,
+                Some(&source),
+                None,
+                &store.inputs(pins),
+                &[state("minecraft:stone", &[])],
+            )
+            .expect("bundle")
+    };
+    let a = [green_pin.clone(), blue_pin.clone()];
+    let b = [blue_pin.clone(), green_pin.clone()];
+    let first = resolve(&a);
+    let second = resolve(&b);
     assert_eq!(
-        store.pack_stack(),
-        vec![green_canonical.clone(), blue_canonical.clone()]
+        atlas_pixel(&first, "minecraft:block/stone", 4, 4),
+        green_png
     );
-    assert_eq!(saved.packs.len(), 2);
-    assert!(saved.packs.iter().all(|pack| pack.compatible));
-    let persisted: serde_json::Value =
-        serde_json::from_slice(&fs::read(&settings_path).expect("read settings"))
-            .expect("settings json");
-    assert_eq!(persisted["schemaVersion"], ASSET_SETTINGS_SCHEMA_VERSION);
-    assert_eq!(persisted["packs"].as_array().expect("packs array").len(), 2);
-
-    let duplicate = store
-        .save_pack_stack(vec![green_canonical.clone(), green.display().to_string()])
-        .expect_err("duplicates must fail");
-    assert!(
-        matches!(duplicate, AssetSettingsError::Invalid(_)),
-        "{duplicate:?}"
+    assert_eq!(
+        atlas_pixel(&second, "minecraft:block/stone", 4, 4),
+        blue_png
     );
+    assert_ne!(first.cache_key, second.cache_key);
+    let only_blue = resolve(std::slice::from_ref(&blue_pin));
 
-    let wrong = dir.path().join("wrong.zip");
-    fs::write(&wrong, pack_zip([0, 0, 0, 255], 15)).expect("wrong pack");
-    let unsupported = store
-        .save_pack_stack(vec![wrong.display().to_string()])
-        .expect_err("wrong pack format must fail");
-    assert!(
-        matches!(unsupported, AssetSettingsError::UnsupportedPack(_)),
-        "{unsupported:?}"
+    fs::remove_file(&green).expect("delete original; cached copy still works");
+    assert_eq!(store.status(&a, profile)[0].state, PackState::Ready);
+    let cached_green = cache.join(&green_pin.path);
+    let green_bytes = fs::read(&cached_green).expect("read cache");
+    let mut same_size_corruption = green_bytes.clone();
+    same_size_corruption[0] ^= 1;
+    fs::write(&cached_green, same_size_corruption).expect("corrupt cached bytes");
+    assert_eq!(store.status(&a, profile)[0].state, PackState::Changed);
+    let degraded = resolve(&a);
+    assert!(degraded.cache_hit);
+    assert_eq!(degraded.cache_key, only_blue.cache_key);
+    assert_eq!(degraded.packs[0].priority, 1);
+    assert_eq!(degraded.pack_issues.len(), 1);
+    assert!(degraded.pack_issues[0].contains("checksum"));
+    assert!(resolve(std::slice::from_ref(&blue_pin))
+        .pack_issues
+        .is_empty());
+    fs::remove_file(cached_green).expect("delete cached pack");
+    assert_eq!(store.status(&a, profile)[0].state, PackState::Missing);
+    fs::write(&green, green_bytes).expect("restore original");
+    assert_eq!(
+        store.import(&green, profile).expect("repair pin"),
+        green_pin
     );
+    assert_eq!(resolve(&a).cache_key, first.cache_key);
+}
 
+#[test]
+fn importing_packs_uses_the_exact_profile_and_rejects_unsafe_entries() {
+    let dir = TempDir::new("pack-format");
+    let store = ResourcePackStore::new(dir.path());
+    let older = minecraft_version::profile_for_version(&"1.20.4".parse().expect("version"))
+        .expect("older profile");
+    let folder = dir.path().join("local folder");
+    fs::create_dir(&folder).expect("pack folder");
+    let format = older.resource_pack_format.expect("older pack format");
+    fs::write(
+        folder.join("pack.mcmeta"),
+        format!(r#"{{"pack":{{"pack_format":{format}}}}}"#),
+    )
+    .expect("pack metadata");
+    let incompatible = store
+        .import(&folder, target_profile())
+        .expect_err("wrong profile");
+    assert_eq!(incompatible.state, PackState::Incompatible);
+    let pin = store.import(&folder, &older).expect("older pack");
+    assert_eq!(
+        store.status(std::slice::from_ref(&pin), target_profile())[0].state,
+        PackState::Incompatible
+    );
+    assert_eq!(
+        store.status(std::slice::from_ref(&pin), &older)[0].state,
+        PackState::Ready
+    );
+    assert_eq!(
+        store.import(&folder, &older).expect("deterministic import"),
+        pin
+    );
     let unsafe_pack = dir.path().join("unsafe.zip");
     let meta = serde_json::to_vec(&serde_json::json!({ "pack": { "pack_format": 46 } }))
         .expect("pack meta");
@@ -631,28 +683,7 @@ fn pack_stack_validates_dedupes_limits_and_persists_schema() {
     )
     .expect("unsafe pack");
     let unsafe_error = store
-        .save_pack_stack(vec![unsafe_pack.display().to_string()])
+        .import(&unsafe_pack, target_profile())
         .expect_err("unsafe archive entry must fail");
-    assert!(
-        matches!(unsafe_error, AssetSettingsError::UnsupportedPack(_)),
-        "{unsafe_error:?}"
-    );
-
-    // A rejected stack must not mutate the last valid saved stack.
-    assert_eq!(store.pack_stack(), vec![green_canonical, blue_canonical]);
-
-    let mut many = Vec::new();
-    for index in 0..17u8 {
-        let path = dir.path().join(format!("many-{index}.zip"));
-        fs::write(&path, pack_zip([index, 0, 0, 255], 46)).expect("many pack");
-        many.push(path.display().to_string());
-    }
-    let limit = store
-        .save_pack_stack(many)
-        .expect_err("more than 16 packs must fail");
-    assert!(matches!(limit, AssetSettingsError::Invalid(_)), "{limit:?}");
-
-    let cleared = store.clear_pack_stack().expect("clear pack stack");
-    assert!(cleared.packs.is_empty());
-    assert!(store.pack_stack().is_empty());
+    assert_eq!(unsafe_error.state, PackState::Invalid);
 }

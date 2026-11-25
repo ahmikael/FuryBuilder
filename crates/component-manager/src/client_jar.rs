@@ -664,7 +664,10 @@ impl ManagedClientJarCache {
                 .file_name()
                 .and_then(|name| name.to_str())
                 .unwrap_or("");
-            if name.starts_with(".staging-") || name.starts_with(".download-") {
+            if name == component_model::RESOURCE_PACK_CACHE_DIR
+                || name.starts_with(".staging-")
+                || name.starts_with(".download-")
+            {
                 continue;
             }
             let metadata = match fs::symlink_metadata(&path) {

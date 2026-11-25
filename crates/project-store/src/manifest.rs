@@ -368,14 +368,7 @@ pub struct JavaComponent {
     pub sha256: Option<String>,
 }
 
-/// One resource or data pack in the asset stack.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AssetsPack {
-    /// Logical path below the asset cache root. Never absolute and never a traversal path.
-    pub path: String,
-    pub sha1: String,
-}
+pub use component_model::AssetsPack;
 
 /// Logical reference to the client JAR and the derived block/item catalog used by a project.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -493,14 +486,21 @@ impl AssetsComponent {
                 }
             }
         }
-        if self.pack_stack.len() > 64 {
-            return Err(invalid_component(
-                "asset pack stack is limited to 64 entries",
-            ));
+        if self.pack_stack.len() > component_model::MAX_RESOURCE_PACKS {
+            return Err(invalid_component(format!(
+                "asset pack stack is limited to {} entries",
+                component_model::MAX_RESOURCE_PACKS
+            )));
         }
-        for pack in &self.pack_stack {
+        for (index, pack) in self.pack_stack.iter().enumerate() {
             validate_logical_relative_path("assets.packStack.path", &pack.path)?;
             validate_hex("assets.packStack.sha1", &pack.sha1, 40)?;
+            if self.pack_stack[..index].iter().any(|other| {
+                other.path.eq_ignore_ascii_case(&pack.path)
+                    || other.sha1.eq_ignore_ascii_case(&pack.sha1)
+            }) {
+                return Err(invalid_component("asset pack stack contains duplicates"));
+            }
         }
         Ok(())
     }

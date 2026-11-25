@@ -63,8 +63,10 @@ pub(crate) struct Archive {
 
 impl Archive {
     pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self, ArchiveError> {
-        let path = path.as_ref();
-        let mut file = File::open(path)?;
+        Self::from_file(File::open(path)?)
+    }
+
+    pub(crate) fn from_file(mut file: File) -> Result<Self, ArchiveError> {
         let file_len = file.metadata()?.len();
         if file_len < EOCD_MIN_BYTES as u64 {
             return Err(ArchiveError::TooSmall);

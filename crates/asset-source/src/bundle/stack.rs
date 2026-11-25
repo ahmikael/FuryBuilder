@@ -1,16 +1,19 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use minecraft_version::VersionProfile;
 use serde::Serialize;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::archive::Archive;
 use crate::bundle::BundleError;
-use crate::discovery::inspect_asset_path;
-use crate::resource_pack::inspect_resource_pack;
-use crate::settings::{AssetSourceSetting, MAX_RESOURCE_PACKS};
-use crate::types::{ResourcePackStatus, VersionStatus};
+use crate::discovery::{expected_client_for_jar, inspect_asset_path};
+use crate::jar::inspect_client_jar;
+use crate::pack_store::{require_compatible, PackIssue, ResourcePackInput};
+use crate::resource_pack::{inspect_resource_pack, is_link};
+use crate::settings::AssetSourceSetting;
+use crate::{VersionStatus, MAX_RESOURCE_PACKS};
 
 const MAX_JSON_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TEXTURE_BYTES: u64 = 4 * 1024 * 1024;
@@ -28,12 +31,14 @@ pub struct BundlePack {
 }
 
 enum PackSource {
-    Zip { path: PathBuf, archive: Archive },
-    Folder { path: PathBuf },
-}
-
-impl PackSource {
-    fn _unused(&self) {}
+    Zip {
+        path: PathBuf,
+        archive: Archive,
+        sha1: String,
+    },
+    Folder {
+        path: PathBuf,
+    },
 }
 
 /// Read-only view over a verified client JAR and an ordered list of resource packs.
@@ -45,6 +50,7 @@ pub struct ResourceStack {
     packs: Vec<PackSource>,
     pub packs_info: Vec<BundlePack>,
     pub warnings: Vec<String>,
+    pub pack_issues: Vec<String>,
     pub fingerprint: String,
     /// Stable fingerprint of the ordered resource-pack stack only. The base JAR is not part
     /// of it, so catalog caches can combine it with the exact version and JAR SHA-1.
@@ -53,10 +59,12 @@ pub struct ResourceStack {
 
 impl ResourceStack {
     pub fn open(
+        profile: &VersionProfile,
         source: Option<&AssetSourceSetting>,
-        pack_paths: &[String],
+        expected_sha1: Option<&str>,
+        packs: &[ResourcePackInput],
     ) -> Result<Self, BundleError> {
-        if pack_paths.len() > MAX_RESOURCE_PACKS {
+        if packs.len() > MAX_RESOURCE_PACKS {
             return Err(BundleError::InvalidArgument(format!(
                 "at most {MAX_RESOURCE_PACKS} resource packs can be stacked"
             )));
@@ -68,14 +76,15 @@ impl ResourceStack {
             packs: Vec::new(),
             packs_info: Vec::new(),
             warnings: Vec::new(),
+            pack_issues: Vec::new(),
             fingerprint: String::new(),
             pack_stack_hash: String::new(),
         };
-        let mut source_pack: Option<PathBuf> = None;
+        let mut source_pack = None;
         if let Some(source) = source {
-            let report = inspect_asset_path(&source.path);
             match source.kind.as_str() {
                 "minecraft_root" | "version_directory" => {
+                    let report = inspect_asset_path(&source.path);
                     let label = if source.kind == "version_directory" {
                         "version folder"
                     } else {
@@ -98,6 +107,15 @@ impl ResourceStack {
                             crate::target::target_minecraft_version()
                         ))
                     })?;
+                    if version.internal_version_id.as_deref()
+                        != Some(profile.minecraft_version.as_str())
+                        || version.world_version != Some(profile.data_version)
+                    {
+                        return Err(BundleError::UnsupportedFormat(format!(
+                            "the selected {label} does not contain the requested Minecraft {} client",
+                            profile.minecraft_version
+                        )));
+                    }
                     if !matches!(
                         version.status,
                         VersionStatus::Compatible | VersionStatus::CompatibleUnverified
@@ -117,23 +135,23 @@ impl ResourceStack {
                     stack.base_jar_sha1 = version.actual_sha1.clone();
                 }
                 "client_jar" => {
-                    if !report.valid {
+                    let path = Path::new(&source.path);
+                    let version = inspect_client_jar(path, &expected_client_for_jar(path));
+                    if !version.errors.is_empty()
+                        || version.internal_id.as_deref()
+                            != Some(profile.minecraft_version.as_str())
+                        || version.world_version != Some(profile.data_version)
+                    {
                         return Err(BundleError::UnsupportedFormat(format!(
                             "the selected client JAR is not usable: {}",
-                            report
-                                .errors
-                                .first()
-                                .cloned()
-                                .unwrap_or_else(|| "unknown reason".to_owned())
+                            version.errors.first().cloned().unwrap_or_else(|| format!(
+                                "expected Minecraft {}",
+                                profile.minecraft_version
+                            ))
                         )));
                     }
-                    let version = report.version.as_ref().ok_or_else(|| {
-                        BundleError::UnsupportedFormat(
-                            "the selected client JAR has no version report".to_owned(),
-                        )
-                    })?;
-                    stack.base_jar_path = Some(PathBuf::from(&version.jar_path));
-                    stack.base_jar_sha1 = version.actual_sha1.clone();
+                    stack.base_jar_path = Some(path.to_path_buf());
+                    stack.base_jar_sha1 = version.sha1;
                     if !version.checksum_verified {
                         stack.warnings.push(
                             "client JAR SHA-1 was not verified against launcher metadata"
@@ -142,17 +160,7 @@ impl ResourceStack {
                     }
                 }
                 "resource_pack" => {
-                    if !report.valid {
-                        return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected resource pack is not usable: {}",
-                            report
-                                .errors
-                                .first()
-                                .cloned()
-                                .unwrap_or_else(|| "unknown reason".to_owned())
-                        )));
-                    }
-                    source_pack = Some(PathBuf::from(&source.path));
+                    source_pack = Some(ResourcePackInput::local(&source.path));
                 }
                 other => {
                     return Err(BundleError::InvalidArgument(format!(
@@ -162,11 +170,20 @@ impl ResourceStack {
             }
         }
 
-        if let Some(path) = source_pack {
-            stack.push_pack(&path)?;
+        if expected_sha1.is_some() && stack.base_jar_sha1.as_deref() != expected_sha1 {
+            return Err(BundleError::UnsupportedFormat(
+                "the client JAR changed since the project catalog was resolved".to_owned(),
+            ));
         }
-        for path in pack_paths {
-            stack.push_pack(Path::new(path))?;
+        for (priority, input) in source_pack.iter().chain(packs).enumerate() {
+            if let Err(issue) = stack.push_pack(input, priority, profile) {
+                let message = format!("{}: {issue}", input.name());
+                if input.is_pinned() {
+                    stack.pack_issues.push(message);
+                } else {
+                    return Err(BundleError::UnsupportedFormat(message));
+                }
+            }
         }
         if let Some(base_path) = &stack.base_jar_path {
             let archive = Archive::open(base_path).map_err(|error| {
@@ -187,58 +204,41 @@ impl ResourceStack {
         Ok(stack)
     }
 
-    fn push_pack(&mut self, path: &Path) -> Result<(), BundleError> {
-        let report = inspect_resource_pack(path);
-        if report.status != ResourcePackStatus::Compatible || !report.errors.is_empty() {
-            return Err(BundleError::UnsupportedFormat(format!(
-                "resource pack {} is not compatible with resource pack format {}: {}",
-                path.display(),
-                crate::target::target_resource_pack_format(),
-                report
-                    .errors
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| format!("{:?}", report.status))
-            )));
-        }
-        for warning in &report.warnings {
-            self.warnings.push(format!("{}: {warning}", path.display()));
-        }
-        let priority = self.packs_info.len();
-        let metadata = fs::symlink_metadata(path).map_err(|error| {
-            BundleError::Io(format!("cannot inspect {}: {error}", path.display()))
-        })?;
-        if metadata.file_type().is_symlink() {
-            return Err(BundleError::UnsupportedFormat(format!(
-                "resource pack is a symlink or junction: {}",
-                path.display()
-            )));
-        }
-        if metadata.is_file() {
-            let archive = Archive::open(path).map_err(|error| {
-                BundleError::UnsupportedFormat(format!(
-                    "cannot read resource pack {}: {error}",
-                    path.display()
-                ))
-            })?;
-            self.packs.push(PackSource::Zip {
-                path: path.to_path_buf(),
-                archive,
-            });
-        } else if metadata.is_dir() {
-            self.packs.push(PackSource::Folder {
-                path: path.to_path_buf(),
-            });
+    fn push_pack(
+        &mut self,
+        input: &ResourcePackInput,
+        priority: usize,
+        profile: &VersionProfile,
+    ) -> Result<(), PackIssue> {
+        let path = &input.path;
+        let (source, report) = if input.metadata()?.is_file() {
+            let (archive, report, sha1) = input.open_zip(profile)?;
+            (
+                PackSource::Zip {
+                    path: path.clone(),
+                    archive,
+                    sha1,
+                },
+                report,
+            )
         } else {
-            return Err(BundleError::UnsupportedFormat(format!(
-                "resource pack is not a zip archive or directory: {}",
-                path.display()
-            )));
+            let report = inspect_resource_pack(path, profile);
+            require_compatible(&report, profile)?;
+            (PackSource::Folder { path: path.clone() }, report)
+        };
+        let name = if input.is_pinned() {
+            input.name()
+        } else {
+            report.name
+        };
+        for warning in &report.warnings {
+            self.warnings.push(format!("{name}: {warning}"));
         }
+        self.packs.push(source);
         self.packs_info.push(BundlePack {
             priority,
             path: path.display().to_string(),
-            name: report.name,
+            name,
             pack_format: report.pack_format,
         });
         Ok(())
@@ -276,7 +276,7 @@ impl ResourceStack {
         let zip_name = components.join("/");
         for pack in &mut self.packs {
             match pack {
-                PackSource::Zip { path, archive } => {
+                PackSource::Zip { path, archive, .. } => {
                     if !archive.entries().iter().any(|entry| entry.name == zip_name) {
                         continue;
                     }
@@ -329,11 +329,11 @@ impl ResourceStack {
 
     fn compute_pack_stack_hash(&self) -> Result<String, BundleError> {
         let mut hasher = Sha256::new();
-        hasher.update(b"furybuilder-pack-stack-v1");
+        hasher.update(b"furybuilder-pack-stack-v2");
         for pack in &self.packs {
             hasher.update(b"pack");
             match pack {
-                PackSource::Zip { path, .. } => hash_path_metadata(&mut hasher, path)?,
+                PackSource::Zip { sha1, .. } => hasher.update(sha1.as_bytes()),
                 PackSource::Folder { path } => hash_tree(&mut hasher, path, 0)?,
             }
         }
@@ -378,7 +378,7 @@ fn read_folder_file(
                 )))
             }
         };
-        if metadata.file_type().is_symlink() {
+        if is_link(&metadata) {
             return Err(BundleError::UnsupportedFormat(format!(
                 "resource pack contains a symlink or junction: {}",
                 current.display()
@@ -439,7 +439,7 @@ fn hash_tree(hasher: &mut Sha256, root: &Path, depth: usize) -> Result<(), Bundl
         let metadata = fs::symlink_metadata(&child).map_err(|error| {
             BundleError::Io(format!("cannot inspect {}: {error}", child.display()))
         })?;
-        if metadata.file_type().is_symlink() {
+        if is_link(&metadata) {
             continue;
         }
         hasher.update(name.to_string_lossy().as_bytes());
@@ -549,7 +549,8 @@ mod tests {
             path: version_dir.display().to_string(),
         };
 
-        let stack = ResourceStack::open(Some(&source), &[]).expect("open version directory");
+        let stack = ResourceStack::open(crate::target_profile(), Some(&source), None, &[])
+            .expect("open version directory");
         assert_eq!(stack.base_jar_path(), Some(jar.as_path()));
         assert!(stack.base_jar_sha1().is_some());
         assert!(stack

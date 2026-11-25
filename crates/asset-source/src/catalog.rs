@@ -2089,9 +2089,11 @@ mod tests {
             .build(&source(&path))
             .expect("catalog");
         let service = CatalogIconAtlasService::new();
+        let profile = crate::target_profile();
+        let store = crate::ResourcePackStore::new(dir.path.join("cache"));
 
         let first = service
-            .atlas(&source(&path), &[], &catalog)
+            .atlas(profile, &source(&path), &[], &catalog)
             .expect("first atlas");
         assert!(!first.cache_hit);
         assert_eq!(first.schema_version, CATALOG_ATLAS_SCHEMA_VERSION);
@@ -2114,15 +2116,16 @@ mod tests {
         assert_eq!(atlas_pixel(&first, stone, 0, 0), [255, 0, 255, 255]);
 
         let second = service
-            .atlas(&source(&path), &[], &catalog)
+            .atlas(profile, &source(&path), &[], &catalog)
             .expect("second atlas");
         assert!(second.cache_hit);
         assert_eq!(second.cache_key, first.cache_key);
 
         let pack = write_pack(&dir, "green-stone", &colored_png([0, 255, 0, 255]));
-        let pack_path = pack.display().to_string();
+        let pin = store.import(&pack, profile).expect("import pack");
+        let inputs = store.inputs(std::slice::from_ref(&pin));
         let third = service
-            .atlas(&source(&path), std::slice::from_ref(&pack_path), &catalog)
+            .atlas(profile, &source(&path), &inputs, &catalog)
             .expect("pack atlas");
         assert!(!third.cache_hit);
         assert_ne!(third.cache_key, first.cache_key);
@@ -2135,9 +2138,23 @@ mod tests {
         assert_eq!(atlas_pixel(&third, stone, 0, 0), [0, 255, 0, 255]);
 
         let fourth = service
-            .atlas(&source(&path), &[pack_path], &catalog)
+            .atlas(profile, &source(&path), &inputs, &catalog)
             .expect("pack cache hit");
         assert!(fourth.cache_hit);
         assert_eq!(fourth.cache_key, third.cache_key);
+        std::fs::remove_file(dir.path.join("cache").join(&pin.path)).expect("delete pinned pack");
+        let fallback = service
+            .atlas(profile, &source(&path), &inputs, &catalog)
+            .expect("cached vanilla atlas");
+        assert!(fallback.cache_hit);
+        assert_eq!(fallback.cache_key, first.cache_key);
+        assert_eq!(fallback.catalog_id, catalog.catalog_id);
+        assert_eq!(fallback.catalog_hash, catalog.catalog_hash);
+        assert_eq!(fallback.pack_issues.len(), 1);
+        assert!(service
+            .atlas(profile, &source(&path), &[], &catalog)
+            .expect("other project with no packs")
+            .pack_issues
+            .is_empty());
     }
 }

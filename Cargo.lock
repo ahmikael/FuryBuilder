@@ -937,12 +937,14 @@ version = "0.2.0"
 dependencies = [
  "base64 0.22.1",
  "flate2",
+ "furybuilder-component-model",
  "furybuilder-minecraft-version",
  "png 0.17.16",
  "serde",
  "serde_json",
  "sha1",
  "sha2 0.10.9",
+ "tempfile",
  "thiserror 2.0.21",
  "zip",
 ]

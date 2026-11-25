@@ -11,6 +11,7 @@ name = "asset_source"
 
 [dependencies]
 base64 = { workspace = true }
+component-model = { path = "../component-model", package = "furybuilder-component-model" }
 flate2 = { workspace = true }
 png = "0.17"
 serde = { workspace = true }
@@ -18,7 +19,6 @@ serde_json = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }
 thiserror = { workspace = true }
+tempfile = "3"
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
-
-[dev-dependencies]
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }

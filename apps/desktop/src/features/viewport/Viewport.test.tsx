@@ -22,13 +22,15 @@ interface FakeRenderer {
   focusOn: Mock;
   capture: Mock;
   updateChunks: Mock;
+  setAssetBundle: Mock;
 }
 
 const mocks = vi.hoisted(() => {
   const instances: FakeRenderer[] = [];
+  const uniqueBlockStates = vi.fn();
   class ViewportRenderer {
     setSnapshot = vi.fn();
-    world = { uniqueBlockStates: vi.fn(() => []) };
+    world = { uniqueBlockStates };
     setGridVisible = vi.fn();
     setChunkBordersVisible = vi.fn();
     setSelectionBox = vi.fn();
@@ -44,14 +46,17 @@ const mocks = vi.hoisted(() => {
       metadata: {},
     }));
     updateChunks = vi.fn();
+    setAssetBundle = vi.fn().mockResolvedValue(undefined);
+    clearAssetBundle = vi.fn();
     constructor() {
       instances.push(this as unknown as FakeRenderer);
     }
   }
-  return { instances, ViewportRenderer };
+  return { instances, ViewportRenderer, uniqueBlockStates };
 });
 
 const ipc = vi.hoisted(() => ({ tauri: false, invoke: vi.fn() }));
+const events = vi.hoisted(() => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
 
 vi.mock("@/renderer/viewport-renderer", () => ({
   ViewportRenderer: mocks.ViewportRenderer,
@@ -63,7 +68,7 @@ vi.mock("@/lib/ipc", async (importOriginal) => {
 });
 
 vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn().mockResolvedValue(() => undefined),
+  listen: events.listen,
 }));
 
 import { Viewport } from "@/features/viewport/Viewport";
@@ -87,6 +92,8 @@ describe("Viewport", () => {
   beforeEach(() => {
     ipc.tauri = false;
     ipc.invoke.mockReset();
+    events.listen.mockClear();
+    mocks.uniqueBlockStates.mockReturnValue([]);
     mocks.instances.length = 0;
     useToolStore.setState({
       tool: "place",
@@ -141,6 +148,51 @@ describe("Viewport", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("refreshes only the active project's packs and ignores an in-flight stale bundle", async () => {
+    ipc.tauri = true;
+    mocks.uniqueBlockStates.mockReturnValue([{ name: "minecraft:stone", properties: {} }]);
+    let resolveInitial: (bundle: { packIssues: string[] }) => void = () => undefined;
+    const initial = new Promise<{ packIssues: string[] }>((resolve) => {
+      resolveInitial = resolve;
+    });
+    const bundle = { packIssues: ["Missing pack"] };
+    const load = vi.fn().mockReturnValueOnce(initial).mockResolvedValue(bundle);
+    ipc.invoke.mockImplementation(async (command: string, args: unknown) => {
+      if (command === "world_info") return worldInfo;
+      if (command === "render_snapshot") return snapshot;
+      if (command === "project_render_bundle") return load(args);
+      if (command === "history_state") return { canUndo: false, canRedo: false, entries: [] };
+      if (command === "project_status") return useProjectStore.getState().current;
+      throw new Error(`unexpected ${command}`);
+    });
+    render(<Viewport />);
+    await waitFor(() =>
+      expect(load).toHaveBeenCalledWith({
+        folder: "Test.furybuilder",
+        blockStates: [{ name: "minecraft:stone", properties: {} }],
+      }),
+    );
+    const subscription = events.listen.mock.calls.find(
+      ([event]) => event === "furybuilder-project-packs-changed",
+    );
+    if (!subscription) throw new Error("missing pack change subscription");
+    const signal = (payload: string) =>
+      subscription[1]({ event: "furybuilder-project-packs-changed", id: 1, payload });
+    act(() => signal("Other.furybuilder"));
+    expect(load).toHaveBeenCalledTimes(1);
+    act(() => signal("Test.furybuilder"));
+    await act(async () => resolveInitial({ packIssues: ["Stale pack"] }));
+    expect(await screen.findByText("1 resource pack skipped")).toHaveAttribute(
+      "title",
+      "Missing pack",
+    );
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(mocks.instances[0]?.setAssetBundle).toHaveBeenCalledExactlyOnceWith(
+      bundle,
+      expect.any(Function),
+    );
   });
 
   it("loads the Rust world snapshot without inventing a demo scene", async () => {

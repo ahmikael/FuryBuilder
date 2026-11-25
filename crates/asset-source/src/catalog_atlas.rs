@@ -12,11 +12,12 @@
 use std::collections::{BTreeSet, VecDeque};
 use std::sync::Mutex;
 
+use minecraft_version::VersionProfile;
 use serde::Serialize;
 
 use crate::bundle::{build_atlas_with_limit, BundleError, ResourceStack};
 use crate::catalog::CatalogSnapshot;
-use crate::settings::AssetSourceSetting;
+use crate::{AssetSourceSetting, ResourcePackInput};
 
 /// Version of the icon-atlas DTO and packing output.
 pub const CATALOG_ATLAS_SCHEMA_VERSION: u32 = 1;
@@ -63,6 +64,7 @@ pub struct CatalogIconAtlas {
     pub png_base64: String,
     pub textures: Vec<CatalogAtlasTexture>,
     pub warnings: Vec<String>,
+    pub pack_issues: Vec<String>,
 }
 
 struct CacheEntry {
@@ -93,17 +95,25 @@ impl CatalogIconAtlasService {
     /// Builds (or reuses) the icon atlas for a catalog and the current resource-pack stack.
     pub fn atlas(
         &self,
+        profile: &VersionProfile,
         source: &AssetSourceSetting,
-        pack_paths: &[String],
+        packs: &[ResourcePackInput],
         catalog: &CatalogSnapshot,
     ) -> Result<CatalogIconAtlas, BundleError> {
-        let mut stack = ResourceStack::open(Some(source), pack_paths)?;
+        let mut stack = ResourceStack::open(
+            profile,
+            Some(source),
+            catalog.client_jar_sha1.as_deref(),
+            packs,
+        )?;
         let key = atlas_cache_key(catalog, &stack)?;
         if let Ok(mut cache) = self.cache.lock() {
             if let Some(index) = cache.iter().position(|entry| entry.key == key) {
                 if let Some(entry) = cache.remove(index) {
                     let mut atlas = entry.atlas.clone();
                     atlas.cache_hit = true;
+                    atlas.pack_issues = stack.pack_issues;
+                    atlas.warnings.splice(..0, stack.warnings);
                     cache.push_front(entry);
                     return Ok(atlas);
                 }
@@ -112,8 +122,6 @@ impl CatalogIconAtlasService {
 
         let keys = icon_keys(catalog);
         let built = build_atlas_with_limit(&mut stack, &keys, MAX_CATALOG_ATLAS_TEXTURES + 1)?;
-        let mut warnings = stack.warnings.clone();
-        warnings.extend(built.warnings);
         let atlas = CatalogIconAtlas {
             schema_version: CATALOG_ATLAS_SCHEMA_VERSION,
             cache_key: key,
@@ -147,9 +155,13 @@ impl CatalogIconAtlasService {
                     has_alpha: texture.has_alpha,
                 })
                 .collect(),
-            warnings,
+            warnings: built.warnings,
+            pack_issues: Vec::new(),
         };
-        Ok(self.insert(atlas))
+        let mut atlas = self.insert(atlas);
+        atlas.pack_issues = stack.pack_issues;
+        atlas.warnings.splice(..0, stack.warnings);
+        Ok(atlas)
     }
 
     fn insert(&self, atlas: CatalogIconAtlas) -> CatalogIconAtlas {

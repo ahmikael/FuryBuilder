@@ -8,7 +8,8 @@ use std::time::{Duration, Instant};
 use asset_source::{
     AssetBundle, AssetBundleService, AssetCatalogService, AssetDiscoveryReport, AssetPathReport,
     AssetSelectionKind, AssetSettingsStore, AssetSourceSetting, BlockStateRequest,
-    CatalogIconAtlas, CatalogIconAtlasService, CatalogSnapshot, SavedAssetSource,
+    CatalogIconAtlas, CatalogIconAtlasService, CatalogSnapshot, PackState, ProjectPackStatus,
+    ResourcePackInput, ResourcePackStore, SavedAssetSource, MAX_RESOURCE_PACKS,
 };
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
@@ -3514,7 +3515,6 @@ pub fn assets_save_source(
         "minecraft_root" => AssetSelectionKind::MinecraftRoot,
         "version_directory" => AssetSelectionKind::VersionDirectory,
         "client_jar" => AssetSelectionKind::ClientJar,
-        "resource_pack" => AssetSelectionKind::ResourcePack,
         other => {
             return Err(AppError::invalid_argument(format!(
                 "unknown asset source kind: {other}"
@@ -3538,7 +3538,7 @@ pub fn assets_save_source(
             .unwrap_or_else(|| "the selected asset source is not usable".to_owned());
         return Err(AppError::invalid_argument(message).with_details(details()));
     }
-    if expected != AssetSelectionKind::ResourcePack && !report.target_match {
+    if !report.target_match {
         return Err(AppError::invalid_argument(format!(
             "the selection does not provide a compatible Minecraft {} client",
             asset_source::target_minecraft_version()
@@ -3582,57 +3582,248 @@ pub fn assets_clear_source(
         })
 }
 
-#[tauri::command]
-pub fn assets_save_pack_stack(
-    app: AppHandle,
-    components: State<'_, ComponentManager>,
-    paths: Vec<String>,
-) -> Result<SavedAssetSource, AppError> {
-    components
-        .assets()
-        .save_pack_stack(paths)
-        .map_err(asset_settings_error)
-        .inspect(|_| {
-            let _ = app.emit("furybuilder-assets-changed", ());
-        })
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectPackStack {
+    minecraft_version: String,
+    target_format: Option<String>,
+    enabled: bool,
+    max_packs: usize,
+    packs: Vec<ProjectPackStatus>,
 }
 
-#[tauri::command]
-pub fn assets_clear_pack_stack(
-    app: AppHandle,
-    components: State<'_, ComponentManager>,
-) -> Result<SavedAssetSource, AppError> {
-    components
-        .assets()
-        .clear_pack_stack()
-        .map_err(asset_settings_error)
-        .inspect(|_| {
-            let _ = app.emit("furybuilder-assets-changed", ());
-        })
+#[derive(serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ProjectPackEdit {
+    Add { path: String },
+    Remove { sha1: String },
+    Move { sha1: String, earlier: bool },
 }
 
-#[tauri::command]
-pub fn assets_render_bundle(
-    components: State<'_, ComponentManager>,
-    service: State<'_, AssetBundleService>,
-    block_states: Vec<BlockStateRequest>,
-    source_kind: Option<String>,
-    source_path: Option<String>,
-) -> Result<AssetBundle, AppError> {
-    let source = resolve_asset_source(components.assets(), source_kind, source_path)?.ok_or_else(
-        || {
-            AppError::invalid_argument(
-                "select Minecraft client assets before rendering Minecraft models; placeholder textures are used meanwhile",
+fn open_project_detail(
+    projects: &ProjectSession,
+    folder: Option<&str>,
+) -> Result<project_store::ProjectDetail, AppError> {
+    let current = projects
+        .current
+        .as_ref()
+        .ok_or_else(|| AppError::new(ErrorCode::NotFound, "no project is open"))?;
+    if folder.is_some_and(|folder| folder != current.folder) {
+        return Err(AppError::new(
+            ErrorCode::Conflict,
+            "the active project changed",
+        ));
+    }
+    projects
+        .store
+        .detail(&current.folder)
+        .map_err(project_error)
+}
+
+fn active_project_detail(
+    state: &AppState,
+    folder: Option<&str>,
+) -> Result<project_store::ProjectDetail, AppError> {
+    let projects = state
+        .projects
+        .lock()
+        .map_err(|_| AppError::internal("project state lock poisoned"))?;
+    open_project_detail(&projects, folder)
+}
+
+fn project_pack_profile(target: &project_store::ProjectTarget) -> Result<VersionProfile, AppError> {
+    profile_for_id(&target.profile_id)
+        .ok_or_else(|| AppError::internal("project target profile is unavailable"))
+}
+
+fn project_pack_report(
+    store: &ResourcePackStore,
+    profile: &VersionProfile,
+    assets: Option<&project_store::AssetsComponent>,
+) -> ProjectPackStack {
+    ProjectPackStack {
+        minecraft_version: profile.minecraft_version.to_string(),
+        target_format: profile.resource_pack_format.map(|major| {
+            profile.pack_format_minors.map_or_else(
+                || major.to_string(),
+                |minor| format!("{major}.{}", minor.resource),
             )
-        },
-    )?;
-    service
-        .bundle(
-            Some(&source),
-            &components.assets().pack_stack(),
-            &block_states,
-        )
-        .map_err(asset_bundle_error)
+        }),
+        enabled: assets.is_some_and(|assets| assets.mode != ComponentMode::Placeholder),
+        max_packs: MAX_RESOURCE_PACKS,
+        packs: assets
+            .map(|assets| store.status(&assets.pack_stack, profile))
+            .unwrap_or_default(),
+    }
+}
+
+#[tauri::command]
+pub async fn project_resource_packs(
+    app: AppHandle,
+    folder: String,
+    refresh_render: Option<bool>,
+) -> Result<ProjectPackStack, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let detail = active_project_detail(&app.state::<AppState>(), Some(&folder))?;
+        let profile = project_pack_profile(&detail.target)?;
+        let report = project_pack_report(
+            &app.state::<ResourcePackStore>(),
+            &profile,
+            detail.components.assets.as_ref(),
+        );
+        if refresh_render == Some(true) {
+            let _ = app.emit("furybuilder-project-packs-changed", &folder);
+        }
+        Ok(report)
+    })
+    .await
+    .map_err(|error| AppError::internal(error.to_string()))?
+}
+
+fn change_project_pack_stack(
+    state: &AppState,
+    store: &ResourcePackStore,
+    folder: &str,
+    edit: ProjectPackEdit,
+) -> Result<ProjectPackStack, AppError> {
+    let before = active_project_detail(state, Some(folder))?;
+    let profile = project_pack_profile(&before.target)?;
+    let mut assets = before
+        .components
+        .assets
+        .clone()
+        .filter(|assets| assets.mode != ComponentMode::Placeholder)
+        .ok_or_else(|| AppError::invalid_argument("resource packs require pinned client assets"))?;
+    let stack = &mut assets.pack_stack;
+    let find_index = |sha1: &str| {
+        stack
+            .iter()
+            .position(|pack| pack.sha1 == sha1)
+            .ok_or_else(|| {
+                AppError::new(
+                    ErrorCode::NotFound,
+                    "the resource pack is not in this project",
+                )
+            })
+    };
+    match edit {
+        ProjectPackEdit::Add { path } => {
+            if stack.len() >= MAX_RESOURCE_PACKS {
+                return Err(AppError::new(
+                    ErrorCode::LimitExceeded,
+                    format!("at most {MAX_RESOURCE_PACKS} resource packs can be stacked"),
+                ));
+            }
+            let path = Path::new(&path);
+            if !path.is_absolute() {
+                return Err(AppError::invalid_argument(
+                    "choose an absolute resource pack path",
+                ));
+            }
+            let pin = store.import(path, &profile).map_err(|issue| {
+                let code = match issue.state {
+                    PackState::Missing => ErrorCode::NotFound,
+                    PackState::Incompatible => ErrorCode::UnsupportedFormat,
+                    _ => ErrorCode::InvalidArgument,
+                };
+                AppError::new(code, issue.to_string())
+            })?;
+            if let Ok(index) = find_index(&pin.sha1) {
+                stack[index] = pin;
+            } else {
+                stack.push(pin);
+            }
+        }
+        ProjectPackEdit::Remove { sha1 } => {
+            let index = find_index(&sha1)?;
+            stack.remove(index);
+        }
+        ProjectPackEdit::Move { sha1, earlier } => {
+            let index = find_index(&sha1)?;
+            let destination = if earlier {
+                index.checked_sub(1)
+            } else {
+                Some(index + 1)
+            };
+            let destination = destination
+                .filter(|destination| *destination < stack.len())
+                .ok_or_else(|| {
+                    AppError::invalid_argument("the pack is already at that end of the stack")
+                })?;
+            stack.swap(index, destination);
+        }
+    }
+    {
+        let projects = state
+            .projects
+            .lock()
+            .map_err(|_| AppError::internal("project state lock poisoned"))?;
+        let current = open_project_detail(&projects, Some(folder))?;
+        if current.summary.project_id != before.summary.project_id
+            || current.target != before.target
+            || current.components.assets != before.components.assets
+        {
+            return Err(AppError::new(
+                ErrorCode::Conflict,
+                "the project asset configuration changed; reload and try again",
+            ));
+        }
+        projects
+            .store
+            .update_pack_stack(folder, stack.clone())
+            .map_err(project_error)?;
+    }
+    Ok(project_pack_report(store, &profile, Some(&assets)))
+}
+
+#[tauri::command]
+pub async fn project_update_resource_packs(
+    app: AppHandle,
+    folder: String,
+    edit: ProjectPackEdit,
+) -> Result<ProjectPackStack, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let report = change_project_pack_stack(
+            &app.state::<AppState>(),
+            &app.state::<ResourcePackStore>(),
+            &folder,
+            edit,
+        )?;
+        let _ = app.emit("furybuilder-project-packs-changed", &folder);
+        Ok(report)
+    })
+    .await
+    .map_err(|error| AppError::internal(error.to_string()))?
+}
+
+#[tauri::command]
+pub async fn project_render_bundle(
+    app: AppHandle,
+    folder: String,
+    block_states: Vec<BlockStateRequest>,
+) -> Result<Option<AssetBundle>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(ProjectVisualAssets {
+            profile,
+            snapshot,
+            packs,
+        }) = project_visual_assets(&app, Some(&folder))?
+        else {
+            return Ok(None);
+        };
+        app.state::<AssetBundleService>()
+            .bundle(
+                &profile,
+                Some(&catalog_asset_source(&snapshot)),
+                snapshot.client_jar_sha1.as_deref(),
+                &packs,
+                &block_states,
+            )
+            .map(Some)
+            .map_err(asset_bundle_error)
+    })
+    .await
+    .map_err(|error| AppError::internal(error.to_string()))?
 }
 
 /// Builds the block/item catalog from the selected client JAR. No files are downloaded or
@@ -3648,8 +3839,7 @@ pub fn assets_catalog(
     service.catalog(&source).map_err(asset_catalog_error)
 }
 
-/// Builds the palette icon atlas for the selected client JAR and the current resource-pack
-/// stack. The atlas is presentation only; registry contents still come from the base JAR.
+/// Builds the unmodified atlas for a selected client JAR, outside a project.
 #[tauri::command]
 pub fn assets_catalog_atlas(
     components: State<'_, ComponentManager>,
@@ -3660,8 +3850,18 @@ pub fn assets_catalog_atlas(
 ) -> Result<CatalogIconAtlas, AppError> {
     let source = resolve_catalog_source(components.inner(), source_kind, source_path)?;
     let snapshot = catalog.catalog(&source).map_err(asset_catalog_error)?;
+    let version = snapshot
+        .minecraft_version
+        .parse::<minecraft_version::VersionId>()
+        .map_err(|error| AppError::invalid_argument(error.to_string()))?;
+    let profile = minecraft_version::profile_for_version(&version).ok_or_else(|| {
+        AppError::new(
+            ErrorCode::UnsupportedFormat,
+            "no exact profile for this client JAR",
+        )
+    })?;
     atlas
-        .atlas(&source, &components.assets().pack_stack(), &snapshot)
+        .atlas(&profile, &catalog_asset_source(&snapshot), &[], &snapshot)
         .map_err(asset_bundle_error)
 }
 
@@ -3675,54 +3875,81 @@ pub fn project_catalog(
     components: State<'_, ComponentManager>,
     catalog: State<'_, AssetCatalogService>,
 ) -> Result<Option<CatalogSnapshot>, AppError> {
-    project_catalog_snapshot(state.inner(), components.inner(), catalog.inner())
+    let detail = active_project_detail(state.inner(), None)?;
+    resolve_project_catalog(
+        components.inner(),
+        catalog.inner(),
+        &detail.target,
+        &detail.components,
+    )
 }
 
 /// Builds the icon atlas for the catalog pinned by the open project. Placeholder projects
 /// return `None`, matching `project_catalog`.
 #[tauri::command]
-pub fn project_catalog_atlas(
-    state: State<'_, AppState>,
-    components: State<'_, ComponentManager>,
-    catalog: State<'_, AssetCatalogService>,
-    atlas: State<'_, CatalogIconAtlasService>,
-) -> Result<Option<CatalogIconAtlas>, AppError> {
-    let Some(snapshot) =
-        project_catalog_snapshot(state.inner(), components.inner(), catalog.inner())?
+pub async fn project_catalog_atlas(app: AppHandle) -> Result<Option<CatalogIconAtlas>, AppError> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let Some(ProjectVisualAssets {
+            profile,
+            snapshot,
+            packs,
+        }) = project_visual_assets(&app, None)?
+        else {
+            return Ok(None);
+        };
+        app.state::<CatalogIconAtlasService>()
+            .atlas(
+                &profile,
+                &catalog_asset_source(&snapshot),
+                &packs,
+                &snapshot,
+            )
+            .map(Some)
+            .map_err(asset_bundle_error)
+    })
+    .await
+    .map_err(|error| AppError::internal(error.to_string()))?
+}
+
+fn catalog_asset_source(snapshot: &CatalogSnapshot) -> AssetSourceSetting {
+    AssetSourceSetting {
+        kind: AssetSelectionKind::ClientJar.as_str().to_owned(),
+        path: snapshot.client_jar.clone(),
+    }
+}
+
+struct ProjectVisualAssets {
+    profile: VersionProfile,
+    snapshot: CatalogSnapshot,
+    packs: Vec<ResourcePackInput>,
+}
+
+fn project_visual_assets(
+    app: &AppHandle,
+    folder: Option<&str>,
+) -> Result<Option<ProjectVisualAssets>, AppError> {
+    let detail = active_project_detail(&app.state::<AppState>(), folder)?;
+    let Some(snapshot) = resolve_project_catalog(
+        &app.state::<ComponentManager>(),
+        &app.state::<AssetCatalogService>(),
+        &detail.target,
+        &detail.components,
+    )?
     else {
         return Ok(None);
     };
-    let source = AssetSourceSetting {
-        kind: AssetSelectionKind::ClientJar.as_str().to_owned(),
-        path: snapshot.client_jar.clone(),
-    };
-    atlas
-        .atlas(&source, &components.assets().pack_stack(), &snapshot)
-        .map(Some)
-        .map_err(asset_bundle_error)
-}
-
-fn project_catalog_snapshot(
-    state: &AppState,
-    components: &ComponentManager,
-    catalog: &AssetCatalogService,
-) -> Result<Option<CatalogSnapshot>, AppError> {
-    let (target, pins) = {
-        let projects = state
-            .projects
-            .lock()
-            .map_err(|_| AppError::internal("project state lock poisoned"))?;
-        let current = projects
-            .current
-            .as_ref()
-            .ok_or_else(|| AppError::new(ErrorCode::NotFound, "no project is open"))?;
-        let detail = projects
-            .store
-            .detail(&current.folder)
-            .map_err(project_error)?;
-        (detail.target, detail.components)
-    };
-    resolve_project_catalog(components, catalog, &target, &pins)
+    let profile = project_pack_profile(&detail.target)?;
+    let packs = detail
+        .components
+        .assets
+        .as_ref()
+        .map(|assets| app.state::<ResourcePackStore>().inputs(&assets.pack_stack))
+        .unwrap_or_default();
+    Ok(Some(ProjectVisualAssets {
+        profile,
+        snapshot,
+        packs,
+    }))
 }
 
 #[tauri::command]
@@ -5863,6 +6090,179 @@ mod component_command_tests {
             )
             .expect("save without replacing component pins");
         assert_eq!(store.open(folder).unwrap().0.components, pins);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn pack_edits_persist_only_in_the_active_project_and_preserve_catalog_pins() {
+        let root = std::env::temp_dir().join(format!(
+            "furybuilder-project-packs-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let state = AppState::new(root.join("projects"));
+        let packs = ResourcePackStore::new(root.join("assets"));
+        let profile = default_profile();
+        let pinned_assets = project_store::AssetsComponent {
+            mode: ComponentMode::Manual,
+            catalog_id: Some("test-catalog".into()),
+            catalog_hash: Some("a".repeat(64)),
+            client_jar_sha1: Some("b".repeat(40)),
+            pack_stack: vec![],
+        };
+        let store = project_store::ProjectStore::new(root.join("projects"));
+        let create = |name: &str, assets| {
+            store
+                .create_with_options(
+                    name,
+                    project_store::CreationMode::Empty,
+                    project_store::EditorState::default(),
+                    project_store::CreateOptions {
+                        profile_id: Some(&profile.id),
+                        components: project_store::ProjectComponents {
+                            assets: Some(assets),
+                            ..Default::default()
+                        },
+                        ..Default::default()
+                    },
+                )
+                .unwrap()
+        };
+        let first = create("First", pinned_assets.clone());
+        let second = create("Second", pinned_assets.clone());
+        let placeholder = create(
+            "Placeholder",
+            project_store::AssetsComponent {
+                mode: ComponentMode::Placeholder,
+                catalog_id: None,
+                catalog_hash: None,
+                client_jar_sha1: None,
+                pack_stack: vec![],
+            },
+        );
+        let select = |project: &project_store::ProjectDetail| {
+            state.projects.lock().unwrap().current = Some(CurrentProject {
+                folder: project.summary.folder.clone(),
+                project_id: project.summary.project_id.clone(),
+                name: project.summary.name.clone(),
+                target: project.target.clone(),
+                saved_revision: project.summary.world_revision,
+                autosaved_revision: None,
+                editor_state: project.editor_state.clone(),
+            });
+        };
+        select(&first);
+        let folder = &first.summary.folder;
+        let local_pack = |name, format| {
+            let path = root.join(name);
+            std::fs::create_dir(&path).unwrap();
+            std::fs::write(
+                path.join("pack.mcmeta"),
+                serde_json::json!({
+                    "pack": { "pack_format": format, "description": name },
+                })
+                .to_string(),
+            )
+            .unwrap();
+            ProjectPackEdit::Add {
+                path: path.to_string_lossy().into_owned(),
+            }
+        };
+        let format = profile.resource_pack_format.unwrap();
+        let first_add =
+            change_project_pack_stack(&state, &packs, folder, local_pack("Blue", format))
+                .expect("first pack");
+        let blue = first_add.packs[0].pin.clone();
+        let second_add =
+            change_project_pack_stack(&state, &packs, folder, local_pack("Green", format))
+                .expect("second pack");
+        let green = second_add.packs[1].pin.clone();
+        let incompatible =
+            change_project_pack_stack(&state, &packs, folder, local_pack("Wrong", format + 1))
+                .err()
+                .expect("incompatible pack must be refused");
+        assert_eq!(incompatible.code, ErrorCode::UnsupportedFormat);
+        let duplicate = change_project_pack_stack(
+            &state,
+            &packs,
+            folder,
+            ProjectPackEdit::Add {
+                path: root.join("Blue").to_string_lossy().into_owned(),
+            },
+        )
+        .expect("reimport same content without duplicating");
+        assert_eq!(duplicate.packs.len(), 2);
+        let moved = change_project_pack_stack(
+            &state,
+            &packs,
+            folder,
+            ProjectPackEdit::Move {
+                sha1: green.sha1.clone(),
+                earlier: true,
+            },
+        )
+        .expect("raise priority");
+        assert_eq!(moved.packs[0].pin, green);
+        assert_eq!(moved.packs[1].pin, blue);
+        let (detail, mut world, _) = store.open(folder).expect("reopen project");
+        let expected = project_store::AssetsComponent {
+            pack_stack: vec![green.clone(), blue.clone()],
+            ..pinned_assets.clone()
+        };
+        assert_eq!(detail.components.assets, Some(expected.clone()));
+        assert_eq!(detail.summary.world_revision, first.summary.world_revision);
+        world.bump_revision();
+        store
+            .save(
+                folder,
+                &world,
+                detail.editor_state,
+                project_store::SaveKind::Manual,
+            )
+            .expect("save world without losing pack configuration");
+        assert_eq!(
+            store.open(folder).unwrap().0.components.assets,
+            Some(expected)
+        );
+        assert_eq!(
+            store
+                .detail(&second.summary.folder)
+                .unwrap()
+                .components
+                .assets,
+            Some(pinned_assets)
+        );
+        select(&second);
+        let wrong_project = change_project_pack_stack(
+            &state,
+            &packs,
+            folder,
+            ProjectPackEdit::Remove {
+                sha1: green.sha1.clone(),
+            },
+        )
+        .err()
+        .expect("stale project edit");
+        assert_eq!(wrong_project.code, ErrorCode::Conflict);
+        select(&placeholder);
+        assert!(change_project_pack_stack(
+            &state,
+            &packs,
+            &placeholder.summary.folder,
+            ProjectPackEdit::Remove {
+                sha1: green.sha1.clone(),
+            }
+        )
+        .is_err());
+        select(&first);
+        let removed = change_project_pack_stack(
+            &state,
+            &packs,
+            folder,
+            ProjectPackEdit::Remove { sha1: green.sha1 },
+        )
+        .expect("remove from this project");
+        assert_eq!(removed.packs.len(), 1);
+        assert_eq!(removed.packs[0].pin, blue);
         std::fs::remove_dir_all(root).unwrap();
     }
 

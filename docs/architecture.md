@@ -78,10 +78,13 @@ geometry per section, separates opaque/cutout/translucent materials, rebases loc
 around the camera and disposes GPU resources explicitly. React owns only the surrounding
 chrome.
 
-Assets come from the user's installed 1.21.4 client JAR/assets or a selected resource pack.
-A missing asset falls back to a clearly marked placeholder and never changes block data.
-Mojang JARs, textures and assets are not redistributed. Atlas caches are keyed by version,
-asset fingerprint, pack-stack hash and renderer schema.
+Rendering uses the exact client JAR pinned by the open project and that project's ordered
+resource-pack snapshots. Project Settings changes the stack without rewriting the world.
+The resolver checks each cached pack's SHA-1 and its metadata against the exact target
+profile. Missing, changed, invalid or incompatible packs are skipped with a warning, not
+removed from the manifest; the remaining packs and the base JAR still render. A missing
+base asset falls back to a clearly marked placeholder and never changes block data.
+Mojang JARs, textures and assets are not redistributed.
 
 ## Components
 

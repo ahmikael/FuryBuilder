@@ -61,6 +61,9 @@ pub fn run() {
             app.manage(asset_source::AssetBundleService::new());
             app.manage(asset_source::AssetCatalogService::new());
             app.manage(asset_source::CatalogIconAtlasService::new());
+            app.manage(asset_source::ResourcePackStore::new(
+                data_dir.join("components").join("assets"),
+            ));
             match local_bridge::start(app.handle().clone(), data_dir.clone()) {
                 Ok(runtime) => {
                     app.manage(runtime);
@@ -159,9 +162,9 @@ pub fn run() {
             commands::assets_save_source,
             commands::assets_use_placeholder,
             commands::assets_clear_source,
-            commands::assets_save_pack_stack,
-            commands::assets_clear_pack_stack,
-            commands::assets_render_bundle,
+            commands::project_resource_packs,
+            commands::project_update_resource_packs,
+            commands::project_render_bundle,
             commands::assets_catalog,
             commands::assets_catalog_atlas,
             commands::project_catalog,

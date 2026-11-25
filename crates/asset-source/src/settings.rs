@@ -6,14 +6,11 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::discovery::inspect_asset_path;
-use crate::resource_pack::inspect_resource_pack;
-use crate::types::{AssetPathReport, ResourcePackReport};
+use crate::types::AssetPathReport;
 
-/// Version of the small settings file that records the selected asset source and pack order.
+/// Version of the small settings file that records the selected client asset source.
 /// Schema 3 adds the explicit placeholder selection; older schemas are not read.
 pub const ASSET_SETTINGS_SCHEMA_VERSION: u32 = 3;
-/// Maximum number of user resource packs. Bounded so a single render request stays predictable.
-pub const MAX_RESOURCE_PACKS: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,8 +28,6 @@ pub struct SavedAssetSource {
     /// JAR. This is never reported as a verified asset source.
     pub placeholder: bool,
     pub load_warning: Option<String>,
-    /// Saved packs in priority order, highest priority first.
-    pub packs: Vec<ResourcePackReport>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,12 +36,9 @@ struct AssetSettingsFile {
     #[serde(default)]
     schema_version: u32,
     source: Option<AssetSourceSetting>,
-    /// Mutually exclusive with `source`. A placeholder selection carries no path and no
-    /// pack stack, because there is no client JAR to resolve Minecraft assets against.
+    /// Mutually exclusive with `source`. A placeholder selection carries no path.
     #[serde(default)]
     placeholder: bool,
-    #[serde(default)]
-    packs: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -55,8 +47,6 @@ pub enum AssetSettingsError {
     Io(String),
     #[error("asset settings are not valid: {0}")]
     Invalid(String),
-    #[error("resource pack cannot be used: {0}")]
-    UnsupportedPack(String),
 }
 
 impl AssetSettingsError {
@@ -64,12 +54,11 @@ impl AssetSettingsError {
         match self {
             AssetSettingsError::Io(_) => "io_error",
             AssetSettingsError::Invalid(_) => "invalid_argument",
-            AssetSettingsError::UnsupportedPack(_) => "unsupported_format",
         }
     }
 }
 
-/// Persists the selected source and ordered pack stack in the application data directory.
+/// Persists the selected client source in the application data directory.
 ///
 /// This file contains only kinds and paths. It is not part of a project and never stores
 /// Minecraft assets themselves.
@@ -91,7 +80,6 @@ impl AssetSettingsStore {
                     schema_version: ASSET_SETTINGS_SCHEMA_VERSION,
                     source: None,
                     placeholder: false,
-                    packs: Vec::new(),
                 }
             }
         };
@@ -107,33 +95,20 @@ impl AssetSettingsStore {
     }
 
     pub fn saved_source(&self) -> SavedAssetSource {
-        let (source, placeholder, pack_paths) = self
+        let (source, placeholder) = self
             .state
             .lock()
-            .map(|state| (state.source.clone(), state.placeholder, state.packs.clone()))
-            .unwrap_or_else(|_| (None, false, Vec::new()));
+            .map(|state| (state.source.clone(), state.placeholder))
+            .unwrap_or_default();
         let report = source
             .as_ref()
             .map(|source| inspect_asset_path(&source.path));
-        let packs = pack_paths
-            .iter()
-            .map(|path| inspect_resource_pack(Path::new(path)))
-            .collect();
         SavedAssetSource {
             source,
             report,
             placeholder,
             load_warning: self.load_warning.clone(),
-            packs,
         }
-    }
-
-    /// Returns the saved pack paths in priority order, highest priority first.
-    pub fn pack_stack(&self) -> Vec<String> {
-        self.state
-            .lock()
-            .map(|state| state.packs.clone())
-            .unwrap_or_default()
     }
 
     pub fn save(&self, source: AssetSourceSetting) -> Result<SavedAssetSource, AssetSettingsError> {
@@ -151,8 +126,7 @@ impl AssetSettingsStore {
     }
 
     /// Explicitly selects original placeholder textures. This is a deliberate mode, not a
-    /// silent fallback: no client JAR, catalog or resource pack stack is available while it is
-    /// active, so the saved pack stack is cleared.
+    /// silent fallback: no client JAR or catalog is available while it is active.
     pub fn use_placeholder(&self) -> Result<SavedAssetSource, AssetSettingsError> {
         {
             let mut state = self
@@ -161,7 +135,6 @@ impl AssetSettingsStore {
                 .map_err(|_| AssetSettingsError::Io("settings lock poisoned".to_owned()))?;
             state.source = None;
             state.placeholder = true;
-            state.packs.clear();
             state.schema_version = ASSET_SETTINGS_SCHEMA_VERSION;
             persist(&self.path, &state)?;
         }
@@ -180,91 +153,6 @@ impl AssetSettingsStore {
             persist(&self.path, &state)?;
         }
         Ok(self.saved_source())
-    }
-
-    /// Validates and stores the ordered pack stack. Highest priority first.
-    pub fn save_pack_stack(
-        &self,
-        paths: Vec<String>,
-    ) -> Result<SavedAssetSource, AssetSettingsError> {
-        let mut normalized: Vec<String> = Vec::new();
-        for path in paths {
-            if path.trim().is_empty() {
-                return Err(AssetSettingsError::Invalid(
-                    "a resource pack path is empty".to_owned(),
-                ));
-            }
-            let canonical = fs::canonicalize(&path).map_err(|error| {
-                AssetSettingsError::Invalid(format!("cannot resolve {path}: {error}"))
-            })?;
-            let text = canonical.display().to_string();
-            if normalized
-                .iter()
-                .any(|existing| path_key(existing) == path_key(&text))
-            {
-                return Err(AssetSettingsError::Invalid(format!(
-                    "duplicate resource pack: {text}"
-                )));
-            }
-            normalized.push(text);
-            if normalized.len() > MAX_RESOURCE_PACKS {
-                return Err(AssetSettingsError::Invalid(format!(
-                    "at most {MAX_RESOURCE_PACKS} resource packs can be stacked"
-                )));
-            }
-        }
-        for path in &normalized {
-            let report = inspect_resource_pack(Path::new(path));
-            if report.status != crate::types::ResourcePackStatus::Compatible
-                || !report.errors.is_empty()
-            {
-                let reason = report
-                    .errors
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| format!("status {:?}", report.status));
-                return Err(AssetSettingsError::UnsupportedPack(format!(
-                    "{path}: {reason}"
-                )));
-            }
-        }
-        {
-            let mut state = self
-                .state
-                .lock()
-                .map_err(|_| AssetSettingsError::Io("settings lock poisoned".to_owned()))?;
-            if state.placeholder {
-                return Err(AssetSettingsError::Invalid(
-                    "select Minecraft client assets before adding resource packs; placeholder textures have no resource pack stack"
-                        .to_owned(),
-                ));
-            }
-            state.packs = normalized;
-            state.schema_version = ASSET_SETTINGS_SCHEMA_VERSION;
-            persist(&self.path, &state)?;
-        }
-        Ok(self.saved_source())
-    }
-
-    pub fn clear_pack_stack(&self) -> Result<SavedAssetSource, AssetSettingsError> {
-        {
-            let mut state = self
-                .state
-                .lock()
-                .map_err(|_| AssetSettingsError::Io("settings lock poisoned".to_owned()))?;
-            state.packs.clear();
-            state.schema_version = ASSET_SETTINGS_SCHEMA_VERSION;
-            persist(&self.path, &state)?;
-        }
-        Ok(self.saved_source())
-    }
-}
-
-fn path_key(path: &str) -> String {
-    if cfg!(windows) {
-        path.to_ascii_lowercase()
-    } else {
-        path.to_owned()
     }
 }
 
@@ -285,19 +173,12 @@ fn load_settings(path: &Path) -> Result<AssetSettingsFile, String> {
                     path.display()
                 ));
             }
-            if settings.placeholder && !settings.packs.is_empty() {
-                return Err(format!(
-                    "{} selects placeholder textures together with a resource pack stack",
-                    path.display()
-                ));
-            }
             Ok(settings)
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(AssetSettingsFile {
             schema_version: ASSET_SETTINGS_SCHEMA_VERSION,
             source: None,
             placeholder: false,
-            packs: Vec::new(),
         }),
         Err(error) => Err(format!("cannot read {}: {error}", path.display())),
     }

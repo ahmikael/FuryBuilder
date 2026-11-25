@@ -78,6 +78,7 @@ export interface AssetBundle {
   baseJar: string | null;
   baseJarSha1: string | null;
   packs: AssetBundlePack[];
+  packIssues: string[];
   atlasWidth: number;
   atlasHeight: number;
   atlasPngBase64: string;

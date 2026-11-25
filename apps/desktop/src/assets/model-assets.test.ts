@@ -70,6 +70,7 @@ function bundle(): AssetBundle {
     baseJar: null,
     baseJarSha1: null,
     packs: [],
+    packIssues: [],
     atlasWidth: 64,
     atlasHeight: 64,
     atlasPngBase64: "",

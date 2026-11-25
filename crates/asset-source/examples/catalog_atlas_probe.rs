@@ -43,7 +43,17 @@ fn main() {
         }
     };
     let service = CatalogIconAtlasService::new();
-    let first = match service.atlas(&source, &options.packs, &catalog) {
+    let version = catalog
+        .minecraft_version
+        .parse()
+        .expect("valid catalog version");
+    let profile = minecraft_version::profile_for_version(&version).expect("known version profile");
+    let packs: Vec<_> = options
+        .packs
+        .iter()
+        .map(asset_source::ResourcePackInput::local)
+        .collect();
+    let first = match service.atlas(&profile, &source, &packs, &catalog) {
         Ok(atlas) => atlas,
         Err(error) => {
             eprintln!("atlas failed ({}): {error}", error.code());
@@ -51,7 +61,7 @@ fn main() {
         }
     };
     let second = if options.repeat {
-        match service.atlas(&source, &options.packs, &catalog) {
+        match service.atlas(&profile, &source, &packs, &catalog) {
             Ok(atlas) => Some(atlas),
             Err(error) => {
                 eprintln!("second atlas failed ({}): {error}", error.code());

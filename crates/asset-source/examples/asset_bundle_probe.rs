@@ -13,7 +13,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use asset_source::{AssetBundleService, AssetSourceSetting, BlockStateRequest};
+use asset_source::{
+    target_profile, AssetBundleService, AssetSourceSetting, BlockStateRequest, ResourcePackInput,
+};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine as _;
 use serde_json::json;
@@ -40,7 +42,14 @@ fn main() {
         path: options.path.clone(),
     };
     let service = AssetBundleService::new();
-    let first = match service.bundle(Some(&source), &options.packs, &options.states) {
+    let packs: Vec<_> = options.packs.iter().map(ResourcePackInput::local).collect();
+    let first = match service.bundle(
+        target_profile(),
+        Some(&source),
+        None,
+        &packs,
+        &options.states,
+    ) {
         Ok(bundle) => bundle,
         Err(error) => {
             eprintln!("bundle failed ({}): {error}", error.code());
@@ -48,7 +57,13 @@ fn main() {
         }
     };
     let second = if options.repeat {
-        match service.bundle(Some(&source), &options.packs, &options.states) {
+        match service.bundle(
+            target_profile(),
+            Some(&source),
+            None,
+            &packs,
+            &options.states,
+        ) {
             Ok(bundle) => Some(bundle),
             Err(error) => {
                 eprintln!("second bundle failed ({}): {error}", error.code());

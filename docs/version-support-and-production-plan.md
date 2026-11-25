@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами. Чтение NBT чанка и запись правок привязаны к ожидаемому профилю; учитываются различия `Status` и ванильного реестра биомов, содержимое block entities сохраняется. Запись по-прежнему проверена только для 1.21.4. Добавлены конвертация биомов 1.13–1.17 и диагностика split layout 26.1–26.3 без допуска этих версий к импорту и записи. Каталог блоков/предметов из client JAR стал источником истины для палитры и записи; состояния и значения свойств проверяются по blockstates, вложенные item definitions разрешаются в конкретную модель, а иконный atlas кэшируется по версии, SHA-1 JAR, стеку паков и схеме каталога. Палитра теперь version-aware: поиск, недавние, избранное и базовые категории из точного каталога. Неизвестные импортированные состояния сохраняются с предупреждением и не допускаются к новому размещению. Следующий шаг — стек resource packs проекта; прогресс и проверки в §21.
+> Статус: P0 закрыт. В P1 добавлены точные профили релизов 1.18–1.21.11, `WorldCodec` и `ClassicAnvilCodec` с golden-тестами. Чтение NBT чанка и запись правок привязаны к ожидаемому профилю; учитываются различия `Status` и ванильного реестра биомов, содержимое block entities сохраняется. Запись по-прежнему проверена только для 1.21.4. Добавлены конвертация биомов 1.13–1.17 и диагностика split layout 26.1–26.3 без допуска этих версий к импорту и записи. Каталог блоков/предметов из client JAR стал источником истины для палитры и записи; состояния и значения свойств проверяются по blockstates, вложенные item definitions разрешаются в конкретную модель, а иконный atlas кэшируется по версии, SHA-1 JAR, стеку паков и схеме каталога. Палитра теперь version-aware: поиск, недавние, избранное и базовые категории из точного каталога. Неизвестные импортированные состояния сохраняются с предупреждением и не допускаются к новому размещению. Resource packs закрепляются и проверяются отдельно для каждого проекта. Следующий шаг — dimensions из профиля; прогресс и проверки в §21.
 > Дата: 2026-11-22; обновлено 2026-11-25 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, catalog icon atlas, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, version-aware palette with search, recent, favorites and basic categories, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -277,7 +277,7 @@ item components, транзитивные tags и persistent cache остают�
 
 #### Версионность
 
-- Snapshot кэшируется по `version + clientJarSha1 + packStackHash + catalogSchema`.
+- Snapshot реестра кэшируется по точному client JAR и схеме; `packStackHash` входит только в ключ иконного atlas-а.
 - Для full-версий каталог можно предсобирать в CI; для неизвестных/advanced — строить в runtime.
 - Проект фиксирует `catalogId` + hash. Если каталог отсутствует — пересобрать из того же JAR, а не подменять «последним».
 - Переименования и aliases: старый ID → новый ID; неизвестные импортированные состояния сохраняются и никогда не подменяются молча.
@@ -383,8 +383,8 @@ Tauri shell держит один экземпляр facade и отдаёт ег
 
 - Инспекция JAR и baseline-каталог: `asset-source::catalog` (см. `docs/catalog.md`).
 - Если текстуры отсутствуют в client JAR — добирать из asset index (по необходимости), но не скачивать весь asset index без нужды.
-- Строить atlas и полный каталог блоков/предметов под версию (§5.4); каталог кэшировать по `version + jarSha1 + packStackHash + catalogSchema`.
-- Resource packs — per-project ordered stack, с проверкой `pack_format` под версию.
+- Строить atlas и полный каталог блоков/предметов под версию (§5.4); стек паков влияет на представление, но не на `catalogId`/`catalogHash`.
+- Resource packs — упорядоченный стек в `components.assets.packStack`, редактируемый в `Project Settings`. ZIP или папка копируется в локальный cache с SHA-1; `pack.mcmeta` проверяется по точному профилю проекта. Пропавшие, изменённые, невалидные и несовместимые копии пропускаются с предупреждением, их pins сохраняются.
 - Ручной путь: `.minecraft` root, `versions/<id>`, `client.jar`, resource pack `.zip`/folder.
 - Ручной `client.jar` принимается после проверки внутренних `version.json` и DataVersion; SHA-1 сверяется с соседним `<id>.json`/`client.json`, а при его отсутствии файл используется с явным предупреждением. Объявленный mismatch отклоняется.
 - Placeholder — **явный** режим с предупреждением, а не молчаливый fallback.
@@ -1408,9 +1408,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P1-14` — Resource pack stack per project + `pack_format` validation. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P1-15` — Dimensions из профиля в domain/import/render/WorldTree. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P1-15`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P1-16`. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1548,7 +1548,7 @@ UI:
 - [x] `P1-11` Atlas + кэш `version + jarSha1 + packStackHash + catalogSchema`.
 - [x] `P1-12` Version-aware палитра: поиск, недавние, избранное, базовые категории.
 - [x] `P1-13` Unknown imported states: preserve + warning, не считать writable.
-- [ ] `P1-14` Resource pack stack per project + `pack_format` validation.
+- [x] `P1-14` Resource pack stack per project + `pack_format` validation.
 
 #### C. Операции с миром
 
@@ -1691,6 +1691,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-25 | Стек resource packs проекта | В `Project Settings` можно добавить ZIP или папку, менять приоритет, удалить ссылку и перепроверить файлы. `components.assets.packStack` хранит до 16 относительных pins с SHA-1; папки нормализуются в детерминированный ZIP в локальном кэше. Viewport и project atlas используют один стек точного профиля; пропавшие, изменённые, невалидные и несовместимые паки пропускаются, но их pins сохраняются. `catalogId`/`catalogHash` и snapshot мира не меняются; глобальный стек удалён. shadcn audit: штатные `Tabs`, `Card`, `Alert`, `Badge`, `Button`; vendored-компоненты и тема не менялись, кнопки порядка и удаления имеют доступные имена | см. `git log` | 744 Rust tests (72 suites), 396 TS tests + 1 skipped; clippy `-D warnings`, fmt, typecheck/lint/format, `git diff --check`; проверены изоляция проектов, повторное открытие и сохранение, приоритет текстур, пропуск повреждённого пака при cache hit и защита от устаревшего ответа viewport. Probe реального JAR 1.21.4: 1 105 текстур, повторный запрос — cache hit |
 | 2026-11-25 | Неизвестные импортированные состояния | При импорте и повторном открытии проверяются фактически используемые состояния по реестру записи; предупреждение показывает число секций и пример, не меняя исходный ID или свойства. Без client JAR сообщение явно указывает на ограниченный реестр. Удалён обход проверки для вставки NBT и шаблонов, включая MCP. Новый проект из структуры загружает исходные состояния в начальный snapshot; replace может сопоставить неизвестное состояние, а undo — восстановить его на исходном месте. Разреженное хранение не схлопывает явный `cave_air` с особыми свойствами в обычный воздух. shadcn audit: существующий `Toast`, примитивы и тема не менялись | см. `git log` | 742 Rust tests (72 suites), 393 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format; import → save → reopen → экспорт изменённого чанка сохраняет ID и свойства; оба Anvil golden-теста прошли |
 | 2026-11-25 | Version-aware палитра | `Blocks` ищет по id и имени и фильтрует точный каталог по `All`/`Recent`/`Favorites` и группам `Building`/`Natural`/`Functional`/`Redstone`/`Technical`/`Other`. Группы — подсказки из прямых тегов и id, не creative inventory и не правила записи; `catalogHash` не меняется. Recent (до 24) и favorites (до 256) хранятся локально по `catalogId`, отдельно от проекта и curated fallback; недоступные id не показываются. shadcn audit: штатные `Select`, `InputGroup`, `Input`, `Button`, `Badge`, `Card`, `Alert`, `Empty`; vendored-компоненты и тема не менялись | см. `git log` | 738 Rust tests (72 suites), 392 TS tests + 1 skipped, clippy `-D warnings`, fmt, typecheck/lint/format; выбор категории, снятие звезды, восстановление предпочтений и изоляция каталогов покрыты тестами |
 | 2026-11-25 | Иконный atlas каталога | `CatalogIconAtlasService` собирает PNG-atlas только из текстур, на которые ссылаются `iconTexture` блоков и предметов, и отдаёт координаты каждой иконки. Кэш ограничен четырьмя записями и 64 MiB и ключуется ровно по `minecraftVersion\|clientJarSha1\|packStackHash\|catalogSchema`; `packStackHash` считается по упорядоченному стеку паков, поэтому замена пака пересобирает atlas, а registry и закреплённые `catalogId`/`catalogHash` не меняются. Добавлены `assets_catalog_atlas` и `project_catalog_atlas` (placeholder возвращает `null`), TS-типы и клиент, `assets_clear_cache` очищает и atlas. Недостающие и битые текстуры получают checker, анимации берут первый кадр. Реальный 1.21.4 JAR: 1,105 текстур, PNG 256×2048, 684,731 байт, повторный запрос — cache hit. shadcn: UI не менялся | см. `git log` | 738 Rust tests (72 suites), 378 TS tests + 1 skipped (379), clippy `-D warnings`, fmt, typecheck/lint/format |

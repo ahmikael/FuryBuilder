@@ -320,7 +320,7 @@ fn inspect_pack_selection(path: &Path, report: &mut AssetPathReport) {
     let target_version = target_minecraft_version();
     let target_format = target_resource_pack_format();
     report.kind = AssetSelectionKind::ResourcePack;
-    let pack = inspect_resource_pack(path);
+    let pack = inspect_resource_pack(path, crate::target_profile());
     report.target_match = pack.compatible;
     report.valid = pack.compatible && pack.errors.is_empty();
     for error in &pack.errors {
@@ -620,7 +620,7 @@ fn status_from_jar(inspection: &ClientJarInspection, expected: &ExpectedClient) 
     VersionStatus::InvalidClientJar
 }
 
-fn expected_client_for_jar(path: &Path) -> ExpectedClient {
+pub(crate) fn expected_client_for_jar(path: &Path) -> ExpectedClient {
     let candidates = [
         path.with_extension("json"),
         path.parent()
@@ -753,7 +753,7 @@ fn scan_resource_packs(folder: &Path, warnings: &mut Vec<String>) -> Vec<Resourc
         }
         let extension = extension(&path);
         if metadata.is_dir() || (metadata.is_file() && extension == "zip") {
-            packs.push(inspect_resource_pack(&path));
+            packs.push(inspect_resource_pack(&path, crate::target_profile()));
         }
     }
     packs.sort_by(|left, right| left.name.cmp(&right.name));
