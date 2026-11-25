@@ -14,6 +14,7 @@ use world_io::world_import::{
     analyze_java_world, load_java_world, load_java_world_with_options, WorldImportOptions,
 };
 use world_io::world_source::{analyze_world_source, WorldSourceKind};
+use world_io::{export_java_world, WorldOverlay};
 use zip::write::SimpleFileOptions;
 
 const TARGET: i32 = 4189;
@@ -482,6 +483,84 @@ fn imports_every_modern_classic_release_end_to_end() {
         );
         assert_eq!(report.chunks, 2, "{label}");
         assert_eq!(snapshot(&root), before, "{label}: import must not write");
+        tested += 1;
+    }
+    assert_eq!(tested, 27, "every modern classic release must be covered");
+}
+
+#[test]
+fn exports_every_modern_classic_release_same_version_and_verifies() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == minecraft_version::VersionFamily::Modern)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("export-{label}"));
+        let root = dir.path().join("world");
+        write_world_for_profile(&root, profile);
+        let before = snapshot(&root);
+
+        let mut overlay = WorldOverlay::open(&root)
+            .unwrap_or_else(|error| panic!("{label}: open overlay: {error}"));
+        overlay
+            .set_block(
+                OVERWORLD,
+                0,
+                -64,
+                0,
+                &"minecraft:gold_block".parse().unwrap(),
+            )
+            .unwrap_or_else(|error| panic!("{label}: edit block: {error}"));
+        let destination = dir.path().join("exported");
+        let report = export_java_world(&overlay, &destination)
+            .unwrap_or_else(|error| panic!("{label}: export: {error}"));
+
+        assert!(report.source_unchanged, "{label}: source changed");
+        assert!(report.source_tree_verified, "{label}: source not hashed");
+        assert!(
+            report.copied_files_match_source,
+            "{label}: copied files differ"
+        );
+        assert!(report.output_revalidated, "{label}: output not revalidated");
+        assert_eq!(report.replaced_chunks, 1, "{label}");
+        assert_eq!(report.skipped_files, ["session.lock"], "{label}");
+        assert_eq!(report.files, before.len() - 1, "{label}");
+        assert_eq!(snapshot(&root), before, "{label}: export wrote the source");
+        for untouched in ["level.dat", "custom-unknown.dat"] {
+            let exported_bytes = fs::read(destination.join(untouched)).expect("read exported file");
+            let source_bytes = before
+                .get(Path::new(untouched))
+                .unwrap_or_else(|| panic!("{label}: missing {untouched}"));
+            assert_eq!(
+                &exported_bytes, source_bytes,
+                "{label}: {untouched} must stay byte-for-byte"
+            );
+        }
+
+        let (exported, _) = load_java_world(&destination)
+            .unwrap_or_else(|error| panic!("{label}: reopen export: {error}"));
+        assert_eq!(
+            exported.version().data_version(),
+            profile.data_version,
+            "{label}"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(0, -64, 0))
+                .expect("edited block")
+                .to_string(),
+            "minecraft:gold_block",
+            "{label}"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(16, -64, 0))
+                .expect("untouched neighbour")
+                .to_string(),
+            "minecraft:dirt",
+            "{label}: untouched chunk must survive byte-for-byte"
+        );
         tested += 1;
     }
     assert_eq!(tested, 27, "every modern classic release must be covered");

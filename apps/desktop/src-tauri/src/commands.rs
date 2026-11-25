@@ -4897,7 +4897,7 @@ mod version_catalog_tests {
             latest_profile.capabilities.support_level,
             minecraft_version::SupportLevel::ReadWriteSubset
         );
-        assert!(!latest_profile.capabilities.export);
+        assert!(latest_profile.capabilities.export);
         assert!(!latest_profile.capabilities.generate);
         assert!(latest.unavailable_reason.is_none());
 

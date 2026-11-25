@@ -58,10 +58,10 @@ impl ReleaseFacts {
         } else if modern_classic {
             vec![
                 format!(
-                    "Classic Anvil import, block/biome editing and project snapshots are verified for Minecraft {}.",
+                    "Classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft {}.",
                     self.version
                 ),
-                "Region export and generation are not enabled for this release yet.".to_owned(),
+                "Generation is not enabled for this release yet.".to_owned(),
                 "The client JAR is the source of the full block and item catalog.".to_owned(),
             ]
         } else {
@@ -86,7 +86,7 @@ impl ReleaseFacts {
                 read: true,
                 edit: true,
                 write: true,
-                export: false,
+                export: true,
                 generate: false,
                 assets: true,
             }
@@ -486,7 +486,7 @@ mod tests {
     }
 
     #[test]
-    fn modern_classic_releases_admit_import_editing_and_snapshots() {
+    fn modern_classic_releases_admit_import_editing_snapshots_and_export() {
         for profile in builtin_profiles()
             .iter()
             .filter(|profile| profile.family == VersionFamily::Modern)
@@ -495,10 +495,10 @@ mod tests {
             assert!(profile.capabilities.read, "{} read", profile.id);
             assert!(profile.capabilities.edit, "{} edit", profile.id);
             assert!(profile.capabilities.write, "{} write", profile.id);
+            assert!(profile.capabilities.export, "{} export", profile.id);
             assert!(profile.capabilities.assets, "{} assets", profile.id);
             if profile.id == JAVA_CLASSIC_1_21_4_ID {
                 assert_eq!(profile.capabilities.support_level, SupportLevel::Full);
-                assert!(profile.capabilities.export);
                 assert!(profile.capabilities.generate);
                 assert!(profile.structure_formats.java_nbt.import);
                 assert!(profile.structure_formats.java_nbt.export);
@@ -507,7 +507,6 @@ mod tests {
                     profile.capabilities.support_level,
                     SupportLevel::ReadWriteSubset
                 );
-                assert!(!profile.capabilities.export, "{} export", profile.id);
                 assert!(!profile.capabilities.generate, "{} generate", profile.id);
                 assert!(
                     !profile.structure_formats.java_nbt.import,

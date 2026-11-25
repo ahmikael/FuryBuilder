@@ -21,6 +21,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use minecraft_version::VersionProfile;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -116,6 +117,8 @@ pub enum WorldExportError {
     UnsafePath(String),
     #[error("world export destination already exists: {0}")]
     AlreadyExists(String),
+    #[error("world export is not verified for Minecraft {0}")]
+    UnsupportedVersion(String),
     #[error("world export verification failed: {0}")]
     VerificationFailed(String),
     #[error("world export limit exceeded: {0}")]
@@ -134,6 +137,7 @@ impl WorldExportError {
             WorldExportError::InvalidArgument(_) => "invalid_argument",
             WorldExportError::UnsafePath(_) => "unsafe_path",
             WorldExportError::AlreadyExists(_) => "conflict",
+            WorldExportError::UnsupportedVersion(_) => "unsupported_version",
             WorldExportError::VerificationFailed(_) => "verification_failed",
             WorldExportError::LimitExceeded(_) => "limit_exceeded",
             WorldExportError::Io(_) => "io_error",
@@ -167,6 +171,7 @@ pub(super) fn export_world(
     options: WorldExportOptions,
 ) -> Result<WorldExportReport, WorldExportError> {
     let world = overlay.world();
+    ensure_export_supported(&world.profile)?;
     if world.level.data_version != world.profile.data_version {
         return Err(WorldExportError::RegionWrite(
             RegionWriteError::UnsupportedDataVersion {
@@ -323,6 +328,15 @@ pub(super) fn export_world(
     };
     staging.publish(&destination)?;
     Ok(report)
+}
+
+fn ensure_export_supported(profile: &VersionProfile) -> Result<(), WorldExportError> {
+    if profile.capabilities.export {
+        return Ok(());
+    }
+    Err(WorldExportError::UnsupportedVersion(
+        profile.minecraft_version.to_string(),
+    ))
 }
 
 fn dirty_regions(
@@ -674,6 +688,17 @@ impl Drop for StagingExport {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn export_is_gated_by_the_profile_capability() {
+        let mut profile = minecraft_version::default_profile();
+        profile.capabilities.export = false;
+        let error = ensure_export_supported(&profile).expect_err("export must be gated");
+        assert_eq!(error.code(), "unsupported_version");
+
+        profile.capabilities.export = true;
+        assert!(ensure_export_supported(&profile).is_ok());
+    }
 
     #[test]
     fn tree_collection_is_sorted_and_bounded() {

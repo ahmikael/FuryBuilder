@@ -6,9 +6,9 @@ human users work through the UI, and external AI agents work through the same
 Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
-- **Target game versions:** Minecraft Java classic Anvil **1.18–1.21.11** (import, editing and
-  project snapshots), with **1.21.4** (`DataVersion` 4189, Java 21) as the full export/generation
-  baseline.
+- **Target game versions:** Minecraft Java classic Anvil **1.18–1.21.11** (import, editing,
+  project snapshots and same-version export), with **1.21.4** (`DataVersion` 4189, Java 21) as
+  the full generation baseline.
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.18–1.21.11)
   and `Vanilla World` (official local 1.21.4 generator after explicit dependency setup)
   are available.
@@ -96,10 +96,10 @@ The supported baseline, tested machine and maintained limitation list are in
 [docs/reference.md](docs/reference.md). The most important current boundaries:
 
 - Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
-- Classic Anvil Java 1.18–1.21.11 is supported for import, block/biome editing and project
-  snapshots; only 1.21.4 additionally has export and generation. Snapshots, split 26.1+, legacy
-  worlds, Bedrock and custom dimensions are refused; a bare `.mca`/`region/` is not a complete
-  world.
+- Classic Anvil Java 1.18–1.21.11 is supported for import, block/biome editing, project
+  snapshots and same-version export; only 1.21.4 additionally has generation. Snapshots, split
+  26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare `.mca`/`region/` is not
+  a complete world.
 - Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are
   preserved raw, not recalculated or synthesized; the UI has no `VanillaRebuild` switch.
 - Structure interchange is Java `.nbt` only and refuses entities/block entities/unknown tags.

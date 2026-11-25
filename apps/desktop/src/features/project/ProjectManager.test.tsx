@@ -313,8 +313,8 @@ const versionCatalog: VersionCatalogReport = {
           assets: true,
         },
         notes: [
-          "Classic Anvil import, block/biome editing and project snapshots are verified for Minecraft 1.21.5.",
-          "Region export and generation are not enabled for this release yet.",
+          "Classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft 1.21.5.",
+          "Generation is not enabled for this release yet.",
         ],
       },
     },
@@ -786,9 +786,7 @@ describe("project wizard", () => {
     expect(
       screen.getByText("Read + write subset", { selector: "[data-slot=alert-title]" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Region export and generation are not enabled for this release yet/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Generation is not enabled for this release yet/)).toBeInTheDocument();
 
     await user.type(search, "1.21.5");
     expect(screen.getByText("1 version shown, grouped by release series.")).toBeInTheDocument();

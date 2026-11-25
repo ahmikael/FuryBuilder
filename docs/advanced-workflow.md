@@ -395,10 +395,10 @@ and avoid treating the tested ceiling as a normal working radius.
   entities, entities and POI are not semantically recalculated after an edit; the optional
   `VanillaRebuild` writer policy invalidates some derived data for the vanilla engine to
   rebuild, as documented in the format notes.
-- The complete world-folder export is verified for 1.21.4 in the backend/test path. This alpha
-  does not expose it as a one-click user action; the user-facing export is a structure `.nbt`.
-  Export and generation for the other modern classic releases stay disabled until their own
-  staged verification.
+- The complete world-folder export is verified for every modern classic release in the
+  backend/test path. This alpha does not expose it as a one-click user action; the user-facing
+  export is a structure `.nbt`. Generation for releases other than 1.21.4 stays disabled until
+  its own staged verification.
 - Reference overlays (PNG blueprint plane and `.nbt` schematic ghost) were researched only.
   The overlay UI is intentionally not enabled; do not expect reference guides in the editor.
 - MCP has no scene-graph write tools and no direct file/shell access. Semantic and parametric

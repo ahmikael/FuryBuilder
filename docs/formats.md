@@ -1,9 +1,10 @@
 # Formats and world support
 
 Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
-the full baseline. Every one of the 27 exact releases in that range can be imported, edited and
-saved through project snapshots. Only 1.21.4 also has verified region export and generation;
-for the other releases those capabilities stay disabled until their own verification.
+the full baseline. Every one of the 27 exact releases in that range can be imported, edited,
+saved through project snapshots and exported same-version. Only 1.21.4 additionally has
+verified generation; for the other releases that capability stays disabled until its own
+verification.
 
 The version picker lists releases and snapshots from the official Mojang manifest. Project
 creation requires a profile with verified write support, so the modern classic releases can
@@ -51,9 +52,9 @@ affected sections. No fallback biome is substituted.
 
 A bare `.mca` file or a `region/` directory is not a complete save. The support matrix
 describes analysis and import boundaries. Only a version with a verified profile can be
-selected for a new project. The `1.18-1.21.11` row includes 1.21.4; region export and
-generation are exposed only for the full baseline until P1-17/P1-18 verify them for every
-release.
+selected for a new project. The `1.18-1.21.11` row includes 1.21.4; same-version export is
+verified for every modern classic release, while generation is exposed only for the full
+baseline until P1-18 verifies it for every release.
 
 ## Java 26.1–26.3 split saves: inspection only
 
@@ -79,14 +80,14 @@ be imported into a project, compared, copied through world passthrough, or expor
 
 ## What is editable (classic 1.18–1.21.11)
 
-Import, block/biome editing and project snapshots are enabled for every exact modern classic
-profile. The shared codec below is verified for all 27 releases. Region-container writing and
-world export remain limited to the full 1.21.4 baseline until their own verification.
+Import, block/biome editing, project snapshots and same-version export are enabled for every
+exact modern classic profile. The shared codec below is verified for all 27 releases.
+Generation remains limited to the full 1.21.4 baseline until its own verification.
 
 | Category                             | Read            | Edit                 | Write                       | Passthrough     | Note                                                                                                                         |
 | ------------------------------------ | --------------- | -------------------- | --------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `level.dat` metadata                 | `supported`     | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | `DataVersion`, `Version.Id`, `LevelName`, `WorldGenSettings` are validated; `level.dat` is not rewritten by the block writer |
-| Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; dirty-region rebuild is verified for 1.21.4, while other modern releases keep the source regions in the immutable source copy |
+| Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; only dirty regions are rebuilt and verified for every modern classic release |
 | Block states and palettes            | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Only `sections[].block_states` in fully generated `minecraft:full` chunks                                                    |
 | Biomes                               | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Whole 4x4x4 cells are editable; palette <= 64; sections without source biome data are refused; untouched cells are preserved |
 | Block entities                       | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Counted and preserved; missing block entities are not synthesized                                                            |
@@ -189,8 +190,7 @@ id and hash always describe the base client JAR, not these packs.
 
 The backend can export a complete new world folder, not a bare `.mca`:
 
-1. Validate a supported classic 1.21.4 source and a new destination. Export for the other
-   modern classic releases stays disabled until P1-17 verifies their staged round trip.
+1. Validate a supported classic 1.18–1.21.11 source and a new destination.
 2. Copy every file byte for byte, skipping only `session.lock`.
 3. Rebuild only dirty regions; untouched records are compared byte for byte.
 4. Reopen and decode every staged region and chunk.
@@ -220,7 +220,7 @@ Before import, export or copy, the selected path is classified:
 
 | Selection                                       | Result                                        |
 | ----------------------------------------------- | --------------------------------------------- |
-| Full classic 1.18–1.21.11 save                 | supported import/edit/snapshot path; export only for the 1.21.4 baseline |
+| Full classic 1.18–1.21.11 save                 | supported import/edit/snapshot/export path     |
 | Full save, other `DataVersion`                  | version blocker                               |
 | Full 26.1+ split save                           | layout blocker; regions inventoried read-only |
 | Classic `region/` plus split markers            | mixed-layout blocker                          |

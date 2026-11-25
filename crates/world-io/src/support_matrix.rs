@@ -97,7 +97,7 @@ fn versions() -> Vec<VersionSupport> {
             write: "verified_block_states_and_biomes".to_owned(),
             passthrough: "byte_for_byte".to_owned(),
             note: format!(
-                "The only profile with verified decoding, block/biome editing, region writing and a complete-folder export plus official-server fixture: Minecraft {} (DataVersion {}).",
+                "The full baseline with verified decoding, block/biome editing, region writing, complete-folder export and an official-server fixture: Minecraft {} (DataVersion {}).",
                 target.minecraft_version, target.data_version
             ),
         },
@@ -115,7 +115,7 @@ fn versions() -> Vec<VersionSupport> {
             write: "verified_block_states_and_biomes".to_owned(),
             passthrough: "byte_for_byte".to_owned(),
             note: format!(
-                "Classic Anvil import, block/biome editing and project snapshots are verified for every exact release in this range. Region export and generation remain disabled until their own verification; Minecraft {} has full support.",
+                "Classic Anvil import, block/biome editing, project snapshots and same-version export are verified for every exact release in this range. Generation remains disabled until its own verification; Minecraft {} has full support.",
                 target.minecraft_version
             ),
         },
@@ -360,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn modern_classic_releases_admit_block_writes_as_a_subset() {
+    fn modern_classic_releases_admit_block_writes_and_export_as_a_subset() {
         let matrix = support_matrix();
         let subset = matrix
             .versions
@@ -370,6 +370,11 @@ mod tests {
         assert_eq!(subset.edit, "block_states_and_biomes");
         assert_eq!(subset.write, "verified_block_states_and_biomes");
         assert_eq!(subset.passthrough, "byte_for_byte");
+        assert!(
+            subset.note.contains("same-version export"),
+            "{}",
+            subset.note
+        );
     }
 
     #[test]

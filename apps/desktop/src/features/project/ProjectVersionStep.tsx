@@ -52,7 +52,7 @@ function supportNotice(profile: VersionProfile) {
       return {
         variant: "default" as const,
         title: "Read + write subset",
-        body: "Only verified fields are written; everything else is preserved byte for byte.",
+        body: "Import, block/biome editing, snapshots and same-version export are verified; everything else is preserved byte for byte. Generation is not enabled for this release.",
       };
     case "read-only":
       return {

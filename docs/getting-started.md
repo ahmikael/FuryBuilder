@@ -74,9 +74,9 @@ cargo test --workspace
    manifest and lists releases, plus snapshots behind a toggle. Every manifest entry is shown,
    including legacy and special ids, but only a version with a verified profile has a support
    badge and can continue. All classic Anvil releases from 1.18 through 1.21.11 are verified for
-   import, block/biome editing and project snapshots; `1.21.4` additionally has full export and
-   generation support. The card shows Java, world height, layout, pack formats and every known
-   limitation. Import asks only for confirmation of the version detected from the source.
+   import, block/biome editing, project snapshots and same-version export; `1.21.4` additionally
+   has generation support. The card shows Java, world height, layout, pack formats and every
+   known limitation. Import asks only for confirmation of the version detected from the source.
 5. On **Source**, Empty has no parameters; Flat exposes the platform's layers, bottom Y and
    biome. Layers are written bottom-up, each 1–16 blocks thick up to the backend limit, and the
    whole source must stay inside the selected version's overworld height. Invalid layers are
