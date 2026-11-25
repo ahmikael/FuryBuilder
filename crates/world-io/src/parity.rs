@@ -265,7 +265,7 @@ pub fn compare_java_world_to_world(
             continue;
         }
         let chunk = region.read_chunk(position.x, position.z)?;
-        let decoded = chunk.decode(dimension)?;
+        let decoded = chunk.decode(dimension, &reference.profile)?;
         if decoded.status.as_deref() != Some("minecraft:full") {
             report.refusals.push(format!(
                 "reference chunk ({}, {}) has status `{}` instead of `minecraft:full`",

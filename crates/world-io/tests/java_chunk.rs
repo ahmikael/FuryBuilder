@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
+use minecraft_version::{builtin_profiles, default_profile, profile_for_version};
 use world_domain::{BlockState, DimensionKind};
 use world_io::anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorldDimension, RegionChunk,
@@ -128,6 +129,9 @@ fn dimension(id: &str, kind: DimensionKind, min_y: i32, height: i32) -> JavaWorl
 }
 
 fn region_chunk(nbt: NbtFile, x: i32, z: i32, y_pos: i32, section_count: usize) -> RegionChunk {
+    let data_version = nbt.root.as_compound().unwrap()["DataVersion"]
+        .as_int()
+        .unwrap();
     RegionChunk {
         x,
         z,
@@ -138,7 +142,7 @@ fn region_chunk(nbt: NbtFile, x: i32, z: i32, y_pos: i32, section_count: usize) 
         summary: RegionChunkSummary {
             x,
             z,
-            data_version: TARGET,
+            data_version,
             status: Some("minecraft:full".to_owned()),
             y_pos: Some(y_pos),
             sections: section_count,
@@ -157,7 +161,7 @@ fn decode(
     section_count: usize,
     dimension: &JavaWorldDimension,
 ) -> Result<world_io::java_chunk::DecodedChunk, AnvilError> {
-    region_chunk(nbt, x, z, y_pos, section_count).decode(dimension)
+    region_chunk(nbt, x, z, y_pos, section_count).decode(dimension, &default_profile())
 }
 
 fn decode_error(nbt: NbtFile) -> AnvilError {
@@ -612,8 +616,93 @@ fn decodes_negative_chunk_and_region_coordinates() {
         .read_chunk(-1, -1)
         .expect("read negative region chunk");
     let decoded = chunk
-        .decode(&overworld())
+        .decode(&overworld(), &default_profile())
         .expect("decode negative region chunk");
     assert_eq!((decoded.x, decoded.z), (-1, -1));
     assert_eq!(decoded.block_at(0, -64, 0), Some(&stone));
+}
+
+#[test]
+fn decodes_section_palettes_with_each_exact_modern_profile_without_admitting_world_io() {
+    let mut blocks = vec![0; 4096];
+    blocks[12] = 16; // First entry of the second padded long at 5 bits.
+    let palette = (0..17)
+        .map(|i| with_properties("example:block", &[("variant", &i.to_string())]))
+        .collect();
+    let mut biome_cells = vec![0; 64];
+    biome_cells[12] = 2;
+    let mut fixture = chunk_root(
+        0,
+        0,
+        -4,
+        Some(vec![section(
+            -4,
+            block_states(palette, TAG_COMPOUND, Some(pack_indices(&blocks, 5))),
+            biomes(
+                &["minecraft:plains", "minecraft:forest", "example:biome"],
+                Some(pack_indices(&biome_cells, 2)),
+            ),
+        )]),
+    );
+    let NbtValue::Compound(root) = &mut fixture.root else {
+        unreachable!("fixture root");
+    };
+    root.insert(
+        "block_entities".to_owned(),
+        NbtValue::List {
+            kind: TAG_COMPOUND,
+            items: vec![NbtValue::compound([
+                ("id", NbtValue::String("example:machine".to_owned())),
+                ("opaque", NbtValue::IntArray(vec![7, 8, 9])),
+            ])],
+        },
+    );
+    let wrong_profile = default_profile();
+    let dim = overworld();
+    let mut tested = 0;
+    for profile in builtin_profiles() {
+        let mut root = fixture.root.as_compound().unwrap().clone();
+        root.insert(
+            "DataVersion".to_owned(),
+            NbtValue::Int(profile.data_version),
+        );
+        let nbt = NbtFile::new("", NbtValue::Compound(root));
+        let region_chunk = region_chunk(nbt, 0, 0, -4, 1);
+        let decoded = region_chunk.decode(&dim, profile).unwrap();
+        assert_eq!(decoded.data_version, profile.data_version);
+        assert_eq!(decoded.block_entities, 1);
+        assert_eq!(
+            decoded
+                .block_at(12, -64, 0)
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("example:block[variant=16]"),
+        );
+        assert_eq!(decoded.biome_at(0, -64, 12), Some("example:biome"));
+        if !profile.capabilities.read {
+            assert!(!world_io::supports_data_version(profile.data_version));
+            assert_eq!(
+                region_chunk.decode(&dim, &wrong_profile).unwrap_err(),
+                AnvilError::UnsupportedDataVersion {
+                    found: profile.data_version,
+                    supported: vec![wrong_profile.data_version],
+                }
+            );
+        }
+        tested += 1;
+    }
+    assert_eq!(tested, 27);
+
+    let profile = profile_for_version(&"1.18.2".parse().unwrap()).unwrap();
+    let NbtValue::Compound(root) = &mut fixture.root else {
+        unreachable!("fixture root");
+    };
+    root.insert("DataVersion".into(), NbtValue::Int(profile.data_version));
+    let dir = TempDir::new("unverified-region");
+    let path = write_region(dir.path(), &fixture, 0, 0);
+    let region = RegionFile::open(path).unwrap();
+    assert!(matches!(
+        region.read_chunk(0, 0),
+        Err(AnvilError::UnsupportedDataVersion { found, .. }) if found == profile.data_version
+    ));
 }

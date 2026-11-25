@@ -87,7 +87,7 @@ fn probe(root: &Path, all_chunks: bool, decode: bool) -> Result<(), AnvilError> 
                 chunks.push(chunk_json(summary));
 
                 if decode {
-                    let decoded = chunk.decode(dimension)?;
+                    let decoded = chunk.decode(dimension, &world.profile)?;
                     let non_empty = decoded
                         .sections
                         .values()

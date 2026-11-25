@@ -151,10 +151,31 @@ fn chunk_nbt(x: i32, z: i32, status: &str, blocks: &str, biome: &str) -> NbtFile
                 "block_entities",
                 NbtValue::List {
                     kind: TAG_COMPOUND,
-                    items: vec![NbtValue::compound([(
-                        "id",
-                        NbtValue::String("minecraft:chest".to_owned()),
-                    )])],
+                    items: vec![NbtValue::compound([
+                        ("id", NbtValue::String("minecraft:chest".to_owned())),
+                        ("x", NbtValue::Int(x * 16)),
+                        ("y", NbtValue::Int(-64)),
+                        ("z", NbtValue::Int(z * 16)),
+                        ("keepPacked", NbtValue::Byte(1)),
+                        (
+                            "Items",
+                            NbtValue::List {
+                                kind: TAG_COMPOUND,
+                                items: vec![NbtValue::compound([
+                                    ("Slot", NbtValue::Byte(3)),
+                                    ("id", NbtValue::String("minecraft:stone".to_owned())),
+                                    ("count", NbtValue::Int(2)),
+                                ])],
+                            },
+                        ),
+                        (
+                            "example:opaque",
+                            NbtValue::compound([
+                                ("nan", NbtValue::Float(f32::from_bits(0x7fc0_0042))),
+                                ("zero", NbtValue::Double(-0.0)),
+                            ]),
+                        ),
+                    ])],
                 },
             ),
             (
@@ -311,12 +332,13 @@ fn writes_only_the_edited_chunk_and_preserves_everything_else() {
     );
 
     let world = JavaWorld::open(&root).expect("reopen source world read-only");
-    let dimension = world.dimension(OVERWORLD).expect("overworld");
     let written = RegionFile::open(&destination).expect("open written region");
     let edited = written.read_chunk(0, 0).expect("edited chunk");
     assert_eq!(edited.summary.block_entities, 1);
     assert_eq!(edited.summary.entities, 1);
-    let decoded = edited.decode(dimension).expect("decode edited chunk");
+    let decoded = world
+        .decode_chunk(OVERWORLD, &edited)
+        .expect("decode edited chunk");
     assert_eq!(
         decoded
             .block_at(0, -64, 0)
@@ -494,6 +516,131 @@ fn accepts_biome_changes_and_refuses_other_fields() {
 }
 
 #[test]
+fn preserves_opaque_block_entities_and_palette_extensions_and_refuses_tampering() {
+    let dir = TempDir::new("opaque-fields");
+    let root = dir.path().join("world");
+    write_world(&root, "minecraft:full");
+    let source_path = root.join("region").join(region_file_name(0, 0));
+    let mut original = chunk_nbt(
+        0,
+        0,
+        "minecraft:full",
+        "minecraft:chest",
+        "minecraft:plains",
+    );
+    let section = first_section(&mut original);
+    for key in ["block_states", "biomes"] {
+        let NbtValue::Compound(container) = section.get_mut(key).unwrap() else {
+            panic!("fixture container");
+        };
+        container.insert("example:extra".into(), NbtValue::IntArray(vec![1, 2, 3]));
+    }
+    fs::write(&source_path, region_bytes(&[(0, 0, original.clone())])).unwrap();
+    let before = read_tree(&root);
+
+    let mut overlay = WorldOverlay::open(&root).unwrap();
+    overlay
+        .set_block(
+            OVERWORLD,
+            1,
+            -64,
+            0,
+            &"minecraft:gold_block".parse().unwrap(),
+        )
+        .unwrap();
+    overlay
+        .set_biome(OVERWORLD, 0, -64, 0, &"minecraft:desert".parse().unwrap())
+        .unwrap();
+    let edited = overlay
+        .materialize_chunk_nbt(OVERWORLD, 0, 0)
+        .unwrap()
+        .unwrap();
+    for (label, policy) in [
+        ("preserve", DerivedDataPolicy::Preserve),
+        ("rebuild", DerivedDataPolicy::VanillaRebuild),
+    ] {
+        let folder = dir.path().join(label);
+        fs::create_dir(&folder).unwrap();
+        let destination = folder.join(region_file_name(0, 0));
+        write_region_from_overlay_with_policy(&overlay, OVERWORLD, 0, 0, &destination, policy)
+            .unwrap();
+        let written = RegionFile::open(&destination)
+            .unwrap()
+            .read_chunk(0, 0)
+            .unwrap();
+        assert_eq!(
+            written.nbt.root.as_compound().unwrap()["block_entities"],
+            original.root.as_compound().unwrap()["block_entities"],
+        );
+        let mut nbt = written.nbt;
+        let section = first_section(&mut nbt);
+        for key in ["block_states", "biomes"] {
+            let container = section[key].as_compound().unwrap();
+            assert_eq!(
+                container["example:extra"],
+                NbtValue::IntArray(vec![1, 2, 3])
+            );
+            assert!(matches!(container["data"], NbtValue::LongArray(_)));
+        }
+    }
+
+    let mut wrong_entity = edited.clone();
+    let NbtValue::Compound(root_tag) = &mut wrong_entity.root else {
+        panic!("fixture root");
+    };
+    let Some(NbtValue::List { items, .. }) = root_tag.get_mut("block_entities") else {
+        panic!("fixture entity list");
+    };
+    let NbtValue::Compound(entity) = &mut items[0] else {
+        panic!("fixture entity");
+    };
+    let Some(NbtValue::Compound(opaque)) = entity.get_mut("example:opaque") else {
+        panic!("fixture opaque payload");
+    };
+    opaque.insert("zero".into(), NbtValue::Double(0.0));
+
+    let mut wrong_palette = edited;
+    let Some(NbtValue::Compound(blocks)) =
+        first_section(&mut wrong_palette).get_mut("block_states")
+    else {
+        panic!("fixture block states");
+    };
+    blocks.remove("example:extra");
+
+    let destination = output_dir(dir.path()).join(region_file_name(0, 0));
+    for (nbt, field) in [
+        (wrong_entity, "block_entities"),
+        (wrong_palette, "block_states"),
+    ] {
+        let error = write_verified_region(
+            overlay.world(),
+            OVERWORLD,
+            0,
+            0,
+            &[VerifiedChunkReplacement::new(0, 0, nbt)],
+            &destination,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains(field), "{error}");
+        assert!(!destination.exists());
+    }
+    assert_eq!(read_tree(&root), before, "source bytes must stay identical");
+}
+
+fn first_section(nbt: &mut NbtFile) -> &mut BTreeMap<String, NbtValue> {
+    let NbtValue::Compound(root) = &mut nbt.root else {
+        panic!("fixture root");
+    };
+    let Some(NbtValue::List { items, .. }) = root.get_mut("sections") else {
+        panic!("fixture sections");
+    };
+    let NbtValue::Compound(section) = &mut items[0] else {
+        panic!("fixture section");
+    };
+    section
+}
+
+#[test]
 fn refuses_to_edit_a_chunk_that_is_not_fully_generated() {
     let dir = TempDir::new("non-full");
     let root = dir.path().join("world");
@@ -634,8 +781,9 @@ fn vanilla_rebuild_policy_invalidates_only_derived_fields() {
     );
 
     let world = JavaWorld::open(&root).expect("reopen source world read-only");
-    let dimension = world.dimension(OVERWORLD).expect("overworld");
-    let decoded = edited.decode(dimension).expect("decode edited chunk");
+    let decoded = world
+        .decode_chunk(OVERWORLD, &edited)
+        .expect("decode edited chunk");
     assert_eq!(
         decoded
             .block_at(0, -64, 0)

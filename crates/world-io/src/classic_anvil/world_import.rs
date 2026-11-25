@@ -408,7 +408,7 @@ pub(super) fn load_world(
                     )));
                 }
                 let chunk = region.read_chunk(entry.x, entry.z)?;
-                let decoded = chunk.decode(dimension)?;
+                let decoded = chunk.decode(dimension, &world.profile)?;
                 report.chunks += 1;
                 report.block_entities += decoded.block_entities;
                 report.entities += decoded.entities;

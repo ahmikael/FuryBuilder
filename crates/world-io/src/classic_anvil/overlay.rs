@@ -6,11 +6,10 @@
 //!
 //! The overlay also materialises a patched chunk NBT in memory. That path:
 //!
-//! - replaces only `sections[].block_states` for the edited sections;
-//! - preserves every other chunk tag, every other section tag (including biomes) and
-//!   every block entity/entity entry;
+//! - replaces only the palette and packed indices of edited block or biome containers;
+//! - preserves all other chunk and section tags, including raw block entities and entities;
 //! - re-decodes the patched NBT with the same strict decoder used for import;
-//! - compares every non-block-state field with the source before returning it.
+//! - compares fields outside the edited palettes with the source before returning it.
 //!
 //! Persistence is a small, explicit JSON document with a schema version, the source
 //! `DataVersion`, palette strings and packed canonical section words as hex strings. The
@@ -841,8 +840,8 @@ impl WorldOverlay {
     /// Re-encodes one dirty chunk to NBT without writing it to disk.
     ///
     /// `None` means the chunk has no overlay edits and should be copied through unchanged.
-    /// The returned NBT is verified by re-decoding it and by comparing every non-block-state
-    /// field with the source chunk.
+    /// The returned NBT is verified by re-decoding it and comparing all fields outside the
+    /// edited block and biome palettes with the source chunk.
     pub fn materialize_chunk_nbt(
         &self,
         dimension_id: &str,
@@ -868,8 +867,8 @@ impl WorldOverlay {
             .ok_or_else(|| OverlayError::UnknownDimension(dimension_id.to_owned()))?;
         let region = self.region(dimension_id, x, z)?;
         let source = region.read_chunk(x, z).map_err(map_missing_chunk)?;
-        let source_decoded = source.decode(dimension)?;
-        let format = ClassicChunkFormat::for_read(source_decoded.data_version)?;
+        let source_decoded = source.decode(dimension, &self.world.profile)?;
+        let format = ClassicChunkFormat::for_profile(&self.world.profile)?;
         let mut patched = source.nbt.clone();
 
         {
@@ -920,16 +919,12 @@ impl WorldOverlay {
                     }
                 };
                 if let Some(section) = edits.sections.get(&section_y) {
-                    compound.insert(
-                        format.blocks.container.to_owned(),
-                        encode_block_states(section, &format.blocks),
-                    );
+                    let layout = &format.blocks;
+                    patch_palette(compound, layout, encode_block_states(section, layout))?;
                 }
                 if let Some(section) = edits.biomes.get(&section_y) {
-                    compound.insert(
-                        format.biomes.container.to_owned(),
-                        encode_biomes(section, &format.biomes),
-                    );
+                    let layout = &format.biomes;
+                    patch_palette(compound, layout, encode_biomes(section, layout))?;
                 }
             }
         }
@@ -1348,7 +1343,7 @@ impl WorldOverlay {
             .ok_or_else(|| OverlayError::UnknownDimension(dimension_id.to_owned()))?;
         let region = self.region(dimension_id, x, z)?;
         let chunk = region.read_chunk(x, z).map_err(map_missing_chunk)?;
-        Ok(chunk.decode(dimension)?)
+        Ok(chunk.decode(dimension, &self.world.profile)?)
     }
 }
 
@@ -1443,7 +1438,7 @@ fn biome_difference_count(a: &DomainBiomeSection, b: &JavaBiomeSection) -> usize
     count
 }
 
-fn encode_block_states(section: &Section, layout: &PaletteLayout) -> NbtValue {
+fn encode_block_states(section: &Section, layout: &PaletteLayout) -> BTreeMap<String, NbtValue> {
     let palette = section
         .palette()
         .iter()
@@ -1488,10 +1483,13 @@ fn encode_block_states(section: &Section, layout: &PaletteLayout) -> NbtValue {
             NbtValue::LongArray(layout.packing(section.palette_len()).pack(indices)),
         );
     }
-    NbtValue::Compound(block_states)
+    block_states
 }
 
-fn encode_biomes(section: &DomainBiomeSection, layout: &PaletteLayout) -> NbtValue {
+fn encode_biomes(
+    section: &DomainBiomeSection,
+    layout: &PaletteLayout,
+) -> BTreeMap<String, NbtValue> {
     let mut biomes = BTreeMap::new();
     biomes.insert(
         layout.palette.to_owned(),
@@ -1514,7 +1512,27 @@ fn encode_biomes(section: &DomainBiomeSection, layout: &PaletteLayout) -> NbtVal
             ),
         );
     }
-    NbtValue::Compound(biomes)
+    biomes
+}
+
+fn patch_palette(
+    section: &mut BTreeMap<String, NbtValue>,
+    layout: &PaletteLayout,
+    fields: BTreeMap<String, NbtValue>,
+) -> Result<(), OverlayError> {
+    let container = section
+        .entry(layout.container.to_owned())
+        .or_insert_with(|| NbtValue::Compound(BTreeMap::new()));
+    let NbtValue::Compound(container) = container else {
+        return Err(OverlayError::VerificationFailed(format!(
+            "{} is not a compound",
+            layout.container
+        )));
+    };
+    // A single-entry palette omits the data array, even if it existed before.
+    container.remove(layout.data);
+    container.extend(fields);
+    Ok(())
 }
 
 pub(super) fn verify_preserved_fields(
@@ -1582,8 +1600,38 @@ pub(super) fn verify_preserved_fields(
                 "section {y} non-editable tags changed"
             )));
         }
+        for layout in [&format.blocks, &format.biomes] {
+            if !palette_extra_fields(source_section, layout)?
+                .eq(palette_extra_fields(patched_section, layout)?)
+            {
+                return Err(OverlayError::VerificationFailed(format!(
+                    "section {y} non-editable tags in `{}` changed",
+                    layout.container
+                )));
+            }
+        }
     }
     Ok(())
+}
+
+fn palette_extra_fields<'a>(
+    section: &'a BTreeMap<String, NbtValue>,
+    layout: &'a PaletteLayout,
+) -> Result<impl Iterator<Item = (&'a String, &'a NbtValue)>, OverlayError> {
+    let container = match section.get(layout.container) {
+        None => None,
+        Some(NbtValue::Compound(fields)) => Some(fields),
+        Some(_) => {
+            return Err(OverlayError::VerificationFailed(format!(
+                "{} is not a compound",
+                layout.container
+            )))
+        }
+    };
+    Ok(container
+        .into_iter()
+        .flatten()
+        .filter(|(key, _)| key.as_str() != layout.palette && key.as_str() != layout.data))
 }
 
 /// Verifies that only the explicitly edited fields changed: sections without a block
@@ -1663,11 +1711,11 @@ fn section_compounds<'a>(
 fn section_order(
     root: &BTreeMap<String, NbtValue>,
     format: &ClassicChunkFormat,
-) -> Result<Vec<i32>, OverlayError> {
+) -> Result<(u8, Vec<i32>), OverlayError> {
     let value = root
         .get(format.sections)
         .ok_or_else(|| OverlayError::VerificationFailed("missing sections list".to_owned()))?;
-    let (_, items) = value
+    let (kind, items) = value
         .as_list()
         .ok_or_else(|| OverlayError::VerificationFailed("sections is not a list".to_owned()))?;
     let mut order = Vec::with_capacity(items.len());
@@ -1684,7 +1732,7 @@ fn section_order(
             }
         }
     }
-    Ok(order)
+    Ok((kind, order))
 }
 
 /// Serialized overlay document. Packed words are lowercase hexadecimal strings.

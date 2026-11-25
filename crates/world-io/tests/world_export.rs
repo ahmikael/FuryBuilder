@@ -589,13 +589,12 @@ fn exports_complete_world_and_preserves_source() {
     );
 
     let source_world = JavaWorld::open(&root).expect("reopen source world");
-    let source_dimension = source_world.dimension(OVERWORLD).expect("source overworld");
     let source_region = source_world
         .read_region(OVERWORLD, 0, 0)
         .expect("source region");
     let source_chunk = source_region.read_chunk(0, 0).expect("source chunk");
-    let source_decoded = source_chunk
-        .decode(source_dimension)
+    let source_decoded = source_world
+        .decode_chunk(OVERWORLD, &source_chunk)
         .expect("decode source");
     assert_eq!(
         source_decoded
@@ -611,14 +610,13 @@ fn exports_complete_world_and_preserves_source() {
     );
 
     let exported_world = JavaWorld::open(&destination).expect("reopen exported world");
-    let exported_dimension = exported_world
-        .dimension(OVERWORLD)
-        .expect("exported overworld");
     let exported_region = exported_world
         .read_region(OVERWORLD, 0, 0)
         .expect("exported region");
     let edited = exported_region.read_chunk(0, 0).expect("edited chunk");
-    let decoded = edited.decode(exported_dimension).expect("decode edited");
+    let decoded = exported_world
+        .decode_chunk(OVERWORLD, &edited)
+        .expect("decode edited");
     assert_eq!(
         decoded
             .block_at(0, -64, 0)

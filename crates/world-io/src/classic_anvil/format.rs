@@ -10,12 +10,19 @@ use world_domain::SECTION_SIZE;
 use super::reader::AnvilError;
 use crate::version_support;
 
+pub(crate) const DATA_VERSION: &str = "DataVersion";
+
 pub(crate) struct ClassicChunkFormat {
-    pub sections: &'static str,
+    pub x_pos: &'static str,
+    pub z_pos: &'static str,
     pub chunk_y: &'static str,
+    pub status: &'static str,
+    pub sections: &'static str,
     pub section_y: &'static str,
     pub blocks: PaletteLayout,
     pub biomes: PaletteLayout,
+    pub block_entities: &'static str,
+    pub entities: &'static str,
     pub heightmaps: &'static str,
     pub post_processing: &'static str,
     pub light: LightLayout,
@@ -38,8 +45,11 @@ pub(crate) struct LightLayout {
 }
 
 const MODERN_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
-    sections: "sections",
+    x_pos: "xPos",
+    z_pos: "zPos",
     chunk_y: "yPos",
+    status: "Status",
+    sections: "sections",
     section_y: "Y",
     blocks: PaletteLayout {
         container: "block_states",
@@ -55,6 +65,8 @@ const MODERN_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
         count: super::chunk::BIOME_SECTION_VOLUME,
         minimum_bits: 1,
     },
+    block_entities: "block_entities",
+    entities: "entities",
     heightmaps: "Heightmaps",
     post_processing: "PostProcessing",
     light: LightLayout {

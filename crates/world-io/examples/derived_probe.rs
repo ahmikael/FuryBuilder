@@ -107,7 +107,7 @@ fn run(args: &[String]) -> Result<(), Box<dyn std::error::Error>> {
                     .join(region_file_name(region_x, region_z));
                 let region_file = RegionFile::open(&region_path)?;
                 let chunk_data = region_file.read_chunk(chunk_x, chunk_z)?;
-                let decoded = chunk_data.decode(dimension)?;
+                let decoded = chunk_data.decode(dimension, &java_world.profile)?;
                 let state = decoded
                     .block_at(x.rem_euclid(16) as u8, y, z.rem_euclid(16) as u8)
                     .map(ToString::to_string);

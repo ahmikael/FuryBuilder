@@ -167,13 +167,10 @@ fn run(
     }
 
     let written = RegionFile::open(destination)?;
-    let written_dimension = world
-        .dimension(dimension)
-        .ok_or("unknown dimension after write")?;
     let mut verified = Vec::new();
     for edit in edits {
         let chunk = written.read_chunk(edit.x.div_euclid(16), edit.z.div_euclid(16))?;
-        let decoded = chunk.decode(written_dimension)?;
+        let decoded = world.decode_chunk(dimension, &chunk)?;
         let local_x = edit.x.rem_euclid(16) as u8;
         let local_z = edit.z.rem_euclid(16) as u8;
         let actual = decoded

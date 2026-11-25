@@ -28,7 +28,7 @@ use world_domain::DimensionKind;
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, MAX_NBT_BYTES, TAG_COMPOUND};
 use crate::version_support;
 
-use super::format::ClassicChunkFormat;
+use super::format::{ClassicChunkFormat, DATA_VERSION};
 
 pub const ANVIL_REGION_EXTENSION: &str = "mca";
 pub const ANVIL_SECTOR_BYTES: u64 = 4096;
@@ -709,16 +709,16 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
     let root = nbt.root.as_compound().ok_or_else(|| {
         AnvilError::InvalidRegion(format!("chunk ({x}, {z}) root is not a compound"))
     })?;
-    let data_version = int_field(root, "DataVersion", "chunk")?;
+    let data_version = int_field(root, DATA_VERSION, "chunk")?;
     let format = ClassicChunkFormat::for_read(data_version)?;
-    let stored_x = int_field(root, "xPos", "chunk")?;
-    let stored_z = int_field(root, "zPos", "chunk")?;
+    let stored_x = int_field(root, format.x_pos, "chunk")?;
+    let stored_z = int_field(root, format.z_pos, "chunk")?;
     if stored_x != x || stored_z != z {
         return Err(AnvilError::InvalidRegion(format!(
             "chunk table position ({x}, {z}) does not match NBT xPos/zPos ({stored_x}, {stored_z})"
         )));
     }
-    let status = optional_string(root, "Status", "chunk")?;
+    let status = optional_string(root, format.status, "chunk")?;
     let y_pos = match root.get(format.chunk_y) {
         Some(NbtValue::Int(value)) => Some(*value),
         Some(_) => {
@@ -729,8 +729,8 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         None => None,
     };
     let sections = compound_list_len(root, format.sections, "chunk", true)?;
-    let block_entities = compound_list_len(root, "block_entities", "chunk", false)?;
-    let entities = compound_list_len(root, "entities", "chunk", false)?;
+    let block_entities = compound_list_len(root, format.block_entities, "chunk", false)?;
+    let entities = compound_list_len(root, format.entities, "chunk", false)?;
 
     if let Some(NbtValue::List { kind, items }) = root.get(format.sections) {
         if *kind != TAG_COMPOUND && !items.is_empty() {

@@ -38,7 +38,7 @@ use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
 use crate::version_support;
 use crate::world_codec::world_codec;
 
-use super::format::ClassicChunkFormat;
+use super::format::{ClassicChunkFormat, DATA_VERSION};
 use super::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
 use super::reader::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, RegionChunk, RegionEntry,
@@ -536,7 +536,7 @@ fn verify_replacement(
             source.x, source.z
         ))
     })?;
-    let data_version = match root.get("DataVersion") {
+    let data_version = match root.get(DATA_VERSION) {
         Some(NbtValue::Int(value)) => *value,
         _ => {
             return Err(RegionWriteError::VerificationFailed(format!(
@@ -551,7 +551,7 @@ fn verify_replacement(
             supported: vec![world.profile.data_version],
         });
     }
-    match (root.get("xPos"), root.get("zPos")) {
+    match (root.get(format.x_pos), root.get(format.z_pos)) {
         (Some(NbtValue::Int(x)), Some(NbtValue::Int(z))) if *x == source.x && *z == source.z => {}
         _ => {
             return Err(RegionWriteError::VerificationFailed(format!(

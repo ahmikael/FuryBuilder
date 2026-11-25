@@ -13,12 +13,13 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use minecraft_version::VersionProfile;
 use world_domain::{BlockState, Chunk, ChunkPos, Section, SECTION_SIZE};
 
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::world_codec::world_codec;
 
-use super::format::{ClassicChunkFormat, PaletteLayout};
+use super::format::{ClassicChunkFormat, PaletteLayout, DATA_VERSION};
 use super::reader::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
@@ -160,9 +161,16 @@ impl DecodedChunk {
 }
 
 impl RegionChunk {
-    /// Decodes block states and biomes for the given dimension.
-    pub fn decode(&self, dimension: &JavaWorldDimension) -> Result<DecodedChunk, AnvilError> {
-        world_codec().decode_chunk(&self.nbt, ChunkPos::new(self.x, self.z), dimension)
+    /// Decodes block states and biomes using the exact profile that owns the world.
+    ///
+    /// The profile is an input rather than a lookup by `DataVersion`, so a chunk can be
+    /// inspected for a known release without granting that release world I/O support.
+    pub fn decode(
+        &self,
+        dimension: &JavaWorldDimension,
+        profile: &VersionProfile,
+    ) -> Result<DecodedChunk, AnvilError> {
+        world_codec().decode_chunk(&self.nbt, ChunkPos::new(self.x, self.z), dimension, profile)
     }
 }
 
@@ -175,7 +183,7 @@ impl JavaWorld {
         let dimension = self
             .dimension(dimension_id)
             .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
-        chunk.decode(dimension)
+        chunk.decode(dimension, &self.profile)
     }
 
     /// Decodes a chunk NBT that is not backed by a region file.
@@ -192,7 +200,7 @@ impl JavaWorld {
         let dimension = self
             .dimension(dimension_id)
             .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
-        world_codec().decode_chunk(nbt, ChunkPos::new(x, z), dimension)
+        world_codec().decode_chunk(nbt, ChunkPos::new(x, z), dimension, &self.profile)
     }
 }
 
@@ -201,15 +209,22 @@ pub(super) fn decode_chunk(
     x: i32,
     z: i32,
     dimension: &JavaWorldDimension,
+    profile: &VersionProfile,
 ) -> Result<DecodedChunk, AnvilError> {
     let root = nbt
         .root
         .as_compound()
         .ok_or_else(|| invalid(x, z, "root tag is not a compound"))?;
-    let data_version = chunk_int(root, "DataVersion", x, z)?;
-    let format = ClassicChunkFormat::for_read(data_version)?;
-    let stored_x = chunk_int(root, "xPos", x, z)?;
-    let stored_z = chunk_int(root, "zPos", x, z)?;
+    let format = ClassicChunkFormat::for_profile(profile)?;
+    let data_version = chunk_int(root, DATA_VERSION, x, z)?;
+    if data_version != profile.data_version {
+        return Err(AnvilError::UnsupportedDataVersion {
+            found: data_version,
+            supported: vec![profile.data_version],
+        });
+    }
+    let stored_x = chunk_int(root, format.x_pos, x, z)?;
+    let stored_z = chunk_int(root, format.z_pos, x, z)?;
     if stored_x != x || stored_z != z {
         return Err(invalid(
             x,
@@ -238,9 +253,9 @@ pub(super) fn decode_chunk(
             ),
         ));
     }
-    let status = match root.get("Status") {
+    let status = match root.get(format.status) {
         Some(NbtValue::String(value)) => Some(value.clone()),
-        Some(_) => return Err(invalid(x, z, "Status is not a string")),
+        Some(_) => return Err(invalid(x, z, format!("{} is not a string", format.status))),
         None => None,
     };
 
@@ -332,8 +347,8 @@ pub(super) fn decode_chunk(
         y_pos,
         sections,
         missing_sections,
-        block_entities: compound_list_len(root, "block_entities", x, z)?,
-        entities: compound_list_len(root, "entities", x, z)?,
+        block_entities: compound_list_len(root, format.block_entities, x, z)?,
+        entities: compound_list_len(root, format.entities, x, z)?,
     })
 }
 
@@ -346,7 +361,9 @@ fn compound_list_len(
     match root.get(key) {
         None => Ok(0),
         Some(NbtValue::List { kind, items }) => {
-            if *kind != TAG_COMPOUND && !items.is_empty() {
+            if !items.is_empty()
+                && (*kind != TAG_COMPOUND || items.iter().any(|item| item.as_compound().is_none()))
+            {
                 return Err(invalid(x, z, format!("{key} is not a list of compounds")));
             }
             Ok(items.len())

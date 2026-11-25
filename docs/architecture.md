@@ -301,11 +301,15 @@ materialization, verified region writes, and full-world export through its inter
 `WorldCodec` interface. `ClassicAnvilCodec` owns the reader, chunk codec, overlay,
 region writer, import, and export. It selects the on-disk section, palette,
 heightmap and light layout from the version profile's format family and takes
-vertical bounds from the selected dimension. The 1.18–1.21.x profiles share
-the modern classic layout, but format selection does not grant I/O capabilities:
-Minecraft Java 1.21.4 remains the only admitted version.
-A loaded overlay carries the verified source profile; encoding starts with that
-source's original NBT, and untouched chunk records never need to be re-encoded.
+vertical bounds from the selected dimension. The chunk decoder takes the expected
+profile and rejects a different `DataVersion` even if the NBT layout is identical.
+The 1.18–1.21.x profiles share the modern classic layout. Raw chunk decoding is
+separate from save admission: Minecraft Java 1.21.4 remains the only admitted version.
+A loaded overlay uses that same profile to patch the original NBT's palette lists
+and packed indices. Section order, unrelated container tags and opaque block-entity
+payloads are verified before and after the region write. NBT equality compares
+serialized floating-point bits so NaNs and signed zero survive these checks.
+Untouched chunk records never need to be re-encoded.
 Export golden tests compare the full file tree against pre-extraction output for
 both derived-data policies, masking only the edited chunk's write timestamp.
 Light-only records one section below or above the terrain remain in raw NBT;

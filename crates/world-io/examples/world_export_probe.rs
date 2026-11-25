@@ -119,7 +119,7 @@ fn run(
             .join(region_file_name(region_x, region_z));
         let region = world_io::RegionFile::open(&region_path)?;
         let chunk = region.read_chunk(edit.x.div_euclid(16), edit.z.div_euclid(16))?;
-        let decoded = chunk.decode(dimension)?;
+        let decoded = chunk.decode(dimension, &exported.profile)?;
         let actual = decoded
             .block_at(
                 edit.x.rem_euclid(16) as u8,

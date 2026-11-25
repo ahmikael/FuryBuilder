@@ -3,6 +3,7 @@
 
 use std::path::Path;
 
+use minecraft_version::VersionProfile;
 use world_domain::{ChunkPos, World};
 
 use crate::classic_anvil::ClassicAnvilCodec;
@@ -27,12 +28,13 @@ pub(crate) trait WorldCodec {
         options: WorldImportOptions,
     ) -> Result<(World, JavaWorldLoadReport), WorldImportError>;
 
-    /// Decode a source or staged chunk using the source dimension's bounds.
+    /// Decode a source or staged chunk using its expected profile and dimension bounds.
     fn decode_chunk(
         &self,
         nbt: &NbtFile,
         position: ChunkPos,
         dimension: &JavaWorldDimension,
+        profile: &VersionProfile,
     ) -> Result<DecodedChunk, AnvilError>;
 
     /// Merge edits into the original NBT. Return `None` for an untouched chunk so

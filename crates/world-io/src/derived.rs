@@ -21,7 +21,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, RegionFile};
-use crate::classic_anvil::format::ClassicChunkFormat;
+use crate::classic_anvil::format::{ClassicChunkFormat, DATA_VERSION};
 use crate::nbt::{NbtFile, NbtValue};
 use crate::version_support;
 
@@ -257,7 +257,7 @@ pub fn inspect_chunk_derived(
         .root
         .as_compound()
         .ok_or_else(|| invalid(format!("chunk ({x}, {z}) root is not a compound")))?;
-    let data_version = match root.get("DataVersion") {
+    let data_version = match root.get(DATA_VERSION) {
         Some(NbtValue::Int(value)) => *value,
         Some(_) => {
             return Err(invalid(format!(
@@ -278,7 +278,7 @@ pub fn inspect_chunk_derived(
         root_fields.insert(key.clone(), tag_name(value).to_owned());
     }
 
-    let status = optional_string(root, "Status", x, z)?;
+    let status = optional_string(root, format.status, x, z)?;
     let y_pos = optional_int(root, format.chunk_y, x, z)?;
     let last_update = optional_long(root, "LastUpdate", x, z)?;
     let inhabited_time = optional_long(root, "InhabitedTime", x, z)?;
@@ -294,9 +294,9 @@ pub fn inspect_chunk_derived(
 
     let heightmaps = inspect_heightmaps(root, format.heightmaps, x, z)?;
 
-    let block_entities_list = list_value(root, "block_entities", x, z)?;
+    let block_entities_list = list_value(root, format.block_entities, x, z)?;
     let block_entity_ids = sample_ids(block_entities_list, "id");
-    let entities_list = list_value(root, "entities", x, z)?;
+    let entities_list = list_value(root, format.entities, x, z)?;
     let entity_ids = sample_ids(entities_list, "id");
 
     let block_ticks = list_len(root, "block_ticks", x, z)?;
@@ -333,8 +333,8 @@ pub fn inspect_chunk_derived(
         sections: root.get(format.sections).map(hash_value),
         sky_light: sky_light.map(|hasher| hex(hasher.finalize())),
         block_light: block_light.map(|hasher| hex(hasher.finalize())),
-        block_entities: root.get("block_entities").map(hash_value),
-        entities: root.get("entities").map(hash_value),
+        block_entities: root.get(format.block_entities).map(hash_value),
+        entities: root.get(format.entities).map(hash_value),
         block_ticks: root.get("block_ticks").map(hash_value),
         fluid_ticks: root.get("fluid_ticks").map(hash_value),
         post_processing: root.get(format.post_processing).map(hash_value),

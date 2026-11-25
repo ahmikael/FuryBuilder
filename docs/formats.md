@@ -148,6 +148,12 @@ for replaced chunks so the vanilla engine rebuilds them on the next load. The so
 is opened read-only and is never modified. This path is verified in the backend/test flow
 but has no one-click UI action in the beta.
 
+Source and replacement chunks must match the world's exact `DataVersion`, even when another
+release uses the same section layout. Edits rewrite only the selected block or biome palette
+and its packed indices; other keys in those containers are kept. Both policies preserve the
+entire block-entity NBT list, including entry order, unknown tags and nested item data. They
+do not check whether the edited blocks still match the preserved block entities.
+
 Modern classic Anvil may store light-only records one section below or above
 the dimension's terrain. They do not contain editable blocks or biomes.
 `Preserve` keeps these records intact; `VanillaRebuild` clears their light

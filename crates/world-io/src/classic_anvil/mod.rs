@@ -13,6 +13,7 @@ pub mod world_import;
 
 use std::path::Path;
 
+use minecraft_version::VersionProfile;
 use world_domain::{ChunkPos, World};
 
 use crate::nbt::NbtFile;
@@ -51,8 +52,9 @@ impl WorldCodec for ClassicAnvilCodec {
         nbt: &NbtFile,
         position: ChunkPos,
         dimension: &JavaWorldDimension,
+        profile: &VersionProfile,
     ) -> Result<DecodedChunk, AnvilError> {
-        chunk::decode_chunk(nbt, position.x, position.z, dimension)
+        chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
     }
 
     fn encode_chunk(

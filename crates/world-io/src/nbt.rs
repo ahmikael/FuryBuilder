@@ -82,7 +82,7 @@ impl NbtError {
 }
 
 /// A named root tag plus deterministic compound/list/array payloads.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NbtFile {
     pub root_name: String,
     pub root: NbtValue,
@@ -97,7 +97,7 @@ impl NbtFile {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum NbtValue {
     Byte(i8),
     Short(i16),
@@ -116,6 +116,32 @@ pub enum NbtValue {
     IntArray(Vec<i32>),
     LongArray(Vec<i64>),
 }
+
+// NBT equality is structural, not numeric: preservation checks must accept
+// unchanged NaN payloads and distinguish the two serialized forms of zero.
+impl PartialEq for NbtValue {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Byte(a), Self::Byte(b)) => a == b,
+            (Self::Short(a), Self::Short(b)) => a == b,
+            (Self::Int(a), Self::Int(b)) => a == b,
+            (Self::Long(a), Self::Long(b)) => a == b,
+            (Self::Float(a), Self::Float(b)) => a.to_bits() == b.to_bits(),
+            (Self::Double(a), Self::Double(b)) => a.to_bits() == b.to_bits(),
+            (Self::ByteArray(a), Self::ByteArray(b)) => a == b,
+            (Self::String(a), Self::String(b)) => a == b,
+            (Self::List { kind: a, items: x }, Self::List { kind: b, items: y }) => {
+                a == b && x == y
+            }
+            (Self::Compound(a), Self::Compound(b)) => a == b,
+            (Self::IntArray(a), Self::IntArray(b)) => a == b,
+            (Self::LongArray(a), Self::LongArray(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for NbtValue {}
 
 impl NbtValue {
     pub fn tag_id(&self) -> u8 {
