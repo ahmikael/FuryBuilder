@@ -8,7 +8,10 @@ use std::path::{Path, PathBuf};
 use asset_source::AssetCatalogService;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use minecraft_version::builtin_profiles;
+use minecraft_version::{
+    builtin_profiles, flattened_biomes::FlattenedBiomeRegistry, BiomeFormat, VersionFamily,
+    VersionProfile,
+};
 use project_store::{
     AssetsComponent, ComponentMode, EditorState, ImportOptions, ProjectComponents, ProjectStore,
     SaveKind, SourceFile,
@@ -271,6 +274,118 @@ fn write_world_for_profile(root: &Path, profile: &minecraft_version::VersionProf
         1,
         0,
         vec![section(-4, "minecraft:dirt", &[])],
+    );
+    fs::write(
+        root.join("region").join("r.0.0.mca"),
+        region_bytes(&[(0, 0, first), (1, 0, second)]),
+    )
+    .expect("write region");
+    fs::write(root.join("custom-unknown.dat"), b"keep me").expect("write unknown file");
+}
+
+fn flattened_block_palette(states: &[(&str, &[(&str, &str)])]) -> NbtValue {
+    let NbtValue::Compound(mut wrapper) = block_palette(states) else {
+        panic!("block palette helper must return a compound");
+    };
+    wrapper.remove("palette").expect("block palette list")
+}
+
+fn flattened_section(y: i8, name: &str, properties: &[(&str, &str)]) -> NbtValue {
+    NbtValue::compound([
+        ("Y", NbtValue::Byte(y)),
+        ("Palette", flattened_block_palette(&[(name, properties)])),
+    ])
+}
+
+fn flattened_biomes(profile: &VersionProfile) -> NbtValue {
+    let registry = FlattenedBiomeRegistry::for_release(&profile.minecraft_version)
+        .unwrap_or_else(|| panic!("{}: flattened biome registry", profile.minecraft_version));
+    let plains = registry
+        .id("minecraft:plains")
+        .expect("plains in the flattened biome registry");
+    let count = if registry.is_volumetric() {
+        16 * 64
+    } else {
+        256
+    };
+    NbtValue::IntArray(vec![plains; count])
+}
+
+fn flattened_chunk_nbt(
+    profile: &VersionProfile,
+    x: i32,
+    z: i32,
+    sections: Vec<NbtValue>,
+) -> NbtFile {
+    NbtFile::new(
+        "",
+        NbtValue::compound([
+            ("DataVersion", NbtValue::Int(profile.data_version)),
+            (
+                "Level",
+                NbtValue::compound([
+                    ("xPos", NbtValue::Int(x)),
+                    ("zPos", NbtValue::Int(z)),
+                    ("Status", NbtValue::String("full".to_owned())),
+                    (
+                        "Sections",
+                        NbtValue::List {
+                            kind: TAG_COMPOUND,
+                            items: sections,
+                        },
+                    ),
+                    ("Biomes", flattened_biomes(profile)),
+                    (
+                        "TileEntities",
+                        NbtValue::List {
+                            kind: TAG_COMPOUND,
+                            items: vec![NbtValue::compound([(
+                                "id",
+                                NbtValue::String("minecraft:chest".to_owned()),
+                            )])],
+                        },
+                    ),
+                    (
+                        "Entities",
+                        NbtValue::List {
+                            kind: TAG_COMPOUND,
+                            items: vec![NbtValue::compound([(
+                                "id",
+                                NbtValue::String("minecraft:item".to_owned()),
+                            )])],
+                        },
+                    ),
+                    ("UnknownLevelTag", NbtValue::String("preserve".to_owned())),
+                ]),
+            ),
+            ("UnknownRootTag", NbtValue::String("preserve".to_owned())),
+        ]),
+    )
+}
+
+fn write_flattened_world_for_profile(root: &Path, profile: &VersionProfile) {
+    fs::create_dir_all(root.join("region")).expect("create region");
+    fs::write(
+        root.join("level.dat"),
+        level_dat_bytes_for(profile.data_version, profile.minecraft_version.as_str()),
+    )
+    .expect("write level.dat");
+    fs::write(root.join("session.lock"), b"1234567890123456").expect("write session lock");
+
+    let first = flattened_chunk_nbt(
+        profile,
+        0,
+        0,
+        vec![
+            flattened_section(0, "minecraft:unknown_machine", &[("powered", "true")]),
+            flattened_section(1, "minecraft:stone", &[]),
+        ],
+    );
+    let second = flattened_chunk_nbt(
+        profile,
+        1,
+        0,
+        vec![flattened_section(0, "minecraft:dirt", &[])],
     );
     fs::write(
         root.join("region").join("r.0.0.mca"),
@@ -621,6 +736,382 @@ fn exports_every_modern_classic_release_same_version_and_verifies() {
 }
 
 #[test]
+fn imports_every_flattened_classic_release_end_to_end() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == VersionFamily::Flattened)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("flattened-import-{label}"));
+        let root = dir.path().join("world");
+        write_flattened_world_for_profile(&root, profile);
+        let before = snapshot(&root);
+
+        let analysis = analyze_java_world(&root);
+        assert!(analysis.supported, "{label}: {:?}", analysis.blockers);
+        assert_eq!(analysis.data_version, Some(profile.data_version), "{label}");
+        assert_eq!(analysis.version_name.as_deref(), Some(label), "{label}");
+        assert_eq!(analysis.block_entities, Some(2), "{label}");
+        assert_eq!(analysis.entities, Some(2), "{label}");
+
+        let (world, report) =
+            load_java_world(&root).unwrap_or_else(|error| panic!("{label}: {error}"));
+        assert_eq!(
+            world.version().data_version(),
+            profile.data_version,
+            "{label}"
+        );
+        assert_eq!(
+            world.version().minecraft_version(),
+            label,
+            "{label} version identity"
+        );
+        let expected = profile
+            .dimension_profiles
+            .iter()
+            .find(|dimension| dimension.kind == minecraft_version::DimensionKind::Overworld)
+            .expect("overworld profile");
+        let dimension = world.dimension(OVERWORLD).expect("overworld");
+        assert_eq!(
+            (dimension.min_y(), dimension.height()),
+            (expected.min_y, expected.height),
+            "{label} bounds"
+        );
+        assert_eq!(report.chunks, 2, "{label}");
+        assert_eq!(report.sections, 3, "{label}");
+        assert_eq!(report.biome_sections, 3, "{label}");
+        assert_eq!(report.block_entities, 2, "{label}");
+        assert_eq!(report.entities, 2, "{label}");
+        assert_eq!(
+            world
+                .get_block(OVERWORLD, BlockPos::new(0, 0, 0))
+                .expect("unknown block")
+                .to_string(),
+            "minecraft:unknown_machine[powered=true]",
+            "{label}"
+        );
+        assert_eq!(
+            world
+                .get_block(OVERWORLD, BlockPos::new(1, 17, 3))
+                .expect("stone")
+                .to_string(),
+            "minecraft:stone",
+            "{label}"
+        );
+        assert_eq!(
+            world
+                .get_biome(OVERWORLD, BlockPos::new(1, 17, 3))
+                .expect("biome")
+                .expect("biome data")
+                .as_str(),
+            "minecraft:plains",
+            "{label}"
+        );
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "{label}: import must not write the source"
+        );
+        tested += 1;
+    }
+    assert_eq!(
+        tested, 19,
+        "every flattened classic release must be covered"
+    );
+}
+
+#[test]
+fn flattened_mixed_columns_warn_after_center_sampling() {
+    let profile = builtin_profiles()
+        .iter()
+        .find(|profile| profile.minecraft_version.as_str() == "1.13.2")
+        .expect("1.13.2 profile");
+    let dir = TempDir::new("flattened-mixed");
+    let root = dir.path().join("world");
+    fs::create_dir_all(root.join("region")).expect("create region");
+    fs::write(
+        root.join("level.dat"),
+        level_dat_bytes_for(profile.data_version, profile.minecraft_version.as_str()),
+    )
+    .expect("write level.dat");
+
+    let registry = FlattenedBiomeRegistry::for_release(&profile.minecraft_version)
+        .expect("1.13.2 biome registry");
+    let plains = registry.id("minecraft:plains").expect("plains");
+    let desert = registry.id("minecraft:desert").expect("desert");
+    let mut biomes = vec![plains; 256];
+    biomes[0] = desert;
+    let mut chunk = flattened_chunk_nbt(
+        profile,
+        0,
+        0,
+        vec![flattened_section(0, "minecraft:stone", &[])],
+    );
+    let NbtValue::Compound(root_map) = &mut chunk.root else {
+        panic!("chunk root compound");
+    };
+    let NbtValue::Compound(level) = root_map.get_mut("Level").expect("Level") else {
+        panic!("Level compound");
+    };
+    level.insert("Biomes".to_owned(), NbtValue::IntArray(biomes));
+    fs::write(
+        root.join("region/r.0.0.mca"),
+        region_bytes(&[(0, 0, chunk)]),
+    )
+    .expect("write region");
+
+    let (world, report) = load_java_world(&root).expect("import mixed columns");
+    assert_eq!(
+        world
+            .get_biome(OVERWORLD, BlockPos::new(0, 0, 0))
+            .expect("biome")
+            .expect("biome data")
+            .as_str(),
+        "minecraft:plains",
+        "the center column wins"
+    );
+    let warnings = report
+        .warnings
+        .iter()
+        .filter(|warning| warning.contains("mixed 1.13-1.14"))
+        .collect::<Vec<_>>();
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("1 mixed"));
+}
+
+#[test]
+fn flattened_column_edit_refuses_different_values_by_height() {
+    let profile = builtin_profiles()
+        .iter()
+        .find(|profile| profile.minecraft_version.as_str() == "1.13.2")
+        .expect("1.13.2 profile");
+    let dir = TempDir::new("flattened-column-conflict");
+    let root = dir.path().join("world");
+    write_flattened_world_for_profile(&root, profile);
+
+    let mut overlay = WorldOverlay::open(&root).expect("open overlay");
+    overlay
+        .set_biome(OVERWORLD, 0, 0, 0, &"minecraft:desert".parse().unwrap())
+        .expect("lower biome edit");
+    overlay
+        .set_biome(OVERWORLD, 0, 16, 0, &"minecraft:forest".parse().unwrap())
+        .expect("upper biome edit");
+    let error = export_java_world(&overlay, dir.path().join("exported"))
+        .expect_err("a column cannot store two biomes by height");
+    assert!(error.to_string().contains("different values"), "{error}");
+}
+
+#[test]
+fn exports_every_flattened_classic_release_same_version_and_verifies() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == VersionFamily::Flattened)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("flattened-export-{label}"));
+        let root = dir.path().join("world");
+        write_flattened_world_for_profile(&root, profile);
+        let before = snapshot(&root);
+
+        let mut overlay = WorldOverlay::open(&root)
+            .unwrap_or_else(|error| panic!("{label}: open overlay: {error}"));
+        overlay
+            .set_block(OVERWORLD, 0, 0, 0, &"minecraft:gold_block".parse().unwrap())
+            .unwrap_or_else(|error| panic!("{label}: edit block: {error}"));
+        overlay
+            .set_biome(OVERWORLD, 0, 0, 0, &"minecraft:desert".parse().unwrap())
+            .unwrap_or_else(|error| panic!("{label}: edit biome: {error}"));
+        let destination = dir.path().join("exported");
+        let report = export_java_world(&overlay, &destination)
+            .unwrap_or_else(|error| panic!("{label}: export: {error}"));
+
+        assert!(report.source_unchanged, "{label}: source changed");
+        assert!(report.source_tree_verified, "{label}: source not hashed");
+        assert!(
+            report.copied_files_match_source,
+            "{label}: copied files differ"
+        );
+        assert!(report.output_revalidated, "{label}: output not revalidated");
+        assert_eq!(report.replaced_chunks, 1, "{label}");
+        assert_eq!(report.skipped_files, ["session.lock"], "{label}");
+        assert_eq!(report.files, before.len() - 1, "{label}");
+        assert_eq!(snapshot(&root), before, "{label}: export wrote the source");
+
+        let written = world_io::RegionFile::open(destination.join("region/r.0.0.mca"))
+            .unwrap_or_else(|error| panic!("{label}: open written region: {error}"));
+        let chunk = written
+            .read_chunk(0, 0)
+            .unwrap_or_else(|error| panic!("{label}: read written chunk: {error}"));
+        let root_nbt = chunk.nbt.root.as_compound().expect("chunk root compound");
+        assert_eq!(
+            root_nbt.get("UnknownRootTag").and_then(NbtValue::as_string),
+            Some("preserve"),
+            "{label}: unknown root tag"
+        );
+        let level = root_nbt
+            .get("Level")
+            .and_then(NbtValue::as_compound)
+            .expect("Level compound");
+        assert_eq!(
+            level.get("UnknownLevelTag").and_then(NbtValue::as_string),
+            Some("preserve"),
+            "{label}: unknown Level tag"
+        );
+        assert_eq!(
+            level.get("Status").and_then(NbtValue::as_string),
+            Some("full"),
+            "{label}: Status"
+        );
+
+        let (exported, exported_report) = load_java_world(&destination)
+            .unwrap_or_else(|error| panic!("{label}: reopen export: {error}"));
+        assert_eq!(
+            exported.version().data_version(),
+            profile.data_version,
+            "{label}"
+        );
+        assert_eq!(exported_report.block_entities, 2, "{label}");
+        assert_eq!(exported_report.entities, 2, "{label}");
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(0, 0, 0))
+                .expect("edited block")
+                .to_string(),
+            "minecraft:gold_block",
+            "{label}"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(1, 0, 0))
+                .expect("unknown block")
+                .to_string(),
+            "minecraft:unknown_machine[powered=true]",
+            "{label}: unknown imported state must survive"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(16, 0, 0))
+                .expect("untouched neighbour")
+                .to_string(),
+            "minecraft:dirt",
+            "{label}: untouched chunk must survive byte-for-byte"
+        );
+        assert_eq!(
+            exported
+                .get_biome(OVERWORLD, BlockPos::new(0, 0, 0))
+                .expect("edited biome")
+                .expect("biome data")
+                .as_str(),
+            "minecraft:desert",
+            "{label}"
+        );
+        let upper_biome = exported
+            .get_biome(OVERWORLD, BlockPos::new(0, 16, 0))
+            .expect("upper biome")
+            .expect("biome data");
+        assert_eq!(
+            upper_biome.as_str(),
+            if profile.biome_format == BiomeFormat::Column {
+                "minecraft:desert"
+            } else {
+                "minecraft:plains"
+            },
+            "{label}: column edits propagate through all sections"
+        );
+        tested += 1;
+    }
+    assert_eq!(
+        tested, 19,
+        "every flattened classic release must be covered"
+    );
+}
+
+#[test]
+fn flattened_projects_save_and_reopen_edits() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == VersionFamily::Flattened)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("flattened-project-{label}"));
+        let root = dir.path().join("world");
+        write_flattened_world_for_profile(&root, profile);
+
+        let (world, _) =
+            load_java_world(&root).unwrap_or_else(|error| panic!("{label}: import: {error}"));
+        let store = ProjectStore::new(dir.path().join("projects"));
+        let folder = format!("{label}.furybuilder");
+        store
+            .create_imported(
+                label,
+                EditorState::default(),
+                &world,
+                "world",
+                ImportOptions {
+                    folder: Some(&folder),
+                    components: ProjectComponents::default(),
+                },
+            )
+            .unwrap_or_else(|error| panic!("{label}: create project: {error}"));
+
+        let (_, mut opened, _) = store
+            .open(&folder)
+            .unwrap_or_else(|error| panic!("{label}: open project: {error}"));
+        let gold: world_domain::BlockState = "minecraft:gold_block".parse().unwrap();
+        let desert: world_domain::BiomeState = "minecraft:desert".parse().unwrap();
+        opened
+            .set_block(OVERWORLD, BlockPos::new(0, 0, 0), &gold)
+            .unwrap_or_else(|error| panic!("{label}: edit block: {error}"));
+        opened
+            .set_biome(OVERWORLD, BlockPos::new(0, 0, 0), &desert)
+            .unwrap_or_else(|error| panic!("{label}: edit biome: {error}"));
+        opened.bump_revision();
+        store
+            .save(&folder, &opened, EditorState::default(), SaveKind::Manual)
+            .unwrap_or_else(|error| panic!("{label}: save project: {error}"));
+
+        let (reopened_detail, reopened, _) = store
+            .open(&folder)
+            .unwrap_or_else(|error| panic!("{label}: reopen project: {error}"));
+        assert_eq!(
+            reopened_detail.target.profile_id, profile.id,
+            "{label}: profile pin"
+        );
+        assert_eq!(
+            reopened
+                .get_block(OVERWORLD, BlockPos::new(0, 0, 0))
+                .unwrap(),
+            gold,
+            "{label}: saved block edit"
+        );
+        assert_eq!(
+            reopened
+                .get_biome(OVERWORLD, BlockPos::new(0, 0, 0))
+                .unwrap()
+                .unwrap(),
+            desert,
+            "{label}: saved biome edit"
+        );
+        assert_eq!(
+            reopened
+                .get_block(OVERWORLD, BlockPos::new(1, 0, 0))
+                .unwrap()
+                .name(),
+            "minecraft:unknown_machine",
+            "{label}: unknown imported state must survive"
+        );
+        tested += 1;
+    }
+    assert_eq!(
+        tested, 19,
+        "every flattened classic release must be covered"
+    );
+}
+
+#[test]
 fn catalog_families_create_edit_save_reopen_export_and_verify() {
     let profiles = builtin_profiles()
         .iter()
@@ -890,15 +1381,15 @@ fn chunk_limit_is_enforced_before_partial_import_is_returned() {
 fn unsupported_data_version_is_blocked_before_import() {
     let dir = TempDir::new("version");
     let root = dir.path().join("world");
-    write_world(&root, 2730);
+    write_world(&root, 1343);
 
     let analysis = analyze_java_world(&root);
     assert!(!analysis.supported);
-    assert_eq!(analysis.data_version, Some(2730));
+    assert_eq!(analysis.data_version, Some(1343));
     assert!(analysis
         .blockers
         .iter()
-        .any(|blocker| blocker.contains("DataVersion 2730")));
+        .any(|blocker| blocker.contains("DataVersion 1343")));
     let error = load_java_world(&root).expect_err("unsupported version");
     assert_eq!(error.code(), "unsupported_version");
 }

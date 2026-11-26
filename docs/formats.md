@@ -44,6 +44,7 @@ affected sections. No fallback biome is substituted.
 | ------------------- | ----------- | --------------------------------- | ---------------------- | --------------------------- | ------------------------- | ---------------------------------- | --------------- |
 | Java 1.21.4         | 4189        | classic Anvil                     | **supported**          | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 1.18-1.21.11   | 2860-4671   | classic Anvil                     | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
+| Java 1.13-1.17.1    | 1519-2730   | classic Anvil (flattened)         | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 26.1-26.3      | 4786-5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`                    | `none`                             | `none`          |
 | Java 26.4 snapshots | 5119+       | split                             | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
 | Pre-1.13            | varies      | McRegion (`region/*.mcr`)         | `detected_unsupported` | `legacy_marker`             | `none`                    | `none`                             | `none`          |
@@ -52,13 +53,18 @@ affected sections. No fallback biome is substituted.
 A bare `.mca` file or a `region/` directory is not a complete save. The support matrix
 describes analysis and import boundaries. Only a version with a verified profile can be
 selected for a new project. The `1.18-1.21.11` row includes 1.21.4; same-version export and
-generation are enabled for every modern classic release.
+generation are enabled for every modern classic release. The `1.13-1.17.1` row covers all 19
+flattened classic releases: import, block/biome editing, project snapshots and same-version
+export are verified, while generation and the managed asset pipeline stay disabled until
+their own P2 stages.
 
-P1 verification covers all 27 releases with import and same-version export round-trips. The
-catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
+P1 verification covers all 27 modern releases with import and same-version export round-trips.
+The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
 modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`), rebuilding the exact catalog from the
-same client JAR after reopen. `Full` remains limited to 1.21.4 because structure `.nbt`
-interchange and the other full-only surfaces are not enabled for the subset profiles.
+same client JAR after reopen. P2 verification adds import, edit, project save/reopen and
+same-version export for all 19 flattened releases. `Full` remains limited to 1.21.4 because
+structure `.nbt` interchange and the other full-only surfaces are not enabled for the subset
+profiles.
 
 ## Java 26.1–26.3 split saves: inspection only
 
@@ -82,17 +88,18 @@ the [26.3 palette change](https://www.minecraft.net/en-us/article/minecraft-26-3
 means an Anvil header does not establish classic chunk compatibility. Split saves cannot
 be imported into a project, compared, copied through world passthrough, or exported.
 
-## What is editable (classic 1.18–1.21.11)
+## What is editable (classic 1.13–1.21.11)
 
-Import, block/biome editing, project snapshots, same-version export and generation are enabled
-for every exact modern classic profile. The shared codec below is verified for all 27 releases;
-generation additionally requires that release's official server JAR.
+Import, block/biome editing, project snapshots and same-version export are enabled for every
+exact classic profile in this range. Modern releases additionally enable generation; flattened
+generation and assets remain disabled until P2-06/P2-08. The shared codec is verified for all
+27 modern and all 19 flattened releases.
 
 | Category                             | Read            | Edit                 | Write                       | Passthrough     | Note                                                                                                                         |
 | ------------------------------------ | --------------- | -------------------- | --------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `level.dat` metadata                 | `supported`     | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | `DataVersion`, `Version.Id`, `LevelName`, `WorldGenSettings` are validated; `level.dat` is not rewritten by the block writer |
-| Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; only dirty regions are rebuilt and verified for every modern classic release |
-| Block states and palettes            | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Only `sections[].block_states` in fully generated `minecraft:full` chunks                                                    |
+| Region containers                    | `supported`     | `chunk_records_only` | `verified_replaced_regions` | `byte_for_byte` | Untouched region files/records are exact bytes; only dirty regions are rebuilt and verified for every classic release |
+| Block states and palettes            | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Modern `sections[].block_states` or flattened `Level.Sections[].Palette`/`BlockStates` in fully generated chunks   |
 | Biomes                               | `supported`     | `supported`          | `verified`                  | `byte_for_byte` | Whole 4x4x4 cells are editable; palette <= 64; sections without source biome data are refused; untouched cells are preserved |
 | Block entities                       | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Counted and preserved; missing block entities are not synthesized                                                            |
 | Chunk entities                       | `inventoried`   | `not_exposed`        | `preserved_raw`             | `byte_for_byte` | Legacy chunk entity lists are counted and preserved                                                                          |
@@ -119,7 +126,8 @@ Generation is driven by the exact `VersionProfile`, never by a global baseline:
 - `level-type` uses the modern namespaced spelling for 1.18–1.21.11: `minecraft:normal`,
   `minecraft:flat`, `minecraft:large_biomes`, `minecraft:amplified`. The same mapping is
   defined for 1.13–1.15 (`default`, `flat`, `largeBiomes`, `amplified`) and 1.8–1.12
-  (`DEFAULT`, `FLAT`, `LARGEBIOMES`, `AMPLIFIED`) for the later families.
+  (`DEFAULT`, `FLAT`, `LARGEBIOMES`, `AMPLIFIED`) for the later families; flattened generation
+  stays disabled until P2-06.
 - Java comes from the profile: 17 for 1.18–1.19 and 21 for 1.20.5–1.21.11.
 - The server JAR must declare the profile's exact version and `DataVersion`; its SHA-1, the
   EULA acceptance and the per-run consent are recorded in `.furybuilder-run.json` schema 3.
@@ -170,16 +178,18 @@ The pre-1.18 chunk keeps `DataVersion` at the root and wraps terrain in a `Level
 `Level.Sections` carries `Y`, `Palette`, `BlockStates`, `SkyLight` and `BlockLight` directly;
 `Level.Biomes`, `Level.TileEntities` and `Level.Entities` stay on the same wrapper. Block-state
 indices are one continuous bit stream in 1.13–1.15 and become padded per 64-bit word from 1.16,
-so a 17-entry palette occupies 320 longs before 1.16 and 342 longs from 1.16. The internal
-decoder validates the exact `DataVersion`, palette values, section bounds and light-only halo
-records, and maps the chunk-wide biome array through the exact numeric registry. Mixed 1.13–1.14
-4×4 footprints are normalized by center sampling at `(4x+2, 4z+2)`—the same choice as the
-vanilla 1.15 upgrade—and the decoded chunk reports how many footprints were sampled. Unchanged
+so a 17-entry palette occupies 320 longs before 1.16 and 342 longs from 1.16. The decoder
+validates the exact `DataVersion`, palette values, section bounds and light-only halo records,
+and maps the chunk-wide biome array through the exact numeric registry. Mixed 1.13–1.14 4×4
+footprints are normalized by center sampling at `(4x+2, 4z+2)`—the same choice as the vanilla
+1.15 upgrade—and the decoded chunk reports how many footprints were sampled. Unchanged
 footprints keep all original columns when written; changing one projected cell replaces that
 whole footprint. Heightmaps and every other tag remain raw.
 
-The decoder is not an admission path: the region reader, project wizard, editor and exporter
-still refuse these releases until the P2 adapter verifies the complete import/edit/export path.
+The region reader, import, overlay editing, region writer and same-version export all accept
+these releases. The writer patches only `Level.Sections[].Palette`/`BlockStates` and
+`Level.Biomes`; every other root/`Level`/section tag is compared with the source and must stay
+unchanged. Generation and the managed asset pipeline remain disabled until P2-06/P2-08.
 
 ## Flattened biome conversion (1.13–1.17)
 
@@ -189,8 +199,9 @@ The flattened releases store biomes in `Level.Biomes`, outside the block-section
 pack formats and the 0–256 vertical bounds; the extended Overworld height starts with 1.18) and
 the numeric registry for each exact release. ID 8 is `minecraft:nether` through 1.15 and
 `minecraft:nether_wastes` from 1.16. The chunk decoder uses this converter; the region reader,
-project wizard and exporter remain closed. The converter also operates on one chunk's NBT so
-the P2 adapter and version conversion can share one mapping.
+project wizard, overlay, region writer and exporter use it through the same profile. The
+converter also operates on one chunk's NBT so the P2 adapter and version conversion can share
+one mapping.
 
 - Decoding produces the normalized 4×4×4 `BiomeSection` grid used by 1.18+.
 - Every source ID must exist in that exact release. An unknown ID stops conversion and is
@@ -198,9 +209,11 @@ the P2 adapter and version conversion can share one mapping.
 - A 1.13–1.14 4×4 footprint may contain 16 different columns. `RequireUniform` (the default)
   refuses that footprint. `SampleCenter` samples `(4x+2, 4z+2)`, matching the vanilla 1.15
   upgrade, and reports how many footprints were reduced.
-- Patching a column chunk requires the edited section grid to be vertically uniform. A
-  changed mixed footprint is written only under `SampleCenter` and replaces all 16 columns;
-  an unchanged footprint keeps its original columns.
+- Patching a column chunk applies an edited cell to every vertical section, because the source
+  can store only one biome per horizontal cell. A change that asks for different values by
+  height is refused instead of silently dropping one of them. A changed mixed footprint is
+  written under `SampleCenter` and replaces all 16 columns; an unchanged footprint keeps its
+  original columns.
 - A biome that does not exist in the source release cannot be patched into it.
 
 ## Client JAR layout (1.13–1.17)
@@ -224,8 +237,8 @@ verified. A `versions/<id>` folder or managed cache folder resolves its JAR dire
 Entity render blockstates (`item_frame`, `glow_item_frame`) do not create blocks, empty item
 models and model templates do not create items, and wall-fan variants never gain an item form
 from their base fan. A special item model with only a `particle` texture keeps a `null` icon.
-These rules apply to catalog construction only; world admission for 1.13–1.17 remains closed
-until the P2 import/edit/export adapter is verified.
+These rules apply to catalog construction. The flattened catalog is built and pinned as a
+project component only when the P2 asset-pipeline stage enables assets for these releases.
 
 ## Structure `.nbt`
 

@@ -18,6 +18,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+use minecraft_version::VersionFamily;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{
@@ -29,7 +30,8 @@ use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::world_codec::world_codec;
 
 use super::chunk::{
-    BiomeSection as JavaBiomeSection, DecodedChunk, DecodedSection, MAX_BLOCK_PALETTE,
+    BiomeSection as JavaBiomeSection, DecodedChunk, DecodedSection, BLOCK_SECTION_VOLUME,
+    MAX_BLOCK_PALETTE,
 };
 use super::format::{ClassicChunkFormat, PaletteLayout};
 use super::reader::{
@@ -868,6 +870,17 @@ impl WorldOverlay {
         let region = self.region(dimension_id, x, z)?;
         let source = region.read_chunk(x, z).map_err(map_missing_chunk)?;
         let source_decoded = source.decode(dimension, &self.world.profile)?;
+        if self.world.profile.family == VersionFamily::Flattened {
+            return super::flattened_chunk::encode_chunk(
+                &source.nbt,
+                dimension,
+                &self.world.profile,
+                &source_decoded,
+                &edits.sections,
+                &edits.biomes,
+            )
+            .map(Some);
+        }
         let format = ClassicChunkFormat::for_profile(&self.world.profile)?;
         let mut patched = source.nbt.clone();
 
@@ -1438,8 +1451,8 @@ fn biome_difference_count(a: &DomainBiomeSection, b: &JavaBiomeSection) -> usize
     count
 }
 
-fn encode_block_states(section: &Section, layout: &PaletteLayout) -> BTreeMap<String, NbtValue> {
-    let palette = section
+pub(super) fn block_palette_entries(section: &Section) -> Vec<NbtValue> {
+    section
         .palette()
         .iter()
         .map(|state| {
@@ -1459,29 +1472,40 @@ fn encode_block_states(section: &Section, layout: &PaletteLayout) -> BTreeMap<St
             }
             NbtValue::Compound(compound)
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
 
+/// YZX palette indices for one 4096-block section. Both modern and flattened
+/// writers use this order; only the word packing differs by release.
+pub(super) fn packed_block_indices(
+    section: &Section,
+    packing: super::format::PackedLongs,
+) -> Option<Vec<i64>> {
+    if section.palette_len() <= 1 {
+        return None;
+    }
+    let indices = (0..BLOCK_SECTION_VOLUME).map(|index| {
+        let x = (index % 16) as u8;
+        let z = ((index / 16) % 16) as u8;
+        let y = ((index / 256) % 16) as u8;
+        section
+            .palette_index(x, y, z)
+            .expect("every local section position has a palette index")
+    });
+    Some(packing.pack(indices))
+}
+
+fn encode_block_states(section: &Section, layout: &PaletteLayout) -> BTreeMap<String, NbtValue> {
     let mut block_states = BTreeMap::new();
     block_states.insert(
         layout.palette.to_owned(),
         NbtValue::List {
             kind: TAG_COMPOUND,
-            items: palette,
+            items: block_palette_entries(section),
         },
     );
-    if section.palette_len() > 1 {
-        let indices = (0..layout.count).map(|index| {
-            let x = (index % 16) as u8;
-            let z = ((index / 16) % 16) as u8;
-            let y = ((index / 256) % 16) as u8;
-            section
-                .palette_index(x, y, z)
-                .expect("every local section position has a palette index")
-        });
-        block_states.insert(
-            layout.data.to_owned(),
-            NbtValue::LongArray(layout.packing(section.palette_len()).pack(indices)),
-        );
+    if let Some(words) = packed_block_indices(section, layout.packing(section.palette_len())) {
+        block_states.insert(layout.data.to_owned(), NbtValue::LongArray(words));
     }
     block_states
 }

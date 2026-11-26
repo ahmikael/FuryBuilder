@@ -372,9 +372,9 @@ and padded words from 1.16, chunk-wide `Level.Biomes`, and light-only halo valid
 exact numeric biome registry and the column/section conversion live beside it. A mixed
 1.13–1.14 4×4 column footprint is normalized by center sampling and counted on the decoded
 chunk; writing a changed cell replaces the whole footprint, while untouched footprints keep
-their original columns. This decoder is available to inspection and codec tests, but
-`version_support` still does not admit those `DataVersion`s to `JavaWorld::open`, import,
-editing or export.
+their original columns. The same decoder is used by `JavaWorld::open`, import, overlay editing,
+region writing and export; `version_support` admits those `DataVersion`s through the exact
+profile capabilities.
 A loaded overlay uses that same profile to patch the original NBT's palette lists
 and packed indices. Section order, unrelated container tags and opaque block-entity
 payloads are verified before and after the region write. NBT equality compares
@@ -407,15 +407,16 @@ Biome conversion for 1.13–1.17 sits beside the codec in
 `classic_anvil/flattened_biomes.rs`. It reads and patches only one chunk's `Level.Biomes`
 array: 256 columns before 1.15 and 1024 YZX cells from 1.15, mapped through the exact
 release's numeric registry. It produces the same normalized 4×4×4 sections as the modern
-decoder and never rewrites other NBT. The flattened chunk decoder uses it, but this is not an
-I/O admission path: the region reader, wizard and exporter still refuse these releases until the
-P2 adapter verifies them.
+decoder and never rewrites other NBT. The flattened chunk decoder uses it, and the overlay
+applies a column edit to every vertical section before writing; a request for different values
+by height is refused. The region reader, wizard, overlay and exporter all use this path for
+the admitted 1.13–1.17 profiles.
 
 ## Security boundaries
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.
 
-- World import accepts classic Anvil 1.18–1.21.11 only: bounded `level.dat`, region files and
+- World import accepts classic Anvil 1.13–1.21.11 only: bounded `level.dat`, region files and
   chunk counts; external `.mcc`, LZ4 and custom compression are refused; offsets and
   sector lengths are validated.
 - World `.zip` archives are extracted into a unique temporary staging folder and removed

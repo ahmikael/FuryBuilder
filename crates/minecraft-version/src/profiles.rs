@@ -71,11 +71,11 @@ impl ReleaseFacts {
         } else if flattened_classic {
             vec![
                 format!(
-                    "Exact Minecraft {} metadata (DataVersion, Java, pack formats and dimensions) is built in.",
+                    "Flattened classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft {}.",
                     self.version
                 ),
-                "The flattened classic Anvil world adapter is not enabled for projects yet."
-                    .to_owned(),
+                "Vanilla generation is not enabled for this release yet.".to_owned(),
+                "The client JAR is the source of the full block and item catalog.".to_owned(),
             ]
         } else {
             vec![
@@ -102,6 +102,16 @@ impl ReleaseFacts {
                 export: true,
                 generate: true,
                 assets: true,
+            }
+        } else if flattened_classic {
+            WorldCapabilities {
+                support_level: SupportLevel::ReadWriteSubset,
+                read: true,
+                edit: true,
+                write: true,
+                export: true,
+                generate: false,
+                assets: false,
             }
         } else {
             WorldCapabilities {
@@ -665,10 +675,15 @@ mod tests {
             );
             assert_eq!(
                 profile.capabilities.support_level,
-                SupportLevel::Unverified,
+                SupportLevel::ReadWriteSubset,
                 "{id}"
             );
-            assert!(!profile.capabilities.read, "{id}");
+            assert!(profile.capabilities.read, "{id}");
+            assert!(profile.capabilities.edit, "{id}");
+            assert!(profile.capabilities.write, "{id}");
+            assert!(profile.capabilities.export, "{id}");
+            assert!(!profile.capabilities.generate, "{id}");
+            assert!(!profile.capabilities.assets, "{id}");
             assert!(profile.capabilities.validate().is_ok(), "{id}");
             assert_eq!(
                 profile_for_data_version(facts.data_version).as_ref(),

@@ -356,7 +356,7 @@ fn invalid_shapes_and_versions_fail_without_writing() {
         Err(FlattenedBiomeError::UnsupportedProfile(_))
     ));
     assert!(
-        !world_io::version_support::supports_data_version(profile.data_version),
-        "biome conversion must not admit 1.14 worlds to the region reader"
+        world_io::version_support::supports_data_version(profile.data_version),
+        "flattened biome profiles are admitted to the region reader"
     );
 }

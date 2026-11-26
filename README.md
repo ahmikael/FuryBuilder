@@ -6,12 +6,12 @@ human users work through the UI, and external AI agents work through the same
 Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
-- **Target game versions:** Minecraft Java classic Anvil **1.18-1.21.11** (import, editing,
-  project snapshots, same-version export and generation with the exact official server JAR,
-  plus exact per-version client-JAR block/item catalogs).
-- **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.18–1.21.11)
-  and `Vanilla World` (official local generator for the project's exact version after explicit
-  dependency setup) are available.
+- **Target game versions:** Minecraft Java classic Anvil **1.13-1.21.11** (import, block/biome
+  editing, project snapshots and same-version export; modern releases also generate with the
+  exact official server JAR, plus exact per-version client-JAR block/item catalogs).
+- **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.13–1.21.11)
+  and `Vanilla World` (official local generator for the project's exact modern version after
+  explicit dependency setup) are available.
 - **License:** Apache-2.0 for FuryBuilder code; see `LICENSE` and `NOTICE`. Minecraft game
   assets are **not** distributed with this repository; see `docs/legal/third-party-notices.md`.
 
@@ -97,10 +97,11 @@ The supported baseline, tested machine and maintained limitation list are in
 [docs/reference.md](docs/reference.md). The most important current boundaries:
 
 - Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
-- Classic Anvil Java 1.18–1.21.11 is supported for import, block/biome editing, project
-  snapshots, same-version export and generation with the exact official server JAR. Snapshots,
-  split 26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare `.mca`/`region/`
-  is not a complete world.
+- Classic Anvil Java 1.13–1.21.11 is supported for import, block/biome editing, project
+  snapshots and same-version export. Modern releases also generate with the exact official
+  server JAR; flattened 1.13–1.17.1 generation and managed assets are not enabled yet.
+  Snapshots, split 26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare
+  `.mca`/`region/` is not a complete world.
 - Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are
   preserved raw, not recalculated or synthesized; the UI has no `VanillaRebuild` switch.
 - Structure interchange is Java `.nbt` only and refuses entities/block entities/unknown tags.

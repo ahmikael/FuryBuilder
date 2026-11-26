@@ -4,7 +4,7 @@
 
 use std::ops::Range;
 
-use minecraft_version::{modern_classic::ModernClassicRelease, VersionProfile};
+use minecraft_version::{modern_classic::ModernClassicRelease, VersionFamily, VersionProfile};
 use world_domain::SECTION_SIZE;
 
 use super::reader::AnvilError;
@@ -12,6 +12,7 @@ use crate::version_support;
 
 pub(crate) const DATA_VERSION: &str = "DataVersion";
 
+#[derive(Debug)]
 pub(crate) struct ClassicChunkFormat {
     pub x_pos: &'static str,
     pub z_pos: &'static str,
@@ -29,6 +30,7 @@ pub(crate) struct ClassicChunkFormat {
     pub light: LightLayout,
 }
 
+#[derive(Debug)]
 pub(crate) struct PaletteLayout {
     pub container: &'static str,
     pub palette: &'static str,
@@ -50,6 +52,7 @@ pub(crate) enum LongPacking {
     Unpadded,
 }
 
+#[derive(Debug)]
 pub(crate) struct LightLayout {
     pub sky: &'static str,
     pub block: &'static str,
@@ -147,6 +150,88 @@ impl ClassicChunkFormat {
         // top Y + 1 relative to the bottom, so height itself must fit.
         PackedLongs::new(height as usize, 1, LongPacking::Padded)
             .word_count((SECTION_SIZE * SECTION_SIZE) as usize)
+    }
+}
+
+/// On-disk layout of the flattened classic Anvil releases (1.13–1.17).
+///
+/// These chunks wrap every field in `Level` and keep the block palette directly
+/// on each section. Biomes live in the chunk-wide `Level.Biomes` array instead
+/// of a section palette. The release boundary for padded `BlockStates` is 1.16.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct FlattenedFormat {
+    pub packing: LongPacking,
+    pub heightmap_key: &'static str,
+    pub post_processing_key: &'static str,
+    pub light_enabled_key: Option<&'static str>,
+    pub full_status: &'static str,
+}
+
+impl FlattenedFormat {
+    pub(crate) fn for_profile(profile: &VersionProfile) -> Result<Self, AnvilError> {
+        if profile.family != VersionFamily::Flattened
+            || profile.world_layout != minecraft_version::WorldLayout::ClassicAnvil
+            || profile.chunk_family != minecraft_version::ChunkFamily::SectionBiomes
+            || !matches!(
+                profile.biome_format,
+                minecraft_version::BiomeFormat::Column | minecraft_version::BiomeFormat::Section
+            )
+        {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "profile `{}` is not a flattened classic Anvil chunk profile",
+                profile.id
+            )));
+        }
+        // 1.14 replaced the single HeightMap int array with a Heightmaps compound;
+        // 1.16 changed block states (and heightmaps) to padded 64-bit words.
+        let modern_fields = profile.data_version >= 1952;
+        Ok(Self {
+            packing: if profile.data_version >= 2566 {
+                LongPacking::Padded
+            } else {
+                LongPacking::Unpadded
+            },
+            heightmap_key: if modern_fields {
+                "Heightmaps"
+            } else {
+                "HeightMap"
+            },
+            post_processing_key: "PostProcessing",
+            light_enabled_key: modern_fields.then_some("isLightOn"),
+            full_status: "full",
+        })
+    }
+}
+
+/// The on-disk chunk layout selected for a profile, independent of whether the
+/// release is admitted to projects.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ChunkLayoutFormat {
+    Modern(&'static ClassicChunkFormat),
+    Flattened(FlattenedFormat),
+}
+
+impl ChunkLayoutFormat {
+    pub(crate) fn for_profile(profile: &VersionProfile) -> Result<Self, AnvilError> {
+        if profile.family == VersionFamily::Flattened {
+            Ok(Self::Flattened(FlattenedFormat::for_profile(profile)?))
+        } else {
+            Ok(Self::Modern(ClassicChunkFormat::for_profile(profile)?))
+        }
+    }
+
+    pub(crate) fn is_full(self, status: Option<&str>) -> bool {
+        match self {
+            Self::Modern(format) => format.is_full(status),
+            Self::Flattened(format) => status == Some(format.full_status),
+        }
+    }
+
+    pub(crate) fn full_status(self) -> &'static str {
+        match self {
+            Self::Modern(format) => format.full_status,
+            Self::Flattened(format) => format.full_status,
+        }
     }
 }
 

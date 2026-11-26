@@ -18,14 +18,17 @@ formats are not migrated.
   official server JAR; `1.21.4` remains the full-support baseline.
 - Exact built-in metadata for Java `1.13–1.17.1`: `DataVersion`, Java 8/16, resource and data
   pack formats 4–7, dimension folders and the 0–256 Overworld height (the extended height starts
-  with 1.18), plus the column/section biome boundary. The flattened world adapter is not enabled
-  yet, so these releases remain unavailable for project creation or import.
+  with 1.18), plus the column/section biome boundary.
+- Import, block/biome editing, project snapshots and same-version export for all 19 flattened
+  classic releases `1.13–1.17.1`. The writer patches only `Level.Sections[].Palette`/
+  `BlockStates` and `Level.Biomes`; every other chunk tag is compared with the source and must
+  stay unchanged. Column biomes apply an edited cell to every vertical section and refuse a
+  request for different values by height. Generation and managed assets remain disabled.
 - Internal chunk decoding for flattened Java `1.13–1.17.1`: pre-1.18 `Level.Sections` with
   direct `Palette`/`BlockStates`, continuous index packing through 1.15 and padded words from
   1.16, chunk-wide numeric biomes and light-only halo validation. Mixed 1.13–1.14 column
   footprints use center sampling and are counted; writing a changed footprint replaces all of
-  its columns, while untouched footprints keep the original data. The releases remain
-  unavailable for project creation or import.
+  its columns, while untouched footprints keep the original data.
 - Exact-version block/item catalogs for Java `1.13–1.17.1` client JARs. The flattened asset
   layout (singular block/item textures, item models instead of item definitions, no atlases and
   plural block/item tags) is read alongside the modern layout. JARs without a root
@@ -33,8 +36,7 @@ formats are not migrated.
   built-in profile, with a warning and checksum verification; version folders and managed cache
   folders are selected directly. Entity render blockstates, empty or template item models and
   wall-fan variants are filtered out of the catalog. Real 1.13.2, 1.14.4, 1.15.2, 1.16.5 and
-  1.17.1 JARs reproduce the vanilla registries exactly. These releases still cannot be opened
-  as projects until the world adapter lands.
+  1.17.1 JARs reproduce the vanilla registries exactly.
 - End-to-end import for all 27 classic Anvil releases from 1.18 through 1.21.11: exact
   `DataVersion`, profile dimensions and vertical bounds, editable block states and 4x4x4 biomes,
   byte-for-byte source copy and a version-bound project snapshot. Split 26.1+ and legacy layouts
@@ -44,9 +46,9 @@ formats are not migrated.
   `Assets` states with visible reasons for unavailable actions. The `unverified` support level
   is now rendered honestly instead of appearing as a blank badge, and project summaries carry
   the verified capabilities of their target profile.
-- Same-version world export for every modern classic release: staged sibling folder, dirty-region
-  rebuild, full output revalidation, source-tree hashes and byte-for-byte preservation of
-  untouched files.
+- Same-version world export for every modern and flattened classic release: staged sibling
+  folder, dirty-region rebuild, full output revalidation, source-tree hashes and byte-for-byte
+  preservation of untouched files.
 - Copy-only same-family project upgrade for modern classic releases: a mandatory source
   checkpoint, exact target catalog/biome validation with mapped and unknown counts, staged
   reopen and verification, atomic publication and a report proving the original project stayed

@@ -1,7 +1,7 @@
 //! The `Level.Biomes` component of Java 1.13–1.17 Anvil NBT.
 //!
-//! These transformations operate on a single NBT chunk. They do not admit
-//! older worlds to the region reader or publish a converted save.
+//! These transformations operate on a single NBT chunk. The reader, import,
+//! overlay and exporter use them for admitted 1.13–1.17 profiles.
 
 use minecraft_version::flattened_biomes::FlattenedBiomeRegistry;
 use minecraft_version::{BiomeFormat, ChunkFamily, VersionProfile, WorldLayout};

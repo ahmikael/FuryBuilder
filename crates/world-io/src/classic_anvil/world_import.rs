@@ -28,7 +28,7 @@ use crate::world_codec::world_codec;
 use crate::world_selection::classify_world_selection;
 use crate::world_source::{ArchiveReport, WorldSourceKind};
 
-use super::format::ClassicChunkFormat;
+use super::format::ChunkLayoutFormat;
 use super::reader::{AnvilError, JavaWorld};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
@@ -359,10 +359,11 @@ pub(super) fn load_world(
     options: WorldImportOptions,
 ) -> Result<(World, JavaWorldLoadReport), WorldImportError> {
     let world = JavaWorld::open(root)?;
-    let format = ClassicChunkFormat::for_profile(&world.profile)?;
+    let format = ChunkLayoutFormat::for_profile(&world.profile)?;
     let biome_registry = ModernClassicRelease::for_profile(&world.profile);
     let mut non_vanilla_biome_sections = 0;
     let mut first_non_vanilla_biome = None;
+    let mut mixed_biome_columns = 0;
     let mut report = JavaWorldLoadReport {
         minecraft_version: world.profile.minecraft_version.to_string(),
         data_version: world.profile.data_version,
@@ -395,6 +396,7 @@ pub(super) fn load_world(
                 report.chunks += 1;
                 report.block_entities += decoded.block_entities;
                 report.entities += decoded.entities;
+                mixed_biome_columns += decoded.mixed_biome_columns;
                 if !format.is_full(decoded.status.as_deref()) {
                     report.non_full_chunks += 1;
                 }
@@ -463,13 +465,19 @@ pub(super) fn load_world(
     if report.non_full_chunks > 0 {
         report.warnings.push(format!(
             "{} chunk(s) do not have status {}; their stored blocks are imported as-is",
-            report.non_full_chunks, format.full_status
+            report.non_full_chunks,
+            format.full_status()
         ));
     }
     if let Some(id) = first_non_vanilla_biome {
         report.warnings.push(format!(
             "{non_vanilla_biome_sections} section(s) contain biome IDs outside the vanilla {} registry (e.g. `{id}`); their original IDs were preserved",
             world.profile.minecraft_version
+        ));
+    }
+    if mixed_biome_columns > 0 {
+        report.warnings.push(format!(
+            "{mixed_biome_columns} mixed 1.13-1.14 4x4 biome column(s) were normalized by center sampling; untouched footprints keep their original columns"
         ));
     }
     report.warnings.push(

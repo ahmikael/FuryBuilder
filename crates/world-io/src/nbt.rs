@@ -191,6 +191,13 @@ impl NbtValue {
         }
     }
 
+    pub fn as_compound_mut(&mut self) -> Option<&mut BTreeMap<String, NbtValue>> {
+        match self {
+            NbtValue::Compound(map) => Some(map),
+            _ => None,
+        }
+    }
+
     pub fn as_list(&self) -> Option<(u8, &[NbtValue])> {
         match self {
             NbtValue::List { kind, items } => Some((*kind, items)),

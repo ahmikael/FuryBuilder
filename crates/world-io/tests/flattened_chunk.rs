@@ -205,8 +205,8 @@ fn flattened_sections_decode_across_the_packing_boundary() {
             Vec::new(),
         );
         assert!(
-            !world_io::supports_data_version(profile.data_version),
-            "{version} must stay outside the region reader"
+            world_io::supports_data_version(profile.data_version),
+            "{version} is admitted to the region reader"
         );
 
         let decoded =

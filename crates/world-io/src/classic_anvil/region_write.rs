@@ -29,7 +29,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
-use minecraft_version::VersionProfile;
+use minecraft_version::{VersionFamily, VersionProfile};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -38,8 +38,8 @@ use crate::nbt::{self, NbtFile, NbtValue, MAX_NBT_BYTES};
 use crate::version_support;
 use crate::world_codec::world_codec;
 
-use super::format::{ClassicChunkFormat, DATA_VERSION};
-use super::overlay::{verify_preserved_fields, OverlayError, WorldOverlay};
+use super::format::{ChunkLayoutFormat, ClassicChunkFormat, FlattenedFormat, DATA_VERSION};
+use super::overlay::{OverlayError, WorldOverlay};
 use super::reader::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, RegionChunk, RegionEntry,
     RegionFile, ANVIL_HEADER_BYTES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_SECTOR_BYTES,
@@ -47,11 +47,29 @@ use super::reader::{
 };
 
 pub const VERIFIED_WRITE_LAYOUT: &str = "classic_anvil";
-/// The complete set of chunk fields this writer fills from the overlay.
+/// The complete set of chunk fields this writer fills from the overlay for modern
+/// section-palette chunks.
 ///
 /// `DerivedDataPolicy::VanillaRebuild` may additionally invalidate the fields listed
 /// by [`DerivedDataPolicy::invalidated_fields`]; it never writes block data into them.
 pub const VERIFIED_WRITE_FIELDS: &[&str] = &["sections[].block_states", "sections[].biomes"];
+/// The flattened 1.13–1.17 writer edits direct section palettes and the chunk-wide
+/// biome array instead of the modern `block_states`/`biomes` containers.
+pub const FLATTENED_WRITE_FIELDS: &[&str] = &[
+    "Level.Sections[].Palette",
+    "Level.Sections[].BlockStates",
+    "Level.Biomes",
+];
+/// Fields the flattened rebuild policy removes or zeroes when they are present.
+/// 1.13 stores `HeightMap`; 1.14+ stores `Heightmaps` and `isLightOn`.
+pub const FLATTENED_INVALIDATED_FIELDS: &[&str] = &[
+    "HeightMap",
+    "Heightmaps",
+    "isLightOn",
+    "PostProcessing",
+    "Sections[].SkyLight",
+    "Sections[].BlockLight",
+];
 
 /// What to do with derived fields that a block/biome write cannot recalculate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Default)]
@@ -107,7 +125,11 @@ impl VerifiedWriteSupport {
             minecraft_version: profile.minecraft_version.to_string(),
             data_version: profile.data_version,
             layout: VERIFIED_WRITE_LAYOUT.to_owned(),
-            fields: VERIFIED_WRITE_FIELDS,
+            fields: if profile.family == VersionFamily::Flattened {
+                FLATTENED_WRITE_FIELDS
+            } else {
+                VERIFIED_WRITE_FIELDS
+            },
             derived_data_policies: &["preserve", "vanillaRebuild"],
             recomputes_derived_metadata: false,
         }
@@ -264,7 +286,7 @@ pub(super) fn write_region(
             supported: vec![world.profile.data_version],
         });
     }
-    let format = ClassicChunkFormat::for_profile(&world.profile)?;
+    let format = ChunkLayoutFormat::for_profile(&world.profile)?;
     let dimension = world
         .dimension(dimension_id)
         .ok_or_else(|| RegionWriteError::UnknownDimension(dimension_id.to_owned()))?;
@@ -389,7 +411,15 @@ pub(super) fn write_region(
         output_redecoded: true,
         derived_data_policy: policy,
         derived_data_action: policy.action(),
-        invalidated_fields: policy.invalidated_fields(),
+        invalidated_fields: match (policy, format) {
+            (DerivedDataPolicy::Preserve, _) => &[],
+            (DerivedDataPolicy::VanillaRebuild, ChunkLayoutFormat::Modern(_)) => {
+                policy.invalidated_fields()
+            }
+            (DerivedDataPolicy::VanillaRebuild, ChunkLayoutFormat::Flattened(_)) => {
+                FLATTENED_INVALIDATED_FIELDS
+            }
+        },
     })
 }
 
@@ -459,7 +489,7 @@ pub fn write_region_from_overlay_with_policy(
 fn source_with_policy(
     source: &RegionChunk,
     policy: DerivedDataPolicy,
-    format: &ClassicChunkFormat,
+    format: ChunkLayoutFormat,
 ) -> Result<NbtFile, RegionWriteError> {
     let mut nbt = source.nbt.clone();
     if policy == DerivedDataPolicy::VanillaRebuild {
@@ -476,7 +506,23 @@ fn source_with_policy(
 /// `PostProcessing` positions refer to the pre-edit geometry.
 fn invalidate_derived_fields(
     nbt: &mut NbtFile,
-    format: &ClassicChunkFormat,
+    format: ChunkLayoutFormat,
+) -> Result<(), RegionWriteError> {
+    match format {
+        ChunkLayoutFormat::Modern(format) => invalidate_modern_derived_fields(nbt, format),
+        ChunkLayoutFormat::Flattened(format) => invalidate_flattened_derived_fields(nbt, format),
+    }
+}
+
+/// Invalidates derived fields for modern section-palette chunks.
+///
+/// This is an explicit hand-off, not a Rust-side recomputation. It is limited to a
+/// fully generated modern chunk: `isLightOn = 0` marks the serialized light as not
+/// trustworthy, missing `Heightmaps` are re-primed from section data, and queued
+/// `PostProcessing` positions refer to the pre-edit geometry.
+fn invalidate_modern_derived_fields(
+    nbt: &mut NbtFile,
+    format: &'static ClassicChunkFormat,
 ) -> Result<(), RegionWriteError> {
     let root = match &mut nbt.root {
         NbtValue::Compound(root) => root,
@@ -522,13 +568,72 @@ fn invalidate_derived_fields(
     Ok(())
 }
 
+/// Invalidates derived fields for flattened 1.13–1.17 chunks. The fields live
+/// under `Level`, and the light arrays still live on each `Level.Sections`
+/// entry. 1.13 uses `HeightMap`; 1.14+ uses `Heightmaps` and `isLightOn`.
+fn invalidate_flattened_derived_fields(
+    nbt: &mut NbtFile,
+    format: FlattenedFormat,
+) -> Result<(), RegionWriteError> {
+    let root = match &mut nbt.root {
+        NbtValue::Compound(root) => root,
+        _ => {
+            return Err(RegionWriteError::VerificationFailed(
+                "chunk root is not a compound".to_owned(),
+            ))
+        }
+    };
+    let level = root
+        .get_mut("Level")
+        .and_then(NbtValue::as_compound_mut)
+        .ok_or_else(|| {
+            RegionWriteError::VerificationFailed("chunk has no Level compound".to_owned())
+        })?;
+    level.remove(format.heightmap_key);
+    level.remove(format.post_processing_key);
+    if let Some(key) = format.light_enabled_key {
+        if let Some(enabled) = level.get_mut(key) {
+            *enabled = NbtValue::Byte(0);
+        }
+    }
+    let sections = level.get_mut("Sections").ok_or_else(|| {
+        RegionWriteError::VerificationFailed("chunk has no Sections list".to_owned())
+    })?;
+    let (kind, items) = match sections {
+        NbtValue::List { kind, items } => (*kind, items),
+        _ => {
+            return Err(RegionWriteError::VerificationFailed(
+                "chunk Sections is not a list".to_owned(),
+            ))
+        }
+    };
+    if kind != crate::nbt::TAG_COMPOUND && !items.is_empty() {
+        return Err(RegionWriteError::VerificationFailed(
+            "chunk Sections is not a list of compounds".to_owned(),
+        ));
+    }
+    for item in items {
+        let section = match item {
+            NbtValue::Compound(section) => section,
+            _ => {
+                return Err(RegionWriteError::VerificationFailed(
+                    "chunk has a non-compound section".to_owned(),
+                ))
+            }
+        };
+        section.remove("SkyLight");
+        section.remove("BlockLight");
+    }
+    Ok(())
+}
+
 fn verify_replacement(
     world: &JavaWorld,
     dimension_id: &str,
     source: &RegionChunk,
     replacement: &NbtFile,
     policy: DerivedDataPolicy,
-    format: &ClassicChunkFormat,
+    format: ChunkLayoutFormat,
 ) -> Result<(), RegionWriteError> {
     let root = replacement.root.as_compound().ok_or_else(|| {
         RegionWriteError::VerificationFailed(format!(
@@ -551,7 +656,17 @@ fn verify_replacement(
             supported: vec![world.profile.data_version],
         });
     }
-    match (root.get(format.x_pos), root.get(format.z_pos)) {
+    let (x_pos, z_pos) = match format {
+        ChunkLayoutFormat::Modern(format) => (root.get(format.x_pos), root.get(format.z_pos)),
+        ChunkLayoutFormat::Flattened(_) => {
+            let level = root.get("Level").and_then(NbtValue::as_compound);
+            (
+                level.and_then(|level| level.get("xPos")),
+                level.and_then(|level| level.get("zPos")),
+            )
+        }
+    };
+    match (x_pos, z_pos) {
         (Some(NbtValue::Int(x)), Some(NbtValue::Int(z))) if *x == source.x && *z == source.z => {}
         _ => {
             return Err(RegionWriteError::VerificationFailed(format!(
@@ -571,6 +686,22 @@ fn verify_replacement(
     world
         .decode_chunk_nbt(dimension_id, source.x, source.z, replacement)
         .map_err(RegionWriteError::Anvil)?;
+    Ok(())
+}
+
+fn verify_preserved_fields(
+    source: &NbtFile,
+    patched: &NbtFile,
+    format: ChunkLayoutFormat,
+) -> Result<(), RegionWriteError> {
+    match format {
+        ChunkLayoutFormat::Modern(format) => {
+            super::overlay::verify_preserved_fields(source, patched, format)?;
+        }
+        ChunkLayoutFormat::Flattened(_) => {
+            super::flattened_chunk::verify_flattened_preserved_fields(source, patched)?;
+        }
+    }
     Ok(())
 }
 
@@ -799,7 +930,7 @@ fn verify_written_region(
     source_entries: &[RegionEntry],
     policy: DerivedDataPolicy,
 ) -> Result<(), RegionWriteError> {
-    let format = ClassicChunkFormat::for_profile(&world.profile)?;
+    let format = ChunkLayoutFormat::for_profile(&world.profile)?;
     let written = RegionFile::open(written_path)?;
     if written.region_coordinates() != source.region_coordinates() {
         return Err(RegionWriteError::VerificationFailed(

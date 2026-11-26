@@ -692,7 +692,16 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         AnvilError::InvalidRegion(format!("chunk ({x}, {z}) root is not a compound"))
     })?;
     let data_version = int_field(root, DATA_VERSION, "chunk")?;
-    let format = ClassicChunkFormat::for_read(data_version)?;
+    let profile = version_support::read_profile(data_version).ok_or_else(|| {
+        AnvilError::UnsupportedDataVersion {
+            found: data_version,
+            supported: version_support::supported_data_versions(),
+        }
+    })?;
+    if profile.family == minecraft_version::VersionFamily::Flattened {
+        return summarize_flattened_chunk(root, x, z, data_version);
+    }
+    let format = ClassicChunkFormat::for_profile(profile)?;
     let stored_x = int_field(root, format.x_pos, "chunk")?;
     let stored_z = int_field(root, format.z_pos, "chunk")?;
     if stored_x != x || stored_z != z {
@@ -746,6 +755,66 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         data_version,
         status,
         y_pos,
+        sections,
+        block_entities,
+        entities,
+    })
+}
+
+fn summarize_flattened_chunk(
+    root: &BTreeMap<String, NbtValue>,
+    x: i32,
+    z: i32,
+    data_version: i32,
+) -> Result<RegionChunkSummary, AnvilError> {
+    let level = root
+        .get("Level")
+        .and_then(NbtValue::as_compound)
+        .ok_or_else(|| {
+            AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has no Level compound"))
+        })?;
+    let stored_x = int_field(level, "xPos", "chunk")?;
+    let stored_z = int_field(level, "zPos", "chunk")?;
+    if stored_x != x || stored_z != z {
+        return Err(AnvilError::InvalidRegion(format!(
+            "chunk table position ({x}, {z}) does not match NBT xPos/zPos ({stored_x}, {stored_z})"
+        )));
+    }
+    let status = optional_string(level, "Status", "chunk")?;
+    let sections = compound_list_len(level, "Sections", "chunk", true)?;
+    let block_entities = compound_list_len(level, "TileEntities", "chunk", false)?;
+    let entities = compound_list_len(level, "Entities", "chunk", false)?;
+    if let Some(NbtValue::List { kind, items }) = level.get("Sections") {
+        if *kind != TAG_COMPOUND && !items.is_empty() {
+            return Err(AnvilError::InvalidRegion(format!(
+                "chunk ({x}, {z}) Sections is not a list of compounds"
+            )));
+        }
+        for section in items {
+            let section = section.as_compound().ok_or_else(|| {
+                AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has a non-compound section"))
+            })?;
+            match section.get("Y") {
+                Some(NbtValue::Byte(_)) => {}
+                Some(_) => {
+                    return Err(AnvilError::InvalidRegion(format!(
+                        "chunk ({x}, {z}) section Y is not a byte"
+                    )))
+                }
+                None => {
+                    return Err(AnvilError::InvalidRegion(format!(
+                        "chunk ({x}, {z}) section has no Y"
+                    )))
+                }
+            }
+        }
+    }
+    Ok(RegionChunkSummary {
+        x,
+        z,
+        data_version,
+        status,
+        y_pos: None,
         sections,
         block_entities,
         entities,

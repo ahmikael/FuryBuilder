@@ -1,25 +1,23 @@
 # Reference (Windows beta 0.2.0)
 
-Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
+Target: Minecraft Java **1.13–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
 the full baseline. Last reviewed: 2026-11-26.
 
-The version picker reads the full official Mojang manifest. Every one of the 27 classic Anvil
-releases from 1.18 through 1.21.11 has a profile that verifies import, block/biome editing,
-project snapshots and same-version export, and enables generation with that release's exact
-official server JAR. Snapshots, split 26.1+ releases and legacy/special ids are visible and are
-refused at project creation rather than guessed.
+The version picker reads the full official Mojang manifest. All 27 classic Anvil releases from
+1.18 through 1.21.11 have a profile that verifies import, block/biome editing, project
+snapshots and same-version export, and enables generation with that release's exact official
+server JAR. The 19 flattened releases from 1.13 through 1.17.1 verify the same import, editing,
+project snapshot and same-version export path, but generation and managed assets remain
+disabled for them until their own stages. Snapshots, split 26.1+ releases and legacy/special
+ids are visible and are refused at project creation rather than guessed.
 
-The other 26 releases use the `read + write subset` support level; **1.21.4** remains the only
+The modern subset uses the `read + write subset` support level; **1.21.4** remains the only
 `full` profile. The difference is deliberate: structure `.nbt` interchange and the remaining
 full-only surfaces are verified only for 1.21.4, while every modern classic release supports
 block/biome editing, project snapshots, same-version export and generation with its exact
-server JAR.
-
-Exact metadata for Java `1.13–1.17.1` is built in as well: `DataVersion`, Java 8
-(1.13–1.16.5) or 16 (1.17+), resource and data pack formats 4–7, dimension folders and the
-0–256 Overworld height (the extended height starts with 1.18). The flattened chunk layout is
-decoded internally, but the region reader, project wizard and exporter remain closed, so these
-releases are still unavailable for project creation or import.
+server JAR. Flattened profiles are also `read + write subset`: their direct
+`Level.Sections[].Palette`/`BlockStates` and `Level.Biomes` are verified, while generation and
+assets are still unavailable.
 
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
@@ -46,7 +44,7 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 | Feature                           | Minecraft install | Client JAR                    | Java                                | Official `server.jar` | Network                                           |
 | --------------------------------- | ----------------- | ----------------------------- | ----------------------------------- | --------------------- | ------------------------------------------------- |
 | `Empty Project` / `Flat base`     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
-| `Import World` (1.18–1.21.11)     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
+| `Import World` (1.13–1.21.11)     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
 | Structure `.nbt` import/export    | No                | No                            | No                                  | No                    | No                                                |
 | Real textures / exact catalog     | No                | Yes                           | No                                  | No                    | First download only; cached afterwards            |
 | `Vanilla World` generation        | No                | Optional; `Placeholder` works | Yes, profile major (17 or 21)       | Yes                   | Downloads; generation can run offline after cache |
@@ -85,12 +83,13 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
 - Integrated/discrete switching, multi-GPU laptops, other GPU vendors and remote-desktop
   display capture.
 - Modded servers, data packs, other server versions, Bedrock worlds, snapshots, split 26.1+
-  saves, legacy worlds and Minecraft versions outside 1.18–1.21.11. Other official versions
+  saves, legacy worlds and Minecraft versions outside 1.13–1.21.11. Other official versions
   are listed but cannot be created or edited. Java majors other than the profile's required
   major are not validated in this beta.
 - Generation was exercised end to end on the 1.21.4 reference machine. The other 1.18–1.21.11
   profiles are covered by exact `level-type`, Java major, data pack format and
   `server.properties` tests, not by downloading every official server JAR in this beta.
+  Flattened 1.13–1.17.1 generation and managed assets are not enabled yet.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -108,12 +107,12 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Java 1.18–1.21.11 classic Anvil is import/edit/snapshot/export verified and can generate with its exact official server JAR. Split 26.x and legacy versions stop at the profile check |
+| KL-05 | Version support  | Java 1.18–1.21.11 modern classic and 1.13–1.17.1 flattened classic are import/edit/snapshot/export verified; modern releases can generate with their exact official server JAR. Split 26.x and legacy versions stop at the profile check |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and legacy import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
 | KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                    |
-| KL-10 | World export     | Complete world-folder export is verified for all modern classic releases and has no one-click UI action |
+| KL-10 | World export     | Complete world-folder export is verified for all modern and flattened classic releases and has no one-click UI action |
 | KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                        |
 | KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                       |
 | KL-13 | Vanilla World    | Requires the profile's Java major (17 for 1.18–1.19, 21 for newer releases), the exact official server JAR, EULA and possibly a download |

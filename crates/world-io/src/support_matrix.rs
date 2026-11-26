@@ -120,6 +120,18 @@ fn versions() -> Vec<VersionSupport> {
             ),
         },
         VersionSupport {
+            id: "java-classic-1.13-1.17-flattened".to_owned(),
+            minecraft_versions: "1.13-1.17.1".to_owned(),
+            data_versions: "1519-2730".to_owned(),
+            layout: "classic_anvil".to_owned(),
+            status: "supported_subset".to_owned(),
+            read: "supported_subset".to_owned(),
+            edit: "block_states_and_biomes".to_owned(),
+            write: "verified_block_states_and_biomes".to_owned(),
+            passthrough: "byte_for_byte".to_owned(),
+            note: "Flattened classic Anvil import, direct Level.Sections palette editing, chunk-wide biome editing, project snapshots and same-version export are verified for every exact release in this range. Generation remains disabled until its own verification.".to_owned(),
+        },
+        VersionSupport {
             id: "java-26.1-26.3-split".to_owned(),
             minecraft_versions: "26.1-26.3".to_owned(),
             data_versions: "4786-5023".to_owned(),
@@ -197,7 +209,7 @@ fn categories() -> &'static [CategoryRow] {
             edit: "supported",
             write: "verified",
             passthrough: "byte_for_byte",
-            note: "The only editable field set is sections[].block_states in fully generated minecraft:full chunks.",
+            note: "The only editable field sets are modern sections[].block_states and flattened Level.Sections[].Palette/BlockStates in fully generated chunks.",
         },
         CategoryRow {
             id: "biomes",
@@ -365,8 +377,26 @@ mod tests {
         let subset = matrix
             .versions
             .iter()
-            .find(|version| version.status == "supported_subset")
+            .find(|version| version.id == "java-classic-1.18-1.21.11-subset")
             .expect("modern classic subset row");
+        assert_eq!(subset.edit, "block_states_and_biomes");
+        assert_eq!(subset.write, "verified_block_states_and_biomes");
+        assert_eq!(subset.passthrough, "byte_for_byte");
+        assert!(
+            subset.note.contains("same-version export"),
+            "{}",
+            subset.note
+        );
+    }
+
+    #[test]
+    fn flattened_classic_releases_admit_block_writes_and_export_as_a_subset() {
+        let matrix = support_matrix();
+        let subset = matrix
+            .versions
+            .iter()
+            .find(|version| version.id == "java-classic-1.13-1.17-flattened")
+            .expect("flattened classic subset row");
         assert_eq!(subset.edit, "block_states_and_biomes");
         assert_eq!(subset.write, "verified_block_states_and_biomes");
         assert_eq!(subset.passthrough, "byte_for_byte");
