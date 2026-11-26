@@ -54,6 +54,12 @@ describes analysis and import boundaries. Only a version with a verified profile
 selected for a new project. The `1.18-1.21.11` row includes 1.21.4; same-version export and
 generation are enabled for every modern classic release.
 
+P1 verification covers all 27 releases with import and same-version export round-trips. The
+catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
+modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`), rebuilding the exact catalog from the
+same client JAR after reopen. `Full` remains limited to 1.21.4 because structure `.nbt`
+interchange and the other full-only surfaces are not enabled for the subset profiles.
+
 ## Java 26.1–26.3 split saves: inspection only
 
 The built-in metadata identifies Java 26.1 (`4786`), 26.1.1 (`4788`), 26.1.2 (`4790`),

@@ -93,6 +93,10 @@ formats are not migrated.
 
 - Project creation and import moved to the full-screen wizard; Settings no longer downloads,
   selects or provisions components.
+- Modern multi-version support is complete for classic Anvil `1.18-1.21.11`: every release has
+  an exact profile and client-JAR catalog, and import, editing, project snapshots, same-version
+  export and generation are enabled. `1.21.4` remains the only `full` support level; split 26.x
+  and legacy versions stay profile-check only.
 - Catalog construction from a directly selected client JAR uses that JAR's internal exact
   version and `DataVersion` instead of requiring the application target. A project-pinned
   rebuild still rejects any catalog id, hash, version, `DataVersion` or client JAR mismatch.

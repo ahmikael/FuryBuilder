@@ -6,8 +6,9 @@ human users work through the UI, and external AI agents work through the same
 Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
-- **Target game versions:** Minecraft Java classic Anvil **1.18–1.21.11** (import, editing,
-  project snapshots, same-version export and generation with the exact official server JAR).
+- **Target game versions:** Minecraft Java classic Anvil **1.18-1.21.11** (import, editing,
+  project snapshots, same-version export and generation with the exact official server JAR,
+  plus exact per-version client-JAR block/item catalogs).
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.18–1.21.11)
   and `Vanilla World` (official local generator for the project's exact version after explicit
   dependency setup) are available.

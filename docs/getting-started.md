@@ -93,7 +93,8 @@ cargo test --workspace
    `Placeholder` is an explicit choice: it lets you edit with clearly marked placeholder
    textures, but it never claims a client JAR, checksum or block/item catalog. When a verified
    client JAR is ready, the step shows the catalog's block and item counts (1,097 blocks and
-   1,385 items for 1.21.4).
+   1,385 items for 1.21.4). The counts come from the selected version's exact client JAR; the
+   1.21.4 measurement is a baseline, not a fixed catalog.
 7. Review the source, the resolved components and catalog, the conservative size/time estimate
    and every aggregated warning, then click **Create project** (or **Import world**). The
    **Preparing** screen lists the components that are already installed (they stay in the cache)

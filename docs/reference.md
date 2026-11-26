@@ -9,6 +9,12 @@ project snapshots and same-version export, and enables generation with that rele
 official server JAR. Snapshots, split 26.1+ releases and legacy/special ids are visible and are
 refused at project creation rather than guessed.
 
+The other 26 releases use the `read + write subset` support level; **1.21.4** remains the only
+`full` profile. The difference is deliberate: structure `.nbt` interchange and the remaining
+full-only surfaces are verified only for 1.21.4, while every modern classic release supports
+block/biome editing, project snapshots, same-version export and generation with its exact
+server JAR.
+
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
 [formats.md](formats.md); content catalog rules are in [catalog.md](catalog.md);
