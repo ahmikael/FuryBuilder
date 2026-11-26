@@ -87,6 +87,8 @@ reported as entries with an explicit warning; they are not silently presented as
   aliases stay `null`/empty until their catalog passes fill them;
 - declared property keys and values under `states`, whether those values are complete, and
   the single declared default state when it is unambiguous;
+- every explicit `variants` entry with its exact property key and weighted model choices,
+  including `x`/`y` rotation and `uvlock`. Multipart blocks have no finite variant list;
 - item definition model type and resolved concrete model under `itemForm`;
 - typed `flags` for placement rules. A flag is `null` when the fact is not known yet, never
   a guessed `false`. The JAR pass currently fills `placeable`, `hasItem` and `hasVariants`;

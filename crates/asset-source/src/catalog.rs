@@ -30,7 +30,7 @@ use crate::discovery::inspect_asset_path;
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
-pub const CATALOG_SCHEMA_VERSION: u32 = 3;
+pub const CATALOG_SCHEMA_VERSION: u32 = 4;
 /// A vanilla client JAR has a few thousand blockstates and items.
 pub const MAX_CATALOG_BLOCKS: usize = 32_768;
 pub const MAX_CATALOG_ITEMS: usize = 32_768;
@@ -98,10 +98,34 @@ pub struct CatalogStates {
     /// Omitting properties lets Minecraft resolve the exact default state.
     pub default_properties: Option<BTreeMap<String, String>>,
     /// Number of explicit `variants` entries; zero for multipart blocks.
-    pub variants: usize,
+    pub variant_count: usize,
+    /// Every explicit variant in file order, including its exact property key and weighted
+    /// model choices. Multipart blocks have no finite variant list.
+    pub variants: Vec<CatalogVariant>,
     pub multipart: bool,
     /// First model referenced by the blockstate file.
     pub model: Option<String>,
+}
+
+/// One explicit entry from the blockstate `variants` object.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogVariant {
+    /// Property values named by the variant key. Empty when the file uses the single `""` key.
+    pub properties: BTreeMap<String, String>,
+    /// Weighted model choices declared by the variant. Vanilla usually has one.
+    pub models: Vec<CatalogVariantModel>,
+}
+
+/// One model choice inside a variant, including the rotation and weight from the JAR.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogVariantModel {
+    pub model: Option<String>,
+    pub x_rotation: i32,
+    pub y_rotation: i32,
+    pub uvlock: bool,
+    pub weight: u32,
 }
 
 /// The item form of one catalog id.
@@ -439,7 +463,8 @@ struct BlockStateFacts {
     properties: BTreeMap<String, BTreeSet<String>>,
     default_properties: Option<BTreeMap<String, String>>,
     property_values_complete: bool,
-    variants: usize,
+    variant_count: usize,
+    variants: Vec<CatalogVariant>,
     multipart: bool,
     first_model: Option<String>,
 }
@@ -539,6 +564,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                 .collect(),
             property_values_complete: facts.property_values_complete,
             default_properties: facts.default_properties,
+            variant_count: facts.variant_count,
             variants: facts.variants,
             multipart: facts.multipart,
             model: facts.first_model,
@@ -674,7 +700,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
 
     let mut entries: BTreeMap<String, CatalogEntry> = BTreeMap::new();
     for (id, block) in blocks {
-        let has_variants = block.states.multipart || block.states.variants > 1;
+        let has_variants = block.states.multipart || block.states.variant_count > 1;
         entries.insert(
             id.clone(),
             CatalogEntry {
@@ -943,8 +969,9 @@ fn parse_blockstate(document: &Value, entry: &str, warnings: &mut Vec<String>) -
         let mut declared_keys: Option<BTreeSet<String>> = None;
         let mut keys_consistent = true;
         for (key, value) in variants {
-            facts.variants += 1;
-            match parse_state_key(key) {
+            facts.variant_count += 1;
+            let properties = parse_state_key(key);
+            match &properties {
                 Some(properties) => {
                     parsed_variants += 1;
                     let keys: BTreeSet<String> = properties.keys().cloned().collect();
@@ -953,22 +980,27 @@ fn parse_blockstate(document: &Value, entry: &str, warnings: &mut Vec<String>) -
                         Some(expected) if *expected != keys => keys_consistent = false,
                         Some(_) => {}
                     }
-                    if facts.variants == 1 {
+                    if facts.variant_count == 1 {
                         facts.default_properties = Some(properties.clone());
                     }
-                    merge_properties(&mut facts.properties, &properties);
+                    merge_properties(&mut facts.properties, properties);
                 }
                 None => push_warning(warnings, format!("{entry}: invalid variant key `{key}`")),
             }
+            let models = parse_variant_models(value);
             if facts.first_model.is_none() {
-                facts.first_model = first_model_ref(value);
+                facts.first_model = models.iter().find_map(|variant| variant.model.clone());
             }
+            facts.variants.push(CatalogVariant {
+                properties: properties.unwrap_or_default(),
+                models,
+            });
         }
-        if facts.variants != 1 || parsed_variants != 1 {
+        if facts.variant_count != 1 || parsed_variants != 1 {
             facts.default_properties = None;
         }
         facts.property_values_complete = parsed_variants > 0
-            && parsed_variants == facts.variants
+            && parsed_variants == facts.variant_count
             && keys_consistent
             && declared_keys.as_ref().is_some_and(|keys| !keys.is_empty());
     } else if let Some(parts) = document.get("multipart").and_then(Value::as_array) {
@@ -1070,6 +1102,46 @@ fn first_model_ref(value: &Value) -> Option<String> {
             .and_then(normalize_id),
         Value::Array(items) => items.iter().find_map(first_model_ref),
         _ => None,
+    }
+}
+
+fn parse_variant_models(value: &Value) -> Vec<CatalogVariantModel> {
+    match value {
+        Value::Array(items) => items.iter().flat_map(parse_variant_models).collect(),
+        Value::String(model) => vec![CatalogVariantModel {
+            model: normalize_id(model),
+            x_rotation: 0,
+            y_rotation: 0,
+            uvlock: false,
+            weight: 1,
+        }],
+        Value::Object(object) => {
+            let rotation = |key: &str| {
+                object
+                    .get(key)
+                    .and_then(Value::as_i64)
+                    .and_then(|value| i32::try_from(value).ok())
+                    .unwrap_or(0)
+            };
+            vec![CatalogVariantModel {
+                model: object
+                    .get("model")
+                    .and_then(Value::as_str)
+                    .and_then(normalize_id),
+                x_rotation: rotation("x"),
+                y_rotation: rotation("y"),
+                uvlock: object
+                    .get("uvlock")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                weight: object
+                    .get("weight")
+                    .and_then(Value::as_u64)
+                    .and_then(|value| u32::try_from(value).ok())
+                    .unwrap_or(1),
+            }]
+        }
+        _ => Vec::new(),
     }
 }
 
@@ -1792,7 +1864,13 @@ mod tests {
         assert!(stone_states.properties.is_empty());
         assert!(!stone_states.property_values_complete);
         assert_eq!(stone_states.default_properties, Some(BTreeMap::new()));
-        assert_eq!(stone_states.variants, 1);
+        assert_eq!(stone_states.variant_count, 1);
+        assert_eq!(stone_states.variants.len(), 1);
+        assert!(stone_states.variants[0].properties.is_empty());
+        assert_eq!(
+            stone_states.variants[0].models[0].model.as_deref(),
+            Some("minecraft:block/stone")
+        );
         assert!(!stone_states.multipart);
         assert_eq!(stone_states.model.as_deref(), Some("minecraft:block/stone"));
         assert_eq!(stone.icon_texture.as_deref(), Some("minecraft:block/stone"));
@@ -1824,7 +1902,18 @@ mod tests {
         );
         assert!(stairs_states.property_values_complete);
         assert!(stairs_states.default_properties.is_none());
-        assert_eq!(stairs_states.variants, 2);
+        assert_eq!(stairs_states.variant_count, 2);
+        assert_eq!(stairs_states.variants.len(), 2);
+        let north = stairs_states
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("facing").map(String::as_str) == Some("north"))
+            .expect("north variant");
+        assert_eq!(north.models[0].y_rotation, 90);
+        assert_eq!(
+            north.models[0].model.as_deref(),
+            Some("minecraft:block/oak_stairs")
+        );
         assert_eq!(stairs.flags.has_variants, Some(true));
         assert_eq!(
             stairs.icon_texture.as_deref(),
@@ -1838,7 +1927,8 @@ mod tests {
             .expect("fence");
         let fence_states = fence.states.as_ref().expect("fence states");
         assert!(fence_states.multipart);
-        assert_eq!(fence_states.variants, 0);
+        assert_eq!(fence_states.variant_count, 0);
+        assert!(fence_states.variants.is_empty());
         assert!(fence_states.default_properties.is_none());
         assert!(!fence_states.property_values_complete);
         assert_eq!(fence.flags.has_variants, Some(true));
@@ -2221,6 +2311,15 @@ mod tests {
             Some("north")
         );
         assert!(single.property_values_complete);
+        assert_eq!(single.variant_count, 1);
+        assert_eq!(single.variants.len(), 1);
+        assert_eq!(single.variants[0].properties["facing"], "north");
+        assert_eq!(single.variants[0].models.len(), 1);
+        assert_eq!(
+            single.variants[0].models[0].model.as_deref(),
+            Some("minecraft:block/x")
+        );
+        assert_eq!(single.variants[0].models[0].weight, 1);
 
         let ambiguous = parse_blockstate(
             &serde_json::json!({"variants":{
@@ -2232,6 +2331,8 @@ mod tests {
         );
         assert!(ambiguous.default_properties.is_none());
         assert!(ambiguous.property_values_complete);
+        assert_eq!(ambiguous.variant_count, 2);
+        assert_eq!(ambiguous.variants.len(), 2);
 
         let inconsistent = parse_blockstate(
             &serde_json::json!({"variants":{
@@ -2243,6 +2344,21 @@ mod tests {
         );
         assert!(inconsistent.default_properties.is_none());
         assert!(!inconsistent.property_values_complete);
+        assert_eq!(inconsistent.variant_count, 2);
+
+        let weighted = parse_blockstate(
+            &serde_json::json!({"variants":{"":[
+                {"model":"minecraft:block/x","weight":2},
+                {"model":"minecraft:block/y","weight":3,"y":90}
+            ]}}),
+            "x.json",
+            &mut warnings,
+        );
+        assert_eq!(weighted.variant_count, 1);
+        assert_eq!(weighted.variants[0].models.len(), 2);
+        assert_eq!(weighted.variants[0].models[0].weight, 2);
+        assert_eq!(weighted.variants[0].models[1].y_rotation, 90);
+        assert_eq!(weighted.variants[0].models[1].weight, 3);
 
         let multipart = parse_blockstate(
             &serde_json::json!({"multipart":[
@@ -2253,6 +2369,8 @@ mod tests {
         );
         assert!(multipart.default_properties.is_none());
         assert!(!multipart.property_values_complete);
+        assert_eq!(multipart.variant_count, 0);
+        assert!(multipart.variants.is_empty());
     }
 
     #[test]

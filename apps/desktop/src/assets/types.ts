@@ -169,9 +169,28 @@ export interface CatalogStates {
   propertyValuesComplete: boolean;
   /** The only declared state; null when several variants exist and the game default applies. */
   defaultProperties: Record<string, string> | null;
-  variants: number;
+  /** Number of explicit `variants` entries; zero for multipart blocks. */
+  variantCount: number;
+  /** Every explicit variant in file order, including its exact property key. */
+  variants: CatalogVariant[];
   multipart: boolean;
   model: string | null;
+}
+
+/** One explicit entry from the blockstate `variants` object. */
+export interface CatalogVariant {
+  properties: Record<string, string>;
+  /** Weighted model choices declared by the variant. */
+  models: CatalogVariantModel[];
+}
+
+/** One model choice inside a variant, including rotation and weight from the JAR. */
+export interface CatalogVariantModel {
+  model: string | null;
+  xRotation: number;
+  yRotation: number;
+  uvlock: boolean;
+  weight: number;
 }
 
 /** The item form of one catalog id. */

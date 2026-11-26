@@ -39,13 +39,23 @@ const curatedCatalog: BlockDefinition[] = [
   },
 ];
 
+type FixtureStates = Omit<CatalogStates, "variantCount" | "variants"> & {
+  variantCount?: number;
+  variants?: CatalogStates["variants"];
+};
+
 function blockEntry(
   id: string,
   displayName: string,
-  states: CatalogStates,
+  inputStates: FixtureStates,
   iconTexture: string,
   tags: string[],
 ): CatalogEntry {
+  const states: CatalogStates = {
+    ...inputStates,
+    variantCount: inputStates.variantCount ?? (inputStates.multipart ? 0 : 1),
+    variants: inputStates.variants ?? [],
+  };
   return {
     id,
     legacyId: null,
@@ -70,13 +80,13 @@ function blockEntry(
       gravity: null,
       waterloggable: null,
       tinted: null,
-      hasVariants: states.multipart || states.variants > 1,
+      hasVariants: states.multipart || states.variantCount > 1,
     },
   };
 }
 
 const projectCatalog: CatalogSnapshot = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   catalogId: "java-1.21.4-0123456789abcdef",
   catalogHash: "a".repeat(64),
   minecraftVersion: "1.21.4",
@@ -93,7 +103,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: {},
         propertyValuesComplete: false,
         defaultProperties: {},
-        variants: 1,
+        variantCount: 1,
         multipart: false,
         model: "minecraft:block/stone",
       },
@@ -112,7 +122,7 @@ const projectCatalog: CatalogSnapshot = {
         },
         propertyValuesComplete: true,
         defaultProperties: null,
-        variants: 2,
+        variantCount: 2,
         multipart: false,
         model: "minecraft:block/oak_stairs",
       },
@@ -126,7 +136,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: { type: ["bottom", "top"], waterlogged: ["false", "true"] },
         propertyValuesComplete: true,
         defaultProperties: null,
-        variants: 2,
+        variantCount: 2,
         multipart: false,
         model: "minecraft:block/oak_slab",
       },
@@ -140,7 +150,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: {},
         propertyValuesComplete: false,
         defaultProperties: {},
-        variants: 1,
+        variantCount: 1,
         multipart: false,
         model: "minecraft:block/chiseled_deepslate",
       },
@@ -154,7 +164,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: { east: ["true"], north: ["true"], south: ["true"], west: ["true"] },
         propertyValuesComplete: false,
         defaultProperties: null,
-        variants: 0,
+        variantCount: 0,
         multipart: true,
         model: "minecraft:block/oak_fence_post",
       },
@@ -168,7 +178,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: {},
         propertyValuesComplete: false,
         defaultProperties: {},
-        variants: 1,
+        variantCount: 1,
         multipart: false,
         model: "minecraft:block/oak_log",
       },
@@ -182,7 +192,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: {},
         propertyValuesComplete: false,
         defaultProperties: {},
-        variants: 1,
+        variantCount: 1,
         multipart: false,
         model: "minecraft:block/redstone_lamp",
       },
@@ -196,7 +206,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: {},
         propertyValuesComplete: false,
         defaultProperties: {},
-        variants: 1,
+        variantCount: 1,
         multipart: false,
         model: "minecraft:block/crafting_table",
       },
@@ -210,7 +220,7 @@ const projectCatalog: CatalogSnapshot = {
         properties: {},
         propertyValuesComplete: false,
         defaultProperties: {},
-        variants: 1,
+        variantCount: 1,
         multipart: false,
         model: "minecraft:block/command_block",
       },

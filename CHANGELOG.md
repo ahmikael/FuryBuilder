@@ -44,6 +44,9 @@ formats are not migrated.
   tags, icon, aliases, nested block states, item form and typed placement flags. Facts the JAR
   cannot prove stay `null` rather than being guessed; the snapshot no longer splits blocks and
   items into parallel arrays.
+- Full blockstate variants: every explicit `variants` key plus its weighted model choices,
+  rotation, `uvlock`, the single unambiguous default state and an honest completeness flag.
+  Multipart blocks expose their conditions without inventing a default state.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes
