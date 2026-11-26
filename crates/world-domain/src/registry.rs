@@ -255,6 +255,11 @@ pub struct BlockRegistry {
 }
 
 impl BlockRegistry {
+    /// Version-independent curated quick picks and no-client-JAR fallback list.
+    pub fn curated() -> Self {
+        Self::target_1_21_4()
+    }
+
     pub fn target_1_21_4() -> Self {
         let mut blocks = BTreeMap::new();
         for (name, defaults) in CATALOG {
@@ -417,7 +422,7 @@ impl BlockRegistry {
 
 impl Default for BlockRegistry {
     fn default() -> Self {
-        Self::target_1_21_4()
+        Self::curated()
     }
 }
 

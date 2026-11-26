@@ -1,8 +1,14 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as IpcModule from "@/lib/ipc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CatalogEntry, CatalogFlags, CatalogSnapshot, CatalogStates } from "@/assets/types";
+import type {
+  CatalogEntry,
+  CatalogFlags,
+  CatalogIconAtlas,
+  CatalogSnapshot,
+  CatalogStates,
+} from "@/assets/types";
 import type { BlockDefinition } from "@/editor/types";
 import { BOTTOM_PANEL_TABS } from "@/editor/layout";
 import { BottomPanel } from "@/features/workspace/BottomPanel";
@@ -12,7 +18,12 @@ import { useToolStore } from "@/state/tool-store";
 import { chooseSelectOption } from "@/test-utils/select";
 
 const runtime = vi.hoisted(() => ({ tauri: true }));
-const catalogApi = vi.hoisted(() => ({ fetch: vi.fn(), project: vi.fn() }));
+const catalogApi = vi.hoisted(() => ({
+  fetch: vi.fn(),
+  curated: vi.fn(),
+  project: vi.fn(),
+  atlas: vi.fn(),
+}));
 
 vi.mock("@/lib/ipc", async (importOriginal) => {
   const actual = await importOriginal<typeof IpcModule>();
@@ -21,10 +32,12 @@ vi.mock("@/lib/ipc", async (importOriginal) => {
 
 vi.mock("@/lib/world-api", () => ({
   fetchBlockCatalog: catalogApi.fetch,
+  fetchCuratedBlockCatalog: catalogApi.curated,
 }));
 
 vi.mock("@/lib/assets-api", () => ({
   loadProjectCatalog: catalogApi.project,
+  loadProjectCatalogAtlas: catalogApi.atlas,
 }));
 
 const curatedCatalog: BlockDefinition[] = [
@@ -270,9 +283,13 @@ beforeEach(() => {
   localStorage.clear();
   usePaletteStore.setState({ catalogs: {} });
   catalogApi.fetch.mockReset();
+  catalogApi.curated.mockReset();
   catalogApi.project.mockReset();
+  catalogApi.atlas.mockReset();
   catalogApi.fetch.mockResolvedValue(curatedCatalog);
+  catalogApi.curated.mockResolvedValue(curatedCatalog);
   catalogApi.project.mockResolvedValue(projectCatalog);
+  catalogApi.atlas.mockResolvedValue(null);
   useEditorStore.setState({ bottomPanelTab: "blocks", bottomPanelOpen: true });
   useToolStore.setState({
     selectedBlock: { name: "minecraft:stone", properties: {} },
@@ -288,7 +305,7 @@ describe("block palette", () => {
     render(<BottomPanel backend={backend} />);
     const search = await screen.findByLabelText("Search blocks");
     await waitFor(() => expect(catalogApi.project).toHaveBeenCalledTimes(1));
-    expect(catalogApi.fetch).not.toHaveBeenCalled();
+    expect(catalogApi.curated).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Client JAR · 1.21.4")).toBeInTheDocument();
     expect(screen.getByText("chiseled_deepslate")).toBeInTheDocument();
 
@@ -404,7 +421,7 @@ describe("block palette", () => {
     expect(screen.getByText(/No recent blocks yet/)).toBeVisible();
   });
 
-  it("selects the game default and edits individual properties", async () => {
+  it("selects the game default and constrains complete property values", async () => {
     const user = userEvent.setup();
     render(<BottomPanel backend={backend} />);
     await screen.findByText("oak_stairs");
@@ -413,15 +430,171 @@ describe("block palette", () => {
       name: "minecraft:oak_stairs",
       properties: {},
     });
-    expect(screen.getByLabelText("Property facing")).toHaveValue("");
-    expect(screen.getByLabelText("Property waterlogged")).toHaveValue("");
+    expect(screen.getByRole("combobox", { name: "Property facing" })).toHaveTextContent(
+      "Game default",
+    );
+    expect(screen.getByRole("combobox", { name: "Property waterlogged" })).toHaveTextContent(
+      "Game default",
+    );
 
-    const facing = screen.getByLabelText("Property facing");
-    await user.type(facing, "south");
-    expect(useToolStore.getState().selectedBlock.properties?.facing).toBe("south");
+    await chooseSelectOption(user, "Property facing", /^north$/);
+    expect(useToolStore.getState().selectedBlock.properties?.facing).toBe("north");
+    expect(screen.getByRole("combobox", { name: "Property facing" })).toHaveTextContent("north");
 
-    await user.click(screen.getByRole("button", { name: /Defaults/ }));
+    await chooseSelectOption(user, "Property facing", /^Game default$/);
     expect(useToolStore.getState().selectedBlock.properties).toEqual({});
+
+    await chooseSelectOption(user, "Property half", /^top$/);
+    await user.click(screen.getByRole("button", { name: /Game default/ }));
+    expect(useToolStore.getState().selectedBlock.properties).toEqual({});
+  });
+
+  it("keeps an imported value outside the declared set visible", async () => {
+    useToolStore.setState({
+      selectedBlock: { name: "minecraft:oak_stairs", properties: { facing: "south" } },
+    });
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    await screen.findByText("oak_stairs");
+
+    expect(screen.getByText("facing=south", { selector: "span" })).toBeVisible();
+    expect(screen.getByText(/Imported value facing=south is not declared/i)).toBeVisible();
+    await chooseSelectOption(user, "Property facing", /^Game default$/);
+    expect(useToolStore.getState().selectedBlock.properties).toEqual({});
+  });
+
+  it("warns about an unknown selected state and disables its default action", async () => {
+    useToolStore.setState({
+      selectedBlock: { name: "minecraft:future_block", properties: { axis: "y" } },
+      replaceFrom: null,
+    });
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    expect(await screen.findByText("minecraft:future_block")).toBeVisible();
+    expect(screen.getByText(/absent from the exact 1\.21\.4 catalog/i)).toBeVisible();
+    expect(screen.getByRole("button", { name: /Game default/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Game default/ })).toHaveAttribute(
+      "title",
+      "Unavailable: this state is not declared by the exact catalog.",
+    );
+
+    await user.click(screen.getByRole("button", { name: /Use as replace source/ }));
+    expect(useToolStore.getState().replaceFrom).toEqual({
+      name: "minecraft:future_block",
+      properties: { axis: "y" },
+    });
+  });
+
+  it("does not claim a version for an unknown state without an exact catalog", async () => {
+    catalogApi.project.mockResolvedValue(null);
+    useToolStore.setState({
+      selectedBlock: { name: "minecraft:future_block", properties: { axis: "y" } },
+    });
+    render(<BottomPanel backend={backend} />);
+    expect(await screen.findByText("Unknown state")).toBeVisible();
+    expect(
+      screen.getByText(/No exact client JAR catalog is loaded, so this state cannot be matched/i),
+    ).toBeVisible();
+    expect(screen.queryByText(/\bundefined\b/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Game default/ })).toHaveAttribute(
+      "title",
+      "Unavailable: no exact catalog is loaded.",
+    );
+  });
+
+  it("renders only the virtualized window and moves it on scroll", async () => {
+    const entries = Array.from({ length: 200 }, (_, index) =>
+      blockEntry(
+        `minecraft:test_block_${index}`,
+        `Test Block ${index}`,
+        {
+          properties: {},
+          propertyValuesComplete: false,
+          defaultProperties: {},
+          variantCount: 1,
+          multipart: false,
+          model: "minecraft:block/stone",
+        },
+        "minecraft:block/stone",
+        [],
+      ),
+    );
+    catalogApi.project.mockResolvedValue({
+      ...projectCatalog,
+      entries,
+      counts: { ...projectCatalog.counts, blocks: entries.length },
+    });
+    render(<BottomPanel backend={backend} />);
+    const list = await screen.findByRole("list", { name: "Block palette" });
+    expect(within(list).getByText("test_block_0")).toBeVisible();
+    expect(within(list).queryByText("test_block_150")).not.toBeInTheDocument();
+    expect(within(list).getAllByRole("listitem").length).toBeLessThan(entries.length);
+
+    fireEvent.scroll(list, { target: { scrollTop: 140 * 32 } });
+    await waitFor(() => expect(within(list).getByText("test_block_140")).toBeInTheDocument());
+    expect(within(list).queryByText("test_block_0")).not.toBeInTheDocument();
+  });
+
+  it("draws atlas icons and an isometric preview", async () => {
+    const atlas: CatalogIconAtlas = {
+      schemaVersion: 1,
+      cacheKey: "java-1.21.4-atlas",
+      cacheHit: false,
+      catalogId: projectCatalog.catalogId,
+      catalogHash: projectCatalog.catalogHash,
+      catalogSchemaVersion: projectCatalog.schemaVersion,
+      minecraftVersion: projectCatalog.minecraftVersion,
+      clientJarSha1: projectCatalog.clientJarSha1 ?? "",
+      packStackHash: "pack-stack",
+      width: 64,
+      height: 64,
+      pngBase64: "iVBORw0KGgo=",
+      textures: [
+        {
+          key: "minecraft:block/stone",
+          path: "assets/minecraft/textures/block/stone.png",
+          x: 0,
+          y: 0,
+          width: 16,
+          height: 16,
+          sourceWidth: 16,
+          sourceHeight: 16,
+          missing: false,
+          hasAlpha: false,
+        },
+      ],
+      warnings: [],
+      packIssues: [],
+    };
+    catalogApi.atlas.mockResolvedValue(atlas);
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    await screen.findByText("stone");
+    await waitFor(() =>
+      expect(document.querySelector('[data-catalog-icon="sprite"]')).not.toBeNull(),
+    );
+
+    await user.click(screen.getByText("stone"));
+    expect(document.querySelector('[data-catalog-icon="cube"]')).not.toBeNull();
+  });
+
+  it("lists quick picks that are proven absent from the exact version", async () => {
+    catalogApi.curated.mockResolvedValue([
+      ...curatedCatalog,
+      { name: "minecraft:copper_bulb", properties: { lit: "false" } },
+    ]);
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    await screen.findByText("Client JAR · 1.21.4");
+    await user.click(screen.getByRole("button", { name: /Quick picks not in this version/ }));
+    const unavailable = screen.getByRole("list", {
+      name: "Quick picks not in this version",
+    });
+    const row = within(unavailable).getByText("copper_bulb").closest('[role="listitem"]');
+    expect(row).toHaveAttribute("aria-disabled", "true");
+    expect(within(row as HTMLElement).getByText("Not in this version")).toBeVisible();
+    expect(within(row as HTMLElement).getByText(/Absent from 1\.21\.4/)).toBeVisible();
+    expect(screen.getByText(/not a complete cross-version catalog diff/i)).toBeVisible();
   });
 
   it("uses the game default when the blockstate declares no properties", async () => {
@@ -458,7 +631,7 @@ describe("block palette", () => {
     expect(screen.getByText(/the client JAR moved/)).toBeInTheDocument();
     expect(screen.getByText("Curated quick picks")).toBeInTheDocument();
     expect(await screen.findByText("oak_stairs")).toBeInTheDocument();
-    expect(catalogApi.fetch).toHaveBeenCalledTimes(1);
+    expect(catalogApi.curated).toHaveBeenCalledTimes(1);
   });
 
   it("treats a placeholder project as an explicit curated fallback", async () => {
@@ -522,6 +695,6 @@ describe("block palette", () => {
     render(<BottomPanel backend={{ ...backend, status: "offline", info: null }} />);
     expect(screen.queryByLabelText("Search blocks")).not.toBeInTheDocument();
     expect(catalogApi.project).not.toHaveBeenCalled();
-    expect(catalogApi.fetch).not.toHaveBeenCalled();
+    expect(catalogApi.curated).not.toHaveBeenCalled();
   });
 });

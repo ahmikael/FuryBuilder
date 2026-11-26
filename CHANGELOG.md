@@ -62,6 +62,13 @@ formats are not migrated.
   rename hints with evidence, and per-entry changes to display names, categories, tags, states,
   item forms, flags and aliases. Removed ids stay explicit unknown entries for the target
   version instead of being silently substituted.
+- Virtualized Blocks palette with catalog atlas icons, an isometric selected-entry preview and
+  a constrained state picker. Complete blockstate sets offer only declared values plus
+  `Game default`; incomplete sets keep a warned text input; imported values outside the
+  declared set stay visible and are never substituted. Selected states missing from the exact
+  catalog show `Not in this version` with a disabled `Game default` action and an explicit
+  replace-source exception. Curated quick-pick ids proven absent from the exact version are
+  listed separately and disabled; this is not presented as a complete cross-version diff.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes

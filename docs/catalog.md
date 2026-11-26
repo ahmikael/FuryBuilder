@@ -131,7 +131,42 @@ contains the block states currently visible.
 - Missing or malformed textures use the same marked checker as the render atlas. Animated
   textures use their first frame. The atlas never changes block names, states or world data.
 - The atlas is not part of `catalogHash`; changing a resource pack must not invalidate the
-  catalog identity pinned by a project.
+  catalog identity pinned by a project. The `Blocks` palette uses this atlas for its row icons
+  and the selected-entry isometric preview. Loading is still eager per catalog; the lazy
+  atlas requested by the performance stage is not implemented yet.
+
+## Palette UI
+
+The `Blocks` palette is a fixed-row virtualized list: only the visible window plus a small
+overscan is mounted, and scrolling moves the window without changing the catalog. Rows use the
+project icon atlas when it is available. The selected entry shows a larger isometric preview
+built from the same catalog texture. That preview is a presentation of the icon texture, not
+a full block-model render; complex and multipart models are not reconstructed.
+
+State editing is constrained where the client JAR can prove the values:
+
+- A blockstate file that enumerates every value of every declared property renders a select
+  with those values plus `Game default`. Choosing `Game default` removes the override, so
+  Minecraft resolves its own default state.
+- An incomplete blockstate file keeps a text input because undeclared values are accepted. The
+  declared values are offered as suggestions.
+- An imported value outside the declared set stays visible and is labelled `(not declared)`;
+  it is never silently dropped or replaced. The palette explains that the value is preserved.
+- Multipart blocks do not invent a single default. `Game default` is still available as an
+  explicit empty selection.
+
+A selected block or state absent from the exact catalog is labelled `Not in this version`.
+The `Game default` action is disabled with a visible reason, while `Use as replace source`
+remains available: existing imported blocks keep their state, and replacement matching is
+read-only. New placement is still refused by the write registry.
+
+The palette also compares the version-independent curated quick-pick ids from
+`curated_block_catalog` with the exact catalog. A quick pick that is absent from the exact
+version is shown under `Quick picks not in this version` with selection and placement disabled.
+This comparison is deliberately narrow: it proves absence of those ids, but it is not a full
+cross-version catalog diff, and it does not apply rename hints or write aliases. A renamed block
+can therefore appear under its old quick-pick id. Full diff-driven suggestions wait for a
+reference catalog to be pinned; `CatalogDiff` itself is read-only and already available.
 
 ## Project authority
 
@@ -144,9 +179,10 @@ that registry too.
 
 `project_catalog` (desktop) / `loadProjectCatalog()` (UI) returns the rebuilt catalog. If the
 project explicitly uses placeholder assets, it returns `null`; the palette then loads
-`block_catalog` curated quick picks and displays the fallback reason. A rebuild failure is also
+`curated_block_catalog` quick picks and displays the fallback reason. A rebuild failure is also
 shown as a fallback notice with the underlying error; the palette never pretends the curated
-list is the exact version catalog.
+list is the exact version catalog. The project write registry still comes only from
+`project_catalog`; curated picks are never write authority.
 
 Exposed as the `assets_catalog` Tauri command and `loadAssetCatalog()` in the desktop client
 for the project wizard, and `project_catalog`/`loadProjectCatalog()` for an open project.
@@ -186,9 +222,11 @@ one:
   catalog ids, versions, `DataVersion`s and schema versions.
 
 Duplicate entry ids in either snapshot are rejected. Rename hints do not populate
-`CatalogEntry.aliases`, do not authorize placement and do not convert imported worlds; they are
-input for the later catalog UI. The `not in this version` badges and other diff-driven UI are a
-later catalog stage.
+`CatalogEntry.aliases`, do not authorize placement and do not convert imported worlds, and they
+are not surfaced in the palette yet. The palette's `not in this version` badges use proven
+absence from the exact catalog (an unknown selected state or a curated quick-pick id); full
+diff-driven suggestions remain later because a second reference catalog is not pinned in the
+project.
 
 ## Honest limits
 
@@ -211,8 +249,9 @@ later catalog stage.
   `category`/`aliases` fields stay `null`/empty until official metadata or an alias source can
   fill them honestly. Search covers the full id, display name and direct tags; the flag filter
   covers placeable, has-item, technical, creative-only, fluid and block-entity entries. The
-  item browser, per-swatch color/shape/version filters, 3D icons and the state picker remain
-  later catalog stages; item components are preserved opaque, not modelled or edited.
+  state picker constrains complete declared sets and preserves undeclared imported values with
+  a warning. The item browser and per-swatch color/shape/version filters remain later catalog
+  stages; item components are preserved opaque, not modelled or edited.
 - Recent selections and starred favorites are local UI preferences keyed by `catalogId`; they
   are not part of the project manifest, do not authorize writes, and are filtered against the
   current catalog when shown. Preferences retain up to 24 recent selections and 256 favorites
@@ -222,16 +261,15 @@ later catalog stage.
   in the write registry and remain placeable; fluids and airlike entries are marked for editor
   rules; a non-vanilla namespace keeps all semantic flags `null`. Unknown imported block states
   are still refused for new placement exactly as before.
-- The palette lists blocks only. Item definitions are extracted and counted, but the item
-  browser and placeable-item duplication are later stages.
+- The palette lists block-form entries only. Item definitions are extracted and counted, but
+  the item browser and placeable-item duplication are later stages.
 - Item definitions resolve the first concrete model from `model`, `base`, `select`,
   `range_dispatch`, `condition` and `composite` shapes; `modelType` records the top-level
   dispatcher. The full definition stays in the JAR. Data components and stack contents are
   not modelled or edited; imported item stacks inside block entities and NBT are preserved
   opaquely, including every component key and value.
-- The icon atlas is exposed through `assets_catalog_atlas` and `project_catalog_atlas`, but
-  the `Blocks` palette still draws flat colour chips. Wiring the atlas into the virtualized
-  palette and adding 3D previews remain later UI stages.
+- The icon atlas is loaded eagerly for the open catalog. The lazy atlas, search index and
+  memory budget for the 10k+ entry target remain the performance stage.
 - Tag membership is direct. Transitive `#tag` references remain available in the JAR and are
   not flattened into each entry.
 - A texture missing from the JAR produces a null icon and a warning. The asset-index fallback

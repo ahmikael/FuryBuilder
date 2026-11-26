@@ -213,6 +213,14 @@ pub fn block_catalog(state: State<'_, AppState>) -> Result<Vec<BlockDefinition>,
     Ok(service.registry().definitions())
 }
 
+/// The version-independent curated quick picks. This is not the project write registry;
+/// the palette compares it with the exact catalog only to prove that a quick pick is absent
+/// from the project version. It never adds write access.
+#[tauri::command]
+pub fn curated_block_catalog() -> Vec<BlockDefinition> {
+    BlockRegistry::curated().definitions()
+}
+
 #[tauri::command]
 pub fn app_info() -> AppInfo {
     build_app_info()
@@ -5038,6 +5046,25 @@ mod version_catalog_tests {
             value["versions"][2]["profile"]["capabilities"]["supportLevel"],
             "full"
         );
+    }
+}
+
+#[cfg(test)]
+mod palette_command_tests {
+    use super::*;
+
+    #[test]
+    fn curated_catalog_is_sorted_version_independent_quick_picks() {
+        let picks = curated_block_catalog();
+        assert!(picks.len() >= 60);
+        assert!(picks.iter().any(|entry| entry.name == "minecraft:stone"));
+        assert!(picks
+            .iter()
+            .any(|entry| entry.name == "minecraft:oak_stairs"));
+        let names: Vec<_> = picks.iter().map(|entry| entry.name.as_str()).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(names, sorted);
     }
 }
 

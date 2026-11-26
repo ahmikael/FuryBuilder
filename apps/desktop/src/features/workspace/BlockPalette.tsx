@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Loader2, RotateCcw, Search, Star, X } from "lucide-react";
-import type { CatalogFlags, CatalogSnapshot } from "@/assets/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, ChevronDown, Loader2, RotateCcw, Search, Star, X } from "lucide-react";
+import type { CatalogFlags, CatalogIconAtlas, CatalogSnapshot } from "@/assets/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Empty,
   EmptyDescription,
@@ -12,7 +13,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
   Select,
@@ -22,7 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import type { BlockDefinition } from "@/editor/types";
+import {
+  CatalogBlockIcon,
+  catalogIconAtlasImage,
+  type CatalogIconAtlasImage,
+} from "@/features/workspace/CatalogBlockIcon";
+import { CatalogStatePicker } from "@/features/workspace/CatalogStatePicker";
 import {
   PALETTE_CATEGORIES,
   PALETTE_FLAG_FILTERS,
@@ -35,16 +42,16 @@ import {
   type PaletteFlagFilterId,
   type PaletteGroupId,
 } from "@/features/workspace/palette-categories";
-import { loadProjectCatalog } from "@/lib/assets-api";
+import { loadProjectCatalog, loadProjectCatalogAtlas } from "@/lib/assets-api";
 import { isTauriRuntime } from "@/lib/ipc";
-import { fetchBlockCatalog } from "@/lib/world-api";
-import { blockColor } from "@/renderer/assets";
+import { fetchCuratedBlockCatalog } from "@/lib/world-api";
 import { usePaletteStore } from "@/state/palette-store";
 import { useToolStore } from "@/state/tool-store";
 
 interface PaletteEntry {
   name: string;
   displayName: string | null;
+  iconTexture: string | null;
   properties: Record<string, string>;
   propertyValues: Record<string, string[]>;
   propertyValuesComplete: boolean;
@@ -52,6 +59,11 @@ interface PaletteEntry {
   groups: PaletteGroupId[];
   tags: string[];
   flags: CatalogFlags | null;
+}
+
+interface UnavailableQuickPick {
+  name: string;
+  displayName: string | null;
 }
 
 interface PaletteLoad {
@@ -66,35 +78,54 @@ const PLACEHOLDER_REASON =
 const EMPTY_IDS: readonly string[] = [];
 const FILTER_OPTIONS = PALETTE_CATEGORIES.map(({ id, label }) => ({ value: id, label }));
 const FLAG_FILTER_OPTIONS = PALETTE_FLAG_FILTERS.map(({ id, label }) => ({ value: id, label }));
+const ROW_HEIGHT = 32;
+const VIRTUAL_OVERSCAN = 6;
+const FALLBACK_VIEWPORT_HEIGHT = 320;
 
 function shortBlockId(id: string): string {
   return id.startsWith("minecraft:") ? id.slice("minecraft:".length) : id;
 }
 
+function reasonMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : String(reason);
+}
+
+function formatProperties(properties: Record<string, string>): string {
+  return Object.keys(properties)
+    .sort()
+    .map((key) => `${key}=${properties[key]}`)
+    .join(", ");
+}
+
 async function loadPalette(): Promise<PaletteLoad> {
-  let fallbackReason: string;
-  try {
-    const snapshot = await loadProjectCatalog();
-    if (snapshot) {
-      return { catalog: snapshot, curated: null, fallbackReason: null, error: null };
-    }
-    fallbackReason = PLACEHOLDER_REASON;
-  } catch (reason: unknown) {
-    fallbackReason = `The project catalog could not be rebuilt: ${
-      reason instanceof Error ? reason.message : String(reason)
-    }. Showing curated quick picks instead.`;
+  const [catalogResult, curatedResult] = await Promise.allSettled([
+    loadProjectCatalog(),
+    fetchCuratedBlockCatalog(),
+  ]);
+  const curated = curatedResult.status === "fulfilled" ? curatedResult.value : null;
+
+  if (catalogResult.status === "fulfilled" && catalogResult.value) {
+    return { catalog: catalogResult.value, curated, fallbackReason: null, error: null };
   }
-  try {
-    const curated = await fetchBlockCatalog();
+
+  const fallbackReason =
+    catalogResult.status === "fulfilled"
+      ? PLACEHOLDER_REASON
+      : `The project catalog could not be rebuilt: ${reasonMessage(catalogResult.reason)}. Showing curated quick picks instead.`;
+
+  if (curated) {
     return { catalog: null, curated, fallbackReason, error: null };
-  } catch (reason: unknown) {
-    return {
-      catalog: null,
-      curated: null,
-      fallbackReason,
-      error: reason instanceof Error ? reason.message : String(reason),
-    };
   }
+
+  return {
+    catalog: null,
+    curated: null,
+    fallbackReason,
+    error:
+      curatedResult.status === "rejected"
+        ? reasonMessage(curatedResult.reason)
+        : "The curated quick-pick catalog is unavailable.",
+  };
 }
 
 export function BlockPalette() {
@@ -104,6 +135,10 @@ export function BlockPalette() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<PaletteFilterId>("all");
   const [flagFilter, setFlagFilter] = useState<PaletteFlagFilterId>("any");
+  const [atlas, setAtlas] = useState<CatalogIconAtlas | null>(null);
+  const [scrollTop, setScrollTop] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const listRef = useRef<HTMLDivElement>(null);
   const selectedBlock = useToolStore((state) => state.selectedBlock);
   const setSelectedBlock = useToolStore((state) => state.setSelectedBlock);
   const setReplaceFrom = useToolStore((state) => state.setReplaceFrom);
@@ -115,6 +150,7 @@ export function BlockPalette() {
   );
   const recordRecent = usePaletteStore((state) => state.recordRecent);
   const toggleFavorite = usePaletteStore((state) => state.toggleFavorite);
+  const catalogId = catalog?.catalogId ?? null;
 
   useEffect(() => {
     if (!isTauriRuntime()) return;
@@ -127,6 +163,47 @@ export function BlockPalette() {
     };
   }, [attempt]);
 
+  useEffect(() => {
+    if (!isTauriRuntime() || !catalogId) return;
+    let cancelled = false;
+    void loadProjectCatalogAtlas()
+      .then((next) => {
+        if (!cancelled) setAtlas(next?.catalogId === catalogId ? next : null);
+      })
+      .catch(() => {
+        if (!cancelled) setAtlas(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [catalogId]);
+
+  useEffect(() => {
+    const element = listRef.current;
+    if (!element) return;
+    const measure = () => setViewportHeight(element.clientHeight);
+    measure();
+    window.addEventListener("resize", measure);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(measure);
+      observer.observe(element);
+    }
+    return () => {
+      window.removeEventListener("resize", measure);
+      observer?.disconnect();
+    };
+  }, []);
+
+  const iconAtlas = useMemo<CatalogIconAtlasImage | null>(
+    () => (atlas && atlas.catalogId === catalogId ? catalogIconAtlasImage(atlas) : null),
+    [atlas, catalogId],
+  );
+  const resetScroll = () => {
+    setScrollTop(0);
+    if (listRef.current) listRef.current.scrollTop = 0;
+  };
+
   const palette = useMemo<PaletteEntry[]>(() => {
     if (catalog) {
       return catalog.entries.flatMap((entry) => {
@@ -136,6 +213,7 @@ export function BlockPalette() {
           {
             name: entry.id,
             displayName: entry.displayName,
+            iconTexture: entry.iconTexture,
             properties: states.defaultProperties ?? {},
             propertyValues: states.properties,
             propertyValuesComplete: states.propertyValuesComplete,
@@ -151,6 +229,7 @@ export function BlockPalette() {
       return curated.map((entry) => ({
         name: entry.name,
         displayName: null,
+        iconTexture: null,
         properties: entry.properties,
         propertyValues: Object.fromEntries(
           Object.entries(entry.properties).map(([key, value]) => [key, [value]]),
@@ -220,14 +299,40 @@ export function BlockPalette() {
       .filter((entry) => matchesPaletteFlagFilter(entry.flags, flagFilter));
   }, [category, palette, recentEntries, favoriteEntries, search, flagFilter]);
 
+  const unavailableQuickPicks = useMemo<UnavailableQuickPick[]>(() => {
+    if (!catalog || !curated) return [];
+    const available = new Set(palette.map((entry) => entry.name));
+    const seen = new Set<string>();
+    return curated
+      .filter((entry) => !available.has(entry.name))
+      .filter((entry) => matchesPaletteSearch({ name: entry.name, displayName: null }, search))
+      .filter((entry) => {
+        if (seen.has(entry.name)) return false;
+        seen.add(entry.name);
+        return true;
+      })
+      .map((entry) => ({ name: entry.name, displayName: null }));
+  }, [catalog, curated, palette, search]);
+
+  const effectiveViewportHeight = viewportHeight || FALLBACK_VIEWPORT_HEIGHT;
+  const maxScrollTop = Math.max(0, visible.length * ROW_HEIGHT - effectiveViewportHeight);
+  const clampedScrollTop = Math.min(scrollTop, maxScrollTop);
+  const startIndex = Math.max(0, Math.floor(clampedScrollTop / ROW_HEIGHT) - VIRTUAL_OVERSCAN);
+  const endIndex = Math.min(
+    visible.length,
+    Math.ceil((clampedScrollTop + effectiveViewportHeight) / ROW_HEIGHT) + VIRTUAL_OVERSCAN,
+  );
+  const windowEntries = visible.slice(startIndex, endIndex);
+
   const definition = entryById.get(selectedBlock.name) ?? null;
   const overrides = selectedBlock.properties ?? {};
-  const propertyKeys = definition
-    ? Array.from(new Set([...Object.keys(definition.propertyValues), ...Object.keys(overrides)]))
-    : Object.keys(overrides);
+  const selectedStateSummary = formatProperties(overrides);
+  const declaredDefaultSummary = definition ? formatProperties(definition.properties) : "";
   const source = catalog ? "clientJar" : curated ? "curated" : null;
   const loading = result === null;
   const selectedFavorite = definition ? favoriteSet.has(definition.name) : false;
+  const showUnavailable =
+    category === "all" && flagFilter === "any" && unavailableQuickPicks.length > 0;
 
   const selectEntry = (entry: PaletteEntry) => {
     setSelectedBlock({
@@ -317,7 +422,10 @@ export function BlockPalette() {
               placeholder={`Search ${palette.length} blocks…`}
               value={search}
               disabled={loading}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                resetScroll();
+              }}
               aria-label="Search blocks"
             />
             <InputGroupAddon>
@@ -328,7 +436,10 @@ export function BlockPalette() {
             items={FILTER_OPTIONS}
             value={category}
             disabled={loading}
-            onValueChange={(value) => setCategory(value ?? "all")}
+            onValueChange={(value) => {
+              resetScroll();
+              setCategory(value ?? "all");
+            }}
           >
             <SelectTrigger className="w-36 shrink-0" aria-label="Block category">
               <SelectValue />
@@ -347,7 +458,10 @@ export function BlockPalette() {
             items={FLAG_FILTER_OPTIONS}
             value={flagFilter}
             disabled={loading}
-            onValueChange={(value) => setFlagFilter((value as PaletteFlagFilterId | null) ?? "any")}
+            onValueChange={(value) => {
+              resetScroll();
+              setFlagFilter((value as PaletteFlagFilterId | null) ?? "any");
+            }}
           >
             <SelectTrigger className="w-36 shrink-0" aria-label="Block filter">
               <SelectValue />
@@ -364,9 +478,11 @@ export function BlockPalette() {
           </Select>
         </div>
         <div
+          ref={listRef}
           role="list"
           aria-label="Block palette"
           className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto rounded-lg border"
+          onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
         >
           {loading ? (
             <div
@@ -382,57 +498,132 @@ export function BlockPalette() {
               </EmptyHeader>
             </Empty>
           ) : (
-            visible.map((entry) => {
-              const active = entry.name === selectedBlock.name;
-              const favorite = favoriteSet.has(entry.name);
-              return (
-                <div key={entry.name} role="listitem" className="flex items-center gap-1 px-1">
-                  <Button
-                    type="button"
-                    variant={active ? "secondary" : "ghost"}
-                    size="sm"
-                    title={entry.displayName ? `${entry.displayName} · ${entry.name}` : entry.name}
-                    aria-pressed={active}
-                    onClick={() => selectEntry(entry)}
-                    className="min-w-0 flex-1 justify-start text-left"
+            <div
+              className="relative w-full"
+              style={{ height: visible.length * ROW_HEIGHT }}
+              aria-hidden="false"
+            >
+              {windowEntries.map((entry, offset) => {
+                const index = startIndex + offset;
+                const active = entry.name === selectedBlock.name;
+                const favorite = favoriteSet.has(entry.name);
+                return (
+                  <div
+                    key={entry.name}
+                    role="listitem"
+                    aria-setsize={visible.length}
+                    aria-posinset={index + 1}
+                    className="absolute inset-x-0 flex items-center gap-1 px-1"
+                    style={{ top: index * ROW_HEIGHT, height: ROW_HEIGHT }}
                   >
-                    <span
-                      className="size-4 shrink-0 rounded-sm border"
-                      style={{ backgroundColor: blockColor(entry.name) }}
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-xs">
-                      <span className="font-mono">{shortBlockId(entry.name)}</span>
-                      {entry.displayName ? (
-                        <span className="ml-1.5 text-muted-foreground">{entry.displayName}</span>
-                      ) : null}
-                    </span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    className="shrink-0"
-                    aria-label={`Favorite ${shortBlockId(entry.name)}`}
-                    title={favorite ? "Remove from favorites" : "Add to favorites"}
-                    aria-pressed={favorite}
-                    onClick={() => toggleFavorite(paletteKey, entry.name)}
-                  >
-                    <Star className={favorite ? "fill-current" : undefined} />
-                  </Button>
-                </div>
-              );
-            })
+                    <Button
+                      type="button"
+                      variant={active ? "secondary" : "ghost"}
+                      size="sm"
+                      title={
+                        entry.displayName ? `${entry.displayName} · ${entry.name}` : entry.name
+                      }
+                      aria-pressed={active}
+                      onClick={() => selectEntry(entry)}
+                      className="min-w-0 flex-1 justify-start text-left"
+                    >
+                      <CatalogBlockIcon
+                        name={entry.name}
+                        textureKey={entry.iconTexture}
+                        atlas={iconAtlas}
+                        size={20}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-xs">
+                        <span className="font-mono">{shortBlockId(entry.name)}</span>
+                        {entry.displayName ? (
+                          <span className="ml-1.5 text-muted-foreground">{entry.displayName}</span>
+                        ) : null}
+                      </span>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="shrink-0"
+                      aria-label={`Favorite ${shortBlockId(entry.name)}`}
+                      title={favorite ? "Remove from favorites" : "Add to favorites"}
+                      aria-pressed={favorite}
+                      onClick={() => toggleFavorite(paletteKey, entry.name)}
+                    >
+                      <Star className={favorite ? "fill-current" : undefined} />
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
+        {showUnavailable ? (
+          <Collapsible className="shrink-0 rounded-lg border">
+            <CollapsibleTrigger className="flex w-full cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-left [&[data-panel-open]>svg]:rotate-180">
+              <span className="text-xs font-medium">Quick picks not in this version</span>
+              <span className="flex items-center gap-1">
+                <Badge variant="outline">{unavailableQuickPicks.length}</Badge>
+                <ChevronDown className="size-3.5 transition-transform" aria-hidden="true" />
+              </span>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="px-2 pb-1.5">
+                <Separator className="mb-1.5" />
+                <p className="pb-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  These curated quick-pick ids are proven absent from the exact{" "}
+                  {catalog?.minecraftVersion} catalog, so selection and placement are disabled. This
+                  is not a complete cross-version catalog diff, and IDs are not remapped; a renamed
+                  block can appear here under its old quick-pick id.
+                </p>
+                <div
+                  role="list"
+                  aria-label="Quick picks not in this version"
+                  className="scrollbar-thin flex max-h-48 flex-col overflow-y-auto"
+                >
+                  {unavailableQuickPicks.map((entry) => (
+                    <div
+                      key={entry.name}
+                      role="listitem"
+                      aria-disabled="true"
+                      title={`Not in ${catalog?.minecraftVersion}: this quick pick is absent from the exact catalog.`}
+                      className="flex items-center gap-2 px-1 py-1 opacity-70"
+                    >
+                      <CatalogBlockIcon
+                        name={entry.name}
+                        textureKey={null}
+                        atlas={iconAtlas}
+                        size={20}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-mono text-xs text-muted-foreground">
+                          {shortBlockId(entry.name)}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Absent from {catalog?.minecraftVersion}; selection disabled.
+                        </div>
+                      </div>
+                      <Badge variant="outline">Not in this version</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ) : null}
       </div>
 
       <Card className="scrollbar-thin flex min-h-0 w-80 shrink-0 flex-col gap-0 overflow-y-auto py-0">
-        <CardContent className="space-y-4 p-4">
+        <CardContent className="flex flex-col gap-4 p-4">
           <div className="flex items-center gap-3">
-            <span
-              className="size-9 rounded-lg border border-black/30"
-              style={{ backgroundColor: blockColor(selectedBlock.name) }}
-            />
+            <span title="Isometric preview of the catalog icon texture, not a full block-model render.">
+              <CatalogBlockIcon
+                name={selectedBlock.name}
+                textureKey={definition?.iconTexture ?? null}
+                atlas={iconAtlas}
+                size={40}
+                mode="cube"
+              />
+            </span>
             <div className="min-w-0">
               <div className="truncate font-mono text-sm">{selectedBlock.name}</div>
               <div className="text-xs text-muted-foreground">
@@ -442,11 +633,25 @@ export function BlockPalette() {
                       ? "Client JAR multipart state"
                       : "Client JAR state"
                     : "Curated quick pick"
-                  : "Custom state"}{" "}
+                  : catalog
+                    ? "Not in this version"
+                    : "Unknown state"}{" "}
                 · brush/paste target
               </div>
             </div>
           </div>
+
+          {!definition ? (
+            <Alert>
+              <AlertTriangle />
+              <AlertTitle>{catalog ? "Not in this version" : "Unknown state"}</AlertTitle>
+              <AlertDescription>
+                {catalog
+                  ? `This state is absent from the exact ${catalog.minecraftVersion} catalog. Existing blocks keep it and it can be used as a replace source, but the write registry refuses new placement.`
+                  : "No exact client JAR catalog is loaded, so this state cannot be matched to a version. Its properties are preserved as stored and the write registry still refuses new placement."}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           {definition ? (
             <div className="flex flex-wrap items-center gap-1">
@@ -468,57 +673,47 @@ export function BlockPalette() {
             </div>
           ) : null}
 
-          <div className="space-y-2">
-            {propertyKeys.length === 0 ? (
-              <div className="text-xs text-muted-foreground">
-                {definition?.multipart
-                  ? "No single JAR default: multipart states are assembled by the game."
-                  : "The blockstate file declares no properties; the game default is used."}
-              </div>
-            ) : (
-              propertyKeys.map((key) => (
-                <label key={key} className="grid grid-cols-[1fr_1.4fr] items-center gap-1.5">
-                  <span className="truncate font-mono text-xs text-muted-foreground">{key}</span>
-                  <Input
-                    className="h-8 px-2 font-mono text-xs"
-                    value={overrides[key] ?? ""}
-                    placeholder={definition?.propertyValues[key]?.join(" | ") ?? "game default"}
-                    aria-label={`Property ${key}`}
-                    onChange={(event) => {
-                      const next = { ...overrides };
-                      if (event.target.value === "") {
-                        delete next[key];
-                      } else {
-                        next[key] = event.target.value;
-                      }
-                      setSelectedBlock({ ...selectedBlock, properties: next });
-                    }}
-                  />
-                </label>
-              ))
-            )}
-            {source === "clientJar" &&
-            definition &&
-            !definition.propertyValuesComplete &&
-            propertyKeys.length > 0 ? (
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                This blockstate file declares only part of the state space. Declared keys are
-                checked; undeclared values are accepted.
-              </p>
-            ) : null}
-            {definition?.multipart ? (
-              <p className="text-[11px] leading-relaxed text-muted-foreground">
-                Multipart states are assembled by the game; an empty selection uses its default
-                state.
-              </p>
-            ) : null}
-          </div>
+          <p className="text-xs leading-relaxed">
+            <span className="text-muted-foreground">Selected properties: </span>
+            <span className="font-mono">{selectedStateSummary || "game default"}</span>
+          </p>
+          {definition && declaredDefaultSummary ? (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              Declared default: <span className="font-mono">{declaredDefaultSummary}</span>
+            </p>
+          ) : null}
+
+          {definition ? (
+            <CatalogStatePicker
+              schema={{
+                properties: definition.propertyValues,
+                propertyValuesComplete: definition.propertyValuesComplete,
+                multipart: definition.multipart,
+              }}
+              values={overrides}
+              onChange={(properties) => setSelectedBlock({ ...selectedBlock, properties })}
+              exact={source === "clientJar"}
+            />
+          ) : (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {catalog
+                ? "The state cannot be edited against a blockstate schema because its block is absent from the exact catalog. Its properties are preserved as stored."
+                : "No exact catalog is loaded, so the state cannot be edited against a blockstate schema. Its properties are preserved as stored."}
+            </p>
+          )}
 
           <div className="flex flex-wrap gap-2">
             <Button
               size="sm"
               variant="outline"
               disabled={!definition}
+              title={
+                definition
+                  ? "Use the game default state; no property overrides are sent."
+                  : catalog
+                    ? "Unavailable: this state is not declared by the exact catalog."
+                    : "Unavailable: no exact catalog is loaded."
+              }
               onClick={() => {
                 if (definition) {
                   setSelectedBlock({
@@ -529,7 +724,7 @@ export function BlockPalette() {
               }}
             >
               <RotateCcw data-icon="inline-start" />
-              Defaults
+              Game default
             </Button>
             <Button size="sm" variant="outline" onClick={() => setReplaceFrom(selectedBlock)}>
               Use as replace source
@@ -554,8 +749,8 @@ export function BlockPalette() {
             ) : null}
             <div className="mt-1.5">
               {source === "clientJar"
-                ? "Block names and property keys come from the project's pinned client JAR catalog. Basic groups use its direct tags and ids; recent and favorites stay local to this catalog."
-                : "Curated quick picks are shown because this project has no client JAR catalog."}
+                ? "Block names and property keys come from the project's pinned client JAR catalog. The preview is an isometric view of the catalog icon texture, not a full block-model render."
+                : "Curated quick picks are shown because this project has no client JAR catalog. Their properties are not an exact blockstate schema."}
             </div>
           </div>
         </CardContent>

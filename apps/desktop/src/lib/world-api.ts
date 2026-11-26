@@ -29,6 +29,11 @@ export function fetchBlockCatalog(): Promise<BlockDefinition[]> {
   return invokeCommand<BlockDefinition[]>("block_catalog");
 }
 
+/** Version-independent curated quick picks, used only as palette fallback/comparison. */
+export function fetchCuratedBlockCatalog(): Promise<BlockDefinition[]> {
+  return invokeCommand<BlockDefinition[]>("curated_block_catalog");
+}
+
 export function fetchWorldInfo(): Promise<WorldInfo> {
   return invokeCommand<WorldInfo>("world_info");
 }

@@ -95,6 +95,7 @@ pub fn run() {
             commands::diagnostics_open_folder,
             commands::diagnostics_record_ui_error,
             commands::block_catalog,
+            commands::curated_block_catalog,
             commands::world_info,
             commands::load_demo_world,
             commands::render_snapshot,
