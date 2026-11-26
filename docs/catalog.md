@@ -17,21 +17,28 @@ when a project has no client JAR catalog (for example, placeholder assets).
 The catalog accepts a manually selected asset source in three forms:
 
 - a `.minecraft` root, resolved to its compatible `versions/<id>/<id>.jar`;
-- a single `versions/<id>` folder;
-- a `client.jar` or any JAR whose internal `version.json` declares the project version.
+- a single `versions/<id>` folder or a managed cache folder containing `client.jar`;
+- a `client.jar` or any JAR that identifies its exact release.
 
-The component manager accepts a manual source for a project only when the internal version id
-and `DataVersion` match the project target. When a sibling `<id>.json`/`client.json` declares
-the client SHA-1 and size, the JAR is hashed and compared; a declared mismatch is refused. A
+The component manager accepts a manual source for a project only when the version id and
+`DataVersion` match the project target. When a sibling `<id>.json`/`client.json` declares the
+client SHA-1 and size, the JAR is hashed and compared; a declared mismatch is refused. A
 correct JAR without launcher metadata is still usable offline with an explicit warning in the
-component status. FuryBuilder never copies, edits or deletes the selected file.
+component status. FuryBuilder never copies, edits or deletes the selected file. Version folders
+and managed cache folders are self-describing: they resolve the JAR directly instead of going
+through `.minecraft` target discovery.
 
-A direct JAR is also self-describing for catalog construction: `CatalogBuilder` reads its
-internal `version.json` and records that exact version and `DataVersion`, independent of the
-application's current target. This lets fixtures and version diffs compare catalogs across
-releases. A project-pinned rebuild must still reproduce the manifest's `catalogId`,
-`catalogHash`, client JAR SHA-1, Minecraft version and `DataVersion`; any mismatch is a conflict,
-never a silent substitution.
+A direct JAR is also self-describing for catalog construction, independent of the application's
+current target. `CatalogBuilder` normally reads its internal `version.json` and records that
+exact version, `DataVersion` and pack formats. Client JARs for 1.13.2 through 1.16.5 have no
+root `version.json`; for those, the adjacent launcher metadata (`<stem>.json`, or `client.json`
+beside `client.jar`) names the exact release and the matching built-in profile supplies
+`DataVersion` and pack formats. That fallback always adds a warning and is refused when the
+metadata is absent, invalid, or names a release without an exact built-in profile. When both
+sources exist, their version ids must agree. This lets fixtures and version diffs compare
+catalogs across releases. A project-pinned rebuild must still reproduce the manifest's
+`catalogId`, `catalogHash`, client JAR SHA-1, Minecraft version and `DataVersion`; any mismatch
+is a conflict, never a silent substitution.
 
 ## Placeholder mode
 
@@ -66,10 +73,11 @@ the pack's root `assets/` entries. It does not apply `pack.mcmeta` overlays.
 | JAR path | Catalog use |
 | --- | --- |
 | `version.json` | Exact version id, `DataVersion`, resource/data pack formats |
+| adjacent `<stem>.json`/`client.json` | Version id and client SHA-1/size when the JAR has no internal `version.json` (1.13.2–1.16.5) |
 | `assets/<ns>/blockstates/<block>.json` | Block ids, variant/multipart properties, first model |
 | `assets/<ns>/models/block/*.json` | Model parent chain and block icon texture |
-| `assets/<ns>/models/item/*.json` | Item icon textures and the pre-item-definition fallback |
-| `assets/<ns>/items/<item>.json` | Item ids and item model references (1.21.4+) |
+| `assets/<ns>/models/item/*.json` | Item icon textures and the item-model fallback for pre-item-definition releases |
+| `assets/<ns>/items/<item>.json` | Item ids and item model references (1.20.6+) |
 | `assets/<ns>/textures/**/*.png` | Texture existence and counts; the icon atlas decodes only referenced icons |
 | `assets/<ns>/lang/en_us.json` | Display names; other languages are counted |
 | `data/<ns>/tags/block/**/*.json` | Direct block tag membership (1.21+; `tags/blocks` on older releases) |
@@ -79,12 +87,25 @@ the pack's root `assets/` entries. It does not apply `pack.mcmeta` overlays.
 Only the `minecraft` namespace is vanilla. Other namespaces found in a modified JAR are
 reported as entries with an explicit warning; they are not silently presented as vanilla.
 
+Client JARs for 1.13–1.17 use the flattened asset layout: singular
+`assets/minecraft/textures/block`/`item`, no `assets/minecraft/items` item definitions, no
+`assets/minecraft/atlases`, item models under `models/item`, and plural
+`data/minecraft/tags/blocks`/`items` folders. The extractor reads both layouts. Because those
+releases have no item definitions, an item is admitted from the item-model fallback (and the
+`item.<ns>.<path>` language key) only when a real non-empty item model exists; model templates
+such as `item/generated`, empty placeholder models such as `item/air`, wall-fan variants and
+entity-only blockstates never become items or blocks. Entity render blockstates
+(`item_frame`, `glow_item_frame`) are skipped with a warning, and empty or special item models
+keep a `null` icon instead of borrowing a `particle` placeholder.
+
 ## Snapshot contract
 
 `CatalogSnapshot` contains:
 
 - `catalogId` and `catalogHash`;
-- exact Minecraft version, `DataVersion`, client JAR SHA-1 and pack formats;
+- exact Minecraft version, `DataVersion`, client JAR SHA-1 and pack formats. The pack formats
+  come from the internal `version.json`; when it is absent they come from the exact built-in
+  profile named by adjacent launcher metadata, and the snapshot carries an explicit warning;
 - one sorted `entries` list and atlas definitions;
 - one `CatalogEntry` per id, merging its block and item forms. An entry with block states
   has `states`; an entry with an item form has `itemForm`; a normal block with an item has
@@ -309,8 +330,15 @@ project.
   is not implemented yet. Special item renderers (shields, heads, banners) have no baked item
   texture; their `particle` placeholder is not used as an icon, so the icon is null instead
   of a misleading block texture.
-- Versions before item definitions fall back to item models and language keys. Numeric ids and
-  pre-1.8 registries are outside the baseline catalog and belong to the legacy stage.
+- Releases before item definitions fall back to item models and language keys. Only a real,
+  non-empty `models/item/<path>` model backed by a valid id is admitted; templates
+  (`item/generated`), empty placeholders (`item/air`), wall-fan variants and entity-backed
+  blockstates are excluded. Numeric ids and pre-1.8 registries remain outside the catalog and
+  belong to the legacy stage.
+- Entity render blockstates are not blocks. `item_frame` and `glow_item_frame` have blockstate
+  files for the entity renderer, so they are skipped with a warning while their item forms stay
+  item-only. An imported world containing such names still preserves the stored id and
+  properties; it simply is not admitted as a placeable block.
 - Tests build synthetic client JARs from the built-in version profiles. A 1.21.4 contract test
   checks sorted unique ids, count parity, flag/form agreement and state/variant legality; a
   checked-in golden JSON snapshot fixes the full diff wire shape for added, removed, renamed,
@@ -318,12 +346,15 @@ project.
   each modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`): it builds the exact catalog,
   imports the world, creates a project pinned to that catalog, edits a block, saves, reopens,
   rebuilds the catalog from the same JAR, exports the world and re-imports the export while
-  checking the edit, the pin and preserved unknown states. The real-JAR matrix and captured
-  catalog snapshots belong to the full fixture stage; manual QA downloads a real JAR. A real
-  1.21.4 client JAR currently reports 1,097 blockstate entries, 1,385 item definitions, 186
-  block tag files, 173 item tag files, 14 atlases and 990 distinct palette icon textures. Its
-  icons are served lazily in bounded batches; the 256-texture measurement is in Performance
-  and memory.
+  checking the edit, the pin and preserved unknown states. Flattened fixtures cover
+  `1.13.2`–`1.17.1`: launcher-metadata resolution, internal `version.json`, checksum refusal,
+  version folders, weighted variants, plural tags, entity blockstates, wall fans, empty item
+  models and special items. Real-JAR verification counted 598/789 blocks/items for `1.13.2`,
+  676/876 for `1.14.4`, 680/883 for `1.15.2`, 763/975 for `1.16.5` and 898/1,099 for `1.17.1`,
+  matching the PrismarineJS registries with no missing or extra entries. A real 1.21.4 client
+  JAR currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
+  173 item tag files, 14 atlases and 990 distinct palette icon textures. Icons are served lazily
+  in bounded batches; the 256-texture measurement is in Performance and memory.
 
 ## Safety bounds
 

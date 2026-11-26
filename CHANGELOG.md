@@ -26,6 +26,15 @@ formats are not migrated.
   footprints use center sampling and are counted; writing a changed footprint replaces all of
   its columns, while untouched footprints keep the original data. The releases remain
   unavailable for project creation or import.
+- Exact-version block/item catalogs for Java `1.13–1.17.1` client JARs. The flattened asset
+  layout (singular block/item textures, item models instead of item definitions, no atlases and
+  plural block/item tags) is read alongside the modern layout. JARs without a root
+  `version.json` resolve their exact release from adjacent launcher metadata and the matching
+  built-in profile, with a warning and checksum verification; version folders and managed cache
+  folders are selected directly. Entity render blockstates, empty or template item models and
+  wall-fan variants are filtered out of the catalog. Real 1.13.2, 1.14.4, 1.15.2, 1.16.5 and
+  1.17.1 JARs reproduce the vanilla registries exactly. These releases still cannot be opened
+  as projects until the world adapter lands.
 - End-to-end import for all 27 classic Anvil releases from 1.18 through 1.21.11: exact
   `DataVersion`, profile dimensions and vertical bounds, editable block states and 4x4x4 biomes,
   byte-for-byte source copy and a version-bound project snapshot. Split 26.1+ and legacy layouts
@@ -131,6 +140,10 @@ formats are not migrated.
   `26.4-pre-1`, `1.14.2 Pre-Release 4` and `25w14craftmine`.
 - A client JAR without launcher metadata is accepted with an explicit warning, while a
   declared checksum or version mismatch is still refused.
+- Flattened client JARs no longer produce phantom entries: an empty item model such as
+  `item/air` does not create an item, item models that are only templates do not create items,
+  entity render blockstates are not listed as blocks, and wall fans do not inherit an item form
+  from their base fan.
 
 ### Security
 

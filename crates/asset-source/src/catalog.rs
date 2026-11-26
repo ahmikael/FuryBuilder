@@ -14,11 +14,11 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
-use minecraft_version::JarVersionJson;
+use minecraft_version::{profile_for_version, JarVersionJson, VersionId};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -27,12 +27,12 @@ use thiserror::Error;
 use crate::archive::Archive;
 use crate::bundle::normalize_id;
 use crate::catalog_flags::classify_flags;
-use crate::discovery::inspect_asset_path;
-use crate::jar::{inspect_client_jar, ExpectedClient};
+use crate::discovery::{inspect_asset_path, read_version_metadata, VersionMetadata};
+use crate::jar::file_sha1;
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
-pub const CATALOG_SCHEMA_VERSION: u32 = 5;
+pub const CATALOG_SCHEMA_VERSION: u32 = 6;
 /// A vanilla client JAR has a few thousand blockstates and items.
 pub const MAX_CATALOG_BLOCKS: usize = 32_768;
 pub const MAX_CATALOG_ITEMS: usize = 32_768;
@@ -51,6 +51,9 @@ pub const MAX_CATALOG_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 
 const MAX_CATALOG_CACHE_ENTRIES: usize = 4;
 const MAX_MODEL_DEPTH: usize = 12;
+/// Item frames are entities. Their blockstate files exist only to render the entity model,
+/// so they must not become placeable block entries. Their item forms stay item-only.
+const ENTITY_BACKED_BLOCKSTATES: &[&str] = &["minecraft:item_frame", "minecraft:glow_item_frame"];
 const UNVERIFIED_JAR_WARNING: &str =
     "the client JAR SHA-1 was not verified against launcher metadata";
 
@@ -398,8 +401,11 @@ struct ResolvedClientJar {
     display_path: String,
     version: String,
     data_version: i32,
+    resource_pack_format: Option<u32>,
+    datapack_format: Option<u32>,
     sha1: Option<String>,
     checksum_verified: bool,
+    warnings: Vec<String>,
 }
 
 fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, CatalogError> {
@@ -423,6 +429,14 @@ fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, 
             // the project profile, so catalogs can be built and compared across versions.
             return resolve_direct_client_jar(selected);
         }
+        Ok(metadata) if metadata.is_dir() => {
+            // A version folder and a managed client cache are selected directly. Both hold a
+            // JAR plus its launcher metadata, so the catalog does not depend on the
+            // application target. A .minecraft root still goes through target discovery.
+            if let Some(jar_path) = version_folder_jar(&selected) {
+                return resolve_direct_client_jar(jar_path);
+            }
+        }
         Ok(_) => {}
         Err(error) => {
             return Err(CatalogError::Io(format!(
@@ -441,15 +455,36 @@ fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, 
             .unwrap_or_else(|| "the selected path is not a compatible client source".to_owned());
         return Err(CatalogError::InvalidSource(reason));
     }
-    let version = report.version.ok_or_else(|| {
-        CatalogError::InvalidSource("the selected path has no client JAR version report".to_owned())
-    })?;
-    if version.jar_path.is_empty() {
-        return Err(CatalogError::InvalidSource(
-            "the selected path has no client JAR".to_owned(),
-        ));
+    let jar_path = report
+        .version
+        .and_then(|version| (!version.jar_path.is_empty()).then_some(version.jar_path))
+        .ok_or_else(|| {
+            CatalogError::InvalidSource("the selected path has no client JAR".to_owned())
+        })?;
+    resolve_direct_client_jar(PathBuf::from(jar_path))
+}
+
+/// A version folder (`versions/<id>/<id>.jar`) or a managed asset cache (`client.jar`).
+/// Neither is the `.minecraft` root; the root has no JAR directly inside it.
+fn version_folder_jar(directory: &Path) -> Option<PathBuf> {
+    let mut names = Vec::new();
+    if let Some(name) = directory.file_name() {
+        names.push(format!("{}.jar", name.to_string_lossy()));
     }
-    let jar_path = PathBuf::from(&version.jar_path);
+    names.push("client.jar".to_owned());
+    names.dedup();
+    names
+        .into_iter()
+        .map(|name| directory.join(name))
+        .find(|path| is_regular_file(path))
+}
+
+fn is_regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .is_ok_and(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+}
+
+fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, CatalogError> {
     let metadata = fs::symlink_metadata(&jar_path).map_err(|error| {
         CatalogError::Io(format!("cannot inspect {}: {error}", jar_path.display()))
     })?;
@@ -459,52 +494,164 @@ fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, 
             jar_path.display()
         )));
     }
-    Ok(ResolvedClientJar {
-        display_path: version.jar_path.clone(),
-        version: version
-            .internal_version_id
-            .clone()
-            .unwrap_or_else(|| version.id.clone()),
-        data_version: version.world_version.ok_or_else(|| {
-            CatalogError::Unsupported(format!(
-                "{} has no version.json DataVersion",
-                jar_path.display()
-            ))
-        })?,
-        sha1: version.actual_sha1.clone(),
-        checksum_verified: version.checksum_verified,
-        jar_path,
-    })
-}
+    let mut warnings = Vec::new();
+    let sidecar = adjacent_launcher_metadata(&jar_path)?;
+    let sha1 = file_sha1(&jar_path).map_err(|error| {
+        CatalogError::Io(format!(
+            "cannot hash the client JAR {}: {error}",
+            jar_path.display()
+        ))
+    })?;
+    let bytes = metadata.len();
+    let declared = sidecar
+        .as_ref()
+        .and_then(|sidecar| sidecar.metadata.downloads.as_ref())
+        .and_then(|downloads| downloads.client.as_ref());
+    let checksum_verified = if let Some(client) = declared {
+        if let Some(expected) = &client.sha1 {
+            if !expected.eq_ignore_ascii_case(&sha1) {
+                return Err(CatalogError::InvalidSource(format!(
+                    "client JAR SHA-1 is {sha1} but launcher metadata declares {expected}"
+                )));
+            }
+        }
+        if let Some(expected) = client.size {
+            if expected != bytes {
+                return Err(CatalogError::InvalidSource(format!(
+                    "client JAR size is {bytes} bytes but launcher metadata declares {expected}"
+                )));
+            }
+        }
+        client.sha1.is_some()
+    } else {
+        false
+    };
 
-fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, CatalogError> {
-    let inspection = inspect_client_jar(&jar_path, &ExpectedClient::default());
-    if let Some(error) = inspection.errors.first() {
-        return Err(CatalogError::InvalidSource(format!(
-            "{}: {error}",
-            jar_path.display()
-        )));
-    }
-    let version = inspection.internal_id.ok_or_else(|| {
-        CatalogError::InvalidSource(format!(
-            "{} has no version.json id; it is not a Minecraft client JAR",
-            jar_path.display()
-        ))
-    })?;
-    let data_version = inspection.world_version.ok_or_else(|| {
-        CatalogError::Unsupported(format!(
-            "{} has no version.json DataVersion",
-            jar_path.display()
-        ))
-    })?;
+    let internal = read_internal_version(&jar_path)?;
+    let (version, data_version, resource_pack_format, datapack_format) = match internal {
+        Some(version_json) => {
+            if let Some(sidecar_id) = sidecar
+                .as_ref()
+                .and_then(|sidecar| sidecar.metadata.id.as_deref())
+            {
+                if sidecar_id != version_json.id.as_str() {
+                    return Err(CatalogError::VersionJson(format!(
+                        "version.json declares `{}`, not the launcher metadata id `{sidecar_id}`",
+                        version_json.id
+                    )));
+                }
+            }
+            let (resource, data) = version_json
+                .integer_pack_formats()
+                .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
+            (version_json.id, version_json.world_version, resource, data)
+        }
+        None => {
+            let sidecar = sidecar.ok_or_else(|| {
+                CatalogError::Unsupported(format!(
+                    "{} has no internal version.json and no adjacent launcher metadata; select its version folder or a client.jar with client.json",
+                    jar_path.display()
+                ))
+            })?;
+            let id = sidecar.metadata.id.ok_or_else(|| {
+                CatalogError::Unsupported(format!(
+                    "{} has no Minecraft version id",
+                    sidecar.path.display()
+                ))
+            })?;
+            let version_id = id.parse::<VersionId>().map_err(|error| {
+                CatalogError::Unsupported(format!(
+                    "{} declares an invalid Minecraft version id `{id}`: {error}",
+                    sidecar.path.display()
+                ))
+            })?;
+            let profile = profile_for_version(&version_id).ok_or_else(|| {
+                CatalogError::Unsupported(format!(
+                    "Minecraft {id} has no exact built-in profile; a client JAR without version.json cannot be catalogued without one"
+                ))
+            })?;
+            warnings.push(format!(
+                "the client JAR has no internal version.json; exact version, DataVersion and pack formats were resolved from {} and the built-in {} profile",
+                sidecar.path.display(),
+                profile.id
+            ));
+            (
+                profile.minecraft_version.as_str().to_owned(),
+                profile.data_version,
+                profile.resource_pack_format,
+                profile.datapack_format,
+            )
+        }
+    };
+
     Ok(ResolvedClientJar {
         display_path: jar_path.display().to_string(),
         version,
         data_version,
-        sha1: inspection.sha1,
-        checksum_verified: false,
+        resource_pack_format,
+        datapack_format,
+        sha1: Some(sha1),
+        checksum_verified,
+        warnings,
         jar_path,
     })
+}
+
+struct LauncherMetadata {
+    path: PathBuf,
+    metadata: VersionMetadata,
+}
+
+/// Finds launcher metadata next to a client JAR. `client.json` is the managed cache layout;
+/// `<stem>.json` is the launcher's `versions/<id>/<id>.json` layout.
+fn adjacent_launcher_metadata(jar_path: &Path) -> Result<Option<LauncherMetadata>, CatalogError> {
+    let mut candidates = Vec::new();
+    if let Some(stem) = jar_path.file_stem() {
+        candidates.push(jar_path.with_file_name(format!("{}.json", stem.to_string_lossy())));
+    }
+    if jar_path.file_name().and_then(|name| name.to_str()) == Some("client.jar") {
+        candidates.push(jar_path.with_file_name("client.json"));
+    }
+    candidates.dedup();
+    for candidate in candidates {
+        if !is_regular_file(&candidate) {
+            continue;
+        }
+        let metadata = read_version_metadata(&candidate).map_err(|error| {
+            CatalogError::InvalidSource(format!(
+                "adjacent launcher metadata {} is invalid: {error}",
+                candidate.display()
+            ))
+        })?;
+        if let Some(metadata) = metadata {
+            return Ok(Some(LauncherMetadata {
+                path: candidate,
+                metadata,
+            }));
+        }
+    }
+    Ok(None)
+}
+
+fn read_internal_version(jar_path: &Path) -> Result<Option<JarVersionJson>, CatalogError> {
+    let mut archive = Archive::open(jar_path).map_err(|error| {
+        CatalogError::InvalidSource(format!(
+            "cannot read the client JAR {}: {error}",
+            jar_path.display()
+        ))
+    })?;
+    let bytes = match archive.read_entry("version.json", MAX_CATALOG_JSON_BYTES) {
+        Ok(bytes) => bytes,
+        Err(crate::archive::ArchiveError::Missing(_)) => return Ok(None),
+        Err(error) => {
+            return Err(CatalogError::InvalidSource(format!(
+                "cannot read version.json from the client JAR: {error}"
+            )))
+        }
+    };
+    let version = serde_json::from_slice(&bytes)
+        .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
+    Ok(Some(version))
 }
 
 /// A cache hit may come from a different path or verification state of the same JAR. Keep
@@ -565,11 +712,12 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
     if !resolved.checksum_verified {
         push_warning(&mut warnings, UNVERIFIED_JAR_WARNING.to_owned());
     }
+    for warning in &resolved.warnings {
+        push_warning(&mut warnings, warning.clone());
+    }
 
-    let version_json = read_version_json(&mut archive, &resolved.version)?;
-    let (resource_pack_format, datapack_format) = version_json
-        .integer_pack_formats()
-        .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
+    let (resource_pack_format, datapack_format) =
+        (resolved.resource_pack_format, resolved.datapack_format);
 
     let entry_names: Vec<String> = archive
         .entries()
@@ -621,6 +769,15 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
 
     let mut blocks: BTreeMap<String, BlockFacts> = BTreeMap::new();
     for (id, entry) in &blockstate_entries {
+        if ENTITY_BACKED_BLOCKSTATES.contains(&id.as_str()) {
+            push_warning(
+                &mut warnings,
+                format!(
+                    "{entry} is an entity render model, not a block; it is not admitted as a placeable block"
+                ),
+            );
+            continue;
+        }
         let facts = match read_json(&mut archive, entry, &mut warnings) {
             Some(document) => parse_blockstate(&document, entry, &mut warnings),
             None => BlockStateFacts::default(),
@@ -685,23 +842,38 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
     }
     if definition_entries.is_empty() {
         // 1.20.6 and older expose item models instead of item definitions. Item templates
-        // such as `item/handheld` are not items, so only block items and lang item keys are
-        // admitted here; a template can never become a fake palette entry.
+        // such as `item/handheld` are not items, so only block items and item ids backed by a
+        // real item model are admitted; a template or an empty placeholder model can never
+        // become a fake palette entry.
+        let mut model_content: HashMap<String, bool> = HashMap::new();
         for block in blocks.keys() {
-            if let Some((namespace, path)) = block.split_once(':') {
-                if item_model_ids.contains(&format!("{namespace}:item/{path}")) {
-                    items.insert(
-                        block.clone(),
-                        ItemFacts {
-                            display_name: None,
-                            model: Some(format!("{namespace}:item/{path}")),
-                            model_type: None,
-                            item_definition: false,
-                            icon_texture: None,
-                            tags: Vec::new(),
-                        },
-                    );
-                }
+            let Some((namespace, path)) = block.split_once(':') else {
+                continue;
+            };
+            if is_wall_fan_variant(block, &blocks) {
+                continue;
+            }
+            let model_id = format!("{namespace}:item/{path}");
+            if item_model_ids.contains(&model_id)
+                && model_has_content(
+                    &mut archive,
+                    &model_index,
+                    &model_id,
+                    &mut model_content,
+                    &mut warnings,
+                )
+            {
+                items.insert(
+                    block.clone(),
+                    ItemFacts {
+                        display_name: None,
+                        model: Some(model_id),
+                        model_type: None,
+                        item_definition: false,
+                        icon_texture: None,
+                        tags: Vec::new(),
+                    },
+                );
             }
         }
         for key in lang.keys() {
@@ -715,16 +887,27 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                 continue;
             }
             let id = format!("{namespace}:{path}");
-            if crate::bundle::valid_id(&id) {
-                items.entry(id.clone()).or_insert(ItemFacts {
-                    display_name: None,
-                    model: Some(format!("{namespace}:item/{path}")),
-                    model_type: None,
-                    item_definition: false,
-                    icon_texture: None,
-                    tags: Vec::new(),
-                });
+            let model_id = format!("{namespace}:item/{path}");
+            if !crate::bundle::valid_id(&id)
+                || !item_model_ids.contains(&model_id)
+                || !model_has_content(
+                    &mut archive,
+                    &model_index,
+                    &model_id,
+                    &mut model_content,
+                    &mut warnings,
+                )
+            {
+                continue;
             }
+            items.entry(id).or_insert(ItemFacts {
+                display_name: None,
+                model: Some(model_id),
+                model_type: None,
+                item_definition: false,
+                icon_texture: None,
+                tags: Vec::new(),
+            });
         }
     }
 
@@ -903,31 +1086,6 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         warnings,
         cache_hit: false,
     })
-}
-
-fn read_version_json(
-    archive: &mut Archive,
-    expected_id: &str,
-) -> Result<JarVersionJson, CatalogError> {
-    let bytes = archive
-        .read_entry("version.json", MAX_CATALOG_JSON_BYTES)
-        .map_err(|error| match error {
-            crate::archive::ArchiveError::Missing(_) => {
-                CatalogError::Unsupported("the client JAR has no version.json".to_owned())
-            }
-            other => CatalogError::InvalidSource(format!(
-                "cannot read version.json from the client JAR: {other}"
-            )),
-        })?;
-    let version: JarVersionJson = serde_json::from_slice(&bytes)
-        .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
-    if version.id != expected_id {
-        return Err(CatalogError::VersionJson(format!(
-            "version.json declares `{}`, not `{expected_id}`",
-            version.id
-        )));
-    }
-    Ok(version)
 }
 
 fn collect_asset_entries(
@@ -1250,6 +1408,38 @@ fn item_model_ref(value: &Value) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Wall coral fans use the item model of their base fan but are not items themselves.
+/// Requiring the base fan block makes the rule explicit instead of matching every suffix.
+fn is_wall_fan_variant(id: &str, blocks: &BTreeMap<String, BlockFacts>) -> bool {
+    id.strip_suffix("_wall_fan")
+        .is_some_and(|base| blocks.contains_key(&format!("{base}_fan")))
+}
+
+/// An item model that is an empty JSON object carries no geometry or texture. Vanilla uses
+/// such a placeholder for air; it must not turn a block into an item.
+fn model_has_content(
+    archive: &mut Archive,
+    models: &HashMap<String, String>,
+    model_id: &str,
+    cache: &mut HashMap<String, bool>,
+    warnings: &mut Vec<String>,
+) -> bool {
+    if let Some(content) = cache.get(model_id) {
+        return *content;
+    }
+    let content = models.get(model_id).is_some_and(|entry| {
+        match read_json(archive, entry, warnings) {
+            Some(Value::Object(object)) => !object.is_empty(),
+            Some(_) => true,
+            // A malformed model is reported by read_json; keep the id instead of silently
+            // dropping a potentially real item.
+            None => true,
+        }
+    });
+    cache.insert(model_id.to_owned(), content);
+    content
 }
 
 fn tags_for(tags: &BTreeMap<String, BTreeSet<String>>, id: &str) -> Vec<String> {
@@ -2109,6 +2299,35 @@ mod tests {
         );
     }
 
+    fn json_bytes(value: Value) -> Vec<u8> {
+        serde_json::to_vec(&value).expect("serialize test JSON")
+    }
+
+    fn write_entries_jar(dir: &TempDir, label: &str, entries: &[(&str, Vec<u8>)]) -> PathBuf {
+        write_entries_jar_in(&dir.path, label, entries)
+    }
+
+    fn write_launcher_metadata(jar: &Path, id: &str) {
+        let sha1 = crate::jar::file_sha1(jar).expect("jar sha1");
+        let size = fs::metadata(jar).expect("jar metadata").len();
+        let path = jar.with_extension("json");
+        fs::write(
+            path,
+            json_bytes(serde_json::json!({
+                "id": id,
+                "type": "release",
+                "downloads": {
+                    "client": {
+                        "sha1": sha1,
+                        "size": size,
+                        "url": "https://piston-data.mojang.com/v1/objects/client.jar"
+                    }
+                }
+            })),
+        )
+        .expect("write launcher metadata");
+    }
+
     fn write_minimal_jar(dir: &TempDir, label: &str, files: &[(&str, &str)]) -> PathBuf {
         let path = dir.path.join(format!("{label}.jar"));
         let file = fs::File::create(&path).expect("create jar");
@@ -2626,6 +2845,603 @@ mod tests {
         assert!(sword_form.model_type.is_none());
         assert_eq!(sword.display_name.as_deref(), Some("Diamond Sword"));
         assert_eq!(sword.tags, vec!["minecraft:swords"]);
+    }
+
+    #[test]
+    fn flattened_catalog_uses_launcher_metadata_when_version_json_is_absent() {
+        let dir = TempDir::new("flat-1.13");
+        let entries = vec![
+            (
+                "assets/minecraft/blockstates/stone.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/stone"}}
+                })),
+            ),
+            (
+                "assets/minecraft/blockstates/air.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/air"}}
+                })),
+            ),
+            (
+                "assets/minecraft/blockstates/item_frame.json",
+                json_bytes(serde_json::json!({
+                    "variants": {
+                        "map=false": {"model": "minecraft:block/item_frame"},
+                        "map=true": {"model": "minecraft:block/item_frame_map"}
+                    }
+                })),
+            ),
+            (
+                "assets/minecraft/blockstates/brain_coral_wall_fan.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/brain_coral_wall_fan"}}
+                })),
+            ),
+            (
+                "assets/minecraft/blockstates/brain_coral_fan.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/brain_coral_fan"}}
+                })),
+            ),
+            (
+                "assets/minecraft/blockstates/sign.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/sign"}}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/stone.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/air.json",
+                json_bytes(serde_json::json!({})),
+            ),
+            (
+                "assets/minecraft/models/block/item_frame.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/item_frame_map.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/brain_coral_wall_fan.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/brain_coral_fan"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/brain_coral_fan.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/brain_coral_fan"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/sign.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/stone.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/models/item/air.json",
+                json_bytes(serde_json::json!({})),
+            ),
+            (
+                "assets/minecraft/models/item/item_frame.json",
+                json_bytes(serde_json::json!({
+                    "parent": "minecraft:item/generated",
+                    "textures": {"layer0": "minecraft:item/item_frame"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/clock.json",
+                json_bytes(serde_json::json!({
+                    "parent": "minecraft:item/generated",
+                    "textures": {"layer0": "minecraft:item/clock_00"},
+                    "overrides": [
+                        {"predicate": {"time": 0.0}, "model": "minecraft:item/clock_01"}
+                    ]
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/generated.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"layer0": "minecraft:item/generated"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/shield.json",
+                json_bytes(serde_json::json!({
+                    "parent": "minecraft:builtin/entity",
+                    "textures": {"particle": "minecraft:block/dark_oak_planks"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/brain_coral_wall_fan.json",
+                json_bytes(serde_json::json!({
+                    "parent": "minecraft:item/generated",
+                    "textures": {"layer0": "minecraft:block/brain_coral_fan"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/brain_coral_fan.json",
+                json_bytes(serde_json::json!({
+                    "parent": "minecraft:item/generated",
+                    "textures": {"layer0": "minecraft:block/brain_coral_fan"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/sign.json",
+                json_bytes(serde_json::json!({
+                    "parent": "minecraft:item/generated",
+                    "textures": {"layer0": "minecraft:item/sign"}
+                })),
+            ),
+            ("assets/minecraft/textures/block/stone.png", tiny_png()),
+            (
+                "assets/minecraft/textures/block/brain_coral_fan.png",
+                tiny_png(),
+            ),
+            (
+                "assets/minecraft/textures/block/dark_oak_planks.png",
+                tiny_png(),
+            ),
+            ("assets/minecraft/textures/item/clock_00.png", tiny_png()),
+            ("assets/minecraft/textures/item/item_frame.png", tiny_png()),
+            ("assets/minecraft/textures/item/sign.png", tiny_png()),
+            (
+                "assets/minecraft/lang/en_us.json",
+                json_bytes(serde_json::json!({
+                    "block.minecraft.air": "Air",
+                    "block.minecraft.brain_coral_fan": "Brain Coral Fan",
+                    "block.minecraft.brain_coral_wall_fan": "Brain Coral Wall Fan",
+                    "block.minecraft.item_frame": "Item Frame",
+                    "block.minecraft.sign": "Sign",
+                    "block.minecraft.stone": "Stone",
+                    "item.minecraft.clock": "Clock",
+                    "item.minecraft.item_frame": "Item Frame",
+                    "item.minecraft.lodestone_compass": "Lodestone Compass",
+                    "item.minecraft.shield": "Shield",
+                    "item.minecraft.sign": "Sign",
+                    "item.modifiers.mainhand": "When in main hand:"
+                })),
+            ),
+            (
+                "data/minecraft/tags/blocks/base_stone.json",
+                json_bytes(serde_json::json!({"values": ["minecraft:stone"]})),
+            ),
+            (
+                "data/minecraft/tags/items/clocks.json",
+                json_bytes(serde_json::json!({"values": ["minecraft:clock"]})),
+            ),
+        ];
+        let jar = write_entries_jar(&dir, "1.13.2", &entries);
+        write_launcher_metadata(&jar, "1.13.2");
+        let service = AssetCatalogService::new();
+        let source = source(&jar);
+        let catalog = service.catalog(&source).expect("1.13 catalog");
+
+        assert_eq!(catalog.minecraft_version, "1.13.2");
+        assert_eq!(catalog.data_version, 1631);
+        assert_eq!(catalog.resource_pack_format, Some(4));
+        assert_eq!(catalog.datapack_format, Some(4));
+        assert!(catalog.catalog_id.starts_with("java-1.13.2-"));
+        assert!(!catalog.cache_hit);
+        assert!(catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no internal version.json")));
+        assert!(catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("entity render model")));
+        assert!(!catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("SHA-1 was not verified")));
+
+        let entry = |id: &str| {
+            catalog
+                .entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .unwrap_or_else(|| panic!("missing catalog entry {id}"))
+        };
+
+        let stone = entry("minecraft:stone");
+        assert!(stone.is_block() && stone.is_item());
+        assert_eq!(stone.icon_texture.as_deref(), Some("minecraft:block/stone"));
+        assert_eq!(stone.display_name.as_deref(), Some("Stone"));
+        assert_eq!(stone.tags, vec!["minecraft:base_stone"]);
+        assert_eq!(
+            stone
+                .states
+                .as_ref()
+                .and_then(|states| states.model.as_deref()),
+            Some("minecraft:block/stone")
+        );
+
+        let clock = entry("minecraft:clock");
+        assert!(!clock.is_block() && clock.is_item());
+        assert_eq!(
+            clock.icon_texture.as_deref(),
+            Some("minecraft:item/clock_00")
+        );
+        assert_eq!(
+            clock
+                .item_form
+                .as_ref()
+                .and_then(|form| form.model.as_deref()),
+            Some("minecraft:item/clock")
+        );
+        assert_eq!(clock.tags, vec!["minecraft:clocks"]);
+
+        let shield = entry("minecraft:shield");
+        assert!(!shield.is_block() && shield.is_item());
+        assert!(
+            shield.icon_texture.is_none(),
+            "a special item's particle texture must not become its icon"
+        );
+
+        let frame = entry("minecraft:item_frame");
+        assert!(frame.item_form.is_some());
+        assert!(
+            frame.states.is_none(),
+            "item frames are entities, not blocks"
+        );
+        assert_eq!(frame.flags.placeable, Some(false));
+        assert_eq!(
+            frame.icon_texture.as_deref(),
+            Some("minecraft:item/item_frame")
+        );
+
+        let wall_fan = entry("minecraft:brain_coral_wall_fan");
+        assert!(wall_fan.is_block());
+        assert!(!wall_fan.is_item());
+        assert!(wall_fan.item_form.is_none());
+
+        let fan = entry("minecraft:brain_coral_fan");
+        assert!(fan.is_block() && fan.is_item());
+
+        let air = entry("minecraft:air");
+        assert!(air.is_block());
+        assert!(
+            !air.is_item(),
+            "an empty item/air model must not become an item"
+        );
+
+        let sign = entry("minecraft:sign");
+        assert!(sign.is_block() && sign.is_item());
+
+        assert!(!catalog
+            .entries
+            .iter()
+            .any(|entry| entry.id == "minecraft:lodestone_compass"));
+        assert!(!catalog
+            .entries
+            .iter()
+            .any(|entry| entry.id.starts_with("modifiers:")));
+        assert!(catalog
+            .entries
+            .iter()
+            .all(|entry| entry.id != "minecraft:generated"));
+
+        assert_eq!(catalog.counts.blockstate_files, 6);
+        assert_eq!(catalog.counts.blocks, 5);
+        assert_eq!(catalog.counts.items, 6);
+        assert_eq!(catalog.counts.blocks_with_items, 3);
+        assert_eq!(catalog.counts.item_only, 3);
+        assert_eq!(catalog.counts.item_models, 9);
+        assert_eq!(catalog.counts.item_definitions, 0);
+        assert_eq!(catalog.counts.textures, 6);
+        assert_eq!(catalog.counts.block_tags, 1);
+        assert_eq!(catalog.counts.item_tags, 1);
+        assert_eq!(catalog.counts.atlases, 0);
+
+        let cached = service.catalog(&source).expect("cached 1.13 catalog");
+        assert!(cached.cache_hit);
+        assert_eq!(cached.catalog_hash, catalog.catalog_hash);
+    }
+
+    #[test]
+    fn every_flattened_profile_supplies_formats_without_internal_version_json() {
+        let dir = TempDir::new("flat-profiles");
+        // 1.13.2-1.16.5 client JARs have no root version.json. Launcher metadata names the
+        // exact release; the built-in profile supplies the remaining catalog facts.
+        for (version, data_version, pack_format) in [
+            ("1.13.2", 1631, 4),
+            ("1.14.4", 1976, 4),
+            ("1.15.2", 2230, 5),
+            ("1.16.5", 2586, 6),
+            ("1.17.1", 2730, 7),
+        ] {
+            let entries = vec![
+                (
+                    "assets/minecraft/blockstates/stone.json",
+                    json_bytes(serde_json::json!({
+                        "variants": {"": {"model": "minecraft:block/stone"}}
+                    })),
+                ),
+                (
+                    "assets/minecraft/models/block/stone.json",
+                    json_bytes(serde_json::json!({
+                        "textures": {"all": "minecraft:block/stone"}
+                    })),
+                ),
+                ("assets/minecraft/textures/block/stone.png", tiny_png()),
+            ];
+            let jar = write_entries_jar(&dir, version, &entries);
+            write_launcher_metadata(&jar, version);
+            let catalog = AssetCatalogService::new()
+                .build(&source(&jar))
+                .unwrap_or_else(|error| panic!("{version} catalog: {error}"));
+            assert_eq!(catalog.minecraft_version, version);
+            assert_eq!(catalog.data_version, data_version);
+            assert_eq!(catalog.resource_pack_format, Some(pack_format));
+            assert_eq!(catalog.datapack_format, Some(pack_format));
+            assert!(
+                catalog
+                    .warnings
+                    .iter()
+                    .any(|warning| warning.contains("no internal version.json")),
+                "{version}: {:?}",
+                catalog.warnings
+            );
+        }
+    }
+
+    #[test]
+    fn flattened_catalog_reads_weighted_variants_from_internal_version_json() {
+        let dir = TempDir::new("flat-1.14");
+        let version = json_bytes(serde_json::json!({
+            "id": "1.14.4",
+            "world_version": 1976,
+            "pack_version": 4,
+            "stable": true
+        }));
+        let entries = vec![
+            ("version.json", version),
+            (
+                "assets/minecraft/blockstates/stone.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": [
+                        {"model": "minecraft:block/stone", "weight": 2},
+                        {"model": "minecraft:block/stone_mirrored", "y": 180}
+                    ]}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/stone.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/stone_mirrored.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/models/item/stone.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            ("assets/minecraft/textures/block/stone.png", tiny_png()),
+            (
+                "assets/minecraft/lang/en_us.json",
+                json_bytes(serde_json::json!({
+                    "block.minecraft.stone": "Stone"
+                })),
+            ),
+        ];
+        let jar = write_entries_jar(&dir, "1.14.4", &entries);
+        write_launcher_metadata(&jar, "1.14.4");
+        let catalog = AssetCatalogService::new()
+            .build(&source(&jar))
+            .expect("1.14 catalog");
+
+        assert_eq!(catalog.minecraft_version, "1.14.4");
+        assert_eq!(catalog.data_version, 1976);
+        assert_eq!(catalog.resource_pack_format, Some(4));
+        assert_eq!(catalog.datapack_format, Some(4));
+        assert!(!catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no internal version.json")));
+        let stone = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:stone")
+            .expect("stone");
+        let states = stone.states.as_ref().expect("stone states");
+        assert_eq!(states.variant_count, 1);
+        assert_eq!(states.variants[0].models.len(), 2);
+        assert_eq!(
+            states.variants[0].models[0].model.as_deref(),
+            Some("minecraft:block/stone")
+        );
+        assert_eq!(states.variants[0].models[0].weight, 2);
+        assert_eq!(
+            states.variants[0].models[1].model.as_deref(),
+            Some("minecraft:block/stone_mirrored")
+        );
+        assert_eq!(states.variants[0].models[1].y_rotation, 180);
+        assert_eq!(stone.icon_texture.as_deref(), Some("minecraft:block/stone"));
+    }
+
+    #[test]
+    fn a_client_jar_without_version_json_or_launcher_metadata_is_refused() {
+        let dir = TempDir::new("flat-no-metadata");
+        let jar = write_entries_jar(
+            &dir,
+            "orphan",
+            &[(
+                "assets/minecraft/blockstates/stone.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/stone"}}
+                })),
+            )],
+        );
+        let error = AssetCatalogService::new()
+            .build(&source(&jar))
+            .expect_err("a JAR without version identity must be refused");
+        let message = error.to_string();
+        assert!(message.contains("no internal version.json"), "{message}");
+        assert!(
+            message.contains("no adjacent launcher metadata"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn launcher_metadata_checksum_and_id_are_checked() {
+        let dir = TempDir::new("flat-metadata-guard");
+        let jar = write_entries_jar(
+            &dir,
+            "1.13.2",
+            &[
+                (
+                    "assets/minecraft/blockstates/stone.json",
+                    json_bytes(serde_json::json!({
+                        "variants": {"": {"model": "minecraft:block/stone"}}
+                    })),
+                ),
+                (
+                    "assets/minecraft/models/block/stone.json",
+                    json_bytes(serde_json::json!({
+                        "textures": {"all": "minecraft:block/stone"}
+                    })),
+                ),
+                ("assets/minecraft/textures/block/stone.png", tiny_png()),
+            ],
+        );
+        let size = fs::metadata(&jar).expect("jar metadata").len();
+        let sidecar = jar.with_extension("json");
+        fs::write(
+            &sidecar,
+            json_bytes(serde_json::json!({
+                "id": "1.13.2",
+                "downloads": {"client": {
+                    "sha1": "0".repeat(40),
+                    "size": size,
+                    "url": "https://piston-data.mojang.com/v1/objects/client.jar"
+                }}
+            })),
+        )
+        .expect("write bad metadata");
+        let error = AssetCatalogService::new()
+            .build(&source(&jar))
+            .expect_err("checksum mismatch must be refused");
+        assert!(error.to_string().contains("SHA-1"), "{error}");
+
+        write_launcher_metadata(&jar, "1.12.2");
+        let error = AssetCatalogService::new()
+            .build(&source(&jar))
+            .expect_err("an unknown exact profile must be refused");
+        assert!(
+            error.to_string().contains("no exact built-in profile"),
+            "{error}"
+        );
+
+        let internal = write_entries_jar(
+            &dir,
+            "internal",
+            &[
+                (
+                    "version.json",
+                    json_bytes(serde_json::json!({
+                        "id": "1.14.4",
+                        "world_version": 1976,
+                        "pack_version": 4,
+                        "stable": true
+                    })),
+                ),
+                (
+                    "assets/minecraft/blockstates/stone.json",
+                    json_bytes(serde_json::json!({
+                        "variants": {"": {"model": "minecraft:block/stone"}}
+                    })),
+                ),
+            ],
+        );
+        write_launcher_metadata(&internal, "1.13.2");
+        let error = AssetCatalogService::new()
+            .build(&source(&internal))
+            .expect_err("internal and launcher ids must agree");
+        assert!(
+            error.to_string().contains("version.json declares"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn version_folder_and_managed_cache_expose_the_jar_with_its_metadata() {
+        let dir = TempDir::new("flat-folders");
+        let entries = vec![
+            (
+                "assets/minecraft/blockstates/stone.json",
+                json_bytes(serde_json::json!({
+                    "variants": {"": {"model": "minecraft:block/stone"}}
+                })),
+            ),
+            (
+                "assets/minecraft/models/block/stone.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            ("assets/minecraft/textures/block/stone.png", tiny_png()),
+        ];
+        let source_dir = dir.path.join("versions").join("1.13.2");
+        fs::create_dir_all(&source_dir).expect("version folder");
+        let jar = write_entries_jar_in(&source_dir, "1.13.2", &entries);
+        write_launcher_metadata(&jar, "1.13.2");
+        let catalog = AssetCatalogService::new()
+            .build(&AssetSourceSetting {
+                kind: "version_folder".to_owned(),
+                path: source_dir.display().to_string(),
+            })
+            .expect("version folder catalog");
+        assert_eq!(catalog.minecraft_version, "1.13.2");
+        assert_eq!(catalog.data_version, 1631);
+
+        let cache_dir = dir.path.join("cache").join("1.13.2");
+        fs::create_dir_all(&cache_dir).expect("cache folder");
+        let jar = write_entries_jar_in(&cache_dir, "client", &entries);
+        write_launcher_metadata(&jar, "1.13.2");
+        let catalog = AssetCatalogService::new()
+            .build(&AssetSourceSetting {
+                kind: "client_jar".to_owned(),
+                path: cache_dir.display().to_string(),
+            })
+            .expect("managed cache catalog");
+        assert_eq!(catalog.minecraft_version, "1.13.2");
+    }
+
+    fn write_entries_jar_in(directory: &Path, label: &str, entries: &[(&str, Vec<u8>)]) -> PathBuf {
+        let path = directory.join(format!("{label}.jar"));
+        let file = fs::File::create(&path).expect("create jar");
+        let mut zip = zip::ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for (name, bytes) in entries {
+            zip.start_file(*name, options).expect("start file");
+            zip.write_all(bytes).expect("write file");
+        }
+        zip.finish().expect("finish jar");
+        path
     }
 
     #[test]

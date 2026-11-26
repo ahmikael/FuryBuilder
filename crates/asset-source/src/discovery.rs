@@ -24,8 +24,8 @@ pub fn default_resource_pack_format() -> i32 {
 }
 
 #[derive(Debug, Deserialize)]
-struct VersionMetadata {
-    id: Option<String>,
+pub(crate) struct VersionMetadata {
+    pub(crate) id: Option<String>,
     #[serde(rename = "type")]
     version_type: Option<String>,
     #[serde(rename = "releaseTime")]
@@ -36,7 +36,7 @@ struct VersionMetadata {
     java_version: Option<JavaVersionMetadata>,
     #[serde(rename = "assetIndex")]
     asset_index: Option<AssetIndexMetadata>,
-    downloads: Option<DownloadsMetadata>,
+    pub(crate) downloads: Option<DownloadsMetadata>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -53,14 +53,14 @@ struct AssetIndexMetadata {
 }
 
 #[derive(Debug, Deserialize)]
-struct DownloadsMetadata {
-    client: Option<ClientDownload>,
+pub(crate) struct DownloadsMetadata {
+    pub(crate) client: Option<ClientDownload>,
 }
 
 #[derive(Debug, Deserialize)]
-struct ClientDownload {
-    sha1: Option<String>,
-    size: Option<u64>,
+pub(crate) struct ClientDownload {
+    pub(crate) sha1: Option<String>,
+    pub(crate) size: Option<u64>,
 }
 
 /// Conventional launcher roots for the current platform.
@@ -699,7 +699,7 @@ fn verify_asset_index(
     }
 }
 
-fn read_version_metadata(path: &Path) -> Result<Option<VersionMetadata>, String> {
+pub(crate) fn read_version_metadata(path: &Path) -> Result<Option<VersionMetadata>, String> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),

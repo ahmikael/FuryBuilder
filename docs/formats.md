@@ -203,6 +203,30 @@ the P2 adapter and version conversion can share one mapping.
   an unchanged footprint keeps its original columns.
 - A biome that does not exist in the source release cannot be patched into it.
 
+## Client JAR layout (1.13–1.17)
+
+The flattened releases use the older asset layout: singular
+`assets/minecraft/textures/block` and `textures/item`, item models instead of
+`assets/minecraft/items` item definitions, no `assets/minecraft/atlases`, and plural
+`data/minecraft/tags/blocks`/`tags/items` folders. The catalog extractor reads this layout as
+well as the modern one.
+
+Client JARs for 1.13.2 through 1.16.5 have no root `version.json`. A directly selected JAR is
+accepted only when adjacent launcher metadata (`<stem>.json`, or `client.json` beside
+`client.jar`) names the exact release and that release has a built-in profile; the profile
+supplies `DataVersion` and the resource/data pack formats, and the catalog records a warning.
+Missing metadata, an invalid id, or an id without an exact profile is refused. When both the
+internal `version.json` and launcher metadata exist, their version ids must agree. A declared
+client SHA-1 or size mismatch is refused for every layout; matching metadata marks the checksum
+verified. A `versions/<id>` folder or managed cache folder resolves its JAR directly, while a
+`.minecraft` root still follows target discovery.
+
+Entity render blockstates (`item_frame`, `glow_item_frame`) do not create blocks, empty item
+models and model templates do not create items, and wall-fan variants never gain an item form
+from their base fan. A special item model with only a `particle` texture keeps a `null` icon.
+These rules apply to catalog construction only; world admission for 1.13–1.17 remains closed
+until the P2 import/edit/export adapter is verified.
+
 ## Structure `.nbt`
 
 Java structure `.nbt` is the first interchange format. It stores a bounded block region
