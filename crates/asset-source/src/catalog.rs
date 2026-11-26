@@ -1754,6 +1754,11 @@ mod tests {
         );
         text(
             &mut zip,
+            "data/minecraft/tags/item/stone_tool_materials.json",
+            r#"{"values":["minecraft:stone"]}"#,
+        );
+        text(
+            &mut zip,
             "assets/minecraft/atlases/blocks.json",
             r#"{"sources":[
                 {"type":"directory","source":"block","prefix":"block/"},
@@ -1847,7 +1852,7 @@ mod tests {
         assert_eq!(catalog.counts.languages, 2);
         assert_eq!(catalog.counts.lang_entries, 6);
         assert_eq!(catalog.counts.block_tags, 1);
-        assert_eq!(catalog.counts.item_tags, 1);
+        assert_eq!(catalog.counts.item_tags, 2);
         assert_eq!(catalog.counts.atlas_sources, 2);
         assert!(!catalog.cache_hit);
 
@@ -1874,7 +1879,13 @@ mod tests {
         assert!(!stone_states.multipart);
         assert_eq!(stone_states.model.as_deref(), Some("minecraft:block/stone"));
         assert_eq!(stone.icon_texture.as_deref(), Some("minecraft:block/stone"));
-        assert_eq!(stone.tags, vec!["minecraft:mineable/pickaxe"]);
+        assert_eq!(
+            stone.tags,
+            vec![
+                "minecraft:mineable/pickaxe",
+                "minecraft:stone_tool_materials"
+            ]
+        );
         assert!(stone.item_form.is_some());
         assert_eq!(stone.flags.placeable, Some(true));
         assert_eq!(stone.flags.has_item, Some(true));
@@ -1963,6 +1974,12 @@ mod tests {
         assert!(sword.states.is_none());
         assert_eq!(sword.flags.placeable, Some(false));
         assert_eq!(sword.flags.has_item, Some(true));
+        assert_eq!(sword.flags.has_variants, Some(false));
+        assert_eq!(sword_form.model_type.as_deref(), Some("minecraft:model"));
+        assert_eq!(
+            sword_form.model.as_deref(),
+            Some("minecraft:item/diamond_sword")
+        );
         assert_eq!(
             sword.icon_texture.as_deref(),
             Some("minecraft:item/diamond_sword")

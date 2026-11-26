@@ -165,6 +165,16 @@ fn chunk_nbt(x: i32, z: i32, status: &str, blocks: &str, biome: &str) -> NbtFile
                                     ("Slot", NbtValue::Byte(3)),
                                     ("id", NbtValue::String("minecraft:stone".to_owned())),
                                     ("count", NbtValue::Int(2)),
+                                    (
+                                        "components",
+                                        NbtValue::compound([
+                                            (
+                                                "minecraft:custom_name",
+                                                NbtValue::String(r#"{"text":"Stored"}"#.to_owned()),
+                                            ),
+                                            ("minecraft:damage", NbtValue::Int(7)),
+                                        ]),
+                                    ),
                                 ])],
                             },
                         ),
@@ -572,6 +582,24 @@ fn preserves_opaque_block_entities_and_palette_extensions_and_refuses_tampering(
             written.nbt.root.as_compound().unwrap()["block_entities"],
             original.root.as_compound().unwrap()["block_entities"],
         );
+        let written_entities = written.nbt.root.as_compound().unwrap()["block_entities"]
+            .as_list()
+            .expect("block entities list")
+            .1;
+        let stored_item = written_entities[0].as_compound().unwrap()["Items"]
+            .as_list()
+            .expect("stored items list")
+            .1[0]
+            .as_compound()
+            .expect("stored item");
+        let components = stored_item["components"]
+            .as_compound()
+            .expect("item components");
+        assert_eq!(
+            components["minecraft:custom_name"],
+            NbtValue::String(r#"{"text":"Stored"}"#.to_owned())
+        );
+        assert_eq!(components["minecraft:damage"], NbtValue::Int(7));
         let mut nbt = written.nbt;
         let section = first_section(&mut nbt);
         for key in ["block_states", "biomes"] {

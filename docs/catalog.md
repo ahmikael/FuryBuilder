@@ -180,8 +180,9 @@ same-version export does not guarantee that a vanilla Minecraft client recognize
   are derived in the desktop UI from direct block tags and conservative id patterns. They do
   not change `catalogHash` and are not Minecraft creative-inventory categories. The catalog
   model already carries `category`, `aliases` and the full flag set, but those values stay
-  `null`/empty until official metadata passes fill them. Full creative categories,
-  technical/creative-only flags and item components remain later stages.
+  `null`/empty until official metadata passes fill them. Full creative categories and
+  technical/creative-only flags remain later stages; item components are preserved opaque,
+  not modelled or edited.
 - Recent selections and starred favorites are local UI preferences keyed by `catalogId`; they
   are not part of the project manifest, do not authorize writes, and are filtered against the
   current catalog when shown. Preferences retain up to 24 recent selections and 256 favorites
@@ -191,8 +192,9 @@ same-version export does not guarantee that a vanilla Minecraft client recognize
   browser and placeable-item duplication are later stages.
 - Item definitions resolve the first concrete model from `model`, `base`, `select`,
   `range_dispatch`, `condition` and `composite` shapes; `modelType` records the top-level
-  dispatcher. The full definition stays in the JAR; item components and stack data are not
-  modelled.
+  dispatcher. The full definition stays in the JAR. Data components and stack contents are
+  not modelled or edited; imported item stacks inside block entities and NBT are preserved
+  opaquely, including every component key and value.
 - The icon atlas is exposed through `assets_catalog_atlas` and `project_catalog_atlas`, but
   the `Blocks` palette still draws flat colour chips. Wiring the atlas into the virtualized
   palette and adding 3D previews remain later UI stages.

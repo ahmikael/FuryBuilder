@@ -47,6 +47,9 @@ formats are not migrated.
 - Full blockstate variants: every explicit `variants` key plus its weighted model choices,
   rotation, `uvlock`, the single unambiguous default state and an honest completeness flag.
   Multipart blocks expose their conditions without inventing a default state.
+- Item entries cover block items and item-only entries with exact names, icons, direct item
+  tags and `placeable`/`hasItem` facts. Imported item stacks and their data components remain
+  opaque NBT and survive editing, saving and export unchanged.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes
