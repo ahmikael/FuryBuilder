@@ -20,6 +20,11 @@ formats are not migrated.
   pack formats 4–7, dimension folders and the 0–256 Overworld height (the extended height starts
   with 1.18), plus the column/section biome boundary. The flattened world adapter is not enabled
   yet, so these releases remain unavailable for project creation or import.
+- Internal chunk decoding for flattened Java `1.13–1.17.1`: pre-1.18 `Level.Sections` with
+  direct `Palette`/`BlockStates`, continuous index packing through 1.15 and padded words from
+  1.16, chunk-wide numeric biomes and light-only halo validation. Mixed 1.13–1.14 column
+  footprints are refused until center sampling is authorized, and the releases remain
+  unavailable for project creation or import.
 - End-to-end import for all 27 classic Anvil releases from 1.18 through 1.21.11: exact
   `DataVersion`, profile dimensions and vertical bounds, editable block states and 4x4x4 biomes,
   byte-for-byte source copy and a version-bound project snapshot. Split 26.1+ and legacy layouts

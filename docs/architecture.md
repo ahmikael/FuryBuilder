@@ -365,6 +365,14 @@ admission: every modern classic profile admits import, editing, snapshots, same-
 and generation through its `capabilities`, while split/legacy profiles remain refused. The
 generation target is derived from the same profile, so `level-type`, Java major, data pack
 format and the required server JAR cannot be taken from another version.
+
+The 1.13–1.17 decoder in `classic_anvil/flattened_chunk.rs` follows the pre-1.18 wrapper:
+`Level.Sections` with direct `Palette`/`BlockStates`, continuous index packing through 1.15
+and padded words from 1.16, chunk-wide `Level.Biomes`, and light-only halo validation. The
+exact numeric biome registry and the column/section conversion live beside it. A mixed
+1.13–1.14 4×4 column footprint is refused until center sampling is explicitly authorized.
+This decoder is available to inspection and codec tests, but `version_support` still does not
+admit those `DataVersion`s to `JavaWorld::open`, import, editing or export.
 A loaded overlay uses that same profile to patch the original NBT's palette lists
 and packed indices. Section order, unrelated container tags and opaque block-entity
 payloads are verified before and after the region write. NBT equality compares
@@ -397,8 +405,9 @@ Biome conversion for 1.13–1.17 sits beside the codec in
 `classic_anvil/flattened_biomes.rs`. It reads and patches only one chunk's `Level.Biomes`
 array: 256 columns before 1.15 and 1024 YZX cells from 1.15, mapped through the exact
 release's numeric registry. It produces the same normalized 4×4×4 sections as the modern
-decoder and never rewrites other NBT. This is not an I/O admission path: the region reader,
-wizard and exporter still refuse these releases until the P2 adapter verifies them.
+decoder and never rewrites other NBT. The flattened chunk decoder uses it, but this is not an
+I/O admission path: the region reader, wizard and exporter still refuse these releases until the
+P2 adapter verifies them.
 
 ## Security boundaries
 

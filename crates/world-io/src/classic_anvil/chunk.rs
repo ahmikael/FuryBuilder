@@ -19,7 +19,7 @@ use world_domain::{BiomeState, BlockState, Chunk, ChunkPos, Section, SECTION_SIZ
 use crate::nbt::{NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use crate::world_codec::world_codec;
 
-use super::format::{ClassicChunkFormat, PaletteLayout, DATA_VERSION};
+use super::format::{ClassicChunkFormat, LongPacking, PackedLongs, PaletteLayout, DATA_VERSION};
 use super::reader::{AnvilError, JavaWorld, JavaWorldDimension, RegionChunk};
 
 pub const BLOCK_SECTION_VOLUME: usize = 4096;
@@ -352,7 +352,7 @@ pub(super) fn decode_chunk(
     })
 }
 
-fn compound_list_len(
+pub(super) fn compound_list_len(
     root: &BTreeMap<String, NbtValue>,
     key: &str,
     x: i32,
@@ -384,9 +384,35 @@ fn decode_block_states(
     let block_states = value
         .as_compound()
         .ok_or_else(|| invalid(x, z, "block_states is not a compound"))?;
-    let palette_value = block_states
-        .get(layout.palette)
-        .ok_or_else(|| invalid(x, z, "block_states has no palette"))?;
+    decode_block_section(
+        block_states,
+        layout.palette,
+        layout.data,
+        layout.count,
+        layout.minimum_bits,
+        layout.packing,
+        x,
+        z,
+    )
+}
+
+/// Decodes one block palette and its packed indices from a section container
+/// whose palette and data keys are already resolved. Used by the modern
+/// `block_states` container and the flattened 1.13–1.17 direct section fields.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn decode_block_section(
+    container: &BTreeMap<String, NbtValue>,
+    palette_key: &str,
+    data_key: &str,
+    count: usize,
+    minimum_bits: u8,
+    packing: LongPacking,
+    x: i32,
+    z: i32,
+) -> Result<Section, AnvilError> {
+    let palette_value = container
+        .get(palette_key)
+        .ok_or_else(|| invalid(x, z, "block palette is missing"))?;
     let (kind, items) = palette_value
         .as_list()
         .ok_or_else(|| invalid(x, z, "block palette is not a list"))?;
@@ -415,7 +441,17 @@ fn decode_block_states(
         palette.push(decode_block_state(item, x, z)?);
     }
 
-    let indices = decode_indices(layout, block_states, "block", palette.len(), x, z)?;
+    let packed = PackedLongs::new(palette.len() - 1, minimum_bits, packing);
+    let indices = decode_indices(
+        container,
+        data_key,
+        "block",
+        palette.len(),
+        count,
+        &packed,
+        x,
+        z,
+    )?;
     Section::from_palette_indices(palette, &indices)
         .ok_or_else(|| invalid(x, z, "block palette indices do not form a valid section"))
 }
@@ -498,27 +534,40 @@ fn decode_biomes(
         palette.push(biome.into());
     }
 
-    let cells = decode_indices(layout, biomes, "biome", palette.len(), x, z)?;
+    let packing = PackedLongs::new(palette.len() - 1, layout.minimum_bits, layout.packing);
+    let cells = decode_indices(
+        biomes,
+        layout.data,
+        "biome",
+        palette.len(),
+        layout.count,
+        &packing,
+        x,
+        z,
+    )?;
     BiomeSection::from_palette(palette, cells)
         .ok_or_else(|| invalid(x, z, "biome palette cells are invalid"))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn decode_indices(
-    layout: &PaletteLayout,
     container: &BTreeMap<String, NbtValue>,
+    data_key: &str,
     label: &str,
     palette_len: usize,
+    count: usize,
+    packing: &PackedLongs,
     x: i32,
     z: i32,
 ) -> Result<Vec<u16>, AnvilError> {
-    let words = match container.get(layout.data) {
+    let words = match container.get(data_key) {
         Some(NbtValue::LongArray(words)) => Some(words.as_slice()),
         Some(_) => return Err(invalid(x, z, format!("{label} data is not a long array"))),
         None => None,
     };
     if palette_len == 1 {
         return if words.is_none_or(<[i64]>::is_empty) {
-            Ok(vec![0; layout.count])
+            Ok(vec![0; count])
         } else {
             Err(invalid(
                 x,
@@ -528,8 +577,7 @@ fn decode_indices(
         };
     }
     let words = words.ok_or_else(|| invalid(x, z, format!("{label} data is missing")))?;
-    let packing = layout.packing(palette_len);
-    let expected = packing.word_count(layout.count);
+    let expected = packing.word_count(count);
     if words.len() != expected {
         return Err(invalid(
             x,
@@ -542,7 +590,7 @@ fn decode_indices(
         ));
     }
     packing
-        .unpack(words, layout.count)
+        .unpack(words, count)
         .enumerate()
         .map(|(index, value)| {
             if value as usize >= palette_len {
@@ -560,7 +608,7 @@ fn decode_indices(
         .collect()
 }
 
-fn chunk_int(
+pub(super) fn chunk_int(
     root: &BTreeMap<String, NbtValue>,
     key: &str,
     x: i32,
@@ -573,7 +621,7 @@ fn chunk_int(
     }
 }
 
-fn invalid(x: i32, z: i32, message: impl Into<String>) -> AnvilError {
+pub(super) fn invalid(x: i32, z: i32, message: impl Into<String>) -> AnvilError {
     AnvilError::InvalidChunk {
         x,
         z,

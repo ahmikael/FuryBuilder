@@ -164,6 +164,21 @@ family. This is not an in-place retarget and not a downgrade:
 This path is verified in the Rust backend and tests. The Project Settings action and
 user-facing report arrive with the Project Settings UI work (P4-06).
 
+## Flattened chunk layout (1.13–1.17)
+
+The pre-1.18 chunk keeps `DataVersion` at the root and wraps terrain in a `Level` compound.
+`Level.Sections` carries `Y`, `Palette`, `BlockStates`, `SkyLight` and `BlockLight` directly;
+`Level.Biomes`, `Level.TileEntities` and `Level.Entities` stay on the same wrapper. Block-state
+indices are one continuous bit stream in 1.13–1.15 and become padded per 64-bit word from 1.16,
+so a 17-entry palette occupies 320 longs before 1.16 and 342 longs from 1.16. The internal
+decoder validates the exact `DataVersion`, palette values, section bounds and light-only halo
+records, and maps the chunk-wide biome array through the exact numeric registry. Mixed 1.13–1.14
+4×4 footprints are refused until center sampling is authorized. Heightmaps and every other tag
+remain raw.
+
+The decoder is not an admission path: the region reader, project wizard, editor and exporter
+still refuse these releases until the P2 adapter verifies the complete import/edit/export path.
+
 ## Flattened biome conversion (1.13–1.17)
 
 The flattened releases store biomes in `Level.Biomes`, outside the block-section palettes:
@@ -171,10 +186,9 @@ The flattened releases store biomes in `Level.Biomes`, outside the block-section
 1.15–1.17. `minecraft-version` carries the exact release metadata (DataVersion, Java 8/16,
 pack formats and the 0–256 vertical bounds; the extended Overworld height starts with 1.18) and
 the numeric registry for each exact release. ID 8 is `minecraft:nether` through 1.15 and
-`minecraft:nether_wastes` from 1.16.
-These worlds are not admitted by the region reader, project wizard or exporter yet; the
-converter operates on one chunk's NBT so the P2 adapter and version conversion can share one
-mapping.
+`minecraft:nether_wastes` from 1.16. The chunk decoder uses this converter; the region reader,
+project wizard and exporter remain closed. The converter also operates on one chunk's NBT so
+the P2 adapter and version conversion can share one mapping.
 
 - Decoding produces the normalized 4×4×4 `BiomeSection` grid used by 1.18+.
 - Every source ID must exist in that exact release. An unknown ID stops conversion and is

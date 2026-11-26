@@ -34,7 +34,20 @@ pub(crate) struct PaletteLayout {
     pub palette: &'static str,
     pub data: &'static str,
     pub count: usize,
-    minimum_bits: u8,
+    pub(super) minimum_bits: u8,
+    pub(super) packing: LongPacking,
+}
+
+/// How palette indices are packed into the Java `LongArray`.
+///
+/// 1.13–1.15 used a continuous bit stream where one value may cross a
+/// 64-bit boundary. 1.16 changed the on-disk block-state array to pad each
+/// word ("no value crosses a long"); the heightmap array gained the same
+/// padding in 1.16. Values are always least-significant-bit first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum LongPacking {
+    Padded,
+    Unpadded,
 }
 
 pub(crate) struct LightLayout {
@@ -59,6 +72,7 @@ const MODERN_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
         data: "data",
         count: super::chunk::BLOCK_SECTION_VOLUME,
         minimum_bits: 4,
+        packing: LongPacking::Padded,
     },
     biomes: PaletteLayout {
         container: "biomes",
@@ -66,6 +80,7 @@ const MODERN_CLASSIC: ClassicChunkFormat = ClassicChunkFormat {
         data: "data",
         count: super::chunk::BIOME_SECTION_VOLUME,
         minimum_bits: 1,
+        packing: LongPacking::Padded,
     },
     block_entities: "block_entities",
     entities: "entities",
@@ -130,28 +145,31 @@ impl ClassicChunkFormat {
     pub(crate) fn heightmap_words(&self, height: i32) -> usize {
         // One value per column. Zero means no block; otherwise the value is
         // top Y + 1 relative to the bottom, so height itself must fit.
-        PaddedLongs::for_max_value(height as usize, 1)
+        PackedLongs::new(height as usize, 1, LongPacking::Padded)
             .word_count((SECTION_SIZE * SECTION_SIZE) as usize)
     }
 }
 
 impl PaletteLayout {
-    pub(crate) fn packing(&self, palette_len: usize) -> PaddedLongs {
-        PaddedLongs::for_max_value(palette_len - 1, self.minimum_bits)
+    pub(crate) fn packing(&self, palette_len: usize) -> PackedLongs {
+        PackedLongs::new(palette_len - 1, self.minimum_bits, self.packing)
     }
 }
 
-/// Values are stored low bits first and never cross a 64-bit word boundary.
-/// This concerns the Java wire format, not the editor's canonical packing.
-pub(crate) struct PaddedLongs {
+/// Java palette indices packed least-significant-bit first. The padded form
+/// never crosses a 64-bit word; the unpadded form is one continuous stream.
+/// This concerns the on-disk format, not the editor's canonical packing.
+pub(crate) struct PackedLongs {
     pub bits: u8,
+    packing: LongPacking,
 }
 
-impl PaddedLongs {
-    fn for_max_value(max: usize, minimum_bits: u8) -> Self {
+impl PackedLongs {
+    pub(crate) fn new(max: usize, minimum_bits: u8, packing: LongPacking) -> Self {
         let bits = (usize::BITS - max.leading_zeros()) as u8;
         Self {
             bits: bits.max(minimum_bits),
+            packing,
         }
     }
 
@@ -160,15 +178,36 @@ impl PaddedLongs {
     }
 
     pub(crate) fn word_count(&self, len: usize) -> usize {
-        len.div_ceil(self.values_per_word())
+        match self.packing {
+            LongPacking::Padded => len.div_ceil(self.values_per_word()),
+            LongPacking::Unpadded => (len * self.bits as usize).div_ceil(64),
+        }
     }
 
     pub(crate) fn pack(&self, indices: impl ExactSizeIterator<Item = u16>) -> Vec<i64> {
-        let mut words = vec![0; self.word_count(indices.len())];
-        let slots = self.values_per_word();
-        for (index, value) in indices.enumerate() {
-            let shift = (index % slots) * self.bits as usize;
-            words[index / slots] |= (value as i64) << shift;
+        let len = indices.len();
+        let mut words = vec![0i64; self.word_count(len)];
+        match self.packing {
+            LongPacking::Padded => {
+                let slots = self.values_per_word();
+                for (index, value) in indices.enumerate() {
+                    let shift = (index % slots) * self.bits as usize;
+                    words[index / slots] |= (value as i64) << shift;
+                }
+            }
+            LongPacking::Unpadded => {
+                let bits = self.bits as usize;
+                for (index, value) in indices.enumerate() {
+                    let bit = index * bits;
+                    let word = bit / 64;
+                    let shift = bit % 64;
+                    let value = u64::from(value);
+                    words[word] |= (value << shift) as i64;
+                    if shift + bits > 64 {
+                        words[word + 1] |= (value >> (64 - shift)) as i64;
+                    }
+                }
+            }
         }
         words
     }
@@ -179,12 +218,25 @@ impl PaddedLongs {
         words: &'a [i64],
         len: usize,
     ) -> impl Iterator<Item = u16> + 'a {
-        let slots = self.values_per_word();
         let bits = self.bits as usize;
         let mask = (1u64 << bits) - 1;
-        (0..len).map(move |i| {
-            let shift = (i % slots) * bits;
-            ((words[i / slots] as u64 >> shift) & mask) as u16
+        let slots = self.values_per_word();
+        let packing = self.packing;
+        (0..len).map(move |index| match packing {
+            LongPacking::Padded => {
+                let shift = (index % slots) * bits;
+                ((words[index / slots] as u64 >> shift) & mask) as u16
+            }
+            LongPacking::Unpadded => {
+                let bit = index * bits;
+                let word = bit / 64;
+                let shift = bit % 64;
+                let mut value = words[word] as u64 >> shift;
+                if shift + bits > 64 {
+                    value |= (words[word + 1] as u64) << (64 - shift);
+                }
+                (value & mask) as u16
+            }
         })
     }
 }
@@ -271,5 +323,30 @@ mod tests {
         assert_eq!(MODERN_CLASSIC.heightmap_words(128), 32);
         assert_eq!(MODERN_CLASSIC.heightmap_words(256), 37);
         assert_eq!(MODERN_CLASSIC.heightmap_words(384), 37);
+    }
+
+    #[test]
+    fn unpadded_longs_are_one_continuous_bit_stream() {
+        let packing = PackedLongs::new(16, 4, LongPacking::Unpadded);
+        assert_eq!(packing.bits, 5);
+        assert_eq!(packing.word_count(4096), 320);
+        let indices = (0..4096)
+            .map(|index| (index % 17) as u16)
+            .collect::<Vec<_>>();
+        let words = packing.pack(indices.iter().copied());
+        assert_eq!(words.len(), 320);
+        assert_eq!(
+            packing.unpack(&words, indices.len()).collect::<Vec<_>>(),
+            indices
+        );
+
+        let padded = PackedLongs::new(16, 4, LongPacking::Padded);
+        assert_eq!(padded.word_count(4096), 342);
+        let words = padded.pack(indices.iter().copied());
+        assert_eq!(words.len(), 342);
+        assert_eq!(
+            padded.unpack(&words, indices.len()).collect::<Vec<_>>(),
+            indices
+        );
     }
 }
