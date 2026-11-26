@@ -515,7 +515,7 @@ describe("block palette", () => {
           multipart: false,
           model: "minecraft:block/stone",
         },
-        "minecraft:block/stone",
+        index < 100 ? "minecraft:block/stone" : "minecraft:block/dirt",
         [],
       ),
     );
@@ -529,15 +529,34 @@ describe("block palette", () => {
     expect(within(list).getByText("test_block_0")).toBeVisible();
     expect(within(list).queryByText("test_block_150")).not.toBeInTheDocument();
     expect(within(list).getAllByRole("listitem").length).toBeLessThan(entries.length);
+    await waitFor(() =>
+      expect(
+        catalogApi.atlas.mock.calls.some(([keys]) =>
+          (keys as string[]).includes("minecraft:block/stone"),
+        ),
+      ).toBe(true),
+    );
+    expect(
+      catalogApi.atlas.mock.calls.some(([keys]) =>
+        (keys as string[]).includes("minecraft:block/dirt"),
+      ),
+    ).toBe(false);
 
     fireEvent.scroll(list, { target: { scrollTop: 140 * 32 } });
     await waitFor(() => expect(within(list).getByText("test_block_140")).toBeInTheDocument());
     expect(within(list).queryByText("test_block_0")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        catalogApi.atlas.mock.calls.some(([keys]) =>
+          (keys as string[]).includes("minecraft:block/dirt"),
+        ),
+      ).toBe(true),
+    );
   });
 
   it("draws atlas icons and an isometric preview", async () => {
     const atlas: CatalogIconAtlas = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       cacheKey: "java-1.21.4-atlas",
       cacheHit: false,
       catalogId: projectCatalog.catalogId,
@@ -563,6 +582,8 @@ describe("block palette", () => {
           hasAlpha: false,
         },
       ],
+      requestedTextureCount: 1,
+      totalIconTextureCount: 9,
       warnings: [],
       packIssues: [],
     };
@@ -573,6 +594,8 @@ describe("block palette", () => {
     await waitFor(() =>
       expect(document.querySelector('[data-catalog-icon="sprite"]')).not.toBeNull(),
     );
+    expect(catalogApi.atlas).toHaveBeenCalled();
+    expect(catalogApi.atlas.mock.calls[0][0]).toContain("minecraft:block/stone");
 
     await user.click(screen.getByText("stone"));
     expect(document.querySelector('[data-catalog-icon="cube"]')).not.toBeNull();

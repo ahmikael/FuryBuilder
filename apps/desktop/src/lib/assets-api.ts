@@ -80,16 +80,20 @@ export function loadAssetCatalog(override?: {
 }
 
 /**
- * Builds the unmodified palette icon atlas for the selected client JAR, outside a project.
+ * Builds one lazy palette icon batch for the selected client JAR, outside a project.
+ * Only textures declared by the exact catalog may be requested.
  */
-export function loadAssetCatalogAtlas(override?: {
-  sourceKind: AssetSourceKind;
-  sourcePath: string;
-}): Promise<CatalogIconAtlas> {
-  return invokeCommand<CatalogIconAtlas>(
-    "assets_catalog_atlas",
-    override ? { sourceKind: override.sourceKind, sourcePath: override.sourcePath } : {},
-  );
+export function loadAssetCatalogAtlas(
+  textureKeys: string[],
+  override?: {
+    sourceKind: AssetSourceKind;
+    sourcePath: string;
+  },
+): Promise<CatalogIconAtlas> {
+  return invokeCommand<CatalogIconAtlas>("assets_catalog_atlas", {
+    textureKeys,
+    ...(override ? { sourceKind: override.sourceKind, sourcePath: override.sourcePath } : {}),
+  });
 }
 
 /**
@@ -101,9 +105,10 @@ export function loadProjectCatalog(): Promise<CatalogSnapshot | null> {
 }
 
 /**
- * Builds the icon atlas for the catalog pinned by the open project and its own resource-pack
- * stack. Returns null for an explicit placeholder project, matching `loadProjectCatalog`.
+ * Builds one lazy icon batch for the catalog pinned by the open project and its own
+ * resource-pack stack. Only textures declared by the exact catalog may be requested.
+ * Returns null for an explicit placeholder project, matching `loadProjectCatalog`.
  */
-export function loadProjectCatalogAtlas(): Promise<CatalogIconAtlas | null> {
-  return invokeCommand<CatalogIconAtlas | null>("project_catalog_atlas");
+export function loadProjectCatalogAtlas(textureKeys: string[]): Promise<CatalogIconAtlas | null> {
+  return invokeCommand<CatalogIconAtlas | null>("project_catalog_atlas", { textureKeys });
 }

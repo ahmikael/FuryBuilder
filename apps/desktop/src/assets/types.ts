@@ -301,8 +301,8 @@ export interface CatalogAtlasTexture {
 }
 
 /**
- * Packed PNG atlas for palette icons. The cache key is
- * `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema`.
+ * One lazy PNG atlas batch for the requested palette icons. The cache key is
+ * `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema|requestedKeysHash`.
  */
 export interface CatalogIconAtlas {
   schemaVersion: number;
@@ -318,6 +318,10 @@ export interface CatalogIconAtlas {
   height: number;
   pngBase64: string;
   textures: CatalogAtlasTexture[];
+  /** Distinct catalog textures requested for this batch. */
+  requestedTextureCount: number;
+  /** Distinct icon textures declared by the whole catalog. */
+  totalIconTextureCount: number;
   warnings: string[];
   packIssues: string[];
 }

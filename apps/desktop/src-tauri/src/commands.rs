@@ -3883,6 +3883,7 @@ pub fn assets_catalog_atlas(
     atlas: State<'_, CatalogIconAtlasService>,
     source_kind: Option<String>,
     source_path: Option<String>,
+    texture_keys: Vec<String>,
 ) -> Result<CatalogIconAtlas, AppError> {
     let source = resolve_catalog_source(components.inner(), source_kind, source_path)?;
     let snapshot = catalog.catalog(&source).map_err(asset_catalog_error)?;
@@ -3897,7 +3898,13 @@ pub fn assets_catalog_atlas(
         )
     })?;
     atlas
-        .atlas(&profile, &catalog_asset_source(&snapshot), &[], &snapshot)
+        .atlas(
+            &profile,
+            &catalog_asset_source(&snapshot),
+            &[],
+            &snapshot,
+            &texture_keys,
+        )
         .map_err(asset_bundle_error)
 }
 
@@ -3923,7 +3930,10 @@ pub fn project_catalog(
 /// Builds the icon atlas for the catalog pinned by the open project. Placeholder projects
 /// return `None`, matching `project_catalog`.
 #[tauri::command]
-pub async fn project_catalog_atlas(app: AppHandle) -> Result<Option<CatalogIconAtlas>, AppError> {
+pub async fn project_catalog_atlas(
+    app: AppHandle,
+    texture_keys: Vec<String>,
+) -> Result<Option<CatalogIconAtlas>, AppError> {
     tauri::async_runtime::spawn_blocking(move || {
         let Some(ProjectVisualAssets {
             profile,
@@ -3939,6 +3949,7 @@ pub async fn project_catalog_atlas(app: AppHandle) -> Result<Option<CatalogIconA
                 &catalog_asset_source(&snapshot),
                 &packs,
                 &snapshot,
+                &texture_keys,
             )
             .map(Some)
             .map_err(asset_bundle_error)

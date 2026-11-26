@@ -3,43 +3,47 @@ import type { CSSProperties } from "react";
 import type { CatalogAtlasTexture, CatalogIconAtlas } from "@/assets/types";
 import { blockColor } from "@/renderer/assets";
 
-export interface CatalogIconAtlasImage {
+export interface CatalogIconSprite {
   url: string;
-  width: number;
-  height: number;
-  textures: ReadonlyMap<string, CatalogAtlasTexture>;
+  atlasWidth: number;
+  atlasHeight: number;
+  texture: CatalogAtlasTexture;
 }
 
-/** Precomputes the atlas image and texture index once per catalog load. */
-export function catalogIconAtlasImage(atlas: CatalogIconAtlas): CatalogIconAtlasImage {
-  return {
-    url: `data:image/png;base64,${atlas.pngBase64}`,
-    width: Math.max(1, atlas.width),
-    height: Math.max(1, atlas.height),
-    textures: new Map(atlas.textures.map((texture) => [texture.key, texture])),
-  };
+/** Every loaded lazy atlas batch merged into one texture-key lookup. */
+export type CatalogIconIndex = ReadonlyMap<string, CatalogIconSprite>;
+
+/** Builds the icon lookup once per set of loaded atlas batches. */
+export function catalogIconIndex(atlases: readonly CatalogIconAtlas[]): CatalogIconIndex {
+  const index = new Map<string, CatalogIconSprite>();
+  for (const atlas of atlases) {
+    const url = `data:image/png;base64,${atlas.pngBase64}`;
+    const atlasWidth = Math.max(1, atlas.width);
+    const atlasHeight = Math.max(1, atlas.height);
+    for (const texture of atlas.textures) {
+      index.set(texture.key, { url, atlasWidth, atlasHeight, texture });
+    }
+  }
+  return index;
 }
 
 interface CatalogBlockIconProps {
   name: string;
   textureKey: string | null;
-  atlas: CatalogIconAtlasImage | null;
+  icons: CatalogIconIndex | null;
   size?: number;
   mode?: "sprite" | "cube";
 }
 
-function spriteStyle(
-  atlas: CatalogIconAtlasImage,
-  texture: CatalogAtlasTexture,
-  size: number,
-): CSSProperties {
+function spriteStyle(sprite: CatalogIconSprite, size: number): CSSProperties {
+  const { texture, url, atlasWidth, atlasHeight } = sprite;
   const scaleX = size / Math.max(1, texture.width);
   const scaleY = size / Math.max(1, texture.height);
   return {
     width: size,
     height: size,
-    backgroundImage: `url("${atlas.url}")`,
-    backgroundSize: `${atlas.width * scaleX}px ${atlas.height * scaleY}px`,
+    backgroundImage: `url("${url}")`,
+    backgroundSize: `${atlasWidth * scaleX}px ${atlasHeight * scaleY}px`,
     backgroundPosition: `${-texture.x * scaleX}px ${-texture.y * scaleY}px`,
     backgroundRepeat: "no-repeat",
     imageRendering: "pixelated",
@@ -53,12 +57,12 @@ function spriteStyle(
 export function CatalogBlockIcon({
   name,
   textureKey,
-  atlas,
+  icons,
   size = 20,
   mode = "sprite",
 }: CatalogBlockIconProps) {
-  const texture = textureKey ? atlas?.textures.get(textureKey) : undefined;
-  if (!atlas || !texture || texture.missing) {
+  const sprite = textureKey ? icons?.get(textureKey) : undefined;
+  if (!sprite || sprite.texture.missing) {
     if (mode === "cube") {
       const face = Math.max(8, Math.round(size * 0.72));
       const half = face / 2;
@@ -104,7 +108,7 @@ export function CatalogBlockIcon({
       <span
         data-catalog-icon="sprite"
         className="shrink-0 rounded-sm"
-        style={spriteStyle(atlas, texture, size)}
+        style={spriteStyle(sprite, size)}
         aria-hidden="true"
       />
     );
@@ -112,7 +116,7 @@ export function CatalogBlockIcon({
 
   const face = Math.max(8, Math.round(size * 0.72));
   const half = face / 2;
-  const faceStyle = spriteStyle(atlas, texture, face);
+  const faceStyle = spriteStyle(sprite, face);
   return (
     <span
       data-catalog-icon="cube"

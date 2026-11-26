@@ -112,28 +112,30 @@ modification time. A project pins `catalogId` and `catalogHash` in its schema-2 
 
 ## Icon atlas
 
-`CatalogIconAtlas` is the presentation companion to the registry snapshot: a packed PNG plus
-the rectangle of every icon texture. It contains only the distinct textures referenced by
-`iconTexture` on catalog entries, so a palette can draw an icon without decoding
-individual files in the WebView. The render atlas used by the viewport is separate and only
-contains the block states currently visible.
+`CatalogIconAtlas` is the presentation companion to the registry snapshot: one lazy packed PNG
+batch plus the rectangles of the requested icon textures. A batch contains only distinct
+textures named in the request, so a palette can draw icons without decoding individual files in
+the WebView and without building a full-catalog atlas. The render atlas used by the viewport is
+separate and only contains the block states currently visible.
 
-- The atlas is built from the exact client JAR and the ordered resource-pack stack. Packs may
+- The batch is built from the exact client JAR and the ordered resource-pack stack. Packs may
   replace a texture, but they never add or remove catalog entries.
-- The cache key is exactly
-  `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema`; changing the JAR,
-  the order or bytes of usable packs, the version or the catalog/atlas schema changes the key.
-  The cache is process-local, bounded to four entries and 64 MiB, and is cleared by
-  `assets_clear_cache`.
-- `assets_catalog_atlas`/`loadAssetCatalogAtlas()` build the vanilla atlas for the selected
-  client JAR. `project_catalog_atlas`/`loadProjectCatalogAtlas()` and `project_render_bundle`
-  use the JAR and pack stack pinned by the open project, and return `null` for placeholder projects.
+- A request must name 1–512 textures that the exact catalog declares as `iconTexture`; empty,
+  unknown or oversized key lists are rejected. Arbitrary archive paths are never accepted.
+- The cache key is
+  `minecraftVersion|clientJarSha1|packStackHash|catalogSchema.atlasSchema|requestedKeysHash`;
+  changing the JAR, the order or bytes of usable packs, the version, the catalog/atlas schema or
+  the requested key set changes the key. The cache is process-local, bounded to 32 entries and
+  16 MiB, and is cleared by `assets_clear_cache`.
+- `assets_catalog_atlas`/`loadAssetCatalogAtlas(textureKeys)` build a vanilla batch for the
+  selected client JAR. `project_catalog_atlas`/`loadProjectCatalogAtlas(textureKeys)` and
+  `project_render_bundle` use the JAR and pack stack pinned by the open project, and return
+  `null` for placeholder projects.
 - Missing or malformed textures use the same marked checker as the render atlas. Animated
   textures use their first frame. The atlas never changes block names, states or world data.
 - The atlas is not part of `catalogHash`; changing a resource pack must not invalidate the
-  catalog identity pinned by a project. The `Blocks` palette uses this atlas for its row icons
-  and the selected-entry isometric preview. Loading is still eager per catalog; the lazy
-  atlas requested by the performance stage is not implemented yet.
+  catalog identity pinned by a project. The `Blocks` palette requests only the visible window,
+  its overscan and the selected entry, then merges the returned texture rectangles.
 
 ## Palette UI
 
@@ -167,6 +169,27 @@ This comparison is deliberately narrow: it proves absence of those ids, but it i
 cross-version catalog diff, and it does not apply rename hints or write aliases. A renamed block
 can therefore appear under its old quick-pick id. Full diff-driven suggestions wait for a
 reference catalog to be pinned; `CatalogDiff` itself is read-only and already available.
+
+## Performance and memory
+
+The palette is designed for a catalog well beyond the current 1,097 blocks and 1,385 items:
+
+- The atlas is lazy. The UI asks only for icon textures in the virtualized window plus the
+  selected entry, debounces requests while scrolling and keeps at most eight returned batches
+  or 16 MiB in the WebView. The backend independently caps its batch cache at 32 entries and
+  16 MiB. A batch is never allowed to grow past 512 textures.
+- Search builds one lowercase haystack per entry and a trigram posting index. A query is
+  normalized once, then a three-character-or-longer query starts from its rarest trigram; shorter
+  queries scan the cached haystacks. The index is capped at an estimated 24 MiB. If a future
+  catalog exceeds that budget, the palette still searches with the linear matcher instead of
+  retaining an unbounded index.
+- The canonical catalog payload held in the backend and sent to the WebView is capped at 64 MiB.
+  The cap is checked against the same canonical JSON used for `catalogHash`, so an oversized
+  catalog fails with `limit_exceeded` instead of exhausting memory. A synthetic 10,000-entry
+  catalog test stays under this budget.
+- A real 1.21.4 client JAR reports 990 distinct palette icon textures. A 256-texture lazy batch
+  measures 256×512 PNG and 191,547 bytes, and a repeated request is a cache hit. The previous
+  eager atlas measurement is historical; the UI no longer builds it.
 
 ## Project authority
 
@@ -268,8 +291,11 @@ project.
   dispatcher. The full definition stays in the JAR. Data components and stack contents are
   not modelled or edited; imported item stacks inside block entities and NBT are preserved
   opaquely, including every component key and value.
-- The icon atlas is loaded eagerly for the open catalog. The lazy atlas, search index and
-  memory budget for the 10k+ entry target remain the performance stage.
+- The icon atlas is loaded lazily in visible-window batches, and the search index is rebuilt
+  from the loaded catalog rather than persisted. Neither the atlas nor the search index changes
+  catalog identity or write admission. The current real-JAR measurement is 990 distinct icon
+  textures; the 10k+ entry target is covered by the bounded atlas, index and payload budgets
+  above.
 - Tag membership is direct. Transitive `#tag` references remain available in the JAR and are
   not flattened into each entry.
 - A texture missing from the JAR produces a null icon and a warning. The asset-index fallback
@@ -281,8 +307,8 @@ project.
 - Tests use a synthetic 1.21.4 client JAR. The real-JAR matrix and captured catalog snapshots
   belong to the full fixture stage; manual QA downloads a real JAR. A real 1.21.4 client JAR
   currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
-  173 item tag files and 14 atlases. Its icon atlas packs 1,105 textures (including the
-  missing checker) into a 256×2048 PNG of 684,731 bytes; a repeated request is a cache hit.
+  173 item tag files, 14 atlases and 990 distinct palette icon textures. Its icons are served
+  lazily in bounded batches; the 256-texture measurement is in Performance and memory.
 
 ## Safety bounds
 
@@ -290,7 +316,7 @@ project.
 - At most 65,536 textures and 65,536 `en_us` keys.
 - At most 16,384 tag files, 256 atlas sources per atlas and 256 warnings.
 - One catalog JSON document is capped at 4 MiB.
-- The icon atlas is capped at 4,096 distinct textures and 32 million pixels; one decoded
-  texture is capped at 1024×1024.
+- One lazy icon-atlas batch requests at most 512 catalog textures and 32 million packed pixels;
+  one decoded texture is capped at 1024×1024.
 - A malformed file is skipped with a warning; a JAR without blockstates is refused instead of
   being reported as an empty catalog.

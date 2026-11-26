@@ -26,8 +26,8 @@ import { Separator } from "@/components/ui/separator";
 import type { BlockDefinition } from "@/editor/types";
 import {
   CatalogBlockIcon,
-  catalogIconAtlasImage,
-  type CatalogIconAtlasImage,
+  catalogIconIndex,
+  type CatalogIconIndex,
 } from "@/features/workspace/CatalogBlockIcon";
 import { CatalogStatePicker } from "@/features/workspace/CatalogStatePicker";
 import {
@@ -42,6 +42,10 @@ import {
   type PaletteFlagFilterId,
   type PaletteGroupId,
 } from "@/features/workspace/palette-categories";
+import {
+  buildPaletteSearchIndex,
+  normalizePaletteSearch,
+} from "@/features/workspace/palette-search-index";
 import { loadProjectCatalog, loadProjectCatalogAtlas } from "@/lib/assets-api";
 import { isTauriRuntime } from "@/lib/ipc";
 import { fetchCuratedBlockCatalog } from "@/lib/world-api";
@@ -81,6 +85,38 @@ const FLAG_FILTER_OPTIONS = PALETTE_FLAG_FILTERS.map(({ id, label }) => ({ value
 const ROW_HEIGHT = 32;
 const VIRTUAL_OVERSCAN = 6;
 const FALLBACK_VIEWPORT_HEIGHT = 320;
+const ICON_REQUEST_DEBOUNCE_MS = 80;
+const MAX_ICON_ATLAS_BATCHES = 8;
+const MAX_ICON_ATLAS_BYTES = 16 * 1024 * 1024;
+
+function atlasBatchBytes(atlas: CatalogIconAtlas): number {
+  return atlas.pngBase64.length + atlas.textures.length * 64;
+}
+
+/** Keeps the most recent lazy icon batches inside the WebView memory budget. */
+function mergeAtlasBatches(
+  current: readonly CatalogIconAtlas[],
+  next: CatalogIconAtlas,
+): CatalogIconAtlas[] {
+  const merged = [
+    ...current.filter(
+      (batch) => batch.catalogId === next.catalogId && batch.cacheKey !== next.cacheKey,
+    ),
+    next,
+  ];
+  const kept: CatalogIconAtlas[] = [];
+  let bytes = 0;
+  for (let index = merged.length - 1; index >= 0; index -= 1) {
+    const batch = merged[index];
+    const batchBytes = atlasBatchBytes(batch);
+    if (kept.length >= MAX_ICON_ATLAS_BATCHES || bytes + batchBytes > MAX_ICON_ATLAS_BYTES) {
+      continue;
+    }
+    kept.unshift(batch);
+    bytes += batchBytes;
+  }
+  return kept;
+}
 
 function shortBlockId(id: string): string {
   return id.startsWith("minecraft:") ? id.slice("minecraft:".length) : id;
@@ -135,7 +171,8 @@ export function BlockPalette() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<PaletteFilterId>("all");
   const [flagFilter, setFlagFilter] = useState<PaletteFlagFilterId>("any");
-  const [atlas, setAtlas] = useState<CatalogIconAtlas | null>(null);
+  const [atlasBatches, setAtlasBatches] = useState<CatalogIconAtlas[]>([]);
+  const [atlasError, setAtlasError] = useState<{ catalogId: string; message: string } | null>(null);
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
@@ -164,21 +201,6 @@ export function BlockPalette() {
   }, [attempt]);
 
   useEffect(() => {
-    if (!isTauriRuntime() || !catalogId) return;
-    let cancelled = false;
-    void loadProjectCatalogAtlas()
-      .then((next) => {
-        if (!cancelled) setAtlas(next?.catalogId === catalogId ? next : null);
-      })
-      .catch(() => {
-        if (!cancelled) setAtlas(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [catalogId]);
-
-  useEffect(() => {
     const element = listRef.current;
     if (!element) return;
     const measure = () => setViewportHeight(element.clientHeight);
@@ -195,10 +217,6 @@ export function BlockPalette() {
     };
   }, []);
 
-  const iconAtlas = useMemo<CatalogIconAtlasImage | null>(
-    () => (atlas && atlas.catalogId === catalogId ? catalogIconAtlasImage(atlas) : null),
-    [atlas, catalogId],
-  );
   const resetScroll = () => {
     setScrollTop(0);
     if (listRef.current) listRef.current.scrollTop = 0;
@@ -244,6 +262,7 @@ export function BlockPalette() {
     return [];
   }, [catalog, curated]);
 
+  const searchIndex = useMemo(() => buildPaletteSearchIndex(palette), [palette]);
   const entryById = useMemo(() => new Map(palette.map((entry) => [entry.name, entry])), [palette]);
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const recentEntries = useMemo(
@@ -291,13 +310,17 @@ export function BlockPalette() {
     } else {
       entries = palette.filter((entry) => entry.groups.includes(category));
     }
-    if (!search.trim()) {
+    const needle = normalizePaletteSearch(search);
+    if (!needle) {
       return entries.filter((entry) => matchesPaletteFlagFilter(entry.flags, flagFilter));
     }
+    const matchedNames = searchIndex?.search(needle) ?? null;
     return entries
-      .filter((entry) => matchesPaletteSearch(entry, search))
+      .filter((entry) =>
+        matchedNames ? matchedNames.has(entry.name) : matchesPaletteSearch(entry, search),
+      )
       .filter((entry) => matchesPaletteFlagFilter(entry.flags, flagFilter));
-  }, [category, palette, recentEntries, favoriteEntries, search, flagFilter]);
+  }, [category, palette, recentEntries, favoriteEntries, search, flagFilter, searchIndex]);
 
   const unavailableQuickPicks = useMemo<UnavailableQuickPick[]>(() => {
     if (!catalog || !curated) return [];
@@ -325,12 +348,54 @@ export function BlockPalette() {
   const windowEntries = visible.slice(startIndex, endIndex);
 
   const definition = entryById.get(selectedBlock.name) ?? null;
+  const loadedAtlasBatches = useMemo(
+    () => atlasBatches.filter((batch) => batch.catalogId === catalogId),
+    [atlasBatches, catalogId],
+  );
+  const iconIndex = useMemo<CatalogIconIndex | null>(
+    () => (loadedAtlasBatches.length > 0 ? catalogIconIndex(loadedAtlasBatches) : null),
+    [loadedAtlasBatches],
+  );
+  const desiredTextureKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const entry of windowEntries) {
+      if (entry.iconTexture) keys.add(entry.iconTexture);
+    }
+    if (definition?.iconTexture) keys.add(definition.iconTexture);
+    return [...keys].sort();
+  }, [windowEntries, definition]);
+  const missingIconKey = desiredTextureKeys
+    .filter((textureKey) => !iconIndex?.has(textureKey))
+    .join("\n");
+
+  useEffect(() => {
+    if (!isTauriRuntime() || !catalogId || !missingIconKey) return;
+    let cancelled = false;
+    const textureKeys = missingIconKey.split("\n");
+    const timer = window.setTimeout(() => {
+      void loadProjectCatalogAtlas(textureKeys)
+        .then((next) => {
+          if (cancelled || !next || next.catalogId !== catalogId) return;
+          setAtlasBatches((current) => mergeAtlasBatches(current, next));
+          setAtlasError(null);
+        })
+        .catch((reason: unknown) => {
+          if (!cancelled) setAtlasError({ catalogId, message: reasonMessage(reason) });
+        });
+    }, ICON_REQUEST_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [catalogId, missingIconKey]);
+
   const overrides = selectedBlock.properties ?? {};
   const selectedStateSummary = formatProperties(overrides);
   const declaredDefaultSummary = definition ? formatProperties(definition.properties) : "";
   const source = catalog ? "clientJar" : curated ? "curated" : null;
   const loading = result === null;
   const selectedFavorite = definition ? favoriteSet.has(definition.name) : false;
+  const visibleAtlasError = atlasError?.catalogId === catalogId ? atlasError.message : null;
   const showUnavailable =
     category === "all" && flagFilter === "any" && unavailableQuickPicks.length > 0;
 
@@ -530,7 +595,7 @@ export function BlockPalette() {
                       <CatalogBlockIcon
                         name={entry.name}
                         textureKey={entry.iconTexture}
-                        atlas={iconAtlas}
+                        icons={iconIndex}
                         size={20}
                       />
                       <span className="min-w-0 flex-1 truncate text-xs">
@@ -591,7 +656,7 @@ export function BlockPalette() {
                       <CatalogBlockIcon
                         name={entry.name}
                         textureKey={null}
-                        atlas={iconAtlas}
+                        icons={iconIndex}
                         size={20}
                       />
                       <div className="min-w-0 flex-1">
@@ -619,7 +684,7 @@ export function BlockPalette() {
               <CatalogBlockIcon
                 name={selectedBlock.name}
                 textureKey={definition?.iconTexture ?? null}
-                atlas={iconAtlas}
+                icons={iconIndex}
                 size={40}
                 mode="cube"
               />
@@ -749,9 +814,12 @@ export function BlockPalette() {
             ) : null}
             <div className="mt-1.5">
               {source === "clientJar"
-                ? "Block names and property keys come from the project's pinned client JAR catalog. The preview is an isometric view of the catalog icon texture, not a full block-model render."
+                ? "Block names and property keys come from the project's pinned client JAR catalog. Icons load only for the visible rows, and the preview is an isometric view of the catalog icon texture, not a full block-model render."
                 : "Curated quick picks are shown because this project has no client JAR catalog. Their properties are not an exact blockstate schema."}
             </div>
+            {visibleAtlasError ? (
+              <div className="mt-1.5">Visible icons could not be loaded: {visibleAtlasError}</div>
+            ) : null}
           </div>
         </CardContent>
       </Card>

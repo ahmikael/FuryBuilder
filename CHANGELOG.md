@@ -69,6 +69,10 @@ formats are not migrated.
   catalog show `Not in this version` with a disabled `Game default` action and an explicit
   replace-source exception. Curated quick-pick ids proven absent from the exact version are
   listed separately and disabled; this is not presented as a complete cross-version diff.
+- Lazy palette icon atlases that decode only the visible window, overscan and selected entry.
+  Requests are bounded to 512 catalog-declared textures, cached in 32-entry/16 MiB backend
+  batches and merged into at most eight/16 MiB WebView batches. Search uses a bounded trigram
+  index, and the canonical catalog payload has a 64 MiB hard cap.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes

@@ -44,7 +44,7 @@ pub use catalog::{
 };
 pub use catalog_atlas::{
     CatalogAtlasTexture, CatalogIconAtlas, CatalogIconAtlasService, CATALOG_ATLAS_SCHEMA_VERSION,
-    MAX_CATALOG_ATLAS_TEXTURES,
+    MAX_CATALOG_ATLAS_REQUEST_TEXTURES,
 };
 pub use catalog_diff::{
     CatalogDiff, CatalogDiffEntry, CatalogDiffError, CatalogEntryChange,

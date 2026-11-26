@@ -53,7 +53,8 @@ fn main() {
         .iter()
         .map(asset_source::ResourcePackInput::local)
         .collect();
-    let first = match service.atlas(&profile, &source, &packs, &catalog) {
+    let texture_keys: Vec<String> = catalog.icon_texture_keys().into_iter().take(256).collect();
+    let first = match service.atlas(&profile, &source, &packs, &catalog, &texture_keys) {
         Ok(atlas) => atlas,
         Err(error) => {
             eprintln!("atlas failed ({}): {error}", error.code());
@@ -61,7 +62,7 @@ fn main() {
         }
     };
     let second = if options.repeat {
-        match service.atlas(&profile, &source, &packs, &catalog) {
+        match service.atlas(&profile, &source, &packs, &catalog, &texture_keys) {
             Ok(atlas) => Some(atlas),
             Err(error) => {
                 eprintln!("second atlas failed ({}): {error}", error.code());
@@ -85,7 +86,7 @@ fn main() {
         }
     }
     let summary = json!({
-        "tool": { "name": "furybuilder-catalog-atlas-probe", "version": 1 },
+        "tool": { "name": "furybuilder-catalog-atlas-probe", "version": 2 },
         "source": { "kind": "client_jar", "path": options.jar },
         "packs": options.packs,
         "schemaVersion": first.schema_version,
@@ -104,6 +105,8 @@ fn main() {
             "height": first.height,
             "pngBytes": BASE64.decode(&first.png_base64).map(|bytes| bytes.len()).unwrap_or(0),
             "textureCount": first.textures.len(),
+            "requestedTextureCount": first.requested_texture_count,
+            "totalIconTextureCount": first.total_icon_texture_count,
             "missingCount": first.textures.iter().filter(|texture| texture.missing).count(),
         },
         "sample": first.textures.iter().find(|texture| texture.key == "minecraft:block/stone"),

@@ -274,13 +274,14 @@ panel agree on which block names and property keys exist, and values are checked
 the blockstate file enumerates them. The snapshot itself is one sorted `CatalogEntry` list:
 block states live under `states`, the item form under `itemForm`, and placement facts under
 typed `flags`; a fact the JAR cannot prove stays `null` instead of being guessed. A separate
-icon atlas packs the catalog's referenced
-textures for presentation; it is cached by exact version, client JAR SHA-1, ordered pack-stack
-hash and catalog schema, so a resource-pack change cannot silently alter the pinned registry.
-The Blocks palette derives basic Building/Natural/Functional/Redstone/Technical/Other groups
-from direct tags and ids and keeps recent/favorite selections as local UI preferences keyed by
-catalog id. Multipart defaults, exact per-block value registries, full creative categories and
-item browsing remain later catalog stages.
+icon atlas builds lazy batches for the textures named by the palette's visible window and
+selected entry; each batch is cached by exact version, client JAR SHA-1, ordered pack-stack
+hash, catalog schema and requested-key digest, so a resource-pack change cannot silently alter
+the pinned registry and a large catalog never needs one eager atlas. The Blocks palette is
+virtualized, derives basic Building/Natural/Functional/Redstone/Technical/Other groups from
+direct tags and ids, uses a bounded trigram search index, and keeps recent/favorite selections
+as local UI preferences keyed by catalog id. Multipart defaults, exact per-block value
+registries, full creative categories and item browsing remain later catalog stages.
 
 Import loads source states into the initial snapshot without using the live write path.
 On open, the service checks used section-palette entries against its write registry and

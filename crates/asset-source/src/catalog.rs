@@ -43,6 +43,10 @@ pub const MAX_CATALOG_ATLAS_SOURCES: usize = 256;
 pub const MAX_CATALOG_JSON_BYTES: u64 = 4 * 1024 * 1024;
 /// Warnings are diagnostics, not data; a broken pack must not produce an unbounded response.
 pub const MAX_CATALOG_WARNINGS: usize = 256;
+/// Budget for the canonical catalog payload held in the backend and sent to the WebView.
+/// A 10k+ entry catalog fits comfortably; exceeding this is a hard error rather than runaway
+/// memory use in both processes.
+pub const MAX_CATALOG_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 
 const MAX_CATALOG_CACHE_ENTRIES: usize = 4;
 const MAX_MODEL_DEPTH: usize = 12;
@@ -171,6 +175,17 @@ impl CatalogEntry {
     /// An entry with an item form can appear in item searches and inventory-like lists.
     pub fn is_item(&self) -> bool {
         self.item_form.is_some()
+    }
+}
+
+impl CatalogSnapshot {
+    /// Distinct icon textures declared by entries. The palette requests only the subset it
+    /// currently displays, so the atlas never decodes every icon for a large catalog.
+    pub fn icon_texture_keys(&self) -> BTreeSet<String> {
+        self.entries
+            .iter()
+            .filter_map(|entry| entry.icon_texture.clone())
+            .collect()
     }
 }
 
@@ -802,13 +817,18 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         atlases: atlases.len(),
         atlas_sources,
     };
-    let catalog_hash = catalog_digest(
+    let (catalog_hash, catalog_bytes) = catalog_digest(
         &resolved.version,
         resolved.data_version,
         resolved.sha1.as_deref(),
         &entries,
         &atlases,
     )?;
+    if catalog_bytes > MAX_CATALOG_MEMORY_BYTES {
+        return Err(CatalogError::LimitExceeded(format!(
+            "the catalog serializes to {catalog_bytes} bytes, over the {MAX_CATALOG_MEMORY_BYTES}-byte memory budget"
+        )));
+    }
     let catalog_id = format!(
         "java-{}-{}",
         safe_version_component(&resolved.version),
@@ -1432,7 +1452,7 @@ fn catalog_digest(
     sha1: Option<&str>,
     entries: &[CatalogEntry],
     atlases: &[CatalogAtlas],
-) -> Result<String, CatalogError> {
+) -> Result<(String, usize), CatalogError> {
     #[derive(Serialize)]
     struct Digest<'a> {
         schema_version: u32,
@@ -1451,13 +1471,14 @@ fn catalog_digest(
         atlases,
     })
     .map_err(|error| CatalogError::Io(error.to_string()))?;
+    let bytes_len = bytes.len();
     let digest = Sha256::digest(bytes);
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
         use std::fmt::Write as _;
         let _ = write!(&mut hex, "{byte:02x}");
     }
-    Ok(hex)
+    Ok((hex, bytes_len))
 }
 
 fn safe_version_component(version: &str) -> String {
@@ -1599,6 +1620,96 @@ mod tests {
             "stable": true
         }))
         .expect("version json")
+    }
+
+    #[test]
+    fn ten_thousand_entries_fit_the_catalog_memory_budget() {
+        let entries: Vec<CatalogEntry> = (0..10_000)
+            .map(|index| CatalogEntry {
+                id: format!("example:block_{index}"),
+                legacy_id: None,
+                display_name: Some(format!("Test Block {index}")),
+                category: None,
+                tags: vec!["example:generated".to_owned()],
+                icon_texture: Some(format!("example:block/icon_{}", index % 256)),
+                aliases: Vec::new(),
+                states: Some(CatalogStates {
+                    properties: BTreeMap::new(),
+                    property_values_complete: true,
+                    default_properties: None,
+                    variant_count: 1,
+                    variants: Vec::new(),
+                    multipart: false,
+                    model: Some(format!("example:block/block_{index}")),
+                }),
+                item_form: Some(CatalogItemForm {
+                    item_definition: true,
+                    model_type: Some("minecraft:model".to_owned()),
+                    model: Some(format!("example:block/block_{index}")),
+                }),
+                flags: CatalogFlags {
+                    placeable: Some(true),
+                    has_item: Some(true),
+                    ..CatalogFlags::default()
+                },
+            })
+            .collect();
+        let (_, bytes) =
+            catalog_digest("1.21.4", 4189, Some("sha1"), &entries, &[]).expect("catalog digest");
+        assert!(
+            bytes < MAX_CATALOG_MEMORY_BYTES,
+            "10k-entry catalog uses {bytes} bytes, over the {MAX_CATALOG_MEMORY_BYTES}-byte budget"
+        );
+    }
+
+    #[test]
+    fn icon_texture_keys_are_deduplicated_per_catalog() {
+        let mut catalog = CatalogSnapshot {
+            schema_version: CATALOG_SCHEMA_VERSION,
+            catalog_id: "java-1.21.4-test".to_owned(),
+            catalog_hash: "hash".to_owned(),
+            minecraft_version: "1.21.4".to_owned(),
+            data_version: 4189,
+            client_jar: "client.jar".to_owned(),
+            client_jar_sha1: Some("sha1".to_owned()),
+            resource_pack_format: Some(46),
+            datapack_format: Some(61),
+            entries: Vec::new(),
+            atlases: Vec::new(),
+            counts: Default::default(),
+            warnings: Vec::new(),
+            cache_hit: false,
+        };
+        catalog.entries = vec![
+            CatalogEntry {
+                id: "minecraft:stone".to_owned(),
+                legacy_id: None,
+                display_name: None,
+                category: None,
+                tags: Vec::new(),
+                icon_texture: Some("minecraft:block/stone".to_owned()),
+                aliases: Vec::new(),
+                states: None,
+                item_form: None,
+                flags: CatalogFlags::default(),
+            },
+            CatalogEntry {
+                id: "minecraft:smooth_stone".to_owned(),
+                legacy_id: None,
+                display_name: None,
+                category: None,
+                tags: Vec::new(),
+                icon_texture: Some("minecraft:block/stone".to_owned()),
+                aliases: Vec::new(),
+                states: None,
+                item_form: None,
+                flags: CatalogFlags::default(),
+            },
+        ];
+        assert_eq!(
+            catalog.icon_texture_keys(),
+            BTreeSet::from(["minecraft:block/stone".to_owned()])
+        );
     }
 
     fn write_jar(dir: &TempDir) -> PathBuf {
@@ -2443,9 +2554,10 @@ mod tests {
         let service = CatalogIconAtlasService::new();
         let profile = crate::target_profile();
         let store = crate::ResourcePackStore::new(dir.path.join("cache"));
+        let stone_keys = vec!["minecraft:block/stone".to_owned()];
 
         let first = service
-            .atlas(profile, &source(&path), &[], &catalog)
+            .atlas(profile, &source(&path), &[], &catalog, &stone_keys)
             .expect("first atlas");
         assert!(!first.cache_hit);
         assert_eq!(first.schema_version, CATALOG_ATLAS_SCHEMA_VERSION);
@@ -2456,8 +2568,18 @@ mod tests {
             first.client_jar_sha1,
             catalog.client_jar_sha1.clone().expect("jar sha1")
         );
-        assert_eq!(first.cache_key.split('|').count(), 4);
+        assert_eq!(first.cache_key.split('|').count(), 5);
         assert!(first.cache_key.contains(&first.pack_stack_hash));
+        assert_eq!(first.requested_texture_count, 1);
+        assert_eq!(
+            first.total_icon_texture_count,
+            catalog.icon_texture_keys().len()
+        );
+        assert_eq!(
+            first.textures.len(),
+            2,
+            "requested icon plus missing checker"
+        );
         let stone = first
             .textures
             .iter()
@@ -2468,16 +2590,42 @@ mod tests {
         assert_eq!(atlas_pixel(&first, stone, 0, 0), [255, 0, 255, 255]);
 
         let second = service
-            .atlas(profile, &source(&path), &[], &catalog)
+            .atlas(profile, &source(&path), &[], &catalog, &stone_keys)
             .expect("second atlas");
         assert!(second.cache_hit);
         assert_eq!(second.cache_key, first.cache_key);
+
+        let other = service
+            .atlas(
+                profile,
+                &source(&path),
+                &[],
+                &catalog,
+                &["minecraft:block/oak_planks".to_owned()],
+            )
+            .expect("different lazy batch");
+        assert!(!other.cache_hit);
+        assert_ne!(other.cache_key, first.cache_key);
+        assert_eq!(other.requested_texture_count, 1);
+        assert!(matches!(
+            service.atlas(
+                profile,
+                &source(&path),
+                &[],
+                &catalog,
+                &["minecraft:block/not_an_icon".to_owned()],
+            ),
+            Err(crate::bundle::BundleError::InvalidArgument(_))
+        ));
+        let (entries, bytes) = service.cache_stats();
+        assert_eq!(entries, 2);
+        assert!(bytes > 0);
 
         let pack = write_pack(&dir, "green-stone", &colored_png([0, 255, 0, 255]));
         let pin = store.import(&pack, profile).expect("import pack");
         let inputs = store.inputs(std::slice::from_ref(&pin));
         let third = service
-            .atlas(profile, &source(&path), &inputs, &catalog)
+            .atlas(profile, &source(&path), &inputs, &catalog, &stone_keys)
             .expect("pack atlas");
         assert!(!third.cache_hit);
         assert_ne!(third.cache_key, first.cache_key);
@@ -2490,13 +2638,13 @@ mod tests {
         assert_eq!(atlas_pixel(&third, stone, 0, 0), [0, 255, 0, 255]);
 
         let fourth = service
-            .atlas(profile, &source(&path), &inputs, &catalog)
+            .atlas(profile, &source(&path), &inputs, &catalog, &stone_keys)
             .expect("pack cache hit");
         assert!(fourth.cache_hit);
         assert_eq!(fourth.cache_key, third.cache_key);
         std::fs::remove_file(dir.path.join("cache").join(&pin.path)).expect("delete pinned pack");
         let fallback = service
-            .atlas(profile, &source(&path), &inputs, &catalog)
+            .atlas(profile, &source(&path), &inputs, &catalog, &stone_keys)
             .expect("cached vanilla atlas");
         assert!(fallback.cache_hit);
         assert_eq!(fallback.cache_key, first.cache_key);
@@ -2504,7 +2652,7 @@ mod tests {
         assert_eq!(fallback.catalog_hash, catalog.catalog_hash);
         assert_eq!(fallback.pack_issues.len(), 1);
         assert!(service
-            .atlas(profile, &source(&path), &[], &catalog)
+            .atlas(profile, &source(&path), &[], &catalog, &stone_keys)
             .expect("other project with no packs")
             .pack_issues
             .is_empty());
