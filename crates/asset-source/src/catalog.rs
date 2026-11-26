@@ -45,6 +45,8 @@ pub const MAX_CATALOG_WARNINGS: usize = 256;
 
 const MAX_CATALOG_CACHE_ENTRIES: usize = 4;
 const MAX_MODEL_DEPTH: usize = 12;
+const UNVERIFIED_JAR_WARNING: &str =
+    "the client JAR SHA-1 was not verified against launcher metadata";
 
 /// One block and/or item from the client JAR.
 ///
@@ -240,9 +242,64 @@ struct CatalogCacheEntry {
     catalog: CatalogSnapshot,
 }
 
-/// Bounded process-local catalog cache. The key includes the JAR identity, so replacing a
-/// JAR with another build of the same version rebuilds the catalog. The project records
-/// the catalog id and hash independently of this cache.
+/// Resolved client JAR plus the official version metadata used to decode it.
+///
+/// `CatalogBuilder` owns the JAR-to-snapshot conversion: `version.json` inside the archive
+/// supplies the exact version, `DataVersion` and pack formats, while launcher metadata
+/// supplies the checksum and display path. Caching and project pin comparison stay outside
+/// the builder.
+pub struct CatalogBuilder {
+    resolved: ResolvedClientJar,
+}
+
+impl CatalogBuilder {
+    pub fn open(source: &AssetSourceSetting) -> Result<Self, CatalogError> {
+        Ok(Self {
+            resolved: resolve_client_jar(source)?,
+        })
+    }
+
+    /// Stable cache identity: exact version, client JAR SHA-1 and catalog schema. The path is
+    /// deliberately absent, so moving or copying the same JAR reuses the same facts. A JAR
+    /// without a readable SHA-1 falls back to its path, size and modification time.
+    pub fn cache_key(&self) -> Result<String, CatalogError> {
+        if let Some(sha1) = &self.resolved.sha1 {
+            return Ok(format!(
+                "{}|{}|{}",
+                self.resolved.version, sha1, CATALOG_SCHEMA_VERSION
+            ));
+        }
+        let metadata = fs::metadata(&self.resolved.jar_path).map_err(|error| {
+            CatalogError::Io(format!(
+                "cannot inspect {}: {error}",
+                self.resolved.jar_path.display()
+            ))
+        })?;
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0);
+        Ok(format!(
+            "{}|path:{}|size:{}|mtime:{}|{}",
+            self.resolved.version,
+            self.resolved.jar_path.display(),
+            metadata.len(),
+            modified,
+            CATALOG_SCHEMA_VERSION
+        ))
+    }
+
+    /// Builds a fresh snapshot without consulting the service cache.
+    pub fn build(&self) -> Result<CatalogSnapshot, CatalogError> {
+        build_catalog(&self.resolved)
+    }
+}
+
+/// Bounded process-local catalog cache. Entries are keyed by exact version, JAR SHA-1 and
+/// catalog schema, never by path or "latest". The project records the catalog id and hash
+/// independently of this cache.
 #[derive(Default)]
 pub struct AssetCatalogService {
     cache: Mutex<VecDeque<CatalogCacheEntry>>,
@@ -261,19 +318,20 @@ impl AssetCatalogService {
 
     /// Builds (or reuses) the catalog for the selected client assets.
     pub fn catalog(&self, source: &AssetSourceSetting) -> Result<CatalogSnapshot, CatalogError> {
-        let resolved = resolve_client_jar(source)?;
-        let key = cache_key(&resolved)?;
+        let builder = CatalogBuilder::open(source)?;
+        let key = builder.cache_key()?;
         if let Ok(mut cache) = self.cache.lock() {
             if let Some(index) = cache.iter().position(|entry| entry.key == key) {
                 if let Some(entry) = cache.remove(index) {
                     let mut catalog = entry.catalog.clone();
                     catalog.cache_hit = true;
+                    apply_cached_source(&mut catalog, &builder.resolved);
                     cache.push_front(entry);
                     return Ok(catalog);
                 }
             }
         }
-        let catalog = build_catalog(&resolved)?;
+        let catalog = builder.build()?;
         if let Ok(mut cache) = self.cache.lock() {
             cache.retain(|entry| entry.key != key);
             cache.push_front(CatalogCacheEntry {
@@ -289,7 +347,7 @@ impl AssetCatalogService {
 
     /// Builds without consulting or updating the cache. Used by tests and diagnostics.
     pub fn build(&self, source: &AssetSourceSetting) -> Result<CatalogSnapshot, CatalogError> {
-        build_catalog(&resolve_client_jar(source)?)
+        CatalogBuilder::open(source)?.build()
     }
 }
 
@@ -356,27 +414,24 @@ fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, 
     })
 }
 
-fn cache_key(resolved: &ResolvedClientJar) -> Result<String, CatalogError> {
-    let metadata = fs::metadata(&resolved.jar_path).map_err(|error| {
-        CatalogError::Io(format!(
-            "cannot inspect {}: {error}",
-            resolved.jar_path.display()
-        ))
-    })?;
-    let modified = metadata
-        .modified()
-        .ok()
-        .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0);
-    Ok(format!(
-        "{}|{}|{}|{}|{}",
-        resolved.jar_path.display(),
-        metadata.len(),
-        modified,
-        resolved.sha1.as_deref().unwrap_or_default(),
-        CATALOG_SCHEMA_VERSION
-    ))
+/// A cache hit may come from a different path or verification state of the same JAR. Keep
+/// the facts and hash, but return the current display path and current checksum warning.
+fn apply_cached_source(catalog: &mut CatalogSnapshot, resolved: &ResolvedClientJar) {
+    catalog.client_jar = resolved.display_path.clone();
+    if resolved.checksum_verified {
+        catalog
+            .warnings
+            .retain(|warning| warning != UNVERIFIED_JAR_WARNING);
+        return;
+    }
+    if !catalog
+        .warnings
+        .iter()
+        .any(|warning| warning == UNVERIFIED_JAR_WARNING)
+    {
+        catalog.warnings.push(UNVERIFIED_JAR_WARNING.to_owned());
+        catalog.warnings.sort();
+    }
 }
 
 #[derive(Default)]
@@ -414,10 +469,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
     })?;
     let mut warnings = Vec::new();
     if !resolved.checksum_verified {
-        push_warning(
-            &mut warnings,
-            "the client JAR SHA-1 was not verified against launcher metadata".to_owned(),
-        );
+        push_warning(&mut warnings, UNVERIFIED_JAR_WARNING.to_owned());
     }
 
     let version_json = read_version_json(&mut archive, &resolved.version)?;
@@ -1877,6 +1929,32 @@ mod tests {
         assert!(!fourth.cache_hit);
         assert_ne!(third.client_jar_sha1, fourth.client_jar_sha1);
         assert_ne!(third.catalog_hash, fourth.catalog_hash);
+    }
+
+    #[test]
+    fn catalog_cache_key_is_content_based_and_tracks_the_current_path() {
+        let dir = TempDir::new("cache-key");
+        let path = write_jar(&dir);
+        let service = AssetCatalogService::new();
+        let first = service.catalog(&source(&path)).expect("first");
+        let builder = CatalogBuilder::open(&source(&path)).expect("builder");
+        assert_eq!(
+            builder.cache_key().expect("cache key"),
+            format!(
+                "{}|{}|{}",
+                first.minecraft_version,
+                first.client_jar_sha1.clone().expect("sha1"),
+                CATALOG_SCHEMA_VERSION
+            )
+        );
+
+        let copy = dir.path.join("copy.jar");
+        fs::copy(&path, &copy).expect("copy jar");
+        let copied = service.catalog(&source(&copy)).expect("copy catalog");
+        assert!(copied.cache_hit);
+        assert_eq!(copied.client_jar, copy.display().to_string());
+        assert_eq!(copied.catalog_id, first.catalog_id);
+        assert_eq!(copied.catalog_hash, first.catalog_hash);
     }
 
     #[test]

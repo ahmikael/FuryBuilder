@@ -38,7 +38,8 @@ formats are not migrated.
   and each run records its profile id, Minecraft version and `DataVersion`.
 - Managed client JAR download and an exact-version block/item catalog built from that JAR
   (1,097 blocks and 1,385 items for 1.21.4), plus manual `.minecraft`/client JAR selection and
-  an explicit placeholder mode.
+  an explicit placeholder mode. Catalog snapshots are cached by exact version, JAR SHA-1 and
+  catalog schema, so moving or copying the same JAR reuses the same pinned facts.
 - One catalog entry per block/item id, with optional legacy id/metadata, display name, category,
   tags, icon, aliases, nested block states, item form and typed placement flags. Facts the JAR
   cannot prove stay `null` rather than being guessed; the snapshot no longer splits blocks and

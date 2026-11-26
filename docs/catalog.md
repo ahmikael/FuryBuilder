@@ -97,9 +97,12 @@ reported as entries with an explicit warning; they are not silently presented as
 
 `catalogHash` is SHA-256 over the canonical entries/atlases, the version, the
 `DataVersion` and the client JAR SHA-1. `catalogId` is
-`java-<version>-<first 16 hex of catalogHash>`. The registry cache is process-local and keyed
-by the JAR path, size, modification time and catalog schema. A project pins `catalogId` and
-`catalogHash` in its schema-2 manifest.
+`java-<version>-<first 16 hex of catalogHash>`. `CatalogBuilder` resolves the client JAR and
+reads its embedded `version.json`; the service cache is process-local and keyed exactly by
+exact version, client JAR SHA-1 and catalog schema. Path, size and modification time are not
+identity, so moving or copying a byte-identical JAR reuses the same snapshot and updates only
+the reported display path. A JAR without a readable SHA-1 falls back to its path, size and
+modification time. A project pins `catalogId` and `catalogHash` in its schema-2 manifest.
 
 ## Icon atlas
 

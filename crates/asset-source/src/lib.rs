@@ -34,11 +34,11 @@ pub use bundle::{
     BundleTexture, ASSET_BUNDLE_SCHEMA_VERSION, MAX_BLOCK_STATES,
 };
 pub use catalog::{
-    AssetCatalogService, CatalogAtlas, CatalogAtlasSource, CatalogCounts, CatalogEntry,
-    CatalogError, CatalogFlags, CatalogItemForm, CatalogLegacyId, CatalogSnapshot, CatalogStates,
-    CATALOG_SCHEMA_VERSION, MAX_CATALOG_ATLAS_SOURCES, MAX_CATALOG_BLOCKS, MAX_CATALOG_ITEMS,
-    MAX_CATALOG_JSON_BYTES, MAX_CATALOG_LANG_ENTRIES, MAX_CATALOG_TAGS, MAX_CATALOG_TEXTURES,
-    MAX_CATALOG_WARNINGS,
+    AssetCatalogService, CatalogAtlas, CatalogAtlasSource, CatalogBuilder, CatalogCounts,
+    CatalogEntry, CatalogError, CatalogFlags, CatalogItemForm, CatalogLegacyId, CatalogSnapshot,
+    CatalogStates, CATALOG_SCHEMA_VERSION, MAX_CATALOG_ATLAS_SOURCES, MAX_CATALOG_BLOCKS,
+    MAX_CATALOG_ITEMS, MAX_CATALOG_JSON_BYTES, MAX_CATALOG_LANG_ENTRIES, MAX_CATALOG_TAGS,
+    MAX_CATALOG_TEXTURES, MAX_CATALOG_WARNINGS,
 };
 pub use catalog_atlas::{
     CatalogAtlasTexture, CatalogIconAtlas, CatalogIconAtlasService, CATALOG_ATLAS_SCHEMA_VERSION,
