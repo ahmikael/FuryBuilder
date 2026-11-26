@@ -30,7 +30,7 @@ use crate::discovery::inspect_asset_path;
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
-pub const CATALOG_SCHEMA_VERSION: u32 = 2;
+pub const CATALOG_SCHEMA_VERSION: u32 = 3;
 /// A vanilla client JAR has a few thousand blockstates and items.
 pub const MAX_CATALOG_BLOCKS: usize = 32_768;
 pub const MAX_CATALOG_ITEMS: usize = 32_768;
@@ -46,13 +46,45 @@ pub const MAX_CATALOG_WARNINGS: usize = 256;
 const MAX_CATALOG_CACHE_ENTRIES: usize = 4;
 const MAX_MODEL_DEPTH: usize = 12;
 
-/// One block from the client JAR with the states the JAR declares.
+/// One block and/or item from the client JAR.
+///
+/// A block-only entry has `states` but no `itemForm`; an item-only entry has the reverse.
+/// Normal blocks with an item form have both. Facts that cannot be derived from the JAR yet
+/// (survival obtainability, block entity, geometry flags) stay `None` in [`CatalogFlags`]
+/// instead of being guessed; later catalog passes fill them from official metadata.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CatalogBlock {
+pub struct CatalogEntry {
     pub id: String,
+    /// Numeric id and optional metadata for legacy versions. `None` for named registries.
+    pub legacy_id: Option<CatalogLegacyId>,
     pub display_name: Option<String>,
-    /// Every property key and all values declared by variants or multipart conditions.
+    /// Category hint assigned by the catalog pass. `None` until categories are known.
+    pub category: Option<String>,
+    pub tags: Vec<String>,
+    /// A texture that exists in the JAR and can be used as the palette icon.
+    pub icon_texture: Option<String>,
+    /// Older names that resolve to this id. Empty until aliases are known.
+    pub aliases: Vec<String>,
+    /// Block states declared by the JAR. `None` when the id has no block form.
+    pub states: Option<CatalogStates>,
+    /// Item form declared by the JAR. `None` for block-only technical entries.
+    pub item_form: Option<CatalogItemForm>,
+    pub flags: CatalogFlags,
+}
+
+/// Numeric id used by pre-flattening versions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogLegacyId {
+    pub id: u32,
+    pub metadata: Option<u16>,
+}
+
+/// Every block state property key and value declared by the blockstate file.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogStates {
     pub properties: BTreeMap<String, Vec<String>>,
     /// True when the blockstate file enumerates every value of every property it declares.
     /// Multipart conditions and single empty variants only name some states, so they are
@@ -68,28 +100,51 @@ pub struct CatalogBlock {
     pub multipart: bool,
     /// First model referenced by the blockstate file.
     pub model: Option<String>,
-    /// A texture that exists in the JAR and can be used as the palette icon.
-    pub icon_texture: Option<String>,
-    pub tags: Vec<String>,
-    pub has_item: bool,
 }
 
-/// One item from the client JAR.
+/// The item form of one catalog id.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct CatalogItem {
-    pub id: String,
-    pub display_name: Option<String>,
+pub struct CatalogItemForm {
     /// True when the entry came from `assets/<namespace>/items/<item>.json`.
     pub item_definition: bool,
     /// Top-level item definition model type, for example `minecraft:select` or
     /// `minecraft:special`. `None` for legacy item models and definitions without a type.
     pub model_type: Option<String>,
     pub model: Option<String>,
-    pub icon_texture: Option<String>,
-    /// Present when the item is also a block (`minecraft:stone`).
-    pub block: Option<String>,
-    pub tags: Vec<String>,
+}
+
+/// Facts used by palette rules and placement. `None` means the fact is not known yet, not
+/// that the answer is false.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogFlags {
+    pub placeable: Option<bool>,
+    pub has_item: Option<bool>,
+    pub obtainable: Option<bool>,
+    pub creative_only: Option<bool>,
+    pub technical: Option<bool>,
+    pub fluid: Option<bool>,
+    pub airlike: Option<bool>,
+    pub block_entity: Option<bool>,
+    pub transparent: Option<bool>,
+    pub full_cube: Option<bool>,
+    pub gravity: Option<bool>,
+    pub waterloggable: Option<bool>,
+    pub tinted: Option<bool>,
+    pub has_variants: Option<bool>,
+}
+
+impl CatalogEntry {
+    /// A block entry owns states; an item-only entry does not.
+    pub fn is_block(&self) -> bool {
+        self.states.is_some()
+    }
+
+    /// An entry with an item form can appear in item searches and inventory-like lists.
+    pub fn is_item(&self) -> bool {
+        self.item_form.is_some()
+    }
 }
 
 /// One atlas definition from `assets/<namespace>/atlases/<atlas>.json`.
@@ -145,8 +200,8 @@ pub struct CatalogSnapshot {
     pub client_jar_sha1: Option<String>,
     pub resource_pack_format: Option<u32>,
     pub datapack_format: Option<u32>,
-    pub blocks: Vec<CatalogBlock>,
-    pub items: Vec<CatalogItem>,
+    /// One entry per id, merging its block and item forms when both exist.
+    pub entries: Vec<CatalogEntry>,
     pub atlases: Vec<CatalogAtlas>,
     pub counts: CatalogCounts,
     pub warnings: Vec<String>,
@@ -334,10 +389,20 @@ struct BlockStateFacts {
     first_model: Option<String>,
 }
 
+struct BlockFacts {
+    display_name: Option<String>,
+    states: CatalogStates,
+    icon_texture: Option<String>,
+    tags: Vec<String>,
+}
+
 struct ItemFacts {
+    display_name: Option<String>,
     model: Option<String>,
     model_type: Option<String>,
     item_definition: bool,
+    icon_texture: Option<String>,
+    tags: Vec<String>,
 }
 
 fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, CatalogError> {
@@ -408,31 +473,31 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
 
     let (lang, languages) = read_language(&mut archive, &entry_names, &mut warnings);
 
-    let mut blocks: BTreeMap<String, CatalogBlock> = BTreeMap::new();
+    let mut blocks: BTreeMap<String, BlockFacts> = BTreeMap::new();
     for (id, entry) in &blockstate_entries {
         let facts = match read_json(&mut archive, entry, &mut warnings) {
             Some(document) => parse_blockstate(&document, entry, &mut warnings),
             None => BlockStateFacts::default(),
         };
-        let properties = facts
-            .properties
-            .iter()
-            .map(|(key, values)| (key.clone(), values.iter().cloned().collect()))
-            .collect();
+        let states = CatalogStates {
+            properties: facts
+                .properties
+                .iter()
+                .map(|(key, values)| (key.clone(), values.iter().cloned().collect()))
+                .collect(),
+            property_values_complete: facts.property_values_complete,
+            default_properties: facts.default_properties,
+            variants: facts.variants,
+            multipart: facts.multipart,
+            model: facts.first_model,
+        };
         blocks.insert(
             id.clone(),
-            CatalogBlock {
-                id: id.clone(),
+            BlockFacts {
                 display_name: block_display_name(&lang, id),
-                properties,
-                property_values_complete: facts.property_values_complete,
-                default_properties: facts.default_properties,
-                variants: facts.variants,
-                multipart: facts.multipart,
-                model: facts.first_model,
+                states,
                 icon_texture: None,
                 tags: Vec::new(),
-                has_item: false,
             },
         );
     }
@@ -462,9 +527,12 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         items.insert(
             id.clone(),
             ItemFacts {
+                display_name: None,
                 model,
                 model_type,
                 item_definition: true,
+                icon_texture: None,
+                tags: Vec::new(),
             },
         );
     }
@@ -478,9 +546,12 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                     items.insert(
                         block.clone(),
                         ItemFacts {
+                            display_name: None,
                             model: Some(format!("{namespace}:item/{path}")),
                             model_type: None,
                             item_definition: false,
+                            icon_texture: None,
+                            tags: Vec::new(),
                         },
                     );
                 }
@@ -499,9 +570,12 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
             let id = format!("{namespace}:{path}");
             if crate::bundle::valid_id(&id) {
                 items.entry(id.clone()).or_insert(ItemFacts {
+                    display_name: None,
                     model: Some(format!("{namespace}:item/{path}")),
                     model_type: None,
                     item_definition: false,
+                    icon_texture: None,
+                    tags: Vec::new(),
                 });
             }
         }
@@ -513,21 +587,16 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         cache: HashMap::new(),
     };
     for block in blocks.values_mut() {
-        if let Some(model) = &block.model {
+        if let Some(model) = &block.states.model {
             block.icon_texture = resolver.icon_texture(model, &texture_ids, &mut warnings);
         }
     }
-    let block_icons: HashMap<String, Option<String>> = blocks
-        .iter()
-        .map(|(id, block)| (id.clone(), block.icon_texture.clone()))
-        .collect();
-    let mut item_icons: HashMap<String, Option<String>> = HashMap::new();
-    for (id, item) in &items {
+    for (id, item) in items.iter_mut() {
         let special = item.model_type.as_deref() == Some("minecraft:special");
-        let icon = item.model.as_ref().and_then(|model| {
+        item.icon_texture = item.model.as_ref().and_then(|model| {
             resolver.item_icon_texture(model, special, &texture_ids, &mut warnings)
         });
-        item_icons.insert(id.clone(), icon);
+        item.display_name = item_display_name(&lang, id, blocks.contains_key(id));
     }
 
     let (block_tags, block_tag_files) = parse_tag_folders(
@@ -544,46 +613,80 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
     );
     let (atlases, atlas_sources) = read_atlases(&mut archive, &entry_names, &mut warnings);
 
-    let mut item_entries: Vec<CatalogItem> = items
-        .iter()
-        .map(|(id, facts)| {
-            let block = blocks.contains_key(id).then(|| id.clone());
-            let special = facts.model_type.as_deref() == Some("minecraft:special");
-            CatalogItem {
-                id: id.clone(),
-                display_name: item_display_name(&lang, id, block.is_some()),
-                item_definition: facts.item_definition,
-                model_type: facts.model_type.clone(),
-                model: facts.model.clone(),
-                icon_texture: item_icons.get(id).cloned().flatten().or_else(|| {
-                    if special {
-                        return None;
-                    }
-                    block
-                        .as_ref()
-                        .and_then(|block| block_icons.get(block).cloned().flatten())
-                }),
-                block,
-                tags: Vec::new(),
-            }
-        })
-        .collect();
-    for item in item_entries.iter_mut() {
-        item.tags = tags_for(&item_tags, &item.id);
+    for (id, block) in &mut blocks {
+        block.tags = tags_for(&block_tags, id);
     }
-    let item_ids: BTreeSet<&str> = item_entries.iter().map(|item| item.id.as_str()).collect();
-    let mut block_entries: Vec<CatalogBlock> = blocks.into_values().collect();
-    for block in block_entries.iter_mut() {
-        block.tags = tags_for(&block_tags, &block.id);
-        block.has_item = item_ids.contains(block.id.as_str());
+    for (id, item) in &mut items {
+        item.tags = tags_for(&item_tags, id);
     }
 
+    let mut entries: BTreeMap<String, CatalogEntry> = BTreeMap::new();
+    for (id, block) in blocks {
+        let has_variants = block.states.multipart || block.states.variants > 1;
+        entries.insert(
+            id.clone(),
+            CatalogEntry {
+                id,
+                legacy_id: None,
+                display_name: block.display_name,
+                category: None,
+                tags: block.tags,
+                icon_texture: block.icon_texture,
+                aliases: Vec::new(),
+                states: Some(block.states),
+                item_form: None,
+                flags: CatalogFlags {
+                    placeable: Some(true),
+                    has_item: Some(false),
+                    has_variants: Some(has_variants),
+                    ..CatalogFlags::default()
+                },
+            },
+        );
+    }
+    for (id, item) in items {
+        let special = item.model_type.as_deref() == Some("minecraft:special");
+        let fallback_icon = if special {
+            None
+        } else {
+            entries
+                .get(&id)
+                .and_then(|entry| entry.icon_texture.clone())
+        };
+        let icon = item.icon_texture.clone().or(fallback_icon);
+        let entry = entries.entry(id.clone()).or_insert_with(|| CatalogEntry {
+            id,
+            legacy_id: None,
+            display_name: None,
+            category: None,
+            tags: Vec::new(),
+            icon_texture: None,
+            aliases: Vec::new(),
+            states: None,
+            item_form: None,
+            flags: CatalogFlags {
+                placeable: Some(false),
+                has_item: Some(true),
+                has_variants: Some(false),
+                ..CatalogFlags::default()
+            },
+        });
+        entry.display_name = item.display_name.or_else(|| entry.display_name.take());
+        entry.item_form = Some(CatalogItemForm {
+            item_definition: item.item_definition,
+            model_type: item.model_type,
+            model: item.model,
+        });
+        entry.icon_texture = icon.or_else(|| entry.icon_texture.take());
+        entry.tags.extend(item.tags);
+        entry.tags.sort();
+        entry.tags.dedup();
+        entry.flags.has_item = Some(true);
+    }
+    let entries: Vec<CatalogEntry> = entries.into_values().collect();
+
     let mut foreign_namespaces = BTreeSet::new();
-    for id in block_entries
-        .iter()
-        .map(|block| &block.id)
-        .chain(item_entries.iter().map(|item| &item.id))
-    {
+    for id in entries.iter().map(|entry| &entry.id) {
         if let Some((namespace, _)) = id.split_once(':') {
             if namespace != "minecraft" {
                 foreign_namespaces.insert(namespace.to_owned());
@@ -602,15 +705,17 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
 
     warnings.sort();
     warnings.dedup();
-    let blocks_with_items = block_entries.iter().filter(|block| block.has_item).count();
+    let block_count = entries.iter().filter(|entry| entry.is_block()).count();
+    let item_count = entries.iter().filter(|entry| entry.is_item()).count();
+    let blocks_with_items = entries
+        .iter()
+        .filter(|entry| entry.is_block() && entry.is_item())
+        .count();
     let counts = CatalogCounts {
-        blocks: block_entries.len(),
-        items: item_entries.len(),
+        blocks: block_count,
+        items: item_count,
         blocks_with_items,
-        item_only: item_entries
-            .iter()
-            .filter(|item| item.block.is_none())
-            .count(),
+        item_only: item_count - blocks_with_items,
         blockstate_files: blockstate_entries.len(),
         block_models: block_model_count,
         item_models: item_model_count,
@@ -627,8 +732,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         &resolved.version,
         resolved.data_version,
         resolved.sha1.as_deref(),
-        &block_entries,
-        &item_entries,
+        &entries,
         &atlases,
     )?;
     let catalog_id = format!(
@@ -646,8 +750,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         client_jar_sha1: resolved.sha1.clone(),
         resource_pack_format,
         datapack_format,
-        blocks: block_entries,
-        items: item_entries,
+        entries,
         atlases,
         counts,
         warnings,
@@ -1207,8 +1310,7 @@ fn catalog_digest(
     version: &str,
     data_version: i32,
     sha1: Option<&str>,
-    blocks: &[CatalogBlock],
-    items: &[CatalogItem],
+    entries: &[CatalogEntry],
     atlases: &[CatalogAtlas],
 ) -> Result<String, CatalogError> {
     #[derive(Serialize)]
@@ -1217,8 +1319,7 @@ fn catalog_digest(
         minecraft_version: &'a str,
         data_version: i32,
         client_jar_sha1: Option<&'a str>,
-        blocks: &'a [CatalogBlock],
-        items: &'a [CatalogItem],
+        entries: &'a [CatalogEntry],
         atlases: &'a [CatalogAtlas],
     }
     let bytes = serde_json::to_vec(&Digest {
@@ -1226,8 +1327,7 @@ fn catalog_digest(
         minecraft_version: version,
         data_version,
         client_jar_sha1: sha1,
-        blocks,
-        items,
+        entries,
         atlases,
     })
     .map_err(|error| CatalogError::Io(error.to_string()))?;
@@ -1593,8 +1693,7 @@ mod tests {
             .bytes()
             .all(|byte| byte.is_ascii_hexdigit()));
         assert!(catalog.catalog_id.starts_with("java-1.21.4-"));
-        assert_eq!(catalog.blocks.len(), 5);
-        assert_eq!(catalog.items.len(), 4);
+        assert_eq!(catalog.entries.len(), 6);
         assert_eq!(catalog.atlases.len(), 1);
         assert_eq!(catalog.atlases[0].id, "minecraft:blocks");
         assert_eq!(catalog.atlases[0].sources.len(), 2);
@@ -1607,6 +1706,10 @@ mod tests {
             catalog.atlases[0].sources[0].prefix.as_deref(),
             Some("block/")
         );
+        let serialized = serde_json::to_value(&catalog).expect("catalog json");
+        assert!(serialized.get("entries").is_some());
+        assert!(serialized.get("blocks").is_none());
+        assert!(serialized.get("items").is_none());
 
         assert_eq!(catalog.counts.blocks, 5);
         assert_eq!(catalog.counts.items, 4);
@@ -1625,59 +1728,70 @@ mod tests {
         assert!(!catalog.cache_hit);
 
         let stone = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "minecraft:stone")
+            .find(|entry| entry.id == "minecraft:stone")
             .expect("stone");
+        let stone_states = stone.states.as_ref().expect("stone states");
         assert_eq!(stone.display_name.as_deref(), Some("Stone"));
-        assert!(stone.properties.is_empty());
-        assert!(!stone.property_values_complete);
-        assert_eq!(stone.default_properties, Some(BTreeMap::new()));
-        assert_eq!(stone.variants, 1);
-        assert!(!stone.multipart);
-        assert_eq!(stone.model.as_deref(), Some("minecraft:block/stone"));
+        assert!(stone.legacy_id.is_none());
+        assert!(stone.category.is_none());
+        assert!(stone.aliases.is_empty());
+        assert!(stone_states.properties.is_empty());
+        assert!(!stone_states.property_values_complete);
+        assert_eq!(stone_states.default_properties, Some(BTreeMap::new()));
+        assert_eq!(stone_states.variants, 1);
+        assert!(!stone_states.multipart);
+        assert_eq!(stone_states.model.as_deref(), Some("minecraft:block/stone"));
         assert_eq!(stone.icon_texture.as_deref(), Some("minecraft:block/stone"));
         assert_eq!(stone.tags, vec!["minecraft:mineable/pickaxe"]);
-        assert!(stone.has_item);
+        assert!(stone.item_form.is_some());
+        assert_eq!(stone.flags.placeable, Some(true));
+        assert_eq!(stone.flags.has_item, Some(true));
+        assert_eq!(stone.flags.has_variants, Some(false));
 
         let stairs = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "minecraft:oak_stairs")
+            .find(|entry| entry.id == "minecraft:oak_stairs")
             .expect("stairs");
+        let stairs_states = stairs.states.as_ref().expect("stairs states");
         assert_eq!(
-            stairs.properties["facing"]
+            stairs_states.properties["facing"]
                 .iter()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
             vec!["east", "north"]
         );
         assert_eq!(
-            stairs.properties["waterlogged"]
+            stairs_states.properties["waterlogged"]
                 .iter()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
             vec!["false", "true"]
         );
-        assert!(stairs.property_values_complete);
-        assert!(stairs.default_properties.is_none());
-        assert_eq!(stairs.variants, 2);
+        assert!(stairs_states.property_values_complete);
+        assert!(stairs_states.default_properties.is_none());
+        assert_eq!(stairs_states.variants, 2);
+        assert_eq!(stairs.flags.has_variants, Some(true));
         assert_eq!(
             stairs.icon_texture.as_deref(),
             Some("minecraft:block/oak_planks")
         );
 
         let fence = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "minecraft:oak_fence")
+            .find(|entry| entry.id == "minecraft:oak_fence")
             .expect("fence");
-        assert!(fence.multipart);
-        assert_eq!(fence.variants, 0);
-        assert!(fence.default_properties.is_none());
-        assert!(!fence.property_values_complete);
+        let fence_states = fence.states.as_ref().expect("fence states");
+        assert!(fence_states.multipart);
+        assert_eq!(fence_states.variants, 0);
+        assert!(fence_states.default_properties.is_none());
+        assert!(!fence_states.property_values_complete);
+        assert_eq!(fence.flags.has_variants, Some(true));
         assert_eq!(
-            fence.properties["north"]
+            fence_states.properties["north"]
                 .iter()
                 .map(String::as_str)
                 .collect::<Vec<_>>(),
@@ -1685,23 +1799,28 @@ mod tests {
         );
 
         let water = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "minecraft:water")
+            .find(|entry| entry.id == "minecraft:water")
             .expect("water");
-        assert!(!water.has_item);
-        assert!(water.properties.is_empty());
-        assert!(!water.property_values_complete);
-        assert_eq!(water.default_properties, Some(BTreeMap::new()));
+        let water_states = water.states.as_ref().expect("water states");
+        assert!(water.item_form.is_none());
+        assert_eq!(water.flags.has_item, Some(false));
+        assert!(water_states.properties.is_empty());
+        assert!(!water_states.property_values_complete);
+        assert_eq!(water_states.default_properties, Some(BTreeMap::new()));
 
         let sword = catalog
-            .items
+            .entries
             .iter()
-            .find(|item| item.id == "minecraft:diamond_sword")
+            .find(|entry| entry.id == "minecraft:diamond_sword")
             .expect("sword");
+        let sword_form = sword.item_form.as_ref().expect("sword item form");
         assert_eq!(sword.display_name.as_deref(), Some("Diamond Sword"));
-        assert!(sword.item_definition);
-        assert!(sword.block.is_none());
+        assert!(sword_form.item_definition);
+        assert!(sword.states.is_none());
+        assert_eq!(sword.flags.placeable, Some(false));
+        assert_eq!(sword.flags.has_item, Some(true));
         assert_eq!(
             sword.icon_texture.as_deref(),
             Some("minecraft:item/diamond_sword")
@@ -1709,11 +1828,13 @@ mod tests {
         assert_eq!(sword.tags, vec!["minecraft:swords"]);
 
         let ruby = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "example:ruby_block")
+            .find(|entry| entry.id == "example:ruby_block")
             .expect("ruby");
         assert_eq!(ruby.display_name.as_deref(), Some("Ruby Block"));
+        assert!(ruby.states.is_some());
+        assert!(ruby.item_form.is_none());
         assert!(catalog
             .warnings
             .iter()
@@ -1811,13 +1932,13 @@ mod tests {
             .build(&source(&path))
             .expect("catalog");
         assert!(catalog
-            .blocks
+            .entries
             .iter()
-            .any(|block| block.id == "minecraft:stone"));
+            .any(|entry| entry.id == "minecraft:stone"));
         assert!(catalog
-            .blocks
+            .entries
             .iter()
-            .any(|block| block.id == "minecraft:broken"));
+            .any(|entry| entry.id == "minecraft:broken"));
         assert!(catalog
             .warnings
             .iter()
@@ -1847,12 +1968,13 @@ mod tests {
         assert_eq!(catalog.counts.block_tags, 1);
         assert_eq!(catalog.counts.item_tags, 1);
         let stone = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "minecraft:stone")
+            .find(|entry| entry.id == "minecraft:stone")
             .expect("stone");
         assert_eq!(stone.tags, vec!["minecraft:mineable/pickaxe"]);
-        assert!(!stone.has_item);
+        assert!(stone.item_form.is_none());
+        assert_eq!(stone.flags.has_item, Some(false));
         assert!(catalog
             .warnings
             .iter()
@@ -1882,9 +2004,9 @@ mod tests {
         assert_eq!(catalog.counts.block_tags, 1);
         assert_eq!(catalog.counts.item_tags, 1);
         let stone = catalog
-            .blocks
+            .entries
             .iter()
-            .find(|block| block.id == "minecraft:stone")
+            .find(|entry| entry.id == "minecraft:stone")
             .expect("stone");
         assert_eq!(stone.tags, vec!["minecraft:mineable/pickaxe"]);
     }
@@ -1919,13 +2041,14 @@ mod tests {
             .expect("catalog");
         assert_eq!(catalog.counts.item_definitions, 0);
         let sword = catalog
-            .items
+            .entries
             .iter()
-            .find(|item| item.id == "minecraft:diamond_sword")
+            .find(|entry| entry.id == "minecraft:diamond_sword")
             .expect("sword");
-        assert!(!sword.item_definition);
-        assert!(sword.block.is_none());
-        assert!(sword.model_type.is_none());
+        let sword_form = sword.item_form.as_ref().expect("sword item form");
+        assert!(!sword_form.item_definition);
+        assert!(sword.states.is_none());
+        assert!(sword_form.model_type.is_none());
         assert_eq!(sword.display_name.as_deref(), Some("Diamond Sword"));
         assert_eq!(sword.tags, vec!["minecraft:swords"]);
     }
@@ -1968,24 +2091,29 @@ mod tests {
             .build(&source(&path))
             .expect("catalog");
         let clock = catalog
-            .items
+            .entries
             .iter()
-            .find(|item| item.id == "minecraft:clock")
+            .find(|entry| entry.id == "minecraft:clock")
             .expect("clock");
-        assert!(clock.item_definition);
-        assert_eq!(clock.model_type.as_deref(), Some("minecraft:select"));
-        assert_eq!(clock.model.as_deref(), Some("minecraft:item/clock_00"));
+        let clock_form = clock.item_form.as_ref().expect("clock item form");
+        assert!(clock_form.item_definition);
+        assert_eq!(clock_form.model_type.as_deref(), Some("minecraft:select"));
+        assert_eq!(clock_form.model.as_deref(), Some("minecraft:item/clock_00"));
         assert_eq!(
             clock.icon_texture.as_deref(),
             Some("minecraft:item/clock_00")
         );
         let head = catalog
-            .items
+            .entries
             .iter()
-            .find(|item| item.id == "minecraft:player_head")
+            .find(|entry| entry.id == "minecraft:player_head")
             .expect("player head");
-        assert_eq!(head.model_type.as_deref(), Some("minecraft:special"));
-        assert_eq!(head.model.as_deref(), Some("minecraft:item/template_skull"));
+        let head_form = head.item_form.as_ref().expect("head item form");
+        assert_eq!(head_form.model_type.as_deref(), Some("minecraft:special"));
+        assert_eq!(
+            head_form.model.as_deref(),
+            Some("minecraft:item/template_skull")
+        );
         assert!(
             head.icon_texture.is_none(),
             "a special item's particle texture is not its icon"
@@ -2067,7 +2195,7 @@ mod tests {
         let catalog = AssetCatalogService::new()
             .build(&source(&path))
             .expect("catalog");
-        assert_eq!(catalog.blocks.len(), 1);
+        assert_eq!(catalog.entries.len(), 1);
         assert_eq!(catalog.counts.block_tags, 2);
         assert!(catalog
             .warnings

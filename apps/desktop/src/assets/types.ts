@@ -156,11 +156,14 @@ export type ProjectPackEdit =
   | { kind: "remove"; sha1: string }
   | { kind: "move"; sha1: string; earlier: boolean };
 
-/** One block from the client JAR's blockstate files. */
-export interface CatalogBlock {
-  id: string;
-  displayName: string | null;
-  /** Every property key and all values declared by the blockstate file. */
+/** Numeric id used by pre-flattening catalog versions. */
+export interface CatalogLegacyId {
+  id: number;
+  metadata: number | null;
+}
+
+/** Every block state property key and value declared by the blockstate file. */
+export interface CatalogStates {
   properties: Record<string, string[]>;
   /** True when the blockstate file enumerates every value of every property it declares. */
   propertyValuesComplete: boolean;
@@ -169,22 +172,51 @@ export interface CatalogBlock {
   variants: number;
   multipart: boolean;
   model: string | null;
-  iconTexture: string | null;
-  tags: string[];
-  hasItem: boolean;
 }
 
-/** One item from item definitions (modern layouts) or item models (older layouts). */
-export interface CatalogItem {
-  id: string;
-  displayName: string | null;
+/** The item form of one catalog id. */
+export interface CatalogItemForm {
+  /** True when the entry came from `assets/<namespace>/items/<item>.json`. */
   itemDefinition: boolean;
   /** Top-level item definition model type, for example `minecraft:select`. */
   modelType: string | null;
   model: string | null;
-  iconTexture: string | null;
-  block: string | null;
+}
+
+/** Facts used by palette rules and placement; null means the fact is not known yet. */
+export interface CatalogFlags {
+  placeable: boolean | null;
+  hasItem: boolean | null;
+  obtainable: boolean | null;
+  creativeOnly: boolean | null;
+  technical: boolean | null;
+  fluid: boolean | null;
+  airlike: boolean | null;
+  blockEntity: boolean | null;
+  transparent: boolean | null;
+  fullCube: boolean | null;
+  gravity: boolean | null;
+  waterloggable: boolean | null;
+  tinted: boolean | null;
+  hasVariants: boolean | null;
+}
+
+/** One block and/or item from the exact client JAR. */
+export interface CatalogEntry {
+  id: string;
+  /** Numeric id and metadata for legacy versions; null for named registries. */
+  legacyId: CatalogLegacyId | null;
+  displayName: string | null;
+  category: string | null;
   tags: string[];
+  iconTexture: string | null;
+  /** Older names that resolve to this id. */
+  aliases: string[];
+  /** Block states declared by the JAR; null when the id has no block form. */
+  states: CatalogStates | null;
+  /** Item form declared by the JAR; null for block-only technical entries. */
+  itemForm: CatalogItemForm | null;
+  flags: CatalogFlags;
 }
 
 export interface CatalogAtlasSource {
@@ -228,8 +260,7 @@ export interface CatalogSnapshot {
   clientJarSha1: string | null;
   resourcePackFormat: number | null;
   datapackFormat: number | null;
-  blocks: CatalogBlock[];
-  items: CatalogItem[];
+  entries: CatalogEntry[];
   atlases: CatalogAtlas[];
   counts: CatalogCounts;
   warnings: string[];

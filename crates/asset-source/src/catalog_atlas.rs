@@ -187,15 +187,9 @@ impl CatalogIconAtlasService {
 
 fn icon_keys(catalog: &CatalogSnapshot) -> BTreeSet<String> {
     catalog
-        .blocks
+        .entries
         .iter()
-        .filter_map(|block| block.icon_texture.clone())
-        .chain(
-            catalog
-                .items
-                .iter()
-                .filter_map(|item| item.icon_texture.clone()),
-        )
+        .filter_map(|entry| entry.icon_texture.clone())
         .collect()
 }
 
@@ -232,44 +226,62 @@ mod tests {
             client_jar_sha1: Some("sha1".to_owned()),
             resource_pack_format: Some(46),
             datapack_format: Some(61),
-            blocks: vec![
-                crate::catalog::CatalogBlock {
+            entries: vec![
+                crate::catalog::CatalogEntry {
                     id: "minecraft:stone".to_owned(),
+                    legacy_id: None,
                     display_name: None,
-                    properties: Default::default(),
-                    property_values_complete: true,
-                    default_properties: None,
-                    variants: 1,
-                    multipart: false,
-                    model: None,
-                    icon_texture: Some("minecraft:block/stone".to_owned()),
+                    category: None,
                     tags: Vec::new(),
-                    has_item: false,
+                    icon_texture: Some("minecraft:block/stone".to_owned()),
+                    aliases: Vec::new(),
+                    states: Some(crate::catalog::CatalogStates {
+                        properties: Default::default(),
+                        property_values_complete: true,
+                        default_properties: None,
+                        variants: 1,
+                        multipart: false,
+                        model: None,
+                    }),
+                    item_form: None,
+                    flags: crate::catalog::CatalogFlags::default(),
                 },
-                crate::catalog::CatalogBlock {
+                crate::catalog::CatalogEntry {
                     id: "minecraft:dirt".to_owned(),
+                    legacy_id: None,
                     display_name: None,
-                    properties: Default::default(),
-                    property_values_complete: true,
-                    default_properties: None,
-                    variants: 1,
-                    multipart: false,
-                    model: None,
-                    icon_texture: Some("minecraft:block/stone".to_owned()),
+                    category: None,
                     tags: Vec::new(),
-                    has_item: false,
+                    icon_texture: Some("minecraft:block/stone".to_owned()),
+                    aliases: Vec::new(),
+                    states: Some(crate::catalog::CatalogStates {
+                        properties: Default::default(),
+                        property_values_complete: true,
+                        default_properties: None,
+                        variants: 1,
+                        multipart: false,
+                        model: None,
+                    }),
+                    item_form: None,
+                    flags: crate::catalog::CatalogFlags::default(),
+                },
+                crate::catalog::CatalogEntry {
+                    id: "minecraft:sword".to_owned(),
+                    legacy_id: None,
+                    display_name: None,
+                    category: None,
+                    tags: Vec::new(),
+                    icon_texture: None,
+                    aliases: Vec::new(),
+                    states: None,
+                    item_form: Some(crate::catalog::CatalogItemForm {
+                        item_definition: true,
+                        model_type: None,
+                        model: None,
+                    }),
+                    flags: crate::catalog::CatalogFlags::default(),
                 },
             ],
-            items: vec![crate::catalog::CatalogItem {
-                id: "minecraft:sword".to_owned(),
-                display_name: None,
-                item_definition: true,
-                model_type: None,
-                model: None,
-                icon_texture: None,
-                block: None,
-                tags: Vec::new(),
-            }],
             atlases: Vec::new(),
             counts: Default::default(),
             warnings: Vec::new(),

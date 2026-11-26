@@ -271,7 +271,10 @@ registry of the open `WorldService`, while the curated registry remains the quic
 exposed by `block_catalog` and the explicit fallback when a project uses placeholder assets.
 Validation uses the same write registry, so the palette, command writes and `Validation`
 panel agree on which block names and property keys exist, and values are checked whenever
-the blockstate file enumerates them. A separate icon atlas packs the catalog's referenced
+the blockstate file enumerates them. The snapshot itself is one sorted `CatalogEntry` list:
+block states live under `states`, the item form under `itemForm`, and placement facts under
+typed `flags`; a fact the JAR cannot prove stays `null` instead of being guessed. A separate
+icon atlas packs the catalog's referenced
 textures for presentation; it is cached by exact version, client JAR SHA-1, ordered pack-stack
 hash and catalog schema, so a resource-pack change cannot silently alter the pinned registry.
 The Blocks palette derives basic Building/Natural/Functional/Redstone/Technical/Other groups

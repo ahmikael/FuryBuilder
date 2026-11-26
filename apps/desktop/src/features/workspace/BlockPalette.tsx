@@ -121,15 +121,21 @@ export function BlockPalette() {
 
   const palette = useMemo<PaletteEntry[]>(() => {
     if (catalog) {
-      return catalog.blocks.map((block) => ({
-        name: block.id,
-        displayName: block.displayName,
-        properties: block.defaultProperties ?? {},
-        propertyValues: block.properties,
-        propertyValuesComplete: block.propertyValuesComplete,
-        multipart: block.multipart,
-        groups: categorizeBlock(block.id, block.tags),
-      }));
+      return catalog.entries.flatMap((entry) => {
+        const states = entry.states;
+        if (!states) return [];
+        return [
+          {
+            name: entry.id,
+            displayName: entry.displayName,
+            properties: states.defaultProperties ?? {},
+            propertyValues: states.properties,
+            propertyValuesComplete: states.propertyValuesComplete,
+            multipart: states.multipart,
+            groups: categorizeBlock(entry.id, entry.tags),
+          },
+        ];
+      });
     }
     if (curated) {
       return curated.map((entry) => ({

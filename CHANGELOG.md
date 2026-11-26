@@ -39,6 +39,10 @@ formats are not migrated.
 - Managed client JAR download and an exact-version block/item catalog built from that JAR
   (1,097 blocks and 1,385 items for 1.21.4), plus manual `.minecraft`/client JAR selection and
   an explicit placeholder mode.
+- One catalog entry per block/item id, with optional legacy id/metadata, display name, category,
+  tags, icon, aliases, nested block states, item form and typed placement flags. Facts the JAR
+  cannot prove stay `null` rather than being guessed; the snapshot no longer splits blocks and
+  items into parallel arrays.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes

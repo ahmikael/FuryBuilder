@@ -259,8 +259,7 @@ const catalog: CatalogSnapshot = {
   clientJarSha1: "b".repeat(40),
   resourcePackFormat: 46,
   datapackFormat: 61,
-  blocks: [],
-  items: [],
+  entries: [],
   atlases: [],
   counts: {
     blocks: 1234,

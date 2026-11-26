@@ -78,14 +78,24 @@ reported as entries with an explicit warning; they are not silently presented as
 
 - `catalogId` and `catalogHash`;
 - exact Minecraft version, `DataVersion`, client JAR SHA-1 and pack formats;
-- sorted blocks, items and atlas definitions;
-- declared property keys and values, whether those values are complete, and the single
-  declared default state when it is unambiguous;
-- item definition model types and resolved concrete models;
+- one sorted `entries` list and atlas definitions;
+- one `CatalogEntry` per id, merging its block and item forms. An entry with block states
+  has `states`; an entry with an item form has `itemForm`; a normal block with an item has
+  both, while block-only technical entries and item-only entries have one;
+- `legacyId`/`metadata` for numeric registries, `displayName`, `category`, direct `tags`,
+  `iconTexture` and aliases. Named-registry entries have `legacyId: null`; category and
+  aliases stay `null`/empty until their catalog passes fill them;
+- declared property keys and values under `states`, whether those values are complete, and
+  the single declared default state when it is unambiguous;
+- item definition model type and resolved concrete model under `itemForm`;
+- typed `flags` for placement rules. A flag is `null` when the fact is not known yet, never
+  a guessed `false`. The JAR pass currently fills `placeable`, `hasItem` and `hasVariants`;
+  survival obtainability, technical/creative-only, fluid, block-entity and geometry flags
+  remain `null` until later passes;
 - counts for blockstates, models, item definitions, textures, languages, tags and atlases;
 - bounded inspection warnings.
 
-`catalogHash` is SHA-256 over the canonical blocks/items/atlases, the version, the
+`catalogHash` is SHA-256 over the canonical entries/atlases, the version, the
 `DataVersion` and the client JAR SHA-1. `catalogId` is
 `java-<version>-<first 16 hex of catalogHash>`. The registry cache is process-local and keyed
 by the JAR path, size, modification time and catalog schema. A project pins `catalogId` and
@@ -95,7 +105,7 @@ by the JAR path, size, modification time and catalog schema. A project pins `cat
 
 `CatalogIconAtlas` is the presentation companion to the registry snapshot: a packed PNG plus
 the rectangle of every icon texture. It contains only the distinct textures referenced by
-`iconTexture` on catalog blocks and items, so a palette can draw an icon without decoding
+`iconTexture` on catalog entries, so a palette can draw an icon without decoding
 individual files in the WebView. The render atlas used by the viewport is separate and only
 contains the block states currently visible.
 
@@ -163,8 +173,10 @@ same-version export does not guarantee that a vanilla Minecraft client recognize
   rejected. Exact per-block property registries remain a later catalog stage.
 - Basic palette groups (`Building`, `Natural`, `Functional`, `Redstone`, `Technical`, `Other`)
   are derived in the desktop UI from direct block tags and conservative id patterns. They do
-  not change `catalogHash` and are not Minecraft creative-inventory categories. Full creative
-  categories, technical/creative-only flags and item components remain later stages.
+  not change `catalogHash` and are not Minecraft creative-inventory categories. The catalog
+  model already carries `category`, `aliases` and the full flag set, but those values stay
+  `null`/empty until official metadata passes fill them. Full creative categories,
+  technical/creative-only flags and item components remain later stages.
 - Recent selections and starred favorites are local UI preferences keyed by `catalogId`; they
   are not part of the project manifest, do not authorize writes, and are filtered against the
   current catalog when shown. Preferences retain up to 24 recent selections and 256 favorites
