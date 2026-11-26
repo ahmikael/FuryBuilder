@@ -54,6 +54,10 @@ formats are not migrated.
   obtainable facts are explicit for the supported vanilla range, while unprovable geometry
   facts and non-vanilla namespaces stay unknown. Flags label entries but never remove them
   from the write registry.
+- Creative-style Blocks palette: Building, Colored, Natural, Functional and Redstone groups,
+  plus Technical and Other, sit alongside All, Recent and Favorites. Search matches full ids,
+  display names and direct tags, and placement-flag filters narrow the same exact-version
+  catalog without hiding technical or creative-only entries.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes

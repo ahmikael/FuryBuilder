@@ -83,8 +83,10 @@ reported as entries with an explicit warning; they are not silently presented as
   has `states`; an entry with an item form has `itemForm`; a normal block with an item has
   both, while block-only technical entries and item-only entries have one;
 - `legacyId`/`metadata` for numeric registries, `displayName`, `category`, direct `tags`,
-  `iconTexture` and aliases. Named-registry entries have `legacyId: null`; category and
-  aliases stay `null`/empty until their catalog passes fill them;
+  `iconTexture` and aliases. Named-registry entries have `legacyId: null`. `category` stays
+  `null` because neither the client JAR nor its tags carry Minecraft's creative-tab
+  assignment; the desktop palette derives advisory creative-style groups instead. Aliases stay
+  empty until a versioned alias source exists;
 - declared property keys and values under `states`, whether those values are complete, and
   the single declared default state when it is unambiguous;
 - every explicit `variants` entry with its exact property key and weighted model choices,
@@ -178,14 +180,16 @@ same-version export does not guarantee that a vanilla Minecraft client recognize
   blockstate files omit properties that do not affect a model (for example `waterlogged` on
   stairs); such values are not checked. A key that is unknown across the catalog is
   rejected. Exact per-block property registries remain a later catalog stage.
-- Basic palette groups (`Building`, `Natural`, `Functional`, `Redstone`, `Technical`, `Other`)
-  are derived in the desktop UI from direct block tags and conservative id patterns. They do
-  not change `catalogHash` and are not Minecraft creative-inventory categories. The catalog
-  model already carries `category`, `aliases` and the full flag set. `category` and `aliases`
-  stay `null`/empty until the creative-category pass, while technical/creative-only, fluid,
-  airlike, block-entity and obtainable flags are filled for vanilla entries. Full creative
-  categories remain a later stage; item components are preserved opaque, not modelled or
-  edited.
+- Creative-style palette groups (`Building Blocks`, `Colored Blocks`, `Natural Blocks`,
+  `Functional Blocks`, `Redstone Blocks`, `Technical`, `Other`) are derived in the desktop UI
+  from direct tags, catalog flags and conservative id patterns. They do not change
+  `catalogHash` and are not an official copy of Minecraft's creative tabs; a block can appear
+  in several groups, while unmatched or non-vanilla entries fall into `Other`. The catalog
+  `category`/`aliases` fields stay `null`/empty until official metadata or an alias source can
+  fill them honestly. Search covers the full id, display name and direct tags; the flag filter
+  covers placeable, has-item, technical, creative-only, fluid and block-entity entries. The
+  item browser, per-swatch color/shape/version filters, 3D icons and the state picker remain
+  later catalog stages; item components are preserved opaque, not modelled or edited.
 - Recent selections and starred favorites are local UI preferences keyed by `catalogId`; they
   are not part of the project manifest, do not authorize writes, and are filtered against the
   current catalog when shown. Preferences retain up to 24 recent selections and 256 favorites

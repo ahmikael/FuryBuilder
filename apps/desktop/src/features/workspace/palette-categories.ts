@@ -1,14 +1,17 @@
 /**
- * Basic palette grouping derived from the exact project catalog.
+ * Creative-style palette grouping derived from the exact project catalog.
  *
- * These are not Minecraft creative-inventory categories: the client JAR does not carry
- * that assignment. The groups below are built from direct block tags and conservative id
- * patterns, so every version gets useful filters without a hand-maintained list. Full
- * creative categories, technical/creative-only flags and item browsing are later stages.
+ * The client JAR does not carry Minecraft's creative-tab assignment, so these groups are
+ * built from direct block/item tags, flags and conservative id patterns. They are hints for
+ * finding entries, not write permissions; Search/Recent/Favorites and the flag filters sit
+ * on top of the same catalog.
  */
+
+import type { CatalogFlags } from "@/assets/types";
 
 export type PaletteGroupId =
   | "building"
+  | "colored"
   | "natural"
   | "functional"
   | "redstone"
@@ -21,16 +24,63 @@ export const PALETTE_CATEGORIES = [
   { id: "all", label: "All" },
   { id: "recent", label: "Recent" },
   { id: "favorites", label: "Favorites" },
-  { id: "building", label: "Building" },
-  { id: "natural", label: "Natural" },
-  { id: "functional", label: "Functional" },
-  { id: "redstone", label: "Redstone" },
+  { id: "building", label: "Building Blocks" },
+  { id: "colored", label: "Colored Blocks" },
+  { id: "natural", label: "Natural Blocks" },
+  { id: "functional", label: "Functional Blocks" },
+  { id: "redstone", label: "Redstone Blocks" },
   { id: "technical", label: "Technical" },
   { id: "other", label: "Other" },
 ] as const satisfies readonly { id: PaletteFilterId; label: string }[];
 
 export function paletteCategoryLabel(id: PaletteFilterId): string {
   return PALETTE_CATEGORIES.find((category) => category.id === id)?.label ?? id;
+}
+
+export type PaletteFlagFilterId =
+  | "any"
+  | "placeable"
+  | "has_item"
+  | "technical"
+  | "creative_only"
+  | "fluid"
+  | "block_entity";
+
+export const PALETTE_FLAG_FILTERS = [
+  { id: "any", label: "Any block" },
+  { id: "placeable", label: "Placeable" },
+  { id: "has_item", label: "With item" },
+  { id: "technical", label: "Technical" },
+  { id: "creative_only", label: "Creative only" },
+  { id: "fluid", label: "Fluid" },
+  { id: "block_entity", label: "Block entity" },
+] as const satisfies readonly { id: PaletteFlagFilterId; label: string }[];
+
+export function paletteFlagFilterLabel(id: PaletteFlagFilterId): string {
+  return PALETTE_FLAG_FILTERS.find((filter) => filter.id === id)?.label ?? id;
+}
+
+/** Matches a catalog flag filter. Unknown flags never satisfy a specific filter. */
+export function matchesPaletteFlagFilter(
+  flags: CatalogFlags | null | undefined,
+  filter: PaletteFlagFilterId,
+): boolean {
+  if (filter === "any") return true;
+  if (!flags) return false;
+  switch (filter) {
+    case "placeable":
+      return flags.placeable === true;
+    case "has_item":
+      return flags.hasItem === true;
+    case "technical":
+      return flags.technical === true;
+    case "creative_only":
+      return flags.creativeOnly === true;
+    case "fluid":
+      return flags.fluid === true;
+    case "block_entity":
+      return flags.blockEntity === true;
+  }
 }
 
 const BUILDING_TAGS = new Set([
@@ -91,6 +141,41 @@ const BUILDING_PREFIXES = [
   "exposed_",
   "weathered_",
   "oxidized_",
+];
+
+const COLOR_PREFIXES = [
+  "light_blue_",
+  "light_gray_",
+  "white_",
+  "orange_",
+  "magenta_",
+  "yellow_",
+  "lime_",
+  "pink_",
+  "gray_",
+  "cyan_",
+  "purple_",
+  "blue_",
+  "brown_",
+  "green_",
+  "red_",
+  "black_",
+];
+
+/** Families that Minecraft groups as color variants instead of separate materials. */
+const COLORED_SUFFIXES = [
+  "_wool",
+  "_carpet",
+  "_concrete",
+  "_concrete_powder",
+  "_terracotta",
+  "_glazed_terracotta",
+  "_stained_glass",
+  "_stained_glass_pane",
+  "_bed",
+  "_banner",
+  "_shulker_box",
+  "_candle",
 ];
 
 const BUILDING_KEYWORDS = [
@@ -549,18 +634,23 @@ export function categorizeBlock(id: string, tags: readonly string[]): PaletteGro
     groups.push("technical");
   }
 
+  if (hasAnyPrefix(path, COLOR_PREFIXES) && hasAnySuffix(path, COLORED_SUFFIXES)) {
+    groups.push("colored");
+  }
+
   return groups.length > 0 ? groups : ["other"];
 }
 
-/** Case-insensitive palette search over the full id and the localized display name. */
+/** Case-insensitive palette search over id, display name and direct tags. */
 export function matchesPaletteSearch(
-  entry: { name: string; displayName: string | null },
+  entry: { name: string; displayName: string | null; tags?: readonly string[] },
   query: string,
 ): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
   return (
     entry.name.toLowerCase().includes(needle) ||
-    (entry.displayName?.toLowerCase().includes(needle) ?? false)
+    (entry.displayName?.toLowerCase().includes(needle) ?? false) ||
+    (entry.tags?.some((tag) => tag.toLowerCase().includes(needle)) ?? false)
   );
 }

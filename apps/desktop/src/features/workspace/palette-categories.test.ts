@@ -1,11 +1,30 @@
 import { describe, expect, it } from "vitest";
 
+import type { CatalogFlags } from "@/assets/types";
 import {
   PALETTE_CATEGORIES,
   categorizeBlock,
+  matchesPaletteFlagFilter,
   matchesPaletteSearch,
   paletteCategoryLabel,
 } from "@/features/workspace/palette-categories";
+
+const EMPTY_FLAGS: CatalogFlags = {
+  placeable: null,
+  hasItem: null,
+  obtainable: null,
+  creativeOnly: null,
+  technical: null,
+  fluid: null,
+  airlike: null,
+  blockEntity: null,
+  transparent: null,
+  fullCube: null,
+  gravity: null,
+  waterloggable: null,
+  tinted: null,
+  hasVariants: null,
+};
 
 describe("palette categories", () => {
   it("keeps a stable, unique filter list", () => {
@@ -14,6 +33,7 @@ describe("palette categories", () => {
       "recent",
       "favorites",
       "building",
+      "colored",
       "natural",
       "functional",
       "redstone",
@@ -23,7 +43,7 @@ describe("palette categories", () => {
     expect(new Set(PALETTE_CATEGORIES.map((category) => category.id)).size).toBe(
       PALETTE_CATEGORIES.length,
     );
-    expect(paletteCategoryLabel("building")).toBe("Building");
+    expect(paletteCategoryLabel("building")).toBe("Building Blocks");
   });
 
   it("groups building blocks from tags, suffixes and material names", () => {
@@ -75,11 +95,50 @@ describe("palette categories", () => {
     expect(groups).not.toContain("building");
   });
 
-  it("searches by full id or display name without changing the case of the query", () => {
-    const entry = { name: "minecraft:oak_stairs", displayName: "Oak Stairs" };
+  it("adds the colored group only to color-family blocks", () => {
+    expect(categorizeBlock("minecraft:white_concrete", [])).toEqual(
+      expect.arrayContaining(["building", "colored"]),
+    );
+    expect(categorizeBlock("minecraft:white_wool", ["minecraft:wool"])).toEqual(
+      expect.arrayContaining(["building", "colored"]),
+    );
+    expect(categorizeBlock("minecraft:white_stained_glass_pane", [])).toContain("colored");
+    expect(categorizeBlock("minecraft:red_bed", ["minecraft:beds"])).toEqual(
+      expect.arrayContaining(["functional", "colored"]),
+    );
+    expect(categorizeBlock("minecraft:red_sandstone", [])).not.toContain("colored");
+    expect(categorizeBlock("minecraft:red_nether_bricks", [])).not.toContain("colored");
+    expect(categorizeBlock("minecraft:brown_mushroom_block", [])).not.toContain("colored");
+    expect(categorizeBlock("minecraft:redstone_wire", [])).not.toContain("colored");
+  });
+
+  it("searches by full id, display name or direct tag", () => {
+    const entry = {
+      name: "minecraft:oak_stairs",
+      displayName: "Oak Stairs",
+      tags: ["minecraft:wooden_stairs"],
+    };
     expect(matchesPaletteSearch(entry, "")).toBe(true);
     expect(matchesPaletteSearch(entry, "OAK")).toBe(true);
     expect(matchesPaletteSearch(entry, "stairs")).toBe(true);
+    expect(matchesPaletteSearch(entry, "wooden_stairs")).toBe(true);
     expect(matchesPaletteSearch(entry, "deepslate")).toBe(false);
+  });
+
+  it("filters by catalog flags without treating unknown as false", () => {
+    const flags = {
+      ...EMPTY_FLAGS,
+      placeable: true,
+      hasItem: true,
+      technical: false,
+      fluid: false,
+    };
+    expect(matchesPaletteFlagFilter(flags, "any")).toBe(true);
+    expect(matchesPaletteFlagFilter(flags, "placeable")).toBe(true);
+    expect(matchesPaletteFlagFilter(flags, "has_item")).toBe(true);
+    expect(matchesPaletteFlagFilter(flags, "technical")).toBe(false);
+    expect(matchesPaletteFlagFilter(EMPTY_FLAGS, "placeable")).toBe(false);
+    expect(matchesPaletteFlagFilter(null, "any")).toBe(true);
+    expect(matchesPaletteFlagFilter(null, "has_item")).toBe(false);
   });
 });

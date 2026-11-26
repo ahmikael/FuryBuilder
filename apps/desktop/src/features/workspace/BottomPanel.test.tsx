@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type * as IpcModule from "@/lib/ipc";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { CatalogEntry, CatalogSnapshot, CatalogStates } from "@/assets/types";
+import type { CatalogEntry, CatalogFlags, CatalogSnapshot, CatalogStates } from "@/assets/types";
 import type { BlockDefinition } from "@/editor/types";
 import { BOTTOM_PANEL_TABS } from "@/editor/layout";
 import { BottomPanel } from "@/features/workspace/BottomPanel";
@@ -50,6 +50,7 @@ function blockEntry(
   inputStates: FixtureStates,
   iconTexture: string,
   tags: string[],
+  inputFlags: Partial<CatalogFlags> = {},
 ): CatalogEntry {
   const states: CatalogStates = {
     ...inputStates,
@@ -81,12 +82,13 @@ function blockEntry(
       waterloggable: null,
       tinted: null,
       hasVariants: states.multipart || states.variantCount > 1,
+      ...inputFlags,
     },
   };
 }
 
 const projectCatalog: CatalogSnapshot = {
-  schemaVersion: 4,
+  schemaVersion: 5,
   catalogId: "java-1.21.4-0123456789abcdef",
   catalogHash: "a".repeat(64),
   minecraftVersion: "1.21.4",
@@ -226,6 +228,7 @@ const projectCatalog: CatalogSnapshot = {
       },
       "minecraft:block/command_block",
       [],
+      { technical: true, creativeOnly: true, obtainable: false },
     ),
   ],
   atlases: [],
@@ -297,6 +300,11 @@ describe("block palette", () => {
     await user.type(search, "Oak Stairs");
     expect(screen.getByText("oak_stairs")).toBeInTheDocument();
     expect(screen.queryByText("stone")).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, "base_stone_overworld");
+    expect(screen.getByText("stone")).toBeInTheDocument();
+    expect(screen.queryByText("oak_stairs")).not.toBeInTheDocument();
   });
 
   it("filters by basic category and keeps recent and favorite blocks", async () => {
@@ -338,6 +346,32 @@ describe("block palette", () => {
     await user.clear(search);
     await user.click(screen.getByRole("button", { name: "Favorite oak_log", pressed: true }));
     expect(within(list).getByRole("status")).toHaveTextContent("No favorites yet");
+  });
+
+  it("filters by catalog flags and labels special entries", async () => {
+    const user = userEvent.setup();
+    render(<BottomPanel backend={backend} />);
+    const list = await screen.findByRole("list", { name: "Block palette" });
+
+    await chooseSelectOption(user, "Block filter", /^Technical/);
+    expect(within(list).getByText("command_block")).toBeInTheDocument();
+    expect(within(list).queryByText("stone")).not.toBeInTheDocument();
+
+    await chooseSelectOption(user, "Block filter", /^Creative only/);
+    expect(within(list).getByText("command_block")).toBeInTheDocument();
+    expect(within(list).queryByText("oak_log")).not.toBeInTheDocument();
+
+    await user.click(within(list).getByText("command_block"));
+    const details = screen.getByText("minecraft:command_block").closest('[data-slot="card"]');
+    expect(details).not.toBeNull();
+    expect(within(details as HTMLElement).getByText("Creative only")).toBeVisible();
+    expect(within(details as HTMLElement).getAllByText("Technical")).toHaveLength(1);
+
+    await chooseSelectOption(user, "Block filter", /^Block entity/);
+    expect(within(list).getByRole("status")).toHaveTextContent("No blocks match block entity");
+
+    await chooseSelectOption(user, "Block filter", /^Any block/);
+    expect(within(list).getByText("stone")).toBeInTheDocument();
   });
 
   it("isolates palette history between pinned catalogs and hides ids missing from the current one", async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Loader2, RotateCcw, Search, Star, X } from "lucide-react";
-import type { CatalogSnapshot } from "@/assets/types";
+import type { CatalogFlags, CatalogSnapshot } from "@/assets/types";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,10 +25,14 @@ import {
 import type { BlockDefinition } from "@/editor/types";
 import {
   PALETTE_CATEGORIES,
+  PALETTE_FLAG_FILTERS,
   categorizeBlock,
+  matchesPaletteFlagFilter,
   matchesPaletteSearch,
   paletteCategoryLabel,
+  paletteFlagFilterLabel,
   type PaletteFilterId,
+  type PaletteFlagFilterId,
   type PaletteGroupId,
 } from "@/features/workspace/palette-categories";
 import { loadProjectCatalog } from "@/lib/assets-api";
@@ -46,6 +50,8 @@ interface PaletteEntry {
   propertyValuesComplete: boolean;
   multipart: boolean;
   groups: PaletteGroupId[];
+  tags: string[];
+  flags: CatalogFlags | null;
 }
 
 interface PaletteLoad {
@@ -59,6 +65,7 @@ const PLACEHOLDER_REASON =
   "This project uses placeholder textures, so it has no client JAR catalog. Showing curated quick picks instead.";
 const EMPTY_IDS: readonly string[] = [];
 const FILTER_OPTIONS = PALETTE_CATEGORIES.map(({ id, label }) => ({ value: id, label }));
+const FLAG_FILTER_OPTIONS = PALETTE_FLAG_FILTERS.map(({ id, label }) => ({ value: id, label }));
 
 function shortBlockId(id: string): string {
   return id.startsWith("minecraft:") ? id.slice("minecraft:".length) : id;
@@ -96,6 +103,7 @@ export function BlockPalette() {
   const { catalog, curated, fallbackReason, error } = result ?? {};
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<PaletteFilterId>("all");
+  const [flagFilter, setFlagFilter] = useState<PaletteFlagFilterId>("any");
   const selectedBlock = useToolStore((state) => state.selectedBlock);
   const setSelectedBlock = useToolStore((state) => state.setSelectedBlock);
   const setReplaceFrom = useToolStore((state) => state.setReplaceFrom);
@@ -133,6 +141,8 @@ export function BlockPalette() {
             propertyValuesComplete: states.propertyValuesComplete,
             multipart: states.multipart,
             groups: categorizeBlock(entry.id, entry.tags),
+            tags: entry.tags,
+            flags: entry.flags,
           },
         ];
       });
@@ -148,6 +158,8 @@ export function BlockPalette() {
         propertyValuesComplete: false,
         multipart: false,
         groups: categorizeBlock(entry.name, []),
+        tags: [],
+        flags: null,
       }));
     }
     return [];
@@ -176,6 +188,7 @@ export function BlockPalette() {
       recent: recentEntries.length,
       favorites: favoriteEntries.length,
       building: 0,
+      colored: 0,
       natural: 0,
       functional: 0,
       redstone: 0,
@@ -199,9 +212,13 @@ export function BlockPalette() {
     } else {
       entries = palette.filter((entry) => entry.groups.includes(category));
     }
-    if (!search.trim()) return entries;
-    return entries.filter((entry) => matchesPaletteSearch(entry, search));
-  }, [category, palette, recentEntries, favoriteEntries, search]);
+    if (!search.trim()) {
+      return entries.filter((entry) => matchesPaletteFlagFilter(entry.flags, flagFilter));
+    }
+    return entries
+      .filter((entry) => matchesPaletteSearch(entry, search))
+      .filter((entry) => matchesPaletteFlagFilter(entry.flags, flagFilter));
+  }, [category, palette, recentEntries, favoriteEntries, search, flagFilter]);
 
   const definition = entryById.get(selectedBlock.name) ?? null;
   const overrides = selectedBlock.properties ?? {};
@@ -228,14 +245,16 @@ export function BlockPalette() {
   const emptyListMessage = search.trim()
     ? `No block matches “${search.trim()}”${
         category === "all" ? "" : ` in ${paletteCategoryLabel(category)}`
-      }.`
-    : category === "recent"
-      ? "No recent blocks yet. Select a block to add it here."
-      : category === "favorites"
-        ? "No favorites yet. Use the star on a block to pin it."
-        : category === "all"
-          ? "This catalog has no blocks."
-          : `No blocks in ${paletteCategoryLabel(category)}.`;
+      }${flagFilter === "any" ? "" : ` with ${paletteFlagFilterLabel(flagFilter).toLowerCase()}`}.`
+    : flagFilter !== "any" && category === "all"
+      ? `No blocks match ${paletteFlagFilterLabel(flagFilter).toLowerCase()}.`
+      : category === "recent"
+        ? "No recent blocks yet. Select a block to add it here."
+        : category === "favorites"
+          ? "No favorites yet. Use the star on a block to pin it."
+          : category === "all"
+            ? "This catalog has no blocks."
+            : `No blocks in ${paletteCategoryLabel(category)}.`;
 
   if (!isTauriRuntime()) {
     return (
@@ -311,7 +330,7 @@ export function BlockPalette() {
             disabled={loading}
             onValueChange={(value) => setCategory(value ?? "all")}
           >
-            <SelectTrigger className="w-32 shrink-0" aria-label="Block category">
+            <SelectTrigger className="w-36 shrink-0" aria-label="Block category">
               <SelectValue />
             </SelectTrigger>
             <SelectContent alignItemWithTrigger={false}>
@@ -319,6 +338,25 @@ export function BlockPalette() {
                 {PALETTE_CATEGORIES.map(({ id, label }) => (
                   <SelectItem key={id} value={id}>
                     {label} ({categoryCounts[id]})
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <Select
+            items={FLAG_FILTER_OPTIONS}
+            value={flagFilter}
+            disabled={loading}
+            onValueChange={(value) => setFlagFilter((value as PaletteFlagFilterId | null) ?? "any")}
+          >
+            <SelectTrigger className="w-36 shrink-0" aria-label="Block filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent alignItemWithTrigger={false}>
+              <SelectGroup>
+                {PALETTE_FLAG_FILTERS.map(({ id, label }) => (
+                  <SelectItem key={id} value={id}>
+                    {label}
                   </SelectItem>
                 ))}
               </SelectGroup>
@@ -417,6 +455,15 @@ export function BlockPalette() {
                   {paletteCategoryLabel(group)}
                 </Badge>
               ))}
+              {definition.flags?.technical && !definition.groups.includes("technical") ? (
+                <Badge variant="outline">Technical</Badge>
+              ) : null}
+              {definition.flags?.creativeOnly ? (
+                <Badge variant="secondary">Creative only</Badge>
+              ) : null}
+              {definition.flags?.fluid ? <Badge variant="outline">Fluid</Badge> : null}
+              {definition.flags?.airlike ? <Badge variant="outline">Air-like</Badge> : null}
+              {definition.flags?.blockEntity ? <Badge variant="outline">Block entity</Badge> : null}
               {selectedFavorite ? <Badge variant="secondary">Favorite</Badge> : null}
             </div>
           ) : null}
