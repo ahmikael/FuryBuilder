@@ -1,0 +1,74 @@
+{
+  "fromCatalogId": "java-1.20.6-a",
+  "toCatalogId": "java-1.21.4-b",
+  "fromVersion": "1.20.6",
+  "toVersion": "1.21.4",
+  "fromDataVersion": 1,
+  "toDataVersion": 1,
+  "fromSchemaVersion": 5,
+  "toSchemaVersion": 5,
+  "added": [
+    {
+      "id": "minecraft:copper_bulb",
+      "displayName": "Copper Bulb",
+      "block": false,
+      "item": false,
+      "vanilla": true
+    }
+  ],
+  "removed": [
+    {
+      "id": "minecraft:dirt",
+      "displayName": "Dirt",
+      "block": false,
+      "item": false,
+      "vanilla": true
+    }
+  ],
+  "renamed": [
+    {
+      "from": {
+        "id": "minecraft:grass",
+        "displayName": "Grass",
+        "block": true,
+        "item": true,
+        "vanilla": true
+      },
+      "to": {
+        "id": "minecraft:short_grass",
+        "displayName": "Short Grass",
+        "block": true,
+        "item": true,
+        "vanilla": true
+      },
+      "evidence": {
+        "knownMapping": true,
+        "sameIcon": false,
+        "sameDisplayName": false,
+        "sameTags": true
+      }
+    }
+  ],
+  "changed": [
+    {
+      "id": "minecraft:stone",
+      "displayName": {
+        "from": "Stone",
+        "to": "Smooth Stone"
+      },
+      "category": null,
+      "iconChanged": false,
+      "aliasesAdded": [],
+      "aliasesRemoved": [],
+      "tagsAdded": [
+        "minecraft:changed"
+      ],
+      "tagsRemoved": [],
+      "states": null,
+      "itemFormChanged": false,
+      "flagsChanged": false,
+      "legacyIdChanged": false
+    }
+  ],
+  "unchanged": 1
+}

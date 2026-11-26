@@ -1049,6 +1049,83 @@ mod tests {
         );
     }
 
+    const DIFF_GOLDEN: &str = include_str!("../tests/goldens/catalog-diff-1.20.6-1.21.4.json");
+
+    fn diff_golden_fixture() -> (CatalogSnapshot, CatalogSnapshot) {
+        let from = snapshot(
+            "java-1.20.6-a",
+            "1.20.6",
+            vec![
+                entry("minecraft:dirt", Some("Dirt"), Some("block/dirt"), &[]),
+                block(
+                    item(entry(
+                        "minecraft:grass",
+                        Some("Grass"),
+                        Some("block/grass"),
+                        &["minecraft:replaceable"],
+                    )),
+                    "block/grass",
+                ),
+                block(
+                    item(entry(
+                        "minecraft:stone",
+                        Some("Stone"),
+                        Some("block/stone"),
+                        &["minecraft:stone"],
+                    )),
+                    "block/stone",
+                ),
+                entry("minecraft:water", Some("Water"), Some("block/water"), &[]),
+            ],
+        );
+        let to = snapshot(
+            "java-1.21.4-b",
+            "1.21.4",
+            vec![
+                entry(
+                    "minecraft:copper_bulb",
+                    Some("Copper Bulb"),
+                    Some("block/copper_bulb"),
+                    &[],
+                ),
+                block(
+                    item(entry(
+                        "minecraft:short_grass",
+                        Some("Short Grass"),
+                        Some("block/short_grass"),
+                        &["minecraft:replaceable"],
+                    )),
+                    "block/short_grass",
+                ),
+                block(
+                    item(entry(
+                        "minecraft:stone",
+                        Some("Smooth Stone"),
+                        Some("block/stone"),
+                        &["minecraft:changed", "minecraft:stone"],
+                    )),
+                    "block/stone",
+                ),
+                entry("minecraft:water", Some("Water"), Some("block/water"), &[]),
+            ],
+        );
+        (from, to)
+    }
+
+    #[test]
+    fn full_diff_matches_golden_snapshot() {
+        let (from, to) = diff_golden_fixture();
+        let diff = CatalogDiff::between(&from, &to).expect("diff");
+        let expected: serde_json::Value =
+            serde_json::from_str(DIFF_GOLDEN).expect("golden diff JSON");
+        assert_eq!(serde_json::to_value(&diff).expect("diff JSON"), expected);
+        assert_eq!(
+            CatalogDiff::between(&from, &to).expect("repeated diff"),
+            diff,
+            "diff must be deterministic"
+        );
+    }
+
     #[test]
     fn serializes_with_camel_case_contract() {
         let from = snapshot(

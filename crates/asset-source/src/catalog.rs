@@ -1883,6 +1883,179 @@ mod tests {
         }
     }
 
+    /// Checks the invariants every built catalog must satisfy, independent of the fixture.
+    fn assert_catalog_contract(catalog: &CatalogSnapshot) {
+        assert_eq!(catalog.schema_version, CATALOG_SCHEMA_VERSION);
+        assert_eq!(catalog.catalog_hash.len(), 64);
+        assert!(catalog
+            .catalog_hash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit()));
+
+        let mut previous: Option<&str> = None;
+        let mut blocks = 0usize;
+        let mut items = 0usize;
+        let mut blocks_with_items = 0usize;
+        for entry in &catalog.entries {
+            if let Some(previous) = previous {
+                assert!(
+                    previous < entry.id.as_str(),
+                    "catalog entries must be sorted and unique: {previous} then {}",
+                    entry.id
+                );
+            }
+            previous = Some(entry.id.as_str());
+            assert!(
+                crate::bundle::valid_id(&entry.id),
+                "invalid catalog id {}",
+                entry.id
+            );
+            assert!(
+                entry.is_block() || entry.is_item(),
+                "{} has neither a block nor an item form",
+                entry.id
+            );
+            assert_eq!(
+                entry.flags.placeable,
+                Some(entry.is_block()),
+                "{} placeable flag must follow its block form",
+                entry.id
+            );
+            assert_eq!(
+                entry.flags.has_item,
+                Some(entry.is_item()),
+                "{} hasItem flag must follow its item form",
+                entry.id
+            );
+
+            let mut tags = entry.tags.clone();
+            tags.sort();
+            tags.dedup();
+            assert_eq!(
+                tags, entry.tags,
+                "{} tags must be sorted and unique",
+                entry.id
+            );
+            assert!(
+                entry.tags.iter().all(|tag| crate::bundle::valid_id(tag)),
+                "{} has an invalid tag",
+                entry.id
+            );
+
+            if let Some(states) = &entry.states {
+                blocks += 1;
+                assert!(
+                    !states.multipart || states.variants.is_empty(),
+                    "{} multipart states cannot have a finite variant list",
+                    entry.id
+                );
+                assert_eq!(
+                    states.variant_count,
+                    states.variants.len(),
+                    "{} variantCount must match its variant list",
+                    entry.id
+                );
+                for (key, values) in &states.properties {
+                    assert!(!key.is_empty(), "{} has an empty property key", entry.id);
+                    assert!(
+                        !values.is_empty(),
+                        "{} property {key} has no declared values",
+                        entry.id
+                    );
+                    assert!(
+                        values.windows(2).all(|window| window[0] < window[1]),
+                        "{} property {key} values must be sorted and unique",
+                        entry.id
+                    );
+                }
+                for variant in &states.variants {
+                    for (key, value) in &variant.properties {
+                        assert!(
+                            states
+                                .properties
+                                .get(key)
+                                .is_some_and(|values| values.contains(value)),
+                            "{} variant uses undeclared {key}={value}",
+                            entry.id
+                        );
+                    }
+                }
+                if let Some(default) = &states.default_properties {
+                    assert_eq!(
+                        states.variant_count, 1,
+                        "{} defaultProperties require exactly one declared variant",
+                        entry.id
+                    );
+                    assert_eq!(
+                        Some(default),
+                        states.variants.first().map(|variant| &variant.properties),
+                        "{} defaultProperties must equal the single declared variant",
+                        entry.id
+                    );
+                    for (key, value) in default {
+                        assert!(
+                            states
+                                .properties
+                                .get(key)
+                                .is_some_and(|values| values.contains(value)),
+                            "{} default uses undeclared {key}={value}",
+                            entry.id
+                        );
+                    }
+                }
+                if states.property_values_complete {
+                    let declared: Vec<&String> = states.properties.keys().collect();
+                    for variant in &states.variants {
+                        assert_eq!(
+                            variant.properties.keys().collect::<Vec<_>>(),
+                            declared,
+                            "{} complete state must declare the same keys in every variant",
+                            entry.id
+                        );
+                    }
+                }
+            }
+
+            if entry.item_form.is_some() {
+                items += 1;
+                if entry.is_block() {
+                    blocks_with_items += 1;
+                }
+            }
+        }
+
+        assert_eq!(catalog.counts.blocks, blocks);
+        assert_eq!(catalog.counts.items, items);
+        assert_eq!(catalog.counts.blocks_with_items, blocks_with_items);
+        assert_eq!(catalog.counts.item_only, items - blocks_with_items);
+    }
+
+    #[test]
+    fn catalog_entries_are_valid_sorted_and_counted() {
+        let dir = TempDir::new("contract");
+        let path = write_jar(&dir);
+        let catalog = AssetCatalogService::new()
+            .catalog(&source(&path))
+            .expect("catalog");
+
+        assert_catalog_contract(&catalog);
+        assert_eq!(
+            catalog
+                .entries
+                .iter()
+                .map(|entry| entry.id.as_str())
+                .collect::<Vec<_>>(),
+            vec![
+                "example:ruby_block",
+                "minecraft:diamond_sword",
+                "minecraft:oak_fence",
+                "minecraft:oak_stairs",
+                "minecraft:stone",
+                "minecraft:water",
+            ]
+        );
+    }
+
     fn write_minimal_jar(dir: &TempDir, label: &str, files: &[(&str, &str)]) -> PathBuf {
         let path = dir.path.join(format!("{label}.jar"));
         let file = fs::File::create(&path).expect("create jar");

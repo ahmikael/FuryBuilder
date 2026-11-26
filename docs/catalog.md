@@ -304,8 +304,11 @@ project.
   of a misleading block texture.
 - Versions before item definitions fall back to item models and language keys. Numeric ids and
   pre-1.8 registries are outside the baseline catalog and belong to the legacy stage.
-- Tests use a synthetic 1.21.4 client JAR. The real-JAR matrix and captured catalog snapshots
-  belong to the full fixture stage; manual QA downloads a real JAR. A real 1.21.4 client JAR
+- Tests use a synthetic 1.21.4 client JAR. A contract test checks sorted unique ids, count
+  parity, flag/form agreement and state/variant legality; a checked-in golden JSON snapshot
+  fixes the full diff wire shape for added, removed, renamed, changed and unchanged entries.
+  The real-JAR matrix and captured catalog snapshots belong to the full fixture stage; manual
+  QA downloads a real JAR. A real 1.21.4 client JAR
   currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
   173 item tag files, 14 atlases and 990 distinct palette icon textures. Its icons are served
   lazily in bounded batches; the 256-texture measurement is in Performance and memory.
