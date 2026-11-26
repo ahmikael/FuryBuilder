@@ -201,17 +201,17 @@ pub struct ProjectStore {
     root: PathBuf,
 }
 
-fn sha256_hex(bytes: &[u8]) -> String {
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     format!("{:x}", hasher.finalize())
 }
 
-fn io_error(context: impl Into<String>, error: std::io::Error) -> ProjectError {
+pub(crate) fn io_error(context: impl Into<String>, error: std::io::Error) -> ProjectError {
     ProjectError::io(context, error)
 }
 
-fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), ProjectError> {
+pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), ProjectError> {
     let parent = path
         .parent()
         .ok_or_else(|| ProjectError::InvalidPath(path.display().to_string()))?;
@@ -240,7 +240,7 @@ fn read_json<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T, ProjectEr
     serde_json::from_slice(&bytes).map_err(ProjectError::Json)
 }
 
-fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> {
+pub(crate) fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), ProjectError> {
     let mut bytes = serde_json::to_vec_pretty(value)?;
     bytes.push(b'\n');
     write_atomic(path, &bytes)
@@ -291,7 +291,7 @@ fn cleanup_temporary_files(dir: &Path) {
     }
 }
 
-fn verify_round_trip(bytes: &[u8]) -> Result<World, ProjectError> {
+pub(crate) fn verify_round_trip(bytes: &[u8]) -> Result<World, ProjectError> {
     let world = decode_world(bytes)?;
     let reencoded = encode_world(&world)?;
     if reencoded != bytes {
@@ -302,7 +302,7 @@ fn verify_round_trip(bytes: &[u8]) -> Result<World, ProjectError> {
     Ok(world)
 }
 
-fn snapshot_file(revision: u64) -> String {
+pub(crate) fn snapshot_file(revision: u64) -> String {
     format!("world-{revision:020}.fwl")
 }
 
@@ -402,7 +402,7 @@ impl ProjectStore {
         &self.root
     }
 
-    fn project_dir(&self, folder: &str) -> Result<PathBuf, ProjectError> {
+    pub(crate) fn project_dir(&self, folder: &str) -> Result<PathBuf, ProjectError> {
         validate_folder(folder)?;
         Ok(self.root.join(folder))
     }
@@ -451,7 +451,7 @@ impl ProjectStore {
         write_json(&dir.join(PROJECT_FILE), &manifest)
     }
 
-    fn manifest(&self, dir: &Path) -> Result<ProjectManifest, ProjectError> {
+    pub(crate) fn manifest(&self, dir: &Path) -> Result<ProjectManifest, ProjectError> {
         let path = dir.join(PROJECT_FILE);
         let raw: serde_json::Value = read_json(&path).map_err(|error| match error {
             ProjectError::Io { .. } => {

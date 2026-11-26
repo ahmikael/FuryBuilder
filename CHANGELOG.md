@@ -23,6 +23,11 @@ formats are not migrated.
 - Same-version world export for every modern classic release: staged sibling folder, dirty-region
   rebuild, full output revalidation, source-tree hashes and byte-for-byte preservation of
   untouched files.
+- Copy-only same-family project upgrade for modern classic releases: a mandatory source
+  checkpoint, exact target catalog/biome validation with mapped and unknown counts, staged
+  reopen and verification, atomic publication and a report proving the original project stayed
+  unchanged. Imported source copies keep their original version; Vanilla projects are refused
+  in favour of regeneration.
 - Vanilla World generation for every modern classic release: the exact `level-type` spelling,
   Java major, data pack format and bounded `server.properties` come from the project profile,
   and each run records its profile id, Minecraft version and `DataVersion`.

@@ -40,6 +40,10 @@ pub enum ProjectError {
     UnsafeSource(String),
     #[error("project manifest is invalid: {0}")]
     InvalidManifest(String),
+    #[error("version upgrade is not available: {0}")]
+    UpgradeUnsupported(String),
+    #[error("version upgrade is blocked: {0}")]
+    UpgradeBlocked(String),
 }
 
 impl ProjectError {
@@ -70,6 +74,8 @@ impl ProjectError {
             ProjectError::UnsupportedSchema { .. } | ProjectError::UnsupportedWorldVersion(_) => {
                 "unsupported_version"
             }
+            ProjectError::UpgradeUnsupported(_) => "unsupported_version",
+            ProjectError::UpgradeBlocked(_) => "conflict",
             ProjectError::InvalidFlatPreset(_) => "invalid_argument",
             ProjectError::Corrupt(_) | ProjectError::ChecksumMismatch { .. } => "conflict",
             ProjectError::LimitExceeded(_) => "limit_exceeded",

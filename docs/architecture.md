@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | Classic Anvil **1.18–1.21.11** is admitted for import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR; **1.21.4**, `DataVersion` 4189, remains the full-support baseline. Split 26.x and legacy versions are detected and refused. |
+| ADR-001 | Classic Anvil **1.18–1.21.11** is admitted for import, block/biome editing, project snapshots, same-version export, generation with the exact official server JAR and copy-only same-family upgrade; **1.21.4**, `DataVersion` 4189, remains the full-support baseline. Split 26.x and legacy versions are detected and refused. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -53,6 +53,17 @@ The MVP keeps one deterministic whole-world snapshot per committed revision, the
 eight, plus autosave and rolling checkpoints. Project schema and snapshot format versions are
 exact: FuryBuilder reads only the current versions and refuses older or newer files without
 rewriting them.
+
+A version upgrade never edits the original project in place. The project store first takes a
+mandatory checkpoint of the saved revision, then copies the project into a hidden staging
+sibling and rebuilds only the copied snapshot for the target modern classic profile. Empty,
+Flat and Import projects are eligible; an imported source tree remains immutable and keeps its
+original version. Vanilla projects are refused because their seed, server JAR and DataVersion
+provenance cannot be carried to another release without regenerating the world. The target
+block catalog and biome registry must both be exact; any unknown used state blocks publication
+instead of being substituted. The staged copy is reopened, semantically verified and published
+with one atomic rename, and the report proves the checkpoint, the new revision and that the
+source manifest and snapshot did not change.
 
 ## MCP boundary
 

@@ -21,6 +21,7 @@ pub mod manifest;
 pub mod snapshot;
 pub mod source;
 pub mod store;
+pub mod upgrade;
 
 pub use component_model::ComponentMode;
 pub use error::ProjectError;
@@ -43,5 +44,9 @@ pub use store::{
     CHECKPOINT_DIR, CHECKPOINT_SCHEMA_VERSION, DATA_DIR, EXPORTS_DIR, MAX_CHECKPOINTS,
     MAX_CHECKPOINT_TEXT_CHARS, MAX_MANIFEST_BACKUPS, MAX_SNAPSHOTS, MAX_SOURCE_FILES,
     SESSION_MARKER, SOURCE_DIR,
+};
+pub use upgrade::{
+    UpgradeOptions, UpgradeOutcome, UpgradePreview, UpgradeReport, UpgradeStateCount,
+    UpgradeVersion,
 };
 pub use workspace_model::WorkspacePolicy;

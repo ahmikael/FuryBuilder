@@ -2,8 +2,8 @@
 
 Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
 the full baseline. Every one of the 27 exact releases in that range can be imported, edited,
-saved through project snapshots, exported same-version and generated with that release's exact
-official server JAR.
+saved through project snapshots, exported same-version, generated with that release's exact
+official server JAR, and upgraded to a newer same-family release through a verified copy.
 
 The version picker lists releases and snapshots from the official Mojang manifest. Project
 creation requires a profile with verified write support, so the modern classic releases can
@@ -124,6 +124,39 @@ Generation is driven by the exact `VersionProfile`, never by a global baseline:
   distance, spawn protection and chunk sync.
 - A run is bounded by radius, time, memory and CPU. Only a completed run whose manifest,
   report and generated world agree can be imported.
+
+## Same-family project upgrade (1.18–1.21.11)
+
+The backend can upgrade a project to a newer release in the same modern classic
+family. This is not an in-place retarget and not a downgrade:
+
+1. Preflight requires a newer target `DataVersion`, the same layout, chunk family,
+   biome format and dimension bounds, verified target client assets, an exact target
+   block catalog and the target biome registry.
+2. The source project must be `Empty`, `Flat` or `Import`; `Vanilla World` is refused
+   because its generator provenance is bound to the original seed, server JAR and
+   version. The saved project is used, so unsaved editor state is never silently
+   converted.
+3. A mandatory checkpoint of the saved source revision is written to the original
+   project's `changes/` directory.
+4. The project folder is copied to a hidden staging sibling. The copy excludes the
+   session marker, cache, old checkpoints, exports, autosaves and old active snapshots.
+   An imported immutable source tree is copied unchanged.
+5. The copied world is rebuilt from the target profile, with every source section
+   transferred. The target profile and revision are written to a new `project.json`;
+   the source project keeps its original manifest and active snapshot byte for byte.
+6. Every used block state and biome is checked against the target. Unknown states are
+   listed with counts and block publication; IDs are never silently substituted.
+   Editor workspace/scene/parametric state is preserved without remapping.
+7. The staged project is reopened, its snapshot checksum and semantics are verified,
+   the source manifest and snapshot are rechecked, and only then is the staging folder
+   renamed to the final project folder.
+8. The report includes mapped and unknown counts, the checkpoint file and revision,
+   copied file/byte counts, the new snapshot checksum and revision, and confirmation
+   that the source stayed unchanged.
+
+This path is verified in the Rust backend and tests. The Project Settings action and
+user-facing report arrive with the Project Settings UI work (P4-06).
 
 ## Flattened biome conversion (1.13–1.17)
 
