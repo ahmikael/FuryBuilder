@@ -29,6 +29,9 @@ formats are not migrated.
   `version.json` are identified by official SHA-1. Minecraft 1.13 uses its natural spawn
   area; 1.13.1 and later also support `/forceload`. Flattened projects use placeholder
   textures while managed assets are unavailable.
+- Java structure `.nbt` interchange for all 19 flattened classic releases. A new project
+  uses the file's exact `DataVersion`, insertion requires a matching project, and the
+  default placement Y uses the selected dimension's build bounds.
 - Flattened world import reads vanilla singleton block palettes with packed zeroes and
   empty proto-chunks without biomes. Same-version writes retain packed singleton indices.
 - Internal chunk decoding for flattened Java `1.13–1.17.1`: pre-1.18 `Level.Sections` with

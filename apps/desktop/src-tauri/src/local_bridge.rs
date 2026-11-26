@@ -905,6 +905,10 @@ fn dispatch_inner(
                     .service
                     .lock()
                     .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                crate::commands::require_structure_version(
+                    template_preview.data_version,
+                    service.world(),
+                )?;
                 service.preview(&params.project_id, &operation)?
             };
             let mut confirmed = false;
@@ -942,6 +946,10 @@ fn dispatch_inner(
                     .service
                     .lock()
                     .map_err(|_| AppError::internal("world state lock poisoned"))?;
+                crate::commands::require_structure_version(
+                    template_preview.data_version,
+                    service.world(),
+                )?;
                 let result = service.execute(OperationRequest {
                     project_id: project_id.clone(),
                     operation,

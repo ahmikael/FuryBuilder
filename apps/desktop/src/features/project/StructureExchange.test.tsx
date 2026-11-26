@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type * as IpcModule from "@/lib/ipc";
+import type { DimensionInfo } from "@/lib/contracts";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import type {
   StructureExportPreview,
@@ -9,6 +10,7 @@ import type {
   StructureImportPreview,
 } from "@/project/structure-types";
 import type { ProjectSummary, SessionStatus } from "@/project/types";
+import type { VersionDimension } from "@/project/version-types";
 import { useProjectStore } from "@/state/project-store";
 import { useToolStore } from "@/state/tool-store";
 import { chooseSelectOption } from "@/test-utils/select";
@@ -77,11 +79,29 @@ function session(): SessionStatus {
   };
 }
 
+const modernDimensions: VersionDimension[] = [
+  { id: "minecraft:overworld", kind: "overworld", minY: -64, height: 384, folder: "" },
+  { id: "minecraft:the_nether", kind: "nether", minY: 0, height: 256, folder: "DIM-1" },
+  { id: "minecraft:the_end", kind: "end", minY: 0, height: 256, folder: "DIM1" },
+];
+
+const worldDimensions: DimensionInfo[] = modernDimensions.map(({ id, kind, minY, height }) => ({
+  id,
+  kind,
+  minY,
+  height,
+  maxY: minY + height - 1,
+  blockCount: 0,
+  sectionCount: 0,
+  chunkCount: 0,
+}));
+
 const importPreview: StructureImportPreview = {
   format: "java_structure",
   dataVersion: 4189,
   targetDataVersion: 4189,
   targetMinecraftVersion: "1.21.4",
+  dimensions: modernDimensions,
   size: [3, 2, 2],
   volume: 12,
   paletteSize: 2,
@@ -157,6 +177,7 @@ beforeEach(() => {
   useWorldStore.setState({
     revision: 4,
     dimension: "minecraft:overworld",
+    dimensions: worldDimensions,
     blockCount: 2048,
     chunkCount: 4,
     sectionCount: 5,
@@ -201,6 +222,56 @@ describe("structure exchange", () => {
     expect(screen.getByText(/2 entities are present/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "New project" }));
     expect(screen.getByRole("button", { name: /Create project from structure/ })).toBeDisabled();
+  });
+
+  it("defaults a flattened file to a new matching project and uses its height for placement", async () => {
+    api.previewImport.mockResolvedValue({
+      ...importPreview,
+      dataVersion: 2730,
+      targetDataVersion: 2730,
+      targetMinecraftVersion: "1.17.1",
+      dimensions: modernDimensions.map((dimension) => ({ ...dimension, minY: 0, height: 256 })),
+      size: [1, 250, 1],
+      volume: 250,
+    });
+    const user = userEvent.setup();
+    render(<StructureExchange />);
+    await uploadStructure();
+    const y = await screen.findByRole("spinbutton", { name: "Origin y" });
+    expect(y).toHaveValue(6);
+    expect(screen.getByRole("button", { name: "Insert into open project" })).toBeDisabled();
+    expect(
+      screen.getByText(/Insertion requires a project with DataVersion 2730/),
+    ).toBeInTheDocument();
+    await chooseSelectOption(user, "Import dimension", "Nether");
+    expect(y).toHaveValue(6);
+    const create = screen.getByRole("button", { name: "Create project from structure" });
+    await user.clear(y);
+    await user.type(y, "7");
+    expect(create).toBeDisabled();
+    expect(screen.getByText(/must fit between Y 0 and 255/)).toBeInTheDocument();
+    await user.clear(y);
+    await user.type(y, "6");
+    api.importProject.mockRejectedValue(new Error("stop after observing the request"));
+    await user.click(create);
+    expect(api.importProject).toHaveBeenCalledWith(
+      expect.objectContaining({ dimension: "minecraft:the_nether", origin: [0, 6, 0] }),
+    );
+  });
+
+  it("recomputes the default when placing a tall structure in a different dimension", async () => {
+    api.previewImport.mockResolvedValue({ ...importPreview, size: [1, 300, 1], volume: 300 });
+    const user = userEvent.setup();
+    render(<StructureExchange />);
+    await uploadStructure();
+    const y = await screen.findByRole("spinbutton", { name: "Origin y" });
+    expect(y).toHaveValue(20);
+    await chooseSelectOption(user, "Import dimension", "End");
+    expect(y).toHaveValue(0);
+    expect(screen.getByRole("button", { name: "Insert structure" })).toBeDisabled();
+    await chooseSelectOption(user, "Import dimension", "Overworld");
+    expect(y).toHaveValue(20);
+    expect(screen.getByRole("button", { name: "Insert structure" })).toBeEnabled();
   });
 
   it("never reuses a box selection from another dimension", async () => {

@@ -2562,17 +2562,12 @@ fn now_seconds() -> u64 {
 }
 
 fn placement_origin(
+    world: &World,
     dimension: &str,
     origin: [i32; 3],
     size: [i32; 3],
 ) -> Result<BlockPos, AppError> {
-    let world = World::new_empty();
-    let target = world.dimension(dimension).map_err(|_| {
-        AppError::new(
-            ErrorCode::InvalidArgument,
-            format!("unknown dimension `{dimension}`"),
-        )
-    })?;
+    let target = world.dimension(dimension).map_err(AppError::from)?;
     if size.iter().any(|axis| *axis <= 0) {
         return Err(AppError::new(
             ErrorCode::InvalidArgument,
@@ -2598,6 +2593,22 @@ fn placement_origin(
         ));
     }
     Ok(BlockPos::new(origin[0], origin[1], origin[2]))
+}
+
+pub(crate) fn require_structure_version(data_version: i32, world: &World) -> Result<(), AppError> {
+    let version = world.version();
+    if data_version != version.data_version() {
+        return Err(AppError::new(
+            ErrorCode::UnsupportedVersion,
+            format!(
+                "structure DataVersion {} does not match Minecraft {} (DataVersion {})",
+                data_version,
+                version.minecraft_version(),
+                version.data_version()
+            ),
+        ));
+    }
+    Ok(())
 }
 
 fn import_changes(
@@ -2657,13 +2668,14 @@ pub(crate) fn prepare_template_insert(
     let (bytes, entry) = library.load_bytes(template_id).map_err(template_error)?;
     let parsed = world_io::read_verified_import(&bytes).map_err(structure_error)?;
     let preview = world_io::preview_from_structure(&parsed.structure, &parsed.inspection);
-    if !preview.compatible {
-        return Err(AppError::new(
-            ErrorCode::UnsupportedFormat,
-            preview.warnings.join("; "),
-        ));
-    }
-    let origin = placement_origin(dimension, origin, preview.size)?;
+    let origin = {
+        let service = state
+            .service
+            .lock()
+            .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        require_structure_version(parsed.structure.data_version, service.world())?;
+        placement_origin(service.world(), dimension, origin, preview.size)?
+    };
     let changes = import_changes(&parsed.structure, origin, include_air)?;
     let bounds = operation_bounds(origin, preview.size)?;
     let operation = Operation::Batch {
@@ -2706,6 +2718,7 @@ fn template_preview_impl(
             .service
             .lock()
             .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        require_structure_version(preview.data_version, service.world())?;
         service.preview(&current.project_id, &operation)?
     };
     Ok(TemplateInsertPreview {
@@ -2735,6 +2748,7 @@ fn template_insert_impl(
             .service
             .lock()
             .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        require_structure_version(preview.data_version, service.world())?;
         let operation = if has_changes {
             Some(service.execute(OperationRequest {
                 project_id: current.project_id.clone(),
@@ -3214,51 +3228,82 @@ pub fn structure_import_project(
     dimension: String,
     origin: [i32; 3],
     include_air: bool,
-    mut editor_state: project_store::EditorState,
+    editor_state: project_store::EditorState,
 ) -> Result<OpenedProjectPayload, AppError> {
     let bytes = decode_structure_payload(&payload)?;
-    let parsed = world_io::read_verified_import(&bytes).map_err(structure_error)?;
-    let preview = world_io::preview_from_structure(&parsed.structure, &parsed.inspection);
-    if !preview.compatible {
-        return Err(AppError::new(
-            ErrorCode::UnsupportedFormat,
-            preview.warnings.join("; "),
-        ));
-    }
-    let origin = placement_origin(&dimension, origin, preview.size)?;
+    import_structure_project(
+        &state,
+        &name,
+        &source_file_name,
+        &bytes,
+        &dimension,
+        origin,
+        include_air,
+        editor_state,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn import_structure_project(
+    state: &AppState,
+    name: &str,
+    source_file_name: &str,
+    bytes: &[u8],
+    dimension: &str,
+    origin: [i32; 3],
+    include_air: bool,
+    mut editor_state: project_store::EditorState,
+) -> Result<OpenedProjectPayload, AppError> {
+    let parsed = world_io::read_verified_import(bytes).map_err(structure_error)?;
+    let profile = minecraft_version::profile_for_data_version(parsed.structure.data_version)
+        .ok_or_else(|| {
+            AppError::new(
+                ErrorCode::UnsupportedVersion,
+                "the structure has no project version profile",
+            )
+        })?;
+    let origin = placement_origin(
+        &World::for_profile(&profile),
+        dimension,
+        origin,
+        parsed.structure.size,
+    )?;
     let changes = import_changes(&parsed.structure, origin, include_air)?;
-    editor_state.selected_dimension = dimension.clone();
+    editor_state.selected_dimension = dimension.to_owned();
     editor_state.validate().map_err(project_error)?;
 
     let mut projects = state
         .projects
         .lock()
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
-    ensure_current_closed(&state, &mut projects)?;
+    ensure_current_closed(state, &mut projects)?;
     let detail = projects
         .store
-        .create(
-            &name,
+        .create_with_options(
+            name,
             project_store::CreationMode::Empty,
             editor_state.clone(),
+            project_store::CreateOptions {
+                profile_id: Some(&profile.id),
+                ..project_store::CreateOptions::default()
+            },
         )
         .map_err(project_error)?;
     let folder = detail.summary.folder.clone();
-    let source_name = sanitize_import_name(&source_file_name);
+    let source_name = sanitize_import_name(source_file_name);
     let root = projects.store.root().to_path_buf();
 
     let built = (|| -> Result<(project_store::ProjectDetail, WorldInfo), AppError> {
         let (_, mut world, _) = projects.store.open(&folder).map_err(project_error)?;
         projects
             .store
-            .attach_source_bytes(&folder, &source_name, &bytes)
+            .attach_source_bytes(&folder, &source_name, bytes)
             .map_err(project_error)?;
-        // Decode the verified source into an unpublished world, like a Java world import.
-        // This is initial data, not an edit or a way to admit these states to a live world.
+        // This is initial source data, not a way to admit these states to live edits.
         let mut changed = false;
         for change in changes {
             changed |= world
-                .set_block(&dimension, change.pos, &change.state)
+                .set_block(dimension, change.pos, &change.state)
                 .map_err(AppError::from)?
                 .changed;
         }
@@ -3279,7 +3324,7 @@ pub fn structure_import_project(
             .begin_session(&folder, world.revision())
             .map_err(project_error)?;
         let info = world.info();
-        install_world_service(&state, world, &editor_state, None)?;
+        install_world_service(state, world, &editor_state, None)?;
         projects.current = Some(CurrentProject {
             folder: folder.clone(),
             project_id: detail.summary.project_id.clone(),
@@ -3296,15 +3341,14 @@ pub fn structure_import_project(
     match built {
         Ok((detail, info)) => {
             drop(projects);
-            current_payload(&state, detail, info, None)
+            current_payload(state, detail, info, None)
         }
         Err(error) => {
             projects.current = None;
             if let Ok(mut service) = state.service.lock() {
                 *service = WorldService::new();
             }
-            // Remove the half-created project folder: it was created by this command and
-            // never exposed as an open project.
+            // Remove the half-created folder, which was never exposed as an open project.
             let _ = std::fs::remove_dir_all(root.join(&folder));
             Err(error)
         }
@@ -3320,22 +3364,23 @@ pub fn structure_insert(
     include_air: bool,
 ) -> Result<StructureInsertOutcome, AppError> {
     let bytes = decode_structure_payload(&payload)?;
-    let parsed = world_io::read_verified_import(&bytes).map_err(structure_error)?;
-    let preview = world_io::preview_from_structure(&parsed.structure, &parsed.inspection);
-    if !preview.compatible {
-        return Err(AppError::new(
-            ErrorCode::UnsupportedFormat,
-            preview.warnings.join("; "),
-        ));
-    }
-    let origin = placement_origin(&dimension, origin, preview.size)?;
-    let changes = import_changes(&parsed.structure, origin, include_air)?;
+    insert_structure(&state, &bytes, dimension, origin, include_air)
+}
 
+fn insert_structure(
+    state: &AppState,
+    bytes: &[u8],
+    dimension: String,
+    origin: [i32; 3],
+    include_air: bool,
+) -> Result<StructureInsertOutcome, AppError> {
+    let parsed = world_io::read_verified_import(bytes).map_err(structure_error)?;
+    let preview = world_io::preview_from_structure(&parsed.structure, &parsed.inspection);
     let projects = state
         .projects
         .lock()
         .map_err(|_| AppError::internal("project state lock poisoned"))?;
-    let current = projects.current.clone().ok_or_else(|| {
+    let current = projects.current.as_ref().ok_or_else(|| {
         AppError::new(
             ErrorCode::NotFound,
             "no project is open; create a project before inserting a structure",
@@ -3346,6 +3391,9 @@ pub fn structure_insert(
             .service
             .lock()
             .map_err(|_| AppError::internal("world state lock poisoned"))?;
+        require_structure_version(parsed.structure.data_version, service.world())?;
+        let origin = placement_origin(service.world(), &dimension, origin, parsed.structure.size)?;
+        let changes = import_changes(&parsed.structure, origin, include_air)?;
         let operation = if changes.is_empty() {
             None
         } else {
@@ -3365,7 +3413,7 @@ pub fn structure_insert(
         (operation, service.world_info())
     };
     drop(projects);
-    let session = session_status(&state)?;
+    let session = session_status(state)?;
     Ok(StructureInsertOutcome {
         preview,
         operation,
@@ -5154,6 +5202,97 @@ mod workspace_tests {
             .expect("library")
             .save_bytes("Floor", &floor_template_bytes(), TemplateSource::Selection)
             .expect("save")
+    }
+
+    #[test]
+    fn flattened_structure_import_and_insertion_use_the_exact_version_and_dimension() {
+        let root =
+            std::env::temp_dir().join(format!("furybuilder-structure-{}", uuid::Uuid::new_v4()));
+        let state = AppState::new(root.clone());
+        let dimension = "minecraft:the_nether";
+        let profile = built_in_profile("java-classic-1.17.1").unwrap();
+        let block: BlockState = "minecraft:stone".parse().unwrap();
+        let structure = Structure::new(
+            profile.data_version,
+            [1, 2, 1],
+            vec![block.clone()],
+            vec![world_io::StructureBlock {
+                pos: [0, 1, 0],
+                palette_index: 0,
+            }],
+        )
+        .unwrap();
+        let bytes = world_io::write_java_structure(&structure, "Test").unwrap();
+        let import = |y| {
+            import_structure_project(
+                &state,
+                "Structure",
+                "source.nbt",
+                &bytes,
+                dimension,
+                [0, y, 0],
+                false,
+                project_store::EditorState::default(),
+            )
+        };
+        for y in [-1, 255] {
+            let error = import(y).expect_err("out-of-bounds import must fail");
+            assert_eq!(error.code, ErrorCode::InvalidArgument);
+            assert!(error.message.contains("0..=255"));
+        }
+        let opened = import(254).unwrap();
+        assert_eq!(opened.detail.target.profile_id, profile.id);
+        assert_eq!(opened.detail.editor_state.selected_dimension, dimension);
+        assert_eq!(opened.info.target_data_version, profile.data_version);
+        let folder = &opened.detail.summary.folder;
+        let (saved, world, _) = state.projects.lock().unwrap().store.open(folder).unwrap();
+        assert_eq!(saved.target.data_version, profile.data_version);
+        assert_eq!(
+            world
+                .get_block(dimension, BlockPos::new(0, 255, 0))
+                .unwrap(),
+            block
+        );
+
+        let insert = |bytes: &[u8], y| {
+            insert_structure(&state, bytes, dimension.to_owned(), [2, y, 0], false)
+        };
+        let mismatch = insert(&floor_template_bytes(), 254).unwrap_err();
+        assert_eq!(mismatch.code, ErrorCode::UnsupportedVersion);
+        assert!(mismatch.message.contains("1.17.1"));
+        let outside = insert(&bytes, 255).unwrap_err();
+        assert_eq!(outside.code, ErrorCode::InvalidArgument);
+        assert_eq!(state.service.lock().unwrap().world_info(), opened.info);
+        let inserted = insert(&bytes, 254).unwrap();
+        assert_eq!(inserted.operation.unwrap().changed_blocks, 1);
+        assert_eq!(inserted.info.revision, opened.info.revision + 1);
+
+        let library = current_template_library(&state).unwrap();
+        let template = library
+            .save_bytes("Structure", &bytes, TemplateSource::Import)
+            .unwrap();
+        let placed =
+            template_insert_impl(&state, &template.id, dimension, [4, 254, 0], false, None)
+                .unwrap();
+        assert_eq!(placed.operation.unwrap().changed_blocks, 1);
+        let template = library
+            .save_bytes(
+                "Other version",
+                &floor_template_bytes(),
+                TemplateSource::Import,
+            )
+            .unwrap();
+        let error =
+            template_preview_impl(&state, &template.id, dimension, [6, 254, 0], false).unwrap_err();
+        assert_eq!(error.code, ErrorCode::UnsupportedVersion);
+
+        let service = state.service.lock().unwrap();
+        let exported = world_io::prepare_export(service.world(), dimension, None, "Test").unwrap();
+        assert_eq!(exported.structure.data_version, profile.data_version);
+        assert_eq!(exported.structure.non_air_blocks(), 3);
+        drop(service);
+        drop(state);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

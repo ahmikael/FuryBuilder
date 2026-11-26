@@ -19,7 +19,10 @@ fn official_plain_structure_round_trips_semantically() {
     let parsed = read_java_structure(PLAIN).expect("official plain structure parses");
     let target = default_version_profile();
     assert_eq!(parsed.inspection.data_version, target.data_version);
-    assert_eq!(parsed.inspection.target_data_version, target.data_version);
+    assert_eq!(
+        parsed.inspection.target_data_version,
+        Some(target.data_version)
+    );
     assert_eq!(parsed.inspection.size, [1, 2, 1]);
     assert_eq!(parsed.inspection.volume, 2);
     assert_eq!(parsed.inspection.palette_size, 2);

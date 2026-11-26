@@ -18,7 +18,7 @@ use crate::{
     BiomeFormat, BlockstateFormat, CapabilityError, CatalogRegistryFormat, ChunkFamily,
     ContentCatalogProfile, DimensionKind, DimensionProfile, GenerationCapabilities,
     ItemModelFormat, JavaRequirement, LevelTypeSyntax, PackFormatMinors, ServerProfile,
-    StructureProfile, StructureSupport, SupportLevel, VersionFamily, VersionId, VersionProfile,
+    StructureProfile, StructureSupport, VersionFamily, VersionId, VersionProfile,
     WorldCapabilities, WorldLayout,
 };
 
@@ -277,10 +277,7 @@ fn family_defaults(
                 },
                 version >= &"1.20.5".parse().expect("item data component boundary"),
             ),
-            structure_formats: java_nbt_only(
-                capabilities.edit && capabilities.support_level == SupportLevel::Full,
-                capabilities.write && capabilities.support_level == SupportLevel::Full,
-            ),
+            structure_formats: java_nbt_only(capabilities.edit, capabilities.export),
             server: server_profile(
                 true,
                 LevelTypeSyntax::ModernNamespaced,
@@ -313,7 +310,7 @@ fn family_defaults(
                 },
                 dimension_profiles: classic_dimensions((0, 256), (0, 256)),
                 content_catalog: named_catalog(ItemModelFormat::ItemModels, false),
-                structure_formats: no_structures(),
+                structure_formats: java_nbt_only(capabilities.edit, capabilities.export),
                 server: server_profile(
                     true,
                     if lowercase_level_type {

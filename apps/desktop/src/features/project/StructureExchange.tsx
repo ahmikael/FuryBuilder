@@ -49,16 +49,20 @@ import {
   type StructureImportPreview,
 } from "@/project/structure-types";
 import { formatBytes } from "@/project/types";
+import type { VersionDimension } from "@/project/version-types";
 import { cn } from "@/lib/utils";
 
 type ExchangeMode = "import" | "export";
 type ImportDestination = "new" | "insert";
 
-function defaultOriginY(height: number, dimension: string): number {
-  const minY = dimension === "minecraft:overworld" ? -64 : 0;
-  const maxY =
-    dimension === "minecraft:the_nether" ? 127 : dimension === "minecraft:the_end" ? 255 : 319;
-  return Math.max(minY, Math.min(64, maxY - height + 1));
+type PlacementDimension = Pick<VersionDimension, "id" | "minY" | "height">;
+
+function defaultOriginY(height: number, dimension: PlacementDimension): number {
+  return Math.max(dimension.minY, Math.min(64, dimension.minY + dimension.height - height));
+}
+
+function placementDimension(dimensions: readonly PlacementDimension[], id: string) {
+  return dimensions.find((dimension) => dimension.id === id) ?? dimensions[0];
 }
 
 function Meta({ label, value }: { label: string; value: ReactNode }) {
@@ -114,9 +118,13 @@ function Warnings({ items }: { items: string[] }) {
 export function StructureExchange() {
   const desktop = isTauriRuntime();
   const current = useProjectStore((state) => state.current);
+  const activeProject = useProjectStore((state) =>
+    state.projects.find((project) => project.folder === state.current?.folder),
+  );
   const loading = useProjectStore((state) => state.loading);
   const revision = useWorldStore((state) => state.revision);
   const worldDimension = useWorldStore((state) => state.dimension);
+  const worldDimensions = useWorldStore((state) => state.dimensions);
   const selection = useToolStore((state) => state.selection);
   const dirty = projectIsDirty(current, revision);
   const projectOpen = Boolean(current?.folder);
@@ -131,7 +139,7 @@ export function StructureExchange() {
   const [importError, setImportError] = useState<string | null>(null);
   const [destination, setDestination] = useState<ImportDestination>("new");
   const [name, setName] = useState("");
-  const [importDimension, setImportDimension] = useState(worldDimension);
+  const [importDimension, setImportDimension] = useState<string | null>(null);
   const [origin, setOrigin] = useState({ x: 0, y: 64, z: 0 });
   const [includeAir, setIncludeAir] = useState(false);
 
@@ -143,6 +151,29 @@ export function StructureExchange() {
   const [exportError, setExportError] = useState<string | null>(null);
 
   const disabled = !desktop || busy || loading;
+  const canInsert =
+    preview?.targetDataVersion != null &&
+    preview.targetDataVersion === activeProject?.targetDataVersion;
+  const importDimensions = (destination === "insert" ? worldDimensions : preview?.dimensions) ?? [];
+  const selectedDimension = importDimensions.find((dimension) => dimension.id === importDimension);
+  const maxOriginY =
+    selectedDimension && preview
+      ? selectedDimension.minY + selectedDimension.height - preview.size[1]
+      : null;
+  const originFits =
+    selectedDimension != null &&
+    maxOriginY != null &&
+    origin.y >= selectedDimension.minY &&
+    origin.y <= maxOriginY;
+  const newProjectBlocked = destination === "new" && dirty;
+  const canImport =
+    preview?.compatible &&
+    originFits &&
+    (destination === "new" ? name.trim().length > 0 && !newProjectBlocked : canInsert);
+  const importDimensionItems = importDimensions.map(({ id }) => ({
+    value: id,
+    label: STRUCTURE_DIMENSIONS.find((dimension) => dimension.id === id)?.label ?? id,
+  }));
   // A box selection has no dimension of its own. Reusing it after switching the export
   // dimension would silently export a different area, so only offer it in its own dimension.
   const selectionMatchesDimension = exportDimension === worldDimension;
@@ -160,11 +191,19 @@ export function StructureExchange() {
     try {
       const payload = await readStructureFile(selected);
       const result = await previewStructureImport(payload);
+      const insert =
+        result.targetDataVersion != null &&
+        result.targetDataVersion === activeProject?.targetDataVersion;
+      const dimension = placementDimension(
+        insert ? worldDimensions : result.dimensions,
+        worldDimension,
+      );
       setFile({ name: selected.name, size: selected.size, payload });
       setPreview(result);
-      setDestination(projectOpen ? "insert" : "new");
+      setDestination(insert ? "insert" : "new");
+      setImportDimension(dimension?.id ?? null);
       setName(selected.name.replace(/\.nbt$/i, "").slice(0, 64) || "Imported structure");
-      setOrigin({ x: 0, y: defaultOriginY(result.size[1], importDimension), z: 0 });
+      setOrigin({ x: 0, y: dimension ? defaultOriginY(result.size[1], dimension) : 64, z: 0 });
     } catch (error) {
       const normalized = normalizeError(error);
       setImportError(normalized.message);
@@ -178,15 +217,20 @@ export function StructureExchange() {
     }
   };
 
-  const changeImportDimension = (dimension: string): void => {
-    setImportDimension(dimension);
-    if (preview) {
+  const changeImportPlacement = (nextDestination: ImportDestination, dimensionId: string): void => {
+    if (!preview) return;
+    if (nextDestination === destination && dimensionId === importDimension) return;
+    const dimensions = nextDestination === "insert" ? worldDimensions : preview.dimensions;
+    const dimension = placementDimension(dimensions, dimensionId);
+    setDestination(nextDestination);
+    setImportDimension(dimension?.id ?? null);
+    if (dimension) {
       setOrigin((value) => ({ ...value, y: defaultOriginY(preview.size[1], dimension) }));
     }
   };
 
   const submitImport = async (): Promise<void> => {
-    if (!file || !preview || !preview.compatible) return;
+    if (!file || !importDimension || !canImport) return;
     setBusy(true);
     setImportError(null);
     try {
@@ -255,8 +299,6 @@ export function StructureExchange() {
       setBusy(false);
     }
   };
-
-  const newProjectBlocked = destination === "new" && dirty;
 
   const headerTargetVersion =
     exportPreview?.targetMinecraftVersion ?? preview?.targetMinecraftVersion;
@@ -352,8 +394,7 @@ export function StructureExchange() {
                     </>
                   ) : (
                     <>
-                      <AlertTriangle className="size-3.5 text-status-error" /> Import blocked:
-                      content cannot be preserved
+                      <AlertTriangle className="size-3.5 text-status-error" /> Import blocked
                     </>
                   )}
                   <span className="ml-auto font-mono text-xs text-muted-foreground">
@@ -367,8 +408,8 @@ export function StructureExchange() {
                   <Meta label="Stored" value={preview.storedBlocks.toLocaleString()} />
                   <Meta label="Entities" value={preview.entities} />
                   <Meta label="Block entities" value={preview.blockEntities} />
-                  <Meta label="Target" value={preview.targetMinecraftVersion} />
-                  <Meta label="Target DV" value={preview.targetDataVersion} />
+                  <Meta label="Target" value={preview.targetMinecraftVersion ?? "Unsupported"} />
+                  <Meta label="Target DV" value={preview.targetDataVersion ?? "—"} />
                   <Meta label="Unknown tags" value={preview.unknownTags.length} />
                 </div>
               </div>
@@ -384,15 +425,19 @@ export function StructureExchange() {
                       size="sm"
                       variant={destination === "new" ? "default" : "outline"}
                       disabled={disabled}
-                      onClick={() => setDestination("new")}
+                      onClick={() =>
+                        changeImportPlacement("new", importDimension ?? worldDimension)
+                      }
                     >
                       New project
                     </Button>
                     <Button
                       size="sm"
                       variant={destination === "insert" ? "default" : "outline"}
-                      disabled={disabled || !projectOpen}
-                      onClick={() => setDestination("insert")}
+                      disabled={disabled || !canInsert}
+                      onClick={() =>
+                        changeImportPlacement("insert", importDimension ?? worldDimension)
+                      }
                     >
                       Insert into open project
                     </Button>
@@ -411,28 +456,33 @@ export function StructureExchange() {
                       Inserts into “{current?.name}”. The project stays unsaved until you save.
                     </p>
                   )}
+                  {projectOpen && preview.compatible && !canInsert ? (
+                    <Alert>
+                      <AlertDescription>
+                        Insertion requires a project with DataVersion {preview.targetDataVersion}.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                 </div>
 
                 <div className="space-y-1">
                   <div className="text-xs font-medium text-muted-foreground">Placement</div>
                   <div className="flex items-center gap-1">
                     <Select
-                      items={STRUCTURE_DIMENSIONS.map((dimension) => ({
-                        value: dimension.id,
-                        label: dimension.label,
-                      }))}
+                      items={importDimensionItems}
                       value={importDimension}
+                      disabled={disabled || importDimensionItems.length === 0}
                       onValueChange={(value) => {
-                        if (value !== null) changeImportDimension(value);
+                        if (value !== null) changeImportPlacement(destination, value);
                       }}
                     >
                       <SelectTrigger className="w-fit" aria-label="Import dimension">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {STRUCTURE_DIMENSIONS.map((dimension) => (
-                          <SelectItem key={dimension.id} value={dimension.id}>
-                            {dimension.label}
+                        {importDimensionItems.map(({ value, label }) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -443,6 +493,9 @@ export function StructureExchange() {
                         <Input
                           type="number"
                           aria-label={`Origin ${axis}`}
+                          aria-invalid={axis === "y" && selectedDimension ? !originFits : undefined}
+                          min={axis === "y" ? selectedDimension?.minY : undefined}
+                          max={axis === "y" ? (maxOriginY ?? undefined) : undefined}
                           value={origin[axis]}
                           className="w-14"
                           onChange={(event) =>
@@ -455,6 +508,14 @@ export function StructureExchange() {
                       </label>
                     ))}
                   </div>
+                  {selectedDimension && !originFits ? (
+                    <Alert variant="destructive">
+                      <AlertDescription>
+                        The structure must fit between Y {selectedDimension.minY} and{" "}
+                        {selectedDimension.minY + selectedDimension.height - 1}.
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Checkbox
                       checked={includeAir}
@@ -476,12 +537,7 @@ export function StructureExchange() {
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"
-
-                  disabled={
-                    disabled ||
-                    !preview.compatible ||
-                    (destination === "new" && (name.trim().length === 0 || newProjectBlocked))
-                  }
+                  disabled={disabled || !canImport}
                   onClick={() => void submitImport()}
                 >
                   {busy ? (
@@ -493,9 +549,11 @@ export function StructureExchange() {
                   )}
                   {destination === "new" ? "Create project from structure" : "Insert structure"}
                 </Button>
-                <span className="text-xs text-muted-foreground">
-                  The original file is copied into the project&apos;s immutable source layer.
-                </span>
+                {destination === "new" ? (
+                  <span className="text-xs text-muted-foreground">
+                    The original file is copied into the project&apos;s immutable source layer.
+                  </span>
+                ) : null}
               </div>
             </>
           ) : (

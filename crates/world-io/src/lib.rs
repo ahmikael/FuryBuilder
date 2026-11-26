@@ -53,9 +53,8 @@ pub use java_chunk::{
     MAX_BIOME_PALETTE, MAX_BLOCK_PALETTE,
 };
 pub use java_structure::{
-    inspect_java_structure, read_java_structure, read_java_structure_unchecked,
-    write_java_structure, JavaStructure, JavaStructureError, StructureInspection,
-    JAVA_STRUCTURE_EXTENSION, JAVA_STRUCTURE_FORMAT,
+    inspect_java_structure, read_java_structure, write_java_structure, JavaStructure,
+    JavaStructureError, StructureInspection, JAVA_STRUCTURE_EXTENSION, JAVA_STRUCTURE_FORMAT,
 };
 pub use nbt::{NbtError, NbtFile, NbtValue};
 pub use overlay::{

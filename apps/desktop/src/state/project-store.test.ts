@@ -143,6 +143,9 @@ function insertOutcome(): StructureInsertOutcome {
       dataVersion: 4189,
       targetDataVersion: 4189,
       targetMinecraftVersion: "1.21.4",
+      dimensions: [
+        { id: "minecraft:overworld", kind: "overworld", minY: -64, height: 384, folder: "region" },
+      ],
       size: [2, 2, 2],
       volume: 8,
       paletteSize: 2,

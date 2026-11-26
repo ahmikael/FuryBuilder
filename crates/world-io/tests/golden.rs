@@ -21,7 +21,10 @@ fn golden_java_structure_1_21_4_is_stable_and_preserves_properties() {
     let parsed = read_java_structure(GOLDEN).expect("golden parses");
     let target = default_version_profile();
     assert_eq!(parsed.inspection.data_version, target.data_version);
-    assert_eq!(parsed.inspection.target_data_version, target.data_version);
+    assert_eq!(
+        parsed.inspection.target_data_version,
+        Some(target.data_version)
+    );
     assert_eq!(parsed.inspection.size, [3, 2, 2]);
     assert_eq!(parsed.inspection.volume, 12);
     assert_eq!(parsed.inspection.non_air_blocks, 2);

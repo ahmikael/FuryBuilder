@@ -138,7 +138,8 @@ project index. Limits: 128 templates, 32 MiB per file and 256 MiB total. Travers
 tampered payloads, duplicate ids and unknown formats are refused.
 
 Insertion obeys layers, masks and protected regions, uses the same preview/audit path and is
-recorded on the chosen layer. It is construction data, not vanilla structure placement.
+recorded on the chosen layer. The template must match the project's exact `DataVersion` and
+fit within the chosen dimension.
 MCP can list templates read-only and insert one through the confirmed write path.
 
 ## 6. Semantic objects
@@ -392,10 +393,10 @@ and avoid treating the tested ceiling as a normal working radius.
 
 ## 14. Deliberate boundaries
 
-- The UI's interchange export is Java structure `.nbt` for 1.21.4. Sponge `.schem`,
+- The UI supports Java structure `.nbt` for classic releases 1.13–1.21.11. Sponge `.schem`,
   `.litematic` and legacy `.schematic` are not enabled.
-- Structure export/import refuses entities, block entities and unknown tags instead of
-  silently dropping them.
+- Structure import refuses entities, block entities and unknown tags. Export contains block
+  states only.
 - Import World supports classic Java 1.18–1.21.11 layouts. A bare `.mca` or `region/` directory
   is not a world. Split, mixed and legacy layouts are detected but not supported.
 - Edits to imported worlds preserve untouched raw data. Heightmaps, light, ticks, block

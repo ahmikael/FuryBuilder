@@ -1,6 +1,6 @@
 # FuryBuilder: поддержка всех версий и production-ready план
 
-> Статус: P0 и P1 закрыты. Classic Anvil 1.13–1.21.11 поддерживает импорт, правку блоков/биомов, project snapshots и same-version export по точному `VersionProfile`. Для всех 46 релизов доступна генерация с точным официальным server JAR; real-server end-to-end проверен на 1.21.4. Проекты 1.13–1.17.1 могут использовать явно выбранные placeholder-текстуры; managed assets для flattened — P2-08. Split 26.1–26.3 распознаётся без допуска к импорту и записи. Каталог из client JAR — источник палитры и валидации записи; он закрепляется в проекте по версии и хэшу. Палитра виртуализирована, использует ленивый atlas и сохраняет неизвестные импортированные состояния. Same-family upgrade через проверенную копию реализован для 1.18–1.21.11 (Empty/Flat/Import); UI — P4-06. Текущий фокус, прогресс и проверки — в §21.
+> Статус: P0 и P1 закрыты. Classic Anvil 1.13–1.21.11 поддерживает импорт, правку блоков/биомов, project snapshots, same-version export и обмен структурами Java `.nbt` по точному `VersionProfile`. Для всех 46 релизов доступна генерация с точным официальным server JAR; real-server end-to-end проверен на 1.21.4. Проекты 1.13–1.17.1 могут использовать явно выбранные placeholder-текстуры; managed assets для flattened — P2-08. Split 26.1–26.3 распознаётся без допуска к импорту и записи. Каталог из client JAR — источник палитры и валидации записи; он закрепляется в проекте по версии и хэшу. Палитра виртуализирована, использует ленивый atlas и сохраняет неизвестные импортированные состояния. Same-family upgrade через проверенную копию реализован для 1.18–1.21.11 (Empty/Flat/Import); UI — P4-06. Текущий фокус, прогресс и проверки — в §21.
 > Дата: 2026-11-22; обновлено 2026-11-26 (project schema v2 only, snapshot v3 only, checkpoint metadata v2, component manager, client JAR catalog, catalog icon atlas, manual assets, explicit placeholder, server exact version, EULA per JAR/version, shared download pipeline, components commands/events, mock HTTP suite, manual/placeholder/relink tests, project lifecycle, welcome screen, project gate, session teardown, recoverable autosave, lifecycle tests, project wizard shell, basics with project folder and mode requirements, version catalog and selection step, version-aware flat source, folder/archive import with safe staging and import strategy, vanilla source with version guard, bounded generation estimate and disk preflight, components step with auto/manual/existing choices, explicit placeholder and catalog counts, review summary with component/catalog details and conservative size/time estimates, preparing checklist with real stage events, cooperative cancel/retry and retained component downloads, component inventory verification and maintenance actions, shared component card/picker/status primitives, vanilla source reusing the verified component summary, settings boundary guard, toolbar without active block badge and without duplicate save status in performance, bottom panel with Blocks, grouped Analysis and grouped Activity, versioned editor layout, bottom panel and toolbar regression tests, full official manifest support, real Tauri auto/manual smoke, version-aware palette with tag search, recent, favorites, creative-style categories and flag filters, catalog diff, virtualized palette with atlas icons and a constrained state picker, profile dimensions in domain/import/render/WorldTree, same-family upgrade engine, P0 documentation, P0 closed).
 > Цель: превратить FuryBuilder из редактора одной версии в полноценный редактор миров и структур Minecraft Java Edition с понятным первым запуском, автоматической подготовкой компонентов и чистым интерфейсом.
 
@@ -103,9 +103,9 @@ FuryBuilder ещё нигде не установлен и не содержит
 
 | Семейство | Версии | Цель | Этап |
 | --- | --- | --- | --- |
-| Modern classic Anvil | 1.18–1.21.11 | **Read + write subset**: импорт, block states, биомы, snapshots, same-version export и генерация с точным server JAR; **Full** только для 1.21.4 | P1 закрыт |
+| Modern classic Anvil | 1.18–1.21.11 | **Read + write subset**: импорт, block states, биомы, snapshots, same-version export, Java `.nbt` и генерация с точным server JAR; **Full** только для 1.21.4 | P1 закрыт |
 | Modern split layout | 26.1–26.3 | **Read-only диагностика** layout/headers; нативный codec — P3 | P1 (диагностика) / P3 |
-| Classic Anvil, flattened | 1.13–1.17.1 | **Read + write subset**: импорт, block states, биомы, snapshots, same-version export и генерация с точным server JAR; managed assets — P2-08 | P2 |
+| Classic Anvil, flattened | 1.13–1.17.1 | **Read + write subset**: импорт, block states, биомы, snapshots, same-version export, Java `.nbt` и генерация с точным server JAR; managed assets — P2-08 | P2 |
 | Classic Anvil, numeric IDs | 1.8–1.12.2 | **Native adapter**: числовые ID + metadata, биомы-колонки; сначала импорт/экспорт, затем редактирование | P3 |
 | Legacy McRegion | pre-1.13 (1.0–1.12) | **Convert/passthrough**: `.mcr` читается и конвертируется; нативное редактирование — только если оправдано | P3 |
 | Snapshots | выбранные | **Read/convert**, без обещания записи | P3 |
@@ -578,14 +578,15 @@ CLOSED (экран приветствия)
 
 | Формат | Импорт | Экспорт | Примечание |
 | --- | --- | --- | --- |
-| Java structure `.nbt` | Да | Да | Основной, версия/DV в файле |
+| Java structure `.nbt` | Да | Да | Classic 1.13–1.21.11, точный `DataVersion` в файле |
 | Sponge `.schem` v1–v3 | Да | Да | Второй адаптер, маппинг palette |
 | Legacy `.schematic` | Да | Ограниченно | Только для legacy-совместимых блоков |
 | Litematica `.litematic` | Да (read) | Нет/позже | Сложные metadata; не обещать запись |
 | `.mcstructure` (Bedrock) | Нет | Нет | Out of scope |
 
 - Импорт: выбор формата по расширению, проверка версии/палитры, preview, вставка в проект или создание нового.
-- Экспорт: формат выбирается по версии проекта; предупреждения о потере entities/block entities/unknown tags.
+- Java `.nbt`: новый проект получает точный профиль файла; вставка требует совпадения с проектом. Строгий импорт отклоняет entities, block entities, несколько палитр и неизвестные теги.
+- Экспорт: формат выбирается по версии проекта. Java `.nbt` содержит block states и `DataVersion` проекта.
 - Round-trip verification: re-encode → re-parse → checksum.
 
 ### 8.4. Генерация мира
@@ -1095,7 +1096,7 @@ UI:
 7. **Derived data.** Четко показывать `Preserve`/`Vanilla rebuild` при экспорте; не обещать пересчёт.
 8. **Block entities/entities.** Предупреждать при импорте/экспорте структур и размещении сундуков/табличек.
 9. **World export UI.** Добавить one-click, destination picker, verification report.
-10. **Version-aware structure origin.** `defaultOriginY` сейчас захардкожен; брать из профиля/измерения.
+10. **Version-aware structure origin.** Выполнено: `defaultOriginY` вычисляется по высоте выбранного измерения. Для нового проекта границы берутся из профиля файла, для вставки — из открытого мира.
 11. **Resource pack validation.** Формат pack_format под версию, а не фиксированный 46.
 12. **Доступность.** Focus-visible, клавиатурная навигация, aria для вкладок/меню, reduced motion.
 13. **Пустые состояния.** Везде объяснять, что нужно сделать, а не просто «нет данных».
@@ -1411,9 +1412,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P2-07` — structures + version-aware `defaultOriginY`. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P2-08` — asset pipeline для старых pack format. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P2-08` — asset pipeline для старых pack format.
+**Следующий шаг после закрытия текущего фокуса:** `P2-09` — фикстуры, E2E и проверка каталога блоков/предметов для 1.13–1.17.
 
 ### 21.0. Правила ведения
 
@@ -1590,7 +1591,7 @@ UI:
 - [x] `P2-04` Blockstate/model/texture differences.
 - [x] `P2-05` Import/edit/export для 1.13–1.17.
 - [x] `P2-06` Generation: server flags/level-type/Java.
-- [ ] `P2-07` Structures + version-aware `defaultOriginY`.
+- [x] `P2-07` Structures + version-aware `defaultOriginY`.
 - [ ] `P2-08` Asset pipeline для старых pack format.
 - [ ] `P2-09` Фикстуры + E2E + проверка каталога блоков/предметов для 1.13–1.17.
 - [ ] `P2-10` Обновить матрицу/docs.
@@ -1694,6 +1695,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-26 | Структуры 1.13–1.17.1 | Java `.nbt` читает и пишет все 19 точных flattened-профилей; capabilities modern classic приведены в соответствие с уже работающим адаптером. Новый проект использует профиль файла. Вставка файла или шаблона требует совпадения `DataVersion` с проектом; preview и backend берут границы Y из выбранного измерения. Строгий импорт отклоняет неподдерживаемые версии и содержимое, которое нельзя сохранить. shadcn: штатные `Alert`, `Button`, `Input`, `Select`; audit checklist пройден по импорту, зависимостям, lint/typecheck и тестам элементов управления. | см. `git log` | 815 Rust tests (74 suites), 439 TS tests + 1 skipped; clippy `--all-targets -D warnings`, fmt, typecheck, lint, format:check. Round-trip всех 19 профилей; создание/повторное открытие, вставка файла и шаблона, Nether Y=255 и отказ несовпадающей версии. Из официальных JAR файл `end_city/base_roof.nbt` прошёл round-trip для 1.14.4/1.15.2/1.16.5/1.17.1 (148 блоков в каждом); тот же шаблон из 1.13.x с дорелизным `DataVersion` 1457 отклонён. |
 | 2026-11-26 | Генерация 1.13–1.17.1 | Включён Vanilla World для 19 точных профилей. `level-type`: `largeBiomes` в 1.13–1.15, `largebiomes` в 1.16–1.17.1. Свойства сервера учитывают доступность status, sync и simulation distance. Для 1.13.x без `version.json` идентичность устанавливается по официальному SHA-1; для 1.14+ проверяются entry point и внутренние метаданные, включая числовой `pack_version`. Java 8 устанавливается как Temurin JRE, Java 16 — как Temurin JDK. Для 1.13 область ограничена естественным спавном; с 1.13.1 используется `/forceload`. Декодер принимает ванильные singleton `BlockStates` и пустые proto-chunks; финальный `Status` для 1.13.x — `postprocessed`. В мастере для flattened доступен явный placeholder; shadcn-компоненты не менялись. | см. `git log` | 813 Rust tests (74 suites), 437 TS tests + 1 skipped; clippy `-D warnings`, fmt, typecheck, lint, format:check. Проверены настройки всех 19 профилей, семь официальных JAR от 1.13 до 1.17.1, managed install 1.13.2 и Temurin 8/16. На реальных данных проверены 189 чанков 1.13.2 с тестовым `level.dat` и 11 чанков мира 1.17.1; правка и экспорт 1.13.2 сохранили исходник. Реальный запуск flattened-сервера с EULA не выполнялся. |
 | 2026-11-26 | Импорт/правка/экспорт 1.13–1.17 | Все 19 flattened-профилей `1.13–1.17.1` переведены в `ReadWriteSubset` с read/edit/write/export; generation и assets остаются выключены до P2-06/P2-08. Reader, импорт, overlay, region writer и same-version export выбирают `FlattenedFormat`: `Level.xPos`/`zPos`/`Status`, прямые `Level.Sections[].Palette`/`BlockStates` с packing boundary 2566 и `Level.Biomes`. Overlay меняет только палитры/индексы блоков и биомный массив, сравнивает все остальные root/`Level`/section-теги с источником и проверяет round-trip; правка колонки применяется ко всем вертикальным секциям, конфликт значений по высоте отклоняется. `VanillaRebuild` инвалидирует `HeightMap`/`Heightmaps`/`isLightOn`/`PostProcessing` и section light. E2E по всем 19 релизам: импорт, правка блока и биома, project save/reopen, same-version export, повторный импорт, неизменность source, сохранение unknown state и неизвестных тегов, byte-for-byte нетронутый чанк. Матрица поддержки, `docs/formats`, `docs/reference`, `docs/architecture`, `docs/getting-started`, `README`, `CHANGELOG` и план обновлены. shadcn: UI не менялся, компоненты и тема не затронуты | см. `git log` | 809 Rust tests (74 suites), 437 TS tests + 1 skipped (438); clippy `--all-targets -D warnings`, fmt, typecheck, oxlint, oxfmt, `pnpm test`; E2E 19 flattened profiles, import/export/project round-trip и modern 27 без регрессий |
 | 2026-11-26 | Каталог 1.13–1.17 | Каталог из client JAR теперь понимает flattened-раскладку 1.13–1.17: singular-папки `textures/block` и `textures/item`, item models вместо item definitions, отсутствие `atlases` и plural-папки `tags/blocks` и `tags/items`. JAR без root `version.json` (1.13.2–1.16.5) получает exact version из соседнего `<stem>.json`/`client.json` и `DataVersion`/pack formats из точного built-in профиля с явным предупреждением; отсутствие metadata, неизвестный профиль или расхождение id с внутренним `version.json` отклоняются, declared SHA-1/size проверяются всегда. Папка `versions/<id>` и managed cache выбираются напрямую, `.minecraft` root по-прежнему идёт через target discovery. Entity render blockstates (`item_frame`, `glow_item_frame`) не создают блоки; пустые (`item/air`) и template-only item models не создают предметы; wall-fan варианты не наследуют item-форму базового fan; special item с одним `particle` сохраняет `null` icon. `CatalogSnapshot` несёт `resourcePackFormat`/`datapackFormat` и source warnings, схема каталога 6. Реальные JAR: 1.13.2 598/789, 1.14.4 676/876, 1.15.2 680/883, 1.16.5 763/975, 1.17.1 898/1,099 блоков/предметов, ровно по регистрам PrismarineJS без missing/extra. Reader/import/export этих версий закрыты до P2-05. shadcn: UI не менялся, компоненты и тема не затронуты | см. `git log` | 803 Rust tests (74 suites), 437 TS tests + 1 skipped (438); clippy `-D warnings`, fmt, typecheck, oxlint, oxfmt, `git diff --check`; синтетические фикстуры 1.13.2–1.17.1: launcher fallback и предупреждение, checksum/id mismatch, version folder и cache, weighted variants, plural tags, entity blockstates, wall fans, empty/template item models, special icon; реальные JAR сверены с PrismarineJS registries |

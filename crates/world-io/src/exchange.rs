@@ -7,16 +7,15 @@
 
 use std::collections::BTreeMap;
 
+use minecraft_version::DimensionProfile;
 use serde::{Deserialize, Serialize};
 use world_domain::{BlockBox, BlockPos, World};
 
 use crate::java_structure::{
-    inspect_java_structure, read_java_structure, read_java_structure_unchecked,
-    write_java_structure, JavaStructure, JavaStructureError, StructureInspection,
-    JAVA_STRUCTURE_FORMAT,
+    import_profile, parse, read_java_structure, write_java_structure, JavaStructure,
+    JavaStructureError, StructureInspection,
 };
 use crate::structure::{Structure, StructureError};
-use crate::version_support;
 
 /// Upper bound on non-empty sections scanned when deriving content bounds. 8,192 sections
 /// is 33.5 million block checks, which keeps an accidental full-world scan bounded.
@@ -36,8 +35,9 @@ pub struct PaletteCount {
 pub struct StructureImportPreview {
     pub format: String,
     pub data_version: i32,
-    pub target_data_version: i32,
-    pub target_minecraft_version: String,
+    pub target_data_version: Option<i32>,
+    pub target_minecraft_version: Option<String>,
+    pub dimensions: Vec<DimensionProfile>,
     pub size: [i32; 3],
     pub volume: u64,
     pub palette_size: usize,
@@ -89,9 +89,11 @@ pub fn palette_counts(structure: &Structure) -> Vec<PaletteCount> {
 }
 
 pub fn import_preview(bytes: &[u8]) -> Result<StructureImportPreview, JavaStructureError> {
-    let inspection = inspect_java_structure(bytes)?;
-    let structure = read_java_structure_unchecked(bytes)?;
-    Ok(preview_from_structure(&structure, &inspection))
+    let parsed = parse(bytes)?;
+    Ok(preview_from_structure(
+        &parsed.structure,
+        &parsed.inspection,
+    ))
 }
 
 /// Builds a UI preview from an already-parsed structure and inspection. Used by import
@@ -100,13 +102,13 @@ pub fn preview_from_structure(
     structure: &Structure,
     inspection: &StructureInspection,
 ) -> StructureImportPreview {
-    let target = version_support::profile_for(inspection.target_data_version)
-        .unwrap_or_else(version_support::default_version_profile);
+    let target = import_profile(inspection.data_version);
     StructureImportPreview {
         format: inspection.format.to_owned(),
         data_version: inspection.data_version,
-        target_data_version: target.data_version,
-        target_minecraft_version: target.minecraft_version.to_string(),
+        target_data_version: inspection.target_data_version,
+        target_minecraft_version: target.map(|profile| profile.minecraft_version.to_string()),
+        dimensions: target.map_or_else(Vec::new, |profile| profile.dimension_profiles.clone()),
         size: inspection.size,
         volume: inspection.volume,
         palette_size: inspection.palette_size,
@@ -155,7 +157,6 @@ pub fn prepare_export(
     };
     let structure = Structure::from_world(world, dimension, bounds, world.version().data_version())
         .map_err(JavaStructureError::from)?;
-    let data_version = structure.data_version;
     let bytes = write_java_structure(&structure, author)?;
     let read = read_java_structure(&bytes)?;
     if read.structure != structure {
@@ -180,21 +181,7 @@ pub fn prepare_export(
     Ok(ExportBundle {
         structure,
         bytes,
-        inspection: StructureInspection {
-            format: JAVA_STRUCTURE_FORMAT,
-            data_version,
-            target_data_version: data_version,
-            size: read.inspection.size,
-            volume: read.inspection.volume,
-            palette_size: read.inspection.palette_size,
-            stored_blocks: read.inspection.stored_blocks,
-            non_air_blocks: read.inspection.non_air_blocks,
-            entities: 0,
-            block_entities: 0,
-            unknown_tags: vec![],
-            warnings: vec![],
-            compatible: true,
-        },
+        inspection: read.inspection,
         warnings,
         bounds,
     })
@@ -280,6 +267,8 @@ pub fn palette_usage(structure: &Structure) -> BTreeMap<String, u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{default_version_profile, JAVA_STRUCTURE_FORMAT};
+    use minecraft_version::{builtin_profiles, VersionFamily};
     use world_domain::BlockState;
 
     fn sample_world() -> World {
@@ -333,6 +322,43 @@ mod tests {
     }
 
     #[test]
+    fn each_flattened_release_round_trips_a_structure_in_its_exact_profile() {
+        let profiles = builtin_profiles()
+            .iter()
+            .filter(|profile| profile.family == VersionFamily::Flattened);
+        for profile in profiles {
+            let mut world = World::for_profile(profile);
+            let dimension = "minecraft:overworld";
+            let position = BlockPos::new(-1, 255, 2);
+            let state: BlockState =
+                "minecraft:oak_stairs[facing=east,half=top,shape=straight,waterlogged=false]"
+                    .parse()
+                    .unwrap();
+            world.set_block(dimension, position, &state).unwrap();
+
+            let export = prepare_export(&world, dimension, None, "FuryBuilder").unwrap();
+            let preview = import_preview(&export.bytes).unwrap();
+            assert_eq!(preview.data_version, profile.data_version);
+            assert_eq!(preview.target_data_version, Some(profile.data_version));
+            assert_eq!(
+                preview.target_minecraft_version.as_deref(),
+                Some(profile.minecraft_version.as_str())
+            );
+            assert_eq!(preview.dimensions, profile.dimension_profiles);
+            assert!(preview.compatible);
+            let imported = read_verified_import(&export.bytes).unwrap();
+            assert_eq!(imported.structure, export.structure);
+            assert_eq!(
+                imported
+                    .structure
+                    .to_world_changes(position, false)
+                    .unwrap(),
+                vec![(position, state)]
+            );
+        }
+    }
+
+    #[test]
     fn export_verification_is_independent_of_world_iteration_order() {
         let mut world = World::new_empty();
         for pos in [
@@ -361,16 +387,16 @@ mod tests {
     }
 
     #[test]
-    fn import_preview_counts_states_and_marks_incompatibility() {
+    fn import_preview_counts_states_and_reports_the_exact_target() {
         let world = sample_world();
         let bundle = prepare_export(&world, "minecraft:overworld", None, "FuryBuilder").unwrap();
         let preview = import_preview(&bundle.bytes).unwrap();
-        let target = version_support::default_version_profile();
+        let target = default_version_profile();
         assert_eq!(preview.format, JAVA_STRUCTURE_FORMAT);
-        assert_eq!(preview.target_data_version, target.data_version);
+        assert_eq!(preview.target_data_version, Some(target.data_version));
         assert_eq!(
-            preview.target_minecraft_version,
-            target.minecraft_version.as_str()
+            preview.target_minecraft_version.as_deref(),
+            Some(target.minecraft_version.as_str())
         );
         assert_eq!(preview.non_air_blocks, 2);
         assert_eq!(

@@ -2,6 +2,7 @@ import type { OperationResult } from "@/editor/types";
 import type { WorldInfo } from "@/lib/contracts";
 import type { Bounds3 } from "@/renderer/types";
 import type { EditorState, SessionStatus } from "@/project/types";
+import type { VersionDimension } from "@/project/version-types";
 
 export interface StructurePaletteCount {
   state: string;
@@ -12,8 +13,9 @@ export interface StructurePaletteCount {
 export interface StructureImportPreview {
   format: string;
   dataVersion: number;
-  targetDataVersion: number;
-  targetMinecraftVersion: string;
+  targetDataVersion: number | null;
+  targetMinecraftVersion: string | null;
+  dimensions: VersionDimension[];
   size: [number, number, number];
   volume: number;
   paletteSize: number;

@@ -60,9 +60,8 @@ P1 verification covers all 27 modern releases with import and same-version expor
 The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
 modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`), rebuilding the exact catalog from the
 same client JAR after reopen. P2 verification adds import, edit, project save/reopen and
-same-version export for all 19 flattened releases. `Full` remains limited to 1.21.4 because
-structure `.nbt` interchange and the other full-only surfaces are not enabled for the subset
-profiles.
+same-version export for all 19 flattened releases. Both families support same-version Java
+structure interchange; `Full` remains limited to 1.21.4.
 
 ## Java 26.1–26.3 split saves: inspection only
 
@@ -247,14 +246,24 @@ and is accepted by structure blocks, `/place template`, datapacks and structure-
 editors. It is never a project store: objects, DSL, history and source provenance are not
 representable.
 
-- Root is gzip-compressed big-endian NBT; `DataVersion` must match the project's verified
-  target (currently `4189`) on strict import.
+- Root is gzip-compressed big-endian NBT. Import and export support the exact release
+  `DataVersion` of each classic Java profile from 1.13 through 1.21.11. Creating a project
+  from a file uses its profile; inserting a file or template requires the open project's
+  exact `DataVersion`. Export writes the project's version.
+- No structure data fixing is performed. The version in the file is authoritative even for
+  bundled game templates: for example, `end_city/base_roof.nbt` shipped with 1.13.x has
+  `DataVersion` 1457 and is refused.
 - `size` axes are `1..=1024`, volume `<= 1,000,000`, palette `<= 4,096`, blocks are sparse
   non-air positions. Missing positions are air.
 - Block states and properties are preserved exactly; orientation is a property, not a
   separate field.
-- Entities, block entities and unknown tags are refused on strict import and never written
-  on export. The file is re-encoded and re-parsed before success is reported.
+- Strict import accepts one palette and refuses entities, block entities and unknown tags.
+  Export writes block states only. The file is re-encoded and re-parsed before success is
+  reported.
+- Placement uses the selected dimension's full build bounds. Classic 1.13–1.17.1
+  dimensions allow Y 0–255 inclusive; modern classic Overworld allows Y −64–319, and its
+  Nether and End allow Y 0–255. Live insertion also validates states against the project's
+  write registry, which is limited when no client catalog is pinned.
 - Limits: 32 MiB compressed over IPC, 64 MiB decompressed NBT, depth 64, collection length
   8,000,000.
 

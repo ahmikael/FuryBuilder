@@ -693,6 +693,8 @@ mod tests {
             assert!(profile.capabilities.export, "{id}");
             assert!(profile.capabilities.generate, "{id}");
             assert!(!profile.capabilities.assets, "{id}");
+            assert!(profile.structure_formats.java_nbt.import, "{id}");
+            assert!(profile.structure_formats.java_nbt.export, "{id}");
             assert!(profile.capabilities.validate().is_ok(), "{id}");
             assert_eq!(
                 profile_for_data_version(facts.data_version).as_ref(),
@@ -873,24 +875,14 @@ mod tests {
                 "{} amplified",
                 profile.id
             );
+            assert!(profile.structure_formats.java_nbt.import, "{}", profile.id);
+            assert!(profile.structure_formats.java_nbt.export, "{}", profile.id);
             if profile.id == JAVA_CLASSIC_1_21_4_ID {
                 assert_eq!(profile.capabilities.support_level, SupportLevel::Full);
-                assert!(profile.structure_formats.java_nbt.import);
-                assert!(profile.structure_formats.java_nbt.export);
             } else {
                 assert_eq!(
                     profile.capabilities.support_level,
                     SupportLevel::ReadWriteSubset
-                );
-                assert!(
-                    !profile.structure_formats.java_nbt.import,
-                    "{} structures stay in P2",
-                    profile.id
-                );
-                assert!(
-                    !profile.structure_formats.java_nbt.export,
-                    "{} structures stay in P2",
-                    profile.id
                 );
             }
         }

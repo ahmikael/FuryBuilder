@@ -242,7 +242,7 @@ older build is not migrated or opened. Create a new project instead of hand-edit
 ## 7. Export a Java structure
 
 The supported interchange format is Minecraft Java **structure `.nbt`** for the project's
-verified target version (currently 1.21.4, `DataVersion` 4189).
+exact classic release from 1.13 through 1.21.11.
 
 1. Select a box (or use the whole loaded area when no selection exists, as shown by the
    preview).
@@ -253,9 +253,8 @@ verified target version (currently 1.21.4, `DataVersion` 4189).
 5. Click **Export .nbt**. The file is written under the project's `exports` folder, re-read
    and compared before it is reported as verified.
 
-Entities, block entities and unknown tags are refused rather than silently dropped. Sponge
-`.schem` is not enabled. A structure export is not a full world save: it contains the blocks
-in the chosen bounds, not `level.dat`, dimensions or sidecar data.
+Structure exports contain block states in the chosen bounds, without world metadata or sidecar
+data. For Sponge `.schem` and other formats, see [Formats](formats.md#structure-nbt).
 
 ## 8. Import a structure
 
@@ -263,12 +262,13 @@ in the chosen bounds, not `level.dat`, dimensions or sidecar data.
 2. Pick a Java `.nbt` file. FuryBuilder shows size, non-air/stored blocks, entities, block
    entities, target version and unknown tags before writing anything.
 3. Choose **new project** or **insert into the open project**, then set the dimension and
-   origin.
+   origin. A new project uses the exact release from the file. Inserting requires the same
+   `DataVersion` as the open project. The default Y adjusts to the chosen dimension's bounds,
+   and the full structure must fit.
 4. Confirm. An insert is one reversible operation and obeys layers, masks and protected
    regions.
 
-Unsupported payloads are blocked at preview; the importer does not skip entities or unknown
-data quietly.
+Unsupported versions, entities, block entities and unknown tags block import.
 
 ## 9. Import an existing Java world
 

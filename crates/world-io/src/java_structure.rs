@@ -1,4 +1,4 @@
-//! Versioned Java structure (`.nbt`) adapter for the verified classic profile.
+//! Versioned Java structure (`.nbt`) adapter for verified classic profiles.
 //!
 //! Schema (Minecraft Java structure file):
 //! ```text
@@ -19,12 +19,12 @@
 
 use std::collections::BTreeMap;
 
+use minecraft_version::{builtin_profiles, StructureSupport, VersionProfile};
 use thiserror::Error;
 use world_domain::BlockState;
 
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, TAG_COMPOUND, TAG_END, TAG_INT};
 use crate::structure::{Structure, StructureBlock, StructureError, MAX_STRUCTURE_PALETTE};
-use crate::version_support;
 
 pub const JAVA_STRUCTURE_FORMAT: &str = "java_structure";
 pub const JAVA_STRUCTURE_EXTENSION: &str = "nbt";
@@ -69,7 +69,7 @@ impl From<StructureError> for JavaStructureError {
 pub struct StructureInspection {
     pub format: &'static str,
     pub data_version: i32,
-    pub target_data_version: i32,
+    pub target_data_version: Option<i32>,
     pub size: [i32; 3],
     pub volume: u64,
     pub palette_size: usize,
@@ -89,10 +89,24 @@ pub struct JavaStructure {
     pub author: Option<String>,
 }
 
-struct Parsed {
-    structure: Structure,
-    inspection: StructureInspection,
-    author: Option<String>,
+pub(crate) fn import_profile(data_version: i32) -> Option<&'static VersionProfile> {
+    builtin_profiles().iter().find(|profile| {
+        profile.data_version == data_version && profile.structure_formats.java_nbt.import
+    })
+}
+
+fn unsupported_version(
+    found: i32,
+    supports: impl Fn(StructureSupport) -> bool,
+) -> JavaStructureError {
+    JavaStructureError::UnsupportedDataVersion {
+        found,
+        supported: builtin_profiles()
+            .iter()
+            .filter(|profile| supports(profile.structure_formats.java_nbt))
+            .map(|profile| profile.data_version)
+            .collect(),
+    }
 }
 
 fn invalid(message: impl Into<String>) -> JavaStructureError {
@@ -137,7 +151,7 @@ fn allowed_keys(
     }
 }
 
-fn parse(bytes: &[u8]) -> Result<Parsed, JavaStructureError> {
+pub(crate) fn parse(bytes: &[u8]) -> Result<JavaStructure, JavaStructureError> {
     let file = nbt::read_gzip(bytes)?;
     let root = file
         .root
@@ -289,14 +303,11 @@ fn parse(bytes: &[u8]) -> Result<Parsed, JavaStructureError> {
     let structure = Structure::new(data_version, size, palette, blocks)?;
     let volume = structure.volume()?;
     let non_air_blocks = structure.non_air_blocks();
-    let target = version_support::profile_for(data_version)
-        .unwrap_or_else(version_support::default_version_profile);
-    let data_version_supported = target.data_version == data_version;
+    let target = import_profile(data_version);
     let mut warnings = Vec::new();
-    if !data_version_supported {
+    if target.is_none() {
         warnings.push(format!(
-            "DataVersion {data_version} is not supported; FuryBuilder writes {}.",
-            target.data_version
+            "Java structure import is not supported for DataVersion {data_version}."
         ));
     }
     if entities > 0 {
@@ -317,11 +328,11 @@ fn parse(bytes: &[u8]) -> Result<Parsed, JavaStructureError> {
         ));
     }
     let compatible =
-        data_version_supported && entities == 0 && block_entities == 0 && unknown_tags.is_empty();
+        target.is_some() && entities == 0 && block_entities == 0 && unknown_tags.is_empty();
     let inspection = StructureInspection {
         format: JAVA_STRUCTURE_FORMAT,
         data_version,
-        target_data_version: target.data_version,
+        target_data_version: target.map(|profile| profile.data_version),
         size,
         volume,
         palette_size: structure.palette.len(),
@@ -333,7 +344,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed, JavaStructureError> {
         warnings,
         compatible,
     };
-    Ok(Parsed {
+    Ok(JavaStructure {
         structure,
         inspection,
         author,
@@ -350,30 +361,18 @@ pub fn inspect_java_structure(bytes: &[u8]) -> Result<StructureInspection, JavaS
 /// be silently dropped.
 pub fn read_java_structure(bytes: &[u8]) -> Result<JavaStructure, JavaStructureError> {
     let parsed = parse(bytes)?;
-    if !version_support::supports_data_version(parsed.inspection.data_version) {
-        return Err(JavaStructureError::UnsupportedDataVersion {
-            found: parsed.inspection.data_version,
-            supported: version_support::supported_data_versions(),
-        });
+    if parsed.inspection.target_data_version.is_none() {
+        return Err(unsupported_version(
+            parsed.structure.data_version,
+            |support| support.import,
+        ));
     }
     if !parsed.inspection.compatible {
         return Err(JavaStructureError::UnsupportedContent(
             parsed.inspection.warnings.join("; "),
         ));
     }
-    Ok(JavaStructure {
-        structure: parsed.structure,
-        inspection: parsed.inspection,
-        author: parsed.author,
-    })
-}
-
-/// Structural-only read for previews: validates NBT, palette, bounds and indices but does
-/// not refuse unsupported DataVersions or content that would be dropped on import. Callers
-/// must surface `inspection.compatible` and warnings and must use `read_java_structure` for
-/// insertion.
-pub fn read_java_structure_unchecked(bytes: &[u8]) -> Result<Structure, JavaStructureError> {
-    Ok(parse(bytes)?.structure)
+    Ok(parsed)
 }
 
 /// Writes a deterministic gzip-compressed Java structure for the structure's DataVersion.
@@ -381,11 +380,12 @@ pub fn write_java_structure(
     structure: &Structure,
     author: &str,
 ) -> Result<Vec<u8>, JavaStructureError> {
-    if !version_support::supports_data_version(structure.data_version) {
-        return Err(JavaStructureError::UnsupportedDataVersion {
-            found: structure.data_version,
-            supported: version_support::supported_data_versions(),
-        });
+    if !builtin_profiles().iter().any(|profile| {
+        profile.data_version == structure.data_version && profile.structure_formats.java_nbt.export
+    }) {
+        return Err(unsupported_version(structure.data_version, |support| {
+            support.export
+        }));
     }
     structure.validate()?;
     let max_axis = 1024;
@@ -460,7 +460,7 @@ mod tests {
     use world_domain::{BlockBox, BlockPos, World};
 
     fn target_data_version() -> i32 {
-        version_support::default_version_profile().data_version
+        crate::default_version_profile().data_version
     }
 
     fn sample_structure() -> Structure {
@@ -498,7 +498,10 @@ mod tests {
         assert_eq!(read.inspection.non_air_blocks, 2);
         assert_eq!(read.inspection.palette_size, 2);
         assert!(read.inspection.compatible);
-        assert_eq!(read.inspection.target_data_version, target_data_version());
+        assert_eq!(
+            read.inspection.target_data_version,
+            Some(target_data_version())
+        );
     }
 
     #[test]
@@ -535,12 +538,34 @@ mod tests {
     }
 
     #[test]
-    fn refuses_unsupported_data_version() {
+    fn refuses_unverified_data_version_without_suggesting_another_target() {
         let mut structure = sample_structure();
-        structure.data_version = 9999;
+        let unverified = builtin_profiles()
+            .iter()
+            .find(|profile| profile.family == minecraft_version::VersionFamily::Split)
+            .unwrap();
+        let found = unverified.data_version;
+        let mut raw =
+            nbt::read_gzip(&write_java_structure(&structure, "FuryBuilder").unwrap()).unwrap();
+        let NbtValue::Compound(root) = &mut raw.root else {
+            panic!("structure root must be a compound");
+        };
+        root.insert("DataVersion".to_owned(), NbtValue::Int(found));
+        let bytes = nbt::write_gzip(&raw).unwrap();
+        let preview = crate::import_preview(&bytes).unwrap();
+        assert_eq!(preview.data_version, found);
+        assert_eq!(preview.target_data_version, None);
+        assert_eq!(preview.target_minecraft_version, None);
+        assert!(preview.dimensions.is_empty());
+        assert!(!preview.compatible);
+        assert!(matches!(
+            read_java_structure(&bytes),
+            Err(JavaStructureError::UnsupportedDataVersion { found: version, .. }) if version == found
+        ));
+        structure.data_version = found;
         assert!(matches!(
             write_java_structure(&structure, "FuryBuilder"),
-            Err(JavaStructureError::UnsupportedDataVersion { found: 9999, .. })
+            Err(JavaStructureError::UnsupportedDataVersion { found: version, .. }) if version == found
         ));
     }
 
