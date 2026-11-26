@@ -64,6 +64,14 @@ mod tests {
         assert!(versions.contains(&4671));
         assert_eq!(versions.len(), 27);
         assert!(!versions.contains(&4786), "split profiles are not classic");
+        assert!(
+            !supports_data_version(1631),
+            "1.13.2 metadata is not a verified reader"
+        );
+        assert!(
+            !supports_data_version(2730),
+            "1.17.1 metadata is not a verified reader"
+        );
     }
 
     #[test]

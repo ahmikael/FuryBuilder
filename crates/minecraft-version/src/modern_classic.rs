@@ -188,10 +188,10 @@ mod tests {
             "0444762afdc8972481abe98e8df39ccc59170a29",
             "1aeabf1ebff7d0eda411b88f0f8e07195e52726d",
         ];
-        for profile in builtin_profiles()
-            .iter()
-            .filter(|p| p.world_layout == WorldLayout::ClassicAnvil)
-        {
+        for profile in builtin_profiles().iter().filter(|p| {
+            p.world_layout == WorldLayout::ClassicAnvil
+                && p.chunk_family == ChunkFamily::ModernPaletted
+        }) {
             let release = ModernClassicRelease::for_profile(profile).unwrap();
             let expected = match profile.minecraft_version.as_str() {
                 id if id.starts_with("1.18") => reported[0],

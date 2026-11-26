@@ -49,6 +49,7 @@ impl ReleaseFacts {
         let version_id = version(self.version);
         let full = self.version == "1.21.4";
         let modern_classic = version_id.family() == VersionFamily::Modern;
+        let flattened_classic = version_id.family() == VersionFamily::Flattened;
         let notes = if full {
             vec![
                 "Block-state and biome writes are verified for classic Anvil 1.21.4.".to_owned(),
@@ -66,6 +67,15 @@ impl ReleaseFacts {
                     self.version
                 ),
                 "The client JAR is the source of the full block and item catalog.".to_owned(),
+            ]
+        } else if flattened_classic {
+            vec![
+                format!(
+                    "Exact Minecraft {} metadata (DataVersion, Java, pack formats and dimensions) is built in.",
+                    self.version
+                ),
+                "The flattened classic Anvil world adapter is not enabled for projects yet."
+                    .to_owned(),
             ]
         } else {
             vec![
@@ -122,6 +132,28 @@ impl ReleaseFacts {
 // per-release launcher JSON; DataVersion and pack formats come from version.json
 // inside each official client JAR. No JAR content is bundled.
 const RELEASES: &[ReleaseFacts] = &[
+    // Flattened classic Anvil. Pack formats are the shared resource/data values
+    // declared by each release's version.json; 1.17.1 stays at format 7.
+    ReleaseFacts::new("1.13", 1519, 8, 4, 4),
+    ReleaseFacts::new("1.13.1", 1628, 8, 4, 4),
+    ReleaseFacts::new("1.13.2", 1631, 8, 4, 4),
+    ReleaseFacts::new("1.14", 1952, 8, 4, 4),
+    ReleaseFacts::new("1.14.1", 1957, 8, 4, 4),
+    ReleaseFacts::new("1.14.2", 1963, 8, 4, 4),
+    ReleaseFacts::new("1.14.3", 1968, 8, 4, 4),
+    ReleaseFacts::new("1.14.4", 1976, 8, 4, 4),
+    ReleaseFacts::new("1.15", 2225, 8, 5, 5),
+    ReleaseFacts::new("1.15.1", 2227, 8, 5, 5),
+    ReleaseFacts::new("1.15.2", 2230, 8, 5, 5),
+    ReleaseFacts::new("1.16", 2566, 8, 5, 5),
+    ReleaseFacts::new("1.16.1", 2567, 8, 5, 5),
+    ReleaseFacts::new("1.16.2", 2578, 8, 6, 6),
+    ReleaseFacts::new("1.16.3", 2580, 8, 6, 6),
+    ReleaseFacts::new("1.16.4", 2584, 8, 6, 6),
+    ReleaseFacts::new("1.16.5", 2586, 8, 6, 6),
+    ReleaseFacts::new("1.17", 2724, 16, 7, 7),
+    ReleaseFacts::new("1.17.1", 2730, 16, 7, 7),
+    // Modern classic Anvil. Pack/DataVersion metadata cross-checked with mcmeta.
     //                          id        DataVersion  Java  resource  data
     ReleaseFacts::new("1.18", 2860, 17, 8, 8),
     ReleaseFacts::new("1.18.1", 2865, 17, 8, 8),
@@ -210,7 +242,7 @@ mod tests {
     use super::*;
     use crate::{
         BiomeFormat, BlockstateFormat, CatalogRegistryFormat, ChunkFamily, DimensionKind,
-        ItemModelFormat, ReleaseType, VersionFamily, WorldLayout,
+        ItemModelFormat, LevelTypeSyntax, ReleaseType, VersionFamily, WorldLayout,
     };
 
     #[test]
@@ -346,6 +378,303 @@ mod tests {
             "26.4",
         ] {
             assert!(profile_for_version(&version(id)).is_none(), "{id}");
+        }
+    }
+
+    #[test]
+    fn flattened_release_metadata_covers_every_exact_version() {
+        #[derive(Clone, Copy)]
+        struct Facts {
+            version: &'static str,
+            data_version: i32,
+            java_major: u32,
+            resource_pack_format: u32,
+            datapack_format: u32,
+            biome_format: BiomeFormat,
+            level_type: LevelTypeSyntax,
+            overworld: (i32, i32),
+        }
+
+        macro_rules! facts {
+            ($version:expr, $data_version:expr, $java_major:expr, $resource:expr, $data:expr, $biome:expr, $level_type:expr, $overworld:expr $(,)?) => {
+                Facts {
+                    version: $version,
+                    data_version: $data_version,
+                    java_major: $java_major,
+                    resource_pack_format: $resource,
+                    datapack_format: $data,
+                    biome_format: $biome,
+                    level_type: $level_type,
+                    overworld: $overworld,
+                }
+            };
+        }
+
+        const RELEASES: [Facts; 19] = [
+            facts!(
+                "1.13",
+                1519,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.13.1",
+                1628,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.13.2",
+                1631,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.14",
+                1952,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.14.1",
+                1957,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.14.2",
+                1963,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.14.3",
+                1968,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.14.4",
+                1976,
+                8,
+                4,
+                4,
+                BiomeFormat::Column,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.15",
+                2225,
+                8,
+                5,
+                5,
+                BiomeFormat::Section,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.15.1",
+                2227,
+                8,
+                5,
+                5,
+                BiomeFormat::Section,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.15.2",
+                2230,
+                8,
+                5,
+                5,
+                BiomeFormat::Section,
+                LevelTypeSyntax::LegacyCamelCase,
+                (0, 256),
+            ),
+            facts!(
+                "1.16",
+                2566,
+                8,
+                5,
+                5,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.16.1",
+                2567,
+                8,
+                5,
+                5,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.16.2",
+                2578,
+                8,
+                6,
+                6,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.16.3",
+                2580,
+                8,
+                6,
+                6,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.16.4",
+                2584,
+                8,
+                6,
+                6,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.16.5",
+                2586,
+                8,
+                6,
+                6,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.17",
+                2724,
+                16,
+                7,
+                7,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+            facts!(
+                "1.17.1",
+                2730,
+                16,
+                7,
+                7,
+                BiomeFormat::Section,
+                LevelTypeSyntax::ModernNamespaced,
+                (0, 256),
+            ),
+        ];
+
+        for facts in RELEASES {
+            let id = facts.version;
+            let profile = profile_for_version(&version(id)).expect(id);
+            assert_eq!(profile.id, format!("java-classic-{id}"), "{id}");
+            assert_eq!(profile.data_version, facts.data_version, "{id}");
+            assert_eq!(profile.family, VersionFamily::Flattened, "{id}");
+            assert_eq!(profile.world_layout, WorldLayout::ClassicAnvil, "{id}");
+            assert_eq!(profile.chunk_family, ChunkFamily::SectionBiomes, "{id}");
+            assert_eq!(profile.biome_format, facts.biome_format, "{id}");
+            assert_eq!(profile.java.minimum_major, facts.java_major, "{id}");
+            assert_eq!(profile.java.recommended_major, facts.java_major, "{id}");
+            assert_eq!(
+                profile.resource_pack_format,
+                Some(facts.resource_pack_format),
+                "{id}"
+            );
+            assert_eq!(profile.datapack_format, Some(facts.datapack_format), "{id}");
+            assert_eq!(profile.pack_format_minors, None, "{id}");
+            assert_eq!(profile.server.level_type_syntax, facts.level_type, "{id}");
+            assert!(profile.server.official_jar, "{id}");
+            assert!(!profile.server.generation.normal, "{id}");
+            assert_eq!(
+                profile.content_catalog.registry_format,
+                CatalogRegistryFormat::Named,
+                "{id}"
+            );
+            assert_eq!(
+                profile.content_catalog.blockstate_format,
+                BlockstateFormat::Json,
+                "{id}"
+            );
+            assert_eq!(
+                profile.content_catalog.item_model_format,
+                ItemModelFormat::ItemModels,
+                "{id}"
+            );
+            assert!(!profile.content_catalog.data_components, "{id}");
+            assert_eq!(
+                profile
+                    .dimension_profiles
+                    .iter()
+                    .map(|dimension| (
+                        dimension.id.as_str(),
+                        dimension.min_y,
+                        dimension.height,
+                        dimension.folder.as_str(),
+                    ))
+                    .collect::<Vec<_>>(),
+                [
+                    (
+                        "minecraft:overworld",
+                        facts.overworld.0,
+                        facts.overworld.1,
+                        "region"
+                    ),
+                    ("minecraft:the_nether", 0, 256, "DIM-1/region"),
+                    ("minecraft:the_end", 0, 256, "DIM1/region"),
+                ],
+                "{id}"
+            );
+            assert_eq!(
+                profile.capabilities.support_level,
+                SupportLevel::Unverified,
+                "{id}"
+            );
+            assert!(!profile.capabilities.read, "{id}");
+            assert!(profile.capabilities.validate().is_ok(), "{id}");
+            assert_eq!(
+                profile_for_data_version(facts.data_version).as_ref(),
+                Some(&profile),
+                "{id}"
+            );
         }
     }
 

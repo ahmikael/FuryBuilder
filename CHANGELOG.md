@@ -16,6 +16,10 @@ formats are not migrated.
   A version needs a verified profile to advance; classic Anvil `1.18–1.21.11` is verified for
   import, editing, project snapshots and same-version export, and can generate with its exact
   official server JAR; `1.21.4` remains the full-support baseline.
+- Exact built-in metadata for Java `1.13–1.17.1`: `DataVersion`, Java 8/16, resource and data
+  pack formats 4–7, dimension folders and the 0–256 Overworld height (the extended height starts
+  with 1.18), plus the column/section biome boundary. The flattened world adapter is not enabled
+  yet, so these releases remain unavailable for project creation or import.
 - End-to-end import for all 27 classic Anvil releases from 1.18 through 1.21.11: exact
   `DataVersion`, profile dimensions and vertical bounds, editable block states and 4x4x4 biomes,
   byte-for-byte source copy and a version-bound project snapshot. Split 26.1+ and legacy layouts

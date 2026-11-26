@@ -660,10 +660,10 @@ fn decodes_section_palettes_with_each_exact_modern_profile() {
     let wrong_profile = default_profile();
     let dim = overworld();
     let mut tested = 0;
-    for profile in builtin_profiles()
-        .iter()
-        .filter(|p| p.world_layout == minecraft_version::WorldLayout::ClassicAnvil)
-    {
+    for profile in builtin_profiles().iter().filter(|p| {
+        p.world_layout == minecraft_version::WorldLayout::ClassicAnvil
+            && p.chunk_family == minecraft_version::ChunkFamily::ModernPaletted
+    }) {
         let mut root = fixture.root.as_compound().unwrap().clone();
         root.insert(
             "DataVersion".to_owned(),

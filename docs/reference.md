@@ -15,6 +15,11 @@ full-only surfaces are verified only for 1.21.4, while every modern classic rele
 block/biome editing, project snapshots, same-version export and generation with its exact
 server JAR.
 
+Exact metadata for Java `1.13–1.17.1` is built in as well: `DataVersion`, Java 8
+(1.13–1.16.5) or 16 (1.17+), resource and data pack formats 4–7, dimension folders and the
+0–256 Overworld height (the extended height starts with 1.18). The flattened world adapter is
+not enabled yet, so these releases remain unavailable for project creation or import.
+
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
 [formats.md](formats.md); content catalog rules are in [catalog.md](catalog.md);

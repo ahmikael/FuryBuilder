@@ -168,10 +168,13 @@ user-facing report arrive with the Project Settings UI work (P4-06).
 
 The flattened releases store biomes in `Level.Biomes`, outside the block-section palettes:
 256 block-column entries in 1.13–1.14 and 1024 YZX cells (16 sections of 4×4×4 cells) in
-1.15–1.17. `minecraft-version` carries the numeric registry for each exact release. ID 8 is
-`minecraft:nether` through 1.15 and `minecraft:nether_wastes` from 1.16. These worlds are
-not admitted by the region reader, project wizard or exporter yet; the converter operates on
-one chunk's NBT so the P2 adapter and version conversion can share one mapping.
+1.15–1.17. `minecraft-version` carries the exact release metadata (DataVersion, Java 8/16,
+pack formats and the 0–256 vertical bounds; the extended Overworld height starts with 1.18) and
+the numeric registry for each exact release. ID 8 is `minecraft:nether` through 1.15 and
+`minecraft:nether_wastes` from 1.16.
+These worlds are not admitted by the region reader, project wizard or exporter yet; the
+converter operates on one chunk's NBT so the P2 adapter and version conversion can share one
+mapping.
 
 - Decoding produces the normalized 4×4×4 `BiomeSection` grid used by 1.18+.
 - Every source ID must exist in that exact release. An unknown ID stops conversion and is

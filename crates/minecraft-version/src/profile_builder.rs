@@ -679,6 +679,8 @@ mod tests {
         assert_eq!(profile.id, "java-classic-1.16.5");
         assert_eq!(profile.chunk_family, ChunkFamily::SectionBiomes);
         assert_eq!(profile.biome_format, BiomeFormat::Section);
+        assert_eq!(profile.dimension_profiles[0].min_y, 0);
+        assert_eq!(profile.dimension_profiles[0].height, 256);
         assert_eq!(
             profile.server.level_type_syntax,
             LevelTypeSyntax::ModernNamespaced
