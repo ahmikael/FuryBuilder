@@ -40,6 +40,10 @@ thiserror = "2"
 uuid = { version = "1", features = ["v4", "serde"] }
 interprocess = "2.4.8"
 
+[profile.dev]
+debug = 0
+incremental = false
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
