@@ -58,6 +58,10 @@ formats are not migrated.
   plus Technical and Other, sit alongside All, Recent and Favorites. Search matches full ids,
   display names and direct tags, and placement-flag filters narrow the same exact-version
   catalog without hiding technical or creative-only entries.
+- Exact-version catalog diffs: added and removed entries, verified or conservatively inferred
+  rename hints with evidence, and per-entry changes to display names, categories, tags, states,
+  item forms, flags and aliases. Removed ids stay explicit unknown entries for the target
+  version instead of being silently substituted.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes

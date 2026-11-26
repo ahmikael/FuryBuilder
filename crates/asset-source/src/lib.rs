@@ -20,6 +20,7 @@ mod archive;
 mod bundle;
 mod catalog;
 mod catalog_atlas;
+mod catalog_diff;
 mod catalog_flags;
 mod discovery;
 mod jar;
@@ -44,6 +45,11 @@ pub use catalog::{
 pub use catalog_atlas::{
     CatalogAtlasTexture, CatalogIconAtlas, CatalogIconAtlasService, CATALOG_ATLAS_SCHEMA_VERSION,
     MAX_CATALOG_ATLAS_TEXTURES,
+};
+pub use catalog_diff::{
+    CatalogDiff, CatalogDiffEntry, CatalogDiffError, CatalogEntryChange,
+    CatalogPropertyValuesChange, CatalogRename, CatalogRenameEvidence, CatalogStatesChange,
+    CatalogStringChange,
 };
 pub use component_model::MAX_RESOURCE_PACKS;
 pub use discovery::{

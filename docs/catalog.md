@@ -167,6 +167,29 @@ template insertion, is refused. Importing a structure as a **new project** inste
 its source states in the initial snapshot. Technical support for carrying stored states through
 same-version export does not guarantee that a vanilla Minecraft client recognizes those states.
 
+## Version diff
+
+`CatalogDiff::between(from, to)` compares two exact-version snapshots without mutating either
+one:
+
+- `added` and `removed` carry id, display name, block/item form and a vanilla-namespace marker.
+  A removed id is the explicit unknown set for the target version; it is never mapped to air or
+  to another id.
+- `renamed` contains alias hints with evidence. Verified vanilla renames for the modern range
+  are listed explicitly (`grass` → `short_grass`, `scute` → `turtle_scute`). Additional pairs
+  are only inferred when icon, display name, tags and block/item form all match and the pairing
+  is unique in both directions. Ambiguous or non-vanilla pairs remain in `added`/`removed`.
+- `changed` covers common entries: display name, category, icon, aliases, tags, item form,
+  flags, legacy id, and detailed state changes (block form, property keys, accepted values,
+  default state, completeness, variant count/list, multipart and model).
+- `unchanged` counts common entries with none of those changes. The diff also carries both
+  catalog ids, versions, `DataVersion`s and schema versions.
+
+Duplicate entry ids in either snapshot are rejected. Rename hints do not populate
+`CatalogEntry.aliases`, do not authorize placement and do not convert imported worlds; they are
+input for the later catalog UI. The `not in this version` badges and other diff-driven UI are a
+later catalog stage.
+
 ## Honest limits
 
 - `defaultProperties` is the only state declared by the blockstate file. When several
