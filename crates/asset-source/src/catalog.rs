@@ -28,6 +28,7 @@ use crate::archive::Archive;
 use crate::bundle::normalize_id;
 use crate::catalog_flags::classify_flags;
 use crate::discovery::inspect_asset_path;
+use crate::jar::{inspect_client_jar, ExpectedClient};
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
@@ -408,6 +409,28 @@ fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, 
                 .to_owned(),
         ));
     }
+    let selected = PathBuf::from(&source.path);
+    match fs::symlink_metadata(&selected) {
+        Ok(metadata) if metadata.file_type().is_symlink() => {
+            return Err(CatalogError::InvalidSource(
+                "the selection is a symlink, junction or reparse point; select the real path"
+                    .to_owned(),
+            ));
+        }
+        Ok(metadata) if metadata.is_file() => {
+            // A direct client JAR is self-describing: `version.json` inside the archive is the
+            // exact version authority. The application target is checked by callers against
+            // the project profile, so catalogs can be built and compared across versions.
+            return resolve_direct_client_jar(selected);
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return Err(CatalogError::Io(format!(
+                "cannot inspect {}: {error}",
+                selected.display()
+            )));
+        }
+    }
     let report = inspect_asset_path(&source.path);
     if !report.valid || !report.target_match {
         let reason = report
@@ -450,6 +473,36 @@ fn resolve_client_jar(source: &AssetSourceSetting) -> Result<ResolvedClientJar, 
         })?,
         sha1: version.actual_sha1.clone(),
         checksum_verified: version.checksum_verified,
+        jar_path,
+    })
+}
+
+fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, CatalogError> {
+    let inspection = inspect_client_jar(&jar_path, &ExpectedClient::default());
+    if let Some(error) = inspection.errors.first() {
+        return Err(CatalogError::InvalidSource(format!(
+            "{}: {error}",
+            jar_path.display()
+        )));
+    }
+    let version = inspection.internal_id.ok_or_else(|| {
+        CatalogError::InvalidSource(format!(
+            "{} has no version.json id; it is not a Minecraft client JAR",
+            jar_path.display()
+        ))
+    })?;
+    let data_version = inspection.world_version.ok_or_else(|| {
+        CatalogError::Unsupported(format!(
+            "{} has no version.json DataVersion",
+            jar_path.display()
+        ))
+    })?;
+    Ok(ResolvedClientJar {
+        display_path: jar_path.display().to_string(),
+        version,
+        data_version,
+        sha1: inspection.sha1,
+        checksum_verified: false,
         jar_path,
     })
 }
@@ -2357,6 +2410,48 @@ mod tests {
         assert_eq!(copied.client_jar, copy.display().to_string());
         assert_eq!(copied.catalog_id, first.catalog_id);
         assert_eq!(copied.catalog_hash, first.catalog_hash);
+    }
+
+    #[test]
+    fn a_direct_client_jar_selects_its_own_exact_version() {
+        let profile = minecraft_version::builtin_profiles()
+            .iter()
+            .find(|profile| profile.minecraft_version.as_str() == "1.18.2")
+            .expect("1.18.2 profile");
+        let dir = TempDir::new("direct-cross-version");
+        let path = dir.path.join("client-1.18.2.jar");
+        let file = fs::File::create(&path).expect("create jar");
+        let mut zip = zip::ZipWriter::new(file);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        let version = serde_json::to_vec(&serde_json::json!({
+            "id": profile.minecraft_version.as_str(),
+            "world_version": profile.data_version,
+            "pack_version": {
+                "resource": profile.resource_pack_format.unwrap_or(0),
+                "data": profile.datapack_format.unwrap_or(0),
+            },
+        }))
+        .expect("version json");
+        zip.start_file("version.json", options)
+            .expect("version entry");
+        zip.write_all(&version).expect("write version.json");
+        zip.start_file("assets/minecraft/blockstates/stone.json", options)
+            .expect("blockstate entry");
+        zip.write_all(br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#)
+            .expect("write blockstate");
+        zip.finish().expect("finish jar");
+
+        let catalog = AssetCatalogService::new()
+            .catalog(&source(&path))
+            .expect("catalog");
+        assert_eq!(catalog.minecraft_version, "1.18.2");
+        assert_eq!(catalog.data_version, profile.data_version);
+        assert!(catalog.catalog_id.starts_with("java-1.18.2-"));
+        assert!(catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("SHA-1 was not verified")));
     }
 
     #[test]

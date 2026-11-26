@@ -5,9 +5,14 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
+use asset_source::AssetCatalogService;
 use flate2::write::ZlibEncoder;
 use flate2::Compression;
 use minecraft_version::builtin_profiles;
+use project_store::{
+    AssetsComponent, ComponentMode, EditorState, ImportOptions, ProjectComponents, ProjectStore,
+    SaveKind, SourceFile,
+};
 use world_domain::BlockPos;
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::world_import::{
@@ -273,6 +278,55 @@ fn write_world_for_profile(root: &Path, profile: &minecraft_version::VersionProf
     )
     .expect("write region");
     fs::write(root.join("custom-unknown.dat"), b"keep me").expect("write unknown file");
+}
+
+fn write_catalog_jar(root: &Path, profile: &minecraft_version::VersionProfile) -> PathBuf {
+    let path = root.join(format!("catalog-{}.jar", profile.minecraft_version));
+    let file = fs::File::create(&path).expect("create catalog JAR");
+    let mut zip = zip::ZipWriter::new(file);
+    let options = SimpleFileOptions::default();
+    let version = serde_json::json!({
+        "id": profile.minecraft_version.as_str(),
+        "name": profile.minecraft_version.as_str(),
+        "world_version": profile.data_version,
+        "pack_version": {
+            "resource": profile.resource_pack_format.unwrap_or(0),
+            "data": profile.datapack_format.unwrap_or(0),
+        },
+    });
+    let mut files = vec![(
+        "version.json".to_owned(),
+        serde_json::to_vec(&version).expect("catalog version JSON"),
+    )];
+    for (id, model) in [
+        ("stone", "minecraft:block/stone"),
+        ("dirt", "minecraft:block/dirt"),
+        ("gold_block", "minecraft:block/gold_block"),
+    ] {
+        files.push((
+            format!("assets/minecraft/blockstates/{id}.json"),
+            format!(r#"{{"variants":{{"":{{"model":"{model}"}}}}}}"#).into_bytes(),
+        ));
+        files.push((
+            format!("assets/minecraft/models/block/{id}.json"),
+            format!(r#"{{"textures":{{"all":"minecraft:block/{id}"}}}}"#).into_bytes(),
+        ));
+    }
+    files.push((
+        "assets/minecraft/lang/en_us.json".to_owned(),
+        serde_json::to_vec(&serde_json::json!({
+            "block.minecraft.stone": "Stone",
+            "block.minecraft.dirt": "Dirt",
+            "block.minecraft.gold_block": "Block of Gold",
+        }))
+        .expect("catalog language JSON"),
+    ));
+    for (name, bytes) in files {
+        zip.start_file(name, options).expect("start catalog entry");
+        zip.write_all(&bytes).expect("write catalog entry");
+    }
+    zip.finish().expect("finish catalog JAR");
+    path
 }
 
 fn add_zip_directory(
@@ -564,6 +618,204 @@ fn exports_every_modern_classic_release_same_version_and_verifies() {
         tested += 1;
     }
     assert_eq!(tested, 27, "every modern classic release must be covered");
+}
+
+#[test]
+fn catalog_families_create_edit_save_reopen_export_and_verify() {
+    let profiles = builtin_profiles()
+        .iter()
+        .filter(|profile| {
+            matches!(
+                profile.minecraft_version.as_str(),
+                "1.18.2" | "1.19.4" | "1.20.6" | "1.21.4"
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(profiles.len(), 4, "one representative per modern family");
+
+    for profile in profiles {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("catalog-family-{label}"));
+        let root = dir.path().join("world");
+        write_world_for_profile(&root, profile);
+        let jar = write_catalog_jar(dir.path(), profile);
+        let catalog = AssetCatalogService::new()
+            .catalog(&asset_source::AssetSourceSetting {
+                kind: "client_jar".to_owned(),
+                path: jar.to_string_lossy().into_owned(),
+            })
+            .unwrap_or_else(|error| panic!("{label}: build catalog: {error}"));
+        assert_eq!(catalog.minecraft_version, label, "{label}");
+        assert_eq!(catalog.data_version, profile.data_version, "{label}");
+        for id in ["minecraft:stone", "minecraft:dirt", "minecraft:gold_block"] {
+            let entry = catalog
+                .entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .unwrap_or_else(|| panic!("{label}: catalog is missing {id}"));
+            assert!(entry.states.is_some(), "{label}: {id} must be a block");
+        }
+        assert!(
+            catalog
+                .entries
+                .iter()
+                .all(|entry| entry.id != "minecraft:unknown_machine"),
+            "{label}: non-vanilla state must stay outside the catalog"
+        );
+
+        let (world, _) = load_java_world(&root).unwrap_or_else(|error| panic!("{label}: {error}"));
+        assert_eq!(
+            world.version().data_version(),
+            profile.data_version,
+            "{label}: editable world version"
+        );
+
+        let assets = AssetsComponent {
+            mode: ComponentMode::Manual,
+            client_jar_sha1: catalog.client_jar_sha1.clone(),
+            catalog_id: Some(catalog.catalog_id.clone()),
+            catalog_hash: Some(catalog.catalog_hash.clone()),
+            pack_stack: Vec::new(),
+        };
+        let pins = ProjectComponents {
+            assets: Some(assets),
+            ..ProjectComponents::default()
+        };
+        let store = ProjectStore::new(dir.path().join("projects"));
+        let folder = format!("{label}.furybuilder");
+        let detail = store
+            .create_imported(
+                label,
+                EditorState::default(),
+                &world,
+                "world",
+                ImportOptions {
+                    folder: Some(&folder),
+                    components: pins.clone(),
+                },
+            )
+            .unwrap_or_else(|error| panic!("{label}: create project: {error}"));
+
+        let project_dir = store.root().join(&detail.summary.folder);
+        let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");
+        let copied = world_io::passthrough_java_world(&root, &source_world)
+            .unwrap_or_else(|error| panic!("{label}: copy source: {error}"));
+        let files = copied
+            .files
+            .iter()
+            .map(|file| SourceFile {
+                relative_path: format!(
+                    "world/{}",
+                    file.relative_path.to_string_lossy().replace('\\', "/")
+                ),
+                bytes: file.bytes,
+                sha256: file.sha256.clone(),
+            })
+            .collect::<Vec<_>>();
+        store
+            .record_source_tree(&folder, "world", &files)
+            .unwrap_or_else(|error| panic!("{label}: record source: {error}"));
+
+        let (_, mut opened, _) = store
+            .open(&folder)
+            .unwrap_or_else(|error| panic!("{label}: open project: {error}"));
+        let gold: world_domain::BlockState = "minecraft:gold_block".parse().unwrap();
+        opened
+            .set_block(OVERWORLD, BlockPos::new(0, -48, 0), &gold)
+            .unwrap_or_else(|error| panic!("{label}: edit project: {error}"));
+        opened.bump_revision();
+        store
+            .save(&folder, &opened, EditorState::default(), SaveKind::Manual)
+            .unwrap_or_else(|error| panic!("{label}: save project: {error}"));
+
+        let (reopened_detail, reopened, _) = store
+            .open(&folder)
+            .unwrap_or_else(|error| panic!("{label}: reopen project: {error}"));
+        assert_eq!(reopened_detail.components, pins, "{label}: catalog pin");
+        let rebuilt = AssetCatalogService::new()
+            .catalog(&asset_source::AssetSourceSetting {
+                kind: "client_jar".to_owned(),
+                path: jar.to_string_lossy().into_owned(),
+            })
+            .unwrap_or_else(|error| panic!("{label}: rebuild catalog from pin: {error}"));
+        let pinned = reopened_detail.components.assets.as_ref().unwrap();
+        assert_eq!(
+            Some(rebuilt.catalog_id.clone()),
+            pinned.catalog_id,
+            "{label}: pinned catalog id"
+        );
+        assert_eq!(
+            Some(rebuilt.catalog_hash.clone()),
+            pinned.catalog_hash,
+            "{label}: pinned catalog hash"
+        );
+        assert_eq!(
+            rebuilt.client_jar_sha1,
+            pinned.client_jar_sha1.clone(),
+            "{label}: pinned client JAR"
+        );
+        assert_eq!(
+            rebuilt.minecraft_version, label,
+            "{label}: rebuilt catalog version"
+        );
+        assert_eq!(
+            rebuilt.data_version, profile.data_version,
+            "{label}: rebuilt catalog DataVersion"
+        );
+        assert_eq!(
+            reopened
+                .get_block(OVERWORLD, BlockPos::new(0, -48, 0))
+                .unwrap(),
+            gold,
+            "{label}: saved edit"
+        );
+        assert_eq!(
+            reopened
+                .get_block(OVERWORLD, BlockPos::new(1, -64, 0))
+                .unwrap()
+                .name(),
+            "minecraft:unknown_machine",
+            "{label}: unknown imported state must survive"
+        );
+
+        let before = snapshot(&source_world);
+        let mut overlay = WorldOverlay::open(&source_world)
+            .unwrap_or_else(|error| panic!("{label}: open overlay: {error}"));
+        overlay
+            .set_block(OVERWORLD, 0, -48, 0, &gold)
+            .unwrap_or_else(|error| panic!("{label}: overlay edit: {error}"));
+        let destination = dir.path().join("export");
+        let report = export_java_world(&overlay, &destination)
+            .unwrap_or_else(|error| panic!("{label}: export: {error}"));
+        assert!(report.source_unchanged, "{label}: source changed");
+        assert!(report.output_revalidated, "{label}: export not revalidated");
+        assert_eq!(snapshot(&source_world), before, "{label}: source bytes");
+
+        let (exported, _) = load_java_world(&destination)
+            .unwrap_or_else(|error| panic!("{label}: reopen export: {error}"));
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(0, -48, 0))
+                .unwrap(),
+            gold,
+            "{label}: exported edit"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(1, -64, 0))
+                .unwrap()
+                .name(),
+            "minecraft:unknown_machine",
+            "{label}: exported unknown state"
+        );
+        assert!(
+            catalog
+                .entries
+                .iter()
+                .any(|entry| entry.id == "minecraft:gold_block" && entry.states.is_some()),
+            "{label}: edited state must be in the exact catalog"
+        );
+    }
 }
 
 #[test]

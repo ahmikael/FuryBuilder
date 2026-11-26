@@ -20,3 +20,5 @@ minecraft-version = { path = "../minecraft-version", package = "furybuilder-mine
 
 [dev-dependencies]
 serde_json = { workspace = true }
+asset-source = { path = "../asset-source", package = "furybuilder-asset-source" }
+project-store = { path = "../project-store", package = "furybuilder-project-store" }

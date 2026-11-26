@@ -20,11 +20,18 @@ The catalog accepts a manually selected asset source in three forms:
 - a single `versions/<id>` folder;
 - a `client.jar` or any JAR whose internal `version.json` declares the project version.
 
-A selection is accepted only when the internal version id and `DataVersion` match the project
-target. When a sibling `<id>.json`/`client.json` declares the client SHA-1 and size, the JAR is
-hashed and compared; a declared mismatch is refused. A correct JAR without launcher metadata
-is still usable offline with an explicit warning in the component status. FuryBuilder never
-copies, edits or deletes the selected file.
+The component manager accepts a manual source for a project only when the internal version id
+and `DataVersion` match the project target. When a sibling `<id>.json`/`client.json` declares
+the client SHA-1 and size, the JAR is hashed and compared; a declared mismatch is refused. A
+correct JAR without launcher metadata is still usable offline with an explicit warning in the
+component status. FuryBuilder never copies, edits or deletes the selected file.
+
+A direct JAR is also self-describing for catalog construction: `CatalogBuilder` reads its
+internal `version.json` and records that exact version and `DataVersion`, independent of the
+application's current target. This lets fixtures and version diffs compare catalogs across
+releases. A project-pinned rebuild must still reproduce the manifest's `catalogId`,
+`catalogHash`, client JAR SHA-1, Minecraft version and `DataVersion`; any mismatch is a conflict,
+never a silent substitution.
 
 ## Placeholder mode
 
@@ -304,14 +311,19 @@ project.
   of a misleading block texture.
 - Versions before item definitions fall back to item models and language keys. Numeric ids and
   pre-1.8 registries are outside the baseline catalog and belong to the legacy stage.
-- Tests use a synthetic 1.21.4 client JAR. A contract test checks sorted unique ids, count
-  parity, flag/form agreement and state/variant legality; a checked-in golden JSON snapshot
-  fixes the full diff wire shape for added, removed, renamed, changed and unchanged entries.
-  The real-JAR matrix and captured catalog snapshots belong to the full fixture stage; manual
-  QA downloads a real JAR. A real 1.21.4 client JAR
-  currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
-  173 item tag files, 14 atlases and 990 distinct palette icon textures. Its icons are served
-  lazily in bounded batches; the 256-texture measurement is in Performance and memory.
+- Tests build synthetic client JARs from the built-in version profiles. A 1.21.4 contract test
+  checks sorted unique ids, count parity, flag/form agreement and state/variant legality; a
+  checked-in golden JSON snapshot fixes the full diff wire shape for added, removed, renamed,
+  changed and unchanged entries. The end-to-end fixture covers one representative release of
+  each modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`): it builds the exact catalog,
+  imports the world, creates a project pinned to that catalog, edits a block, saves, reopens,
+  rebuilds the catalog from the same JAR, exports the world and re-imports the export while
+  checking the edit, the pin and preserved unknown states. The real-JAR matrix and captured
+  catalog snapshots belong to the full fixture stage; manual QA downloads a real JAR. A real
+  1.21.4 client JAR currently reports 1,097 blockstate entries, 1,385 item definitions, 186
+  block tag files, 173 item tag files, 14 atlases and 990 distinct palette icon textures. Its
+  icons are served lazily in bounded batches; the 256-texture measurement is in Performance
+  and memory.
 
 ## Safety bounds
 

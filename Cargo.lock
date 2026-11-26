@@ -1181,7 +1181,9 @@ name = "furybuilder-world-io"
 version = "0.2.0"
 dependencies = [
  "flate2",
+ "furybuilder-asset-source",
  "furybuilder-minecraft-version",
+ "furybuilder-project-store",
  "furybuilder-world-domain",
  "serde",
  "serde_json",

@@ -40,6 +40,10 @@ formats are not migrated.
   (1,097 blocks and 1,385 items for 1.21.4), plus manual `.minecraft`/client JAR selection and
   an explicit placeholder mode. Catalog snapshots are cached by exact version, JAR SHA-1 and
   catalog schema, so moving or copying the same JAR reuses the same pinned facts.
+- Cross-family catalog fixtures and an end-to-end catalog path: a synthetic exact-version JAR
+  for representative `1.18.2`, `1.19.4`, `1.20.6` and `1.21.4` projects is used to create,
+  edit, save, reopen, rebuild the pinned catalog, export and re-import the world while checking
+  the edit and preserved unknown states.
 - One catalog entry per block/item id, with optional legacy id/metadata, display name, category,
   tags, icon, aliases, nested block states, item form and typed placement flags. Facts the JAR
   cannot prove stay `null` rather than being guessed; the snapshot no longer splits blocks and
@@ -89,6 +93,9 @@ formats are not migrated.
 
 - Project creation and import moved to the full-screen wizard; Settings no longer downloads,
   selects or provisions components.
+- Catalog construction from a directly selected client JAR uses that JAR's internal exact
+  version and `DataVersion` instead of requiring the application target. A project-pinned
+  rebuild still rejects any catalog id, hash, version, `DataVersion` or client JAR mismatch.
 - Internal project formats are not migrated: a project from before manifest schema v2,
   snapshot format v3 or checkpoint metadata v2 must be recreated.
 - The version manifest keeps Mojang's raw ids, so legacy and special versions no longer abort
