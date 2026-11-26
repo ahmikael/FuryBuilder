@@ -50,6 +50,10 @@ formats are not migrated.
 - Item entries cover block items and item-only entries with exact names, icons, direct item
   tags and `placeable`/`hasItem` facts. Imported item stacks and their data components remain
   opaque NBT and survive editing, saving and export unchanged.
+- Version-aware placement flags: technical, creative-only, fluid, airlike, block-entity and
+  obtainable facts are explicit for the supported vanilla range, while unprovable geometry
+  facts and non-vanilla namespaces stay unknown. Flags label entries but never remove them
+  from the write registry.
 - Unified component manager for Java, client assets and official servers with progress,
   cancel, verify, relink, remove and open-folder actions. Settings shows a read-only inventory.
 - Manual Java selection that probes the major version, architecture and vendor; newer runtimes

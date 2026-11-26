@@ -20,6 +20,7 @@ mod archive;
 mod bundle;
 mod catalog;
 mod catalog_atlas;
+mod catalog_flags;
 mod discovery;
 mod jar;
 mod pack_store;

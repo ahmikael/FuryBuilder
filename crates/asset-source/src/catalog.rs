@@ -26,11 +26,12 @@ use thiserror::Error;
 
 use crate::archive::Archive;
 use crate::bundle::normalize_id;
+use crate::catalog_flags::classify_flags;
 use crate::discovery::inspect_asset_path;
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
-pub const CATALOG_SCHEMA_VERSION: u32 = 4;
+pub const CATALOG_SCHEMA_VERSION: u32 = 5;
 /// A vanilla client JAR has a few thousand blockstates and items.
 pub const MAX_CATALOG_BLOCKS: usize = 32_768;
 pub const MAX_CATALOG_ITEMS: usize = 32_768;
@@ -700,7 +701,6 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
 
     let mut entries: BTreeMap<String, CatalogEntry> = BTreeMap::new();
     for (id, block) in blocks {
-        let has_variants = block.states.multipart || block.states.variant_count > 1;
         entries.insert(
             id.clone(),
             CatalogEntry {
@@ -713,12 +713,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                 aliases: Vec::new(),
                 states: Some(block.states),
                 item_form: None,
-                flags: CatalogFlags {
-                    placeable: Some(true),
-                    has_item: Some(false),
-                    has_variants: Some(has_variants),
-                    ..CatalogFlags::default()
-                },
+                flags: CatalogFlags::default(),
             },
         );
     }
@@ -742,12 +737,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
             aliases: Vec::new(),
             states: None,
             item_form: None,
-            flags: CatalogFlags {
-                placeable: Some(false),
-                has_item: Some(true),
-                has_variants: Some(false),
-                ..CatalogFlags::default()
-            },
+            flags: CatalogFlags::default(),
         });
         entry.display_name = item.display_name.or_else(|| entry.display_name.take());
         entry.item_form = Some(CatalogItemForm {
@@ -759,7 +749,13 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         entry.tags.extend(item.tags);
         entry.tags.sort();
         entry.tags.dedup();
-        entry.flags.has_item = Some(true);
+    }
+    for entry in entries.values_mut() {
+        let has_variants = entry
+            .states
+            .as_ref()
+            .is_some_and(|states| states.multipart || states.variant_count > 1);
+        entry.flags = classify_flags(&entry.id, entry.is_block(), entry.is_item(), has_variants);
     }
     let entries: Vec<CatalogEntry> = entries.into_values().collect();
 
@@ -1890,6 +1886,12 @@ mod tests {
         assert_eq!(stone.flags.placeable, Some(true));
         assert_eq!(stone.flags.has_item, Some(true));
         assert_eq!(stone.flags.has_variants, Some(false));
+        assert_eq!(stone.flags.obtainable, Some(true));
+        assert_eq!(stone.flags.creative_only, Some(false));
+        assert_eq!(stone.flags.technical, Some(false));
+        assert_eq!(stone.flags.fluid, Some(false));
+        assert_eq!(stone.flags.airlike, Some(false));
+        assert_eq!(stone.flags.block_entity, Some(false));
 
         let stairs = catalog
             .entries
@@ -1959,6 +1961,9 @@ mod tests {
         let water_states = water.states.as_ref().expect("water states");
         assert!(water.item_form.is_none());
         assert_eq!(water.flags.has_item, Some(false));
+        assert_eq!(water.flags.fluid, Some(true));
+        assert_eq!(water.flags.technical, Some(false));
+        assert_eq!(water.flags.obtainable, Some(false));
         assert!(water_states.properties.is_empty());
         assert!(!water_states.property_values_complete);
         assert_eq!(water_states.default_properties, Some(BTreeMap::new()));
@@ -1975,6 +1980,9 @@ mod tests {
         assert_eq!(sword.flags.placeable, Some(false));
         assert_eq!(sword.flags.has_item, Some(true));
         assert_eq!(sword.flags.has_variants, Some(false));
+        assert_eq!(sword.flags.obtainable, Some(true));
+        assert_eq!(sword.flags.creative_only, Some(false));
+        assert_eq!(sword.flags.technical, Some(false));
         assert_eq!(sword_form.model_type.as_deref(), Some("minecraft:model"));
         assert_eq!(
             sword_form.model.as_deref(),
@@ -1994,6 +2002,9 @@ mod tests {
         assert_eq!(ruby.display_name.as_deref(), Some("Ruby Block"));
         assert!(ruby.states.is_some());
         assert!(ruby.item_form.is_none());
+        assert_eq!(ruby.flags.technical, None);
+        assert_eq!(ruby.flags.obtainable, None);
+        assert_eq!(ruby.flags.block_entity, None);
         assert!(catalog
             .warnings
             .iter()

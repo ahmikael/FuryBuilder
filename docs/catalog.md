@@ -91,9 +91,11 @@ reported as entries with an explicit warning; they are not silently presented as
   including `x`/`y` rotation and `uvlock`. Multipart blocks have no finite variant list;
 - item definition model type and resolved concrete model under `itemForm`;
 - typed `flags` for placement rules. A flag is `null` when the fact is not known yet, never
-  a guessed `false`. The JAR pass currently fills `placeable`, `hasItem` and `hasVariants`;
-  survival obtainability, technical/creative-only, fluid, block-entity and geometry flags
-  remain `null` until later passes;
+  a guessed `false`. `placeable`, `hasItem` and `hasVariants` follow directly from the JAR;
+  `obtainable`, `creativeOnly`, `technical`, `fluid`, `airlike` and `blockEntity` use explicit
+  vanilla registry rules for 1.18–1.21.11. Non-vanilla namespaces leave those rules `null`
+  instead of claiming vanilla semantics; transparent/full-cube/gravity/waterloggable/tinted
+  geometry flags also remain `null` until a later pass;
 - counts for blockstates, models, item definitions, textures, languages, tags and atlases;
 - bounded inspection warnings.
 
@@ -179,15 +181,20 @@ same-version export does not guarantee that a vanilla Minecraft client recognize
 - Basic palette groups (`Building`, `Natural`, `Functional`, `Redstone`, `Technical`, `Other`)
   are derived in the desktop UI from direct block tags and conservative id patterns. They do
   not change `catalogHash` and are not Minecraft creative-inventory categories. The catalog
-  model already carries `category`, `aliases` and the full flag set, but those values stay
-  `null`/empty until official metadata passes fill them. Full creative categories and
-  technical/creative-only flags remain later stages; item components are preserved opaque,
-  not modelled or edited.
+  model already carries `category`, `aliases` and the full flag set. `category` and `aliases`
+  stay `null`/empty until the creative-category pass, while technical/creative-only, fluid,
+  airlike, block-entity and obtainable flags are filled for vanilla entries. Full creative
+  categories remain a later stage; item components are preserved opaque, not modelled or
+  edited.
 - Recent selections and starred favorites are local UI preferences keyed by `catalogId`; they
   are not part of the project manifest, do not authorize writes, and are filtered against the
   current catalog when shown. Preferences retain up to 24 recent selections and 256 favorites
   per catalog across the eight most recently updated catalogs. Curated quick picks use a
   separate history.
+- Palette flags are advisory labels, not write gates. Technical and creative-only blocks stay
+  in the write registry and remain placeable; fluids and airlike entries are marked for editor
+  rules; a non-vanilla namespace keeps all semantic flags `null`. Unknown imported block states
+  are still refused for new placement exactly as before.
 - The palette lists blocks only. Item definitions are extracted and counted, but the item
   browser and placeable-item duplication are later stages.
 - Item definitions resolve the first concrete model from `model`, `base`, `select`,
