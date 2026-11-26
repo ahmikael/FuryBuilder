@@ -69,9 +69,13 @@ const server = {
 };
 
 const readySetup: VanillaSetupReport = {
+  profileId: "java-classic-1.21.4",
   targetMinecraftVersion: "1.21.4",
   targetDataVersion: 4189,
   targetJavaMajor: 21,
+  generationSupported: true,
+  levelTypeSyntax: "modern-namespaced",
+  availablePresets: ["normal", "flat", "large_biomes", "amplified"],
   serverDatapackFormat: 61,
   generationLimits: {
     minRadiusChunks: 1,
@@ -160,6 +164,9 @@ const last: GenerationReport = {
   worldComplete: true,
   exitCode: 0,
   serverPid: 1234,
+  profileId: "java-classic-1.21.4",
+  minecraftVersion: "1.21.4",
+  dataVersion: 4189,
   seed: "FuryBuilder",
   preset: "normal",
   centerX: 0,
@@ -215,7 +222,7 @@ describe("VanillaWorldWizard", () => {
         "Read and accept the Minecraft EULA for the selected server.jar in this wizard.",
       ],
     });
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     expect(await screen.findByText("Setup is incomplete")).toBeInTheDocument();
     expect(screen.getByText(/Select a compatible Java 21 runtime/)).toBeInTheDocument();
@@ -230,7 +237,7 @@ describe("VanillaWorldWizard", () => {
   });
 
   it("shows the Java and server prepared in the Components step without a second setup", async () => {
-    render(<VanillaWorldWizard version="1.21.4" components={preparedComponents} />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" components={preparedComponents} />);
 
     expect(await screen.findByText("Ready to generate")).toBeInTheDocument();
     expect(screen.getByText("21.0.12")).toBeInTheDocument();
@@ -249,7 +256,7 @@ describe("VanillaWorldWizard", () => {
   });
 
   it("shows the bounded area, time limit and disk estimate", async () => {
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     expect(await screen.findByText("Generation estimate")).toBeInTheDocument();
     await waitFor(() => expect(api.estimate).toHaveBeenCalledWith(1, 120));
@@ -267,7 +274,7 @@ describe("VanillaWorldWizard", () => {
       availableDiskBytes: 1024,
       fitsOnDisk: false,
     });
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     expect(await screen.findByText("Not enough disk")).toBeInTheDocument();
     expect(screen.getByText(/Free at least/)).toBeInTheDocument();
@@ -279,9 +286,11 @@ describe("VanillaWorldWizard", () => {
     expect(api.start).not.toHaveBeenCalled();
   });
 
-  it("refuses generation when the selected version is not the verified target", async () => {
+  it("explains when the selected version cannot generate a world", async () => {
     api.setup.mockResolvedValue({
       ...readySetup,
+      generationSupported: false,
+      availablePresets: [],
       java: null,
       javaReady: false,
       server: null,
@@ -289,23 +298,33 @@ describe("VanillaWorldWizard", () => {
       eulaAcceptedAt: null,
       eulaMatchesSelected: false,
       ready: false,
-      blockers: ["The selected version is not verified for generation."],
+      blockers: ["Generation is not verified for this version."],
     });
-    render(<VanillaWorldWizard version="1.21.5" />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     expect(
-      await screen.findByText("Generation is not verified for this version"),
+      await screen.findByText("Generation is not available for this version"),
     ).toBeInTheDocument();
-    expect(screen.getByText(/The selected project version is/)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/Generation is not verified for this version/).length,
+    ).toBeGreaterThan(0);
     expect(
       screen.queryByRole("button", { name: "Download official Minecraft server JAR" }),
     ).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
   });
 
+  it("asks for a version before generation can be configured", async () => {
+    render(<VanillaWorldWizard />);
+
+    expect(await screen.findByText("Choose a version first")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start Vanilla World generation" })).toBeDisabled();
+    expect(api.setup).not.toHaveBeenCalled();
+  });
+
   it("requires the explicit run consent and sends the supported world settings", async () => {
     const user = userEvent.setup();
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     const start = await screen.findByRole("button", {
       name: "Start Vanilla World generation",
@@ -321,7 +340,7 @@ describe("VanillaWorldWizard", () => {
     await user.click(start);
 
     await waitFor(() => expect(api.start).toHaveBeenCalledTimes(1));
-    expect(api.start).toHaveBeenCalledWith({
+    expect(api.start).toHaveBeenCalledWith("java-classic-1.21.4", {
       seed: "FuryBuilder",
       preset: "normal",
       centerX: 0,
@@ -363,7 +382,7 @@ describe("VanillaWorldWizard", () => {
         warnings: [],
       },
     ]);
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     const add = await screen.findByRole("button", { name: "Add data packs" });
     await user.click(add);
@@ -381,13 +400,13 @@ describe("VanillaWorldWizard", () => {
     expect(start).toBeEnabled();
     await user.click(start);
     await waitFor(() => expect(api.start).toHaveBeenCalledTimes(1));
-    expect(api.start.mock.calls[0][0].datapacks).toEqual([{ path: "C:\\packs\\valid.zip" }]);
+    expect(api.start.mock.calls[0][1].datapacks).toEqual([{ path: "C:\\packs\\valid.zip" }]);
   });
 
   it("requests cancellation of a running official server", async () => {
     const user = userEvent.setup();
     api.status.mockResolvedValue({ active: running, last: null });
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     const cancel = await screen.findByRole("button", {
       name: "Cancel Vanilla World generation",
@@ -400,7 +419,7 @@ describe("VanillaWorldWizard", () => {
 
   it("shows the completed world and states how it becomes a project", async () => {
     api.status.mockResolvedValue({ active: null, last });
-    render(<VanillaWorldWizard />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" />);
 
     expect(await screen.findByText("Last isolated generation")).toBeInTheDocument();
     expect(screen.getAllByText("completed").length).toBeGreaterThan(0);
@@ -416,7 +435,7 @@ describe("VanillaWorldWizard", () => {
     const user = userEvent.setup();
     const onOpenWorld = vi.fn().mockResolvedValue(true);
     api.status.mockResolvedValue({ active: null, last });
-    render(<VanillaWorldWizard onOpenWorld={onOpenWorld} />);
+    render(<VanillaWorldWizard profileId="java-classic-1.21.4" onOpenWorld={onOpenWorld} />);
 
     const open = await screen.findByRole("button", {
       name: "Open generated world as a project",
@@ -440,7 +459,12 @@ describe("VanillaWorldWizard", () => {
       },
     };
     api.status.mockResolvedValue({ active: null, last: incomplete });
-    render(<VanillaWorldWizard onOpenWorld={vi.fn().mockResolvedValue(true)} />);
+    render(
+      <VanillaWorldWizard
+        profileId="java-classic-1.21.4"
+        onOpenWorld={vi.fn().mockResolvedValue(true)}
+      />,
+    );
 
     const open = await screen.findByRole("button", {
       name: "Open generated world as a project",

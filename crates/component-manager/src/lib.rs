@@ -2237,7 +2237,9 @@ mod tests {
         assert!(manager
             .inner
             .server
-            .selected(&runtime_manager::ServerTarget::baseline())
+            .selected(&runtime_manager::ServerTarget::for_profile(
+                &minecraft_version::default_profile()
+            ))
             .is_none());
     }
 
@@ -2381,7 +2383,9 @@ mod tests {
         assert!(manager
             .inner
             .server
-            .selected(&runtime_manager::ServerTarget::baseline())
+            .selected(&runtime_manager::ServerTarget::for_profile(
+                &minecraft_version::default_profile()
+            ))
             .is_none());
     }
 

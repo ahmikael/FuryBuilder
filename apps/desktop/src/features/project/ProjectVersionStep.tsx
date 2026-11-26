@@ -52,7 +52,9 @@ function supportNotice(profile: VersionProfile) {
       return {
         variant: "default" as const,
         title: "Read + write subset",
-        body: "Import, block/biome editing, snapshots and same-version export are verified; everything else is preserved byte for byte. Generation is not enabled for this release.",
+        body: profile.capabilities.generate
+          ? "Import, block/biome editing, snapshots, same-version export and generation with the exact official server JAR are enabled; everything else is preserved byte for byte."
+          : "Import, block/biome editing, snapshots and same-version export are enabled; everything else is preserved byte for byte. Generation is not enabled for this release.",
       };
     case "read-only":
       return {

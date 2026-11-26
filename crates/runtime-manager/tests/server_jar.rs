@@ -164,7 +164,7 @@ fn manual_selection_verifies_reports_and_detects_disk_changes() {
     assert_eq!(report.matches_official, None);
     assert_eq!(report.warnings.len(), 1);
 
-    let discovery = manager.discover();
+    let discovery = manager.discover(&exact);
     assert_eq!(discovery.target_minecraft_version, "1.21.4");
     assert_eq!(discovery.target_data_version, 4189);
     assert_eq!(discovery.target_java_major, 21);
@@ -259,8 +259,8 @@ fn eula_acceptance_is_explicit_and_tied_to_the_exact_jar_and_version() {
         .select_manual(&jar, &exact)
         .expect("select server jar");
     let sha1 = report.sha1.clone().expect("sha1");
-    assert!(manager.discover().eula.is_none());
-    assert!(!manager.discover().eula_matches_selected);
+    assert!(manager.discover(&exact).eula.is_none());
+    assert!(!manager.discover(&exact).eula_matches_selected);
 
     let eula = manager
         .accept_eula(true, &exact)
@@ -271,7 +271,7 @@ fn eula_acceptance_is_explicit_and_tied_to_the_exact_jar_and_version() {
     assert!(eula.matches("1.21.4", &sha1));
     assert!(!eula.matches("1.20.6", &sha1));
     assert!(!eula.matches("1.21.4", "0000000000000000000000000000000000000000"));
-    let discovery = manager.discover();
+    let discovery = manager.discover(&exact);
     assert!(discovery.eula_matches_selected);
     assert_eq!(
         discovery
@@ -287,7 +287,7 @@ fn eula_acceptance_is_explicit_and_tied_to_the_exact_jar_and_version() {
         .select_manual(&second_jar, &second)
         .expect("select second version");
     assert!(manager.eula_for(&second).is_none());
-    assert!(manager.discover().eula_matches_selected);
+    assert!(manager.discover(&exact).eula_matches_selected);
     let second_eula = manager
         .accept_eula(true, &second)
         .expect("second explicit acceptance");
@@ -299,7 +299,7 @@ fn eula_acceptance_is_explicit_and_tied_to_the_exact_jar_and_version() {
     manager
         .clear_selection(&exact.minecraft_version)
         .expect("clear first selection");
-    let discovery = manager.discover();
+    let discovery = manager.discover(&exact);
     assert!(discovery.selected.is_none());
     assert!(
         discovery.eula.is_none(),
@@ -312,12 +312,12 @@ fn eula_acceptance_is_explicit_and_tied_to_the_exact_jar_and_version() {
         .select_manual(&jar, &exact)
         .expect("reselect server jar");
     assert!(
-        manager.discover().eula_matches_selected,
+        manager.discover(&exact).eula_matches_selected,
         "the acceptance survives reselecting the same JAR"
     );
-    manager.clear_eula().expect("withdraw eula");
+    manager.clear_eula(&exact).expect("withdraw eula");
     assert!(manager.eula_for(&exact).is_none());
-    assert!(!manager.discover().eula_matches_selected);
+    assert!(!manager.discover(&exact).eula_matches_selected);
     assert!(
         manager.eula_for(&second).is_some(),
         "withdrawing the baseline acceptance keeps another JAR's record"
@@ -337,7 +337,7 @@ fn a_changed_jar_is_not_covered_by_its_old_eula_acceptance() {
     manager
         .accept_eula(true, &exact)
         .expect("explicit acceptance");
-    assert!(manager.discover().eula_matches_selected);
+    assert!(manager.discover(&exact).eula_matches_selected);
 
     fs::OpenOptions::new()
         .append(true)
@@ -345,7 +345,7 @@ fn a_changed_jar_is_not_covered_by_its_old_eula_acceptance() {
         .expect("open jar")
         .write_all(b"tampered")
         .expect("append");
-    let discovery = manager.discover();
+    let discovery = manager.discover(&exact);
     assert!(!discovery.selected.as_ref().expect("selection").ready);
     assert!(!discovery.eula_matches_selected);
     assert!(discovery.eula.is_none());

@@ -61,7 +61,10 @@ impl ReleaseFacts {
                     "Classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft {}.",
                     self.version
                 ),
-                "Generation is not enabled for this release yet.".to_owned(),
+                format!(
+                    "Vanilla generation with the official Minecraft {} server JAR is enabled for this release.",
+                    self.version
+                ),
                 "The client JAR is the source of the full block and item catalog.".to_owned(),
             ]
         } else {
@@ -87,7 +90,7 @@ impl ReleaseFacts {
                 edit: true,
                 write: true,
                 export: true,
-                generate: false,
+                generate: true,
                 assets: true,
             }
         } else {
@@ -486,7 +489,7 @@ mod tests {
     }
 
     #[test]
-    fn modern_classic_releases_admit_import_editing_snapshots_and_export() {
+    fn modern_classic_releases_admit_import_editing_snapshots_export_and_generation() {
         for profile in builtin_profiles()
             .iter()
             .filter(|profile| profile.family == VersionFamily::Modern)
@@ -497,9 +500,28 @@ mod tests {
             assert!(profile.capabilities.write, "{} write", profile.id);
             assert!(profile.capabilities.export, "{} export", profile.id);
             assert!(profile.capabilities.assets, "{} assets", profile.id);
+            assert!(profile.capabilities.generate, "{} generate", profile.id);
+            assert!(profile.server.official_jar, "{} server", profile.id);
+            assert_eq!(
+                profile.server.level_type_syntax,
+                crate::LevelTypeSyntax::ModernNamespaced,
+                "{} level-type",
+                profile.id
+            );
+            assert!(profile.server.generation.normal, "{} normal", profile.id);
+            assert!(profile.server.generation.flat, "{} flat", profile.id);
+            assert!(
+                profile.server.generation.large_biomes,
+                "{} large biomes",
+                profile.id
+            );
+            assert!(
+                profile.server.generation.amplified,
+                "{} amplified",
+                profile.id
+            );
             if profile.id == JAVA_CLASSIC_1_21_4_ID {
                 assert_eq!(profile.capabilities.support_level, SupportLevel::Full);
-                assert!(profile.capabilities.generate);
                 assert!(profile.structure_formats.java_nbt.import);
                 assert!(profile.structure_formats.java_nbt.export);
             } else {
@@ -507,7 +529,6 @@ mod tests {
                     profile.capabilities.support_level,
                     SupportLevel::ReadWriteSubset
                 );
-                assert!(!profile.capabilities.generate, "{} generate", profile.id);
                 assert!(
                     !profile.structure_formats.java_nbt.import,
                     "{} structures stay in P2",

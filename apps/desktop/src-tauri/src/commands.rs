@@ -25,10 +25,11 @@ use minecraft_version::{
 };
 use runtime_manager::{
     DatapackInspection, GeneratedWorld, GenerationEstimate, GenerationLimits, GenerationRequest,
-    GenerationRunsReport, GenerationSnapshot, GenerationStatusReport, InstalledRuntime,
-    InstalledServerJar, JavaRuntimeReport, ManagedCacheReport, ManagedServerCacheReport,
-    RuntimeDiscoveryReport, RuntimeProgress, RuntimeReleaseInfo, SavedEula, ServerDiscoveryReport,
-    ServerJarReport, ServerProgress, ServerReleaseInfo,
+    GenerationRunsReport, GenerationSnapshot, GenerationStatusReport, GenerationTarget,
+    InstalledRuntime, InstalledServerJar, JavaRuntimeReport, ManagedCacheReport,
+    ManagedServerCacheReport, RuntimeDiscoveryReport, RuntimeProgress, RuntimeReleaseInfo,
+    SavedEula, ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo,
+    WorldPreset,
 };
 use serde::Serialize;
 use structure_library::{LibraryError, StructureLibrary, TemplateEntry, TemplateSource};
@@ -1770,6 +1771,32 @@ fn import_generated_inner(
             "the generated world does not declare a DataVersion",
         )
     })?;
+    let generated_profile = minecraft_version::profile_for_id(&generated.profile_id)
+        .ok_or_else(|| {
+            AppError::new(
+                ErrorCode::UnsupportedVersion,
+                format!(
+                    "the generation run references profile `{}`, which is not built into this FuryBuilder",
+                    generated.profile_id
+                ),
+            )
+        })?;
+    if generated.minecraft_version != minecraft_version
+        || generated.data_version != data_version
+        || generated_profile.minecraft_version.as_str() != minecraft_version
+        || generated_profile.data_version != data_version
+    {
+        return Err(AppError::new(
+            ErrorCode::Conflict,
+            format!(
+                "the generation run recorded Minecraft {} (DataVersion {}) but its world declares {} (DataVersion {}); the mixed-version run is refused",
+                generated.minecraft_version,
+                generated.data_version,
+                minecraft_version,
+                data_version
+            ),
+        ));
+    }
     let provenance = project_store::VanillaProvenance {
         seed: generated.seed.clone(),
         preset: generated.preset.label().to_owned(),
@@ -4398,35 +4425,59 @@ pub async fn runtime_clear_managed(
     Ok(report)
 }
 
+fn built_in_profile(profile_id: &str) -> Result<VersionProfile, AppError> {
+    minecraft_version::profile_for_id(profile_id).ok_or_else(|| {
+        AppError::new(
+            ErrorCode::UnsupportedVersion,
+            format!(
+                "Minecraft profile `{profile_id}` is not built into this FuryBuilder; choose a version from the catalog again."
+            ),
+        )
+    })
+}
+
+fn server_target_for(profile: &VersionProfile) -> runtime_manager::ServerTarget {
+    runtime_manager::ServerTarget::for_profile(profile)
+}
+
+fn generation_target_for(profile: &VersionProfile) -> Result<GenerationTarget, AppError> {
+    GenerationTarget::for_profile(profile).map_err(server_error)
+}
+
 #[tauri::command]
 pub async fn server_discover(
     components: State<'_, ComponentManager>,
+    profile_id: String,
 ) -> Result<ServerDiscoveryReport, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
     let manager = components.server().clone();
-    tauri::async_runtime::spawn_blocking(move || manager.discover())
+    tauri::async_runtime::spawn_blocking(move || manager.discover(&target))
         .await
         .map_err(|error| AppError::internal(format!("server discovery task failed: {error}")))
 }
 
 #[tauri::command]
-pub fn server_saved(components: State<'_, ComponentManager>) -> Option<ServerJarReport> {
-    components
-        .server()
-        .selected(&runtime_manager::ServerTarget::baseline())
+pub fn server_saved(
+    components: State<'_, ComponentManager>,
+    profile_id: String,
+) -> Result<Option<ServerJarReport>, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    Ok(components.server().selected(&server_target_for(&profile)))
 }
 
 #[tauri::command]
 pub async fn server_select_jar(
     app: AppHandle,
     components: State<'_, ComponentManager>,
+    profile_id: String,
     path: String,
 ) -> Result<ServerJarReport, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
     let manager = components.server().clone();
     let report = tauri::async_runtime::spawn_blocking(move || {
-        manager.select_manual(
-            std::path::Path::new(&path),
-            &runtime_manager::ServerTarget::baseline(),
-        )
+        manager.select_manual(std::path::Path::new(&path), &target)
     })
     .await
     .map_err(|error| AppError::internal(format!("server validation task failed: {error}")))?
@@ -4439,8 +4490,10 @@ pub async fn server_select_jar(
 pub fn server_clear_selection(
     app: AppHandle,
     components: State<'_, ComponentManager>,
+    profile_id: String,
 ) -> Result<(), AppError> {
-    let target = runtime_manager::ServerTarget::baseline();
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
     components
         .server()
         .clear_selection(&target.minecraft_version)
@@ -4452,27 +4505,30 @@ pub fn server_clear_selection(
 #[tauri::command]
 pub async fn server_release(
     components: State<'_, ComponentManager>,
+    profile_id: String,
 ) -> Result<ServerReleaseInfo, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
     let manager = components.server().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        manager.release(&runtime_manager::ServerTarget::baseline())
-    })
-    .await
-    .map_err(|error| AppError::internal(format!("Mojang metadata task failed: {error}")))?
-    .map_err(server_error)
+    tauri::async_runtime::spawn_blocking(move || manager.release(&target))
+        .await
+        .map_err(|error| AppError::internal(format!("Mojang metadata task failed: {error}")))?
+        .map_err(server_error)
 }
 
 #[tauri::command]
 pub async fn server_install(
     app: AppHandle,
     components: State<'_, ComponentManager>,
+    profile_id: String,
     version: String,
 ) -> Result<InstalledServerJar, AppError> {
-    let target = runtime_manager::ServerTarget::baseline();
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
     if version != target.minecraft_version.as_str() {
         return Err(AppError::invalid_argument(format!(
-            "The server settings page can install Minecraft {}; project-specific versions use the component installer.",
-            target.minecraft_version
+            "The selected project targets Minecraft {}; install that exact server version instead of {}.",
+            target.minecraft_version, version
         )));
     }
     let manager = components.server().clone();
@@ -4535,11 +4591,14 @@ pub async fn server_clear_managed(
 pub fn server_accept_eula(
     app: AppHandle,
     components: State<'_, ComponentManager>,
+    profile_id: String,
     accepted: bool,
 ) -> Result<SavedEula, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
     let eula = components
         .server()
-        .accept_eula(accepted, &runtime_manager::ServerTarget::baseline())
+        .accept_eula(accepted, &target)
         .map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
     Ok(eula)
@@ -4549,8 +4608,14 @@ pub fn server_accept_eula(
 pub fn server_clear_eula(
     app: AppHandle,
     components: State<'_, ComponentManager>,
+    profile_id: String,
 ) -> Result<(), AppError> {
-    components.server().clear_eula().map_err(server_error)?;
+    let profile = built_in_profile(&profile_id)?;
+    let target = server_target_for(&profile);
+    components
+        .server()
+        .clear_eula(&target)
+        .map_err(server_error)?;
     let _ = app.emit("furybuilder-server-changed", ());
     Ok(())
 }
@@ -4559,18 +4624,23 @@ pub fn server_clear_eula(
 pub async fn server_start_generation(
     app: AppHandle,
     components: State<'_, ComponentManager>,
+    profile_id: String,
     request: GenerationRequest,
 ) -> Result<GenerationSnapshot, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    let target = generation_target_for(&profile)?;
     let runtime = components.java().clone();
-    let java = tauri::async_runtime::spawn_blocking(move || runtime.saved())
+    let java_major = target.java_major;
+    let minecraft_version = target.minecraft_version.clone();
+    let java = tauri::async_runtime::spawn_blocking(move || runtime.saved_for_major(java_major))
         .await
         .map_err(|error| AppError::internal(format!("Java runtime task failed: {error}")))?;
     let Some(java) = java else {
         return Err(AppError::new(
             ErrorCode::InvalidArgument,
             format!(
-                "Select a usable Java {} runtime before starting generation.",
-                runtime_manager::target_java_major()
+                "Select a usable Java {} runtime before starting generation for Minecraft {}.",
+                target.java_major, minecraft_version
             ),
         ));
     };
@@ -4578,14 +4648,14 @@ pub async fn server_start_generation(
         return Err(AppError::new(
             ErrorCode::InvalidArgument,
             format!(
-                "The saved Java runtime is no longer usable with Minecraft {}.",
-                runtime_manager::target_minecraft_version()
+                "The saved Java runtime is no longer usable with Minecraft {} (requires Java {}).",
+                minecraft_version, target.java_major
             ),
         ));
     }
     let manager = components.server().clone();
     let snapshot = tauri::async_runtime::spawn_blocking(move || {
-        manager.start_generation(std::path::Path::new(&java.path), request)
+        manager.start_generation(std::path::Path::new(&java.path), &target, request)
     })
     .await
     .map_err(|error| AppError::internal(format!("server generation task failed: {error}")))?;
@@ -4648,6 +4718,7 @@ pub async fn server_clear_generation_runs(
 #[tauri::command]
 pub async fn server_inspect_datapacks(
     components: State<'_, ComponentManager>,
+    profile_id: String,
     paths: Vec<String>,
 ) -> Result<Vec<DatapackInspection>, AppError> {
     if paths.len() > 16 {
@@ -4656,27 +4727,36 @@ pub async fn server_inspect_datapacks(
             "At most 16 data packs can be inspected at once.",
         ));
     }
+    let profile = built_in_profile(&profile_id)?;
+    let target = generation_target_for(&profile)?;
     let manager = components.server().clone();
-    tauri::async_runtime::spawn_blocking(move || manager.inspect_datapacks(&paths))
+    tauri::async_runtime::spawn_blocking(move || manager.inspect_datapacks(&target, &paths))
         .await
         .map_err(|error| AppError::internal(format!("data pack inspection task failed: {error}")))
 }
 
 /// Combined Vanilla World setup check for the wizard. It reads the already verified runtime
-/// and server selections; it never probes, downloads, accepts the EULA or starts anything.
+/// and server selections for the exact selected version profile; it never probes, downloads,
+/// accepts the EULA or starts anything.
 #[tauri::command]
 pub async fn vanilla_setup_check(
     components: State<'_, ComponentManager>,
+    profile_id: String,
 ) -> Result<VanillaSetupReport, AppError> {
+    let profile = built_in_profile(&profile_id)?;
+    let server_target = server_target_for(&profile);
+    let generation_target = GenerationTarget::for_profile(&profile);
+    let java_major = profile.java.recommended_major;
+    let minecraft_version = profile.minecraft_version.to_string();
     let runtime = components.java().clone();
-    let java = tauri::async_runtime::spawn_blocking(move || runtime.saved())
+    let java = tauri::async_runtime::spawn_blocking(move || runtime.saved_for_major(java_major))
         .await
         .map_err(|error| AppError::internal(format!("Java runtime task failed: {error}")))?;
     let java_ready = java
         .as_ref()
-        .map(JavaRuntimeReport::is_compatible)
+        .map(JavaRuntimeReport::is_usable)
         .unwrap_or(false);
-    let discovery = components.server().discover();
+    let discovery = components.server().discover(&server_target);
     let server_ready = discovery
         .selected
         .as_ref()
@@ -4684,23 +4764,26 @@ pub async fn vanilla_setup_check(
         .unwrap_or(false);
     let eula_matches_selected = discovery.eula_matches_selected;
     let eula_accepted_at = discovery.eula.as_ref().map(|eula| eula.accepted_at);
-    let profile = world_io::default_version_profile();
     let mut blockers = Vec::new();
+    let generation_supported = generation_target.is_ok();
+    if let Err(error) = &generation_target {
+        blockers.push(error.to_string());
+    }
     match java.as_ref() {
         None => blockers.push(format!(
             "Select a compatible Java {} runtime in the project's Components step.",
             profile.java.recommended_major
         )),
         Some(_) if !java_ready => blockers.push(format!(
-            "The saved Java runtime is not compatible with Minecraft Java {}.",
-            profile.minecraft_version
+            "The saved Java runtime is not compatible with Minecraft Java {} (requires Java {}).",
+            minecraft_version, profile.java.recommended_major
         )),
         Some(_) => {}
     }
     match discovery.selected.as_ref() {
         None => blockers.push(format!(
             "Select or download the official Minecraft {} server.jar in the project's Components step.",
-            profile.minecraft_version
+            minecraft_version
         )),
         Some(server) if !server.ready => blockers.push(format!(
             "The selected server JAR is not ready: {}",
@@ -4711,18 +4794,30 @@ pub async fn vanilla_setup_check(
         )),
         Some(_) => {}
     }
-    if !eula_matches_selected {
+    if generation_supported && !eula_matches_selected {
         blockers.push(
             "Read and accept the Minecraft EULA for the selected server.jar in the Source step."
                 .to_owned(),
         );
     }
-    let ready = java_ready && server_ready && eula_matches_selected;
+    let ready = generation_supported && java_ready && server_ready && eula_matches_selected;
+    let (available_presets, level_type_syntax, server_datapack_format) = match &generation_target {
+        Ok(target) => (
+            target.available_presets(),
+            Some(target.level_type_syntax),
+            Some(target.datapack_format),
+        ),
+        Err(_) => (Vec::new(), None, None),
+    };
     Ok(VanillaSetupReport {
-        target_minecraft_version: profile.minecraft_version.to_string(),
+        profile_id: profile.id,
+        target_minecraft_version: minecraft_version,
         target_data_version: profile.data_version,
         target_java_major: profile.java.recommended_major,
-        server_datapack_format: runtime_manager::target_datapack_format(),
+        generation_supported,
+        level_type_syntax,
+        available_presets,
+        server_datapack_format,
         generation_limits: components.server().generation_limits(),
         java,
         java_ready,
@@ -4738,10 +4833,14 @@ pub async fn vanilla_setup_check(
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VanillaSetupReport {
+    pub profile_id: String,
     pub target_minecraft_version: String,
     pub target_data_version: i32,
     pub target_java_major: u32,
-    pub server_datapack_format: u32,
+    pub generation_supported: bool,
+    pub level_type_syntax: Option<minecraft_version::LevelTypeSyntax>,
+    pub available_presets: Vec<WorldPreset>,
+    pub server_datapack_format: Option<u32>,
     pub generation_limits: GenerationLimits,
     pub java: Option<JavaRuntimeReport>,
     pub java_ready: bool,
@@ -4898,7 +4997,7 @@ mod version_catalog_tests {
             minecraft_version::SupportLevel::ReadWriteSubset
         );
         assert!(latest_profile.capabilities.export);
-        assert!(!latest_profile.capabilities.generate);
+        assert!(latest_profile.capabilities.generate);
         assert!(latest.unavailable_reason.is_none());
 
         let snapshot = &report.versions[1];

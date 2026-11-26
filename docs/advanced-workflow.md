@@ -305,6 +305,10 @@ After the explicit EULA acceptance for the exact JAR and version, plus a separat
 consent, the server runs in an isolated temporary directory without a game window. It listens
 on loopback only, has memory/time limits, is contained in a kill-on-close Windows Job Object
 and reports real region-header progress. Cancel or crash terminates the whole Java tree. The
+generation target comes from the project profile: for 1.18–1.21.11 the `level-type` value is
+`minecraft:normal`, `minecraft:flat`, `minecraft:large_biomes` or `minecraft:amplified`, Java is
+17 for 1.18–1.19 and 21 for newer releases, and data packs are validated against that version's
+data pack format. The
 completed run is imported as a `Vanilla World` project: the generated folder is copied byte
 for byte, decoded into the Rust core, and seed/preset/data packs/Java/server identity are
 recorded in `project.json`.
@@ -397,8 +401,8 @@ and avoid treating the tested ceiling as a normal working radius.
   rebuild, as documented in the format notes.
 - The complete world-folder export is verified for every modern classic release in the
   backend/test path. This alpha does not expose it as a one-click user action; the user-facing
-  export is a structure `.nbt`. Generation for releases other than 1.21.4 stays disabled until
-  its own staged verification.
+  export is a structure `.nbt`. Generation is enabled for every modern classic release with its
+  exact official server JAR; split 26.x and legacy versions stay disabled.
 - Reference overlays (PNG blueprint plane and `.nbt` schematic ghost) were researched only.
   The overlay UI is intentionally not enabled; do not expect reference guides in the editor.
 - MCP has no scene-graph write tools and no direct file/shell access. Semantic and parametric

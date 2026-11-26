@@ -89,6 +89,13 @@ export interface InstalledServerJar {
 
 export type WorldPreset = "normal" | "flat" | "large_biomes" | "amplified";
 
+/** The `level-type` spelling the selected version's server accepts. */
+export type LevelTypeSyntax =
+  | "modern-namespaced"
+  | "legacy-camel-case"
+  | "legacy-upper"
+  | "unknown";
+
 /** Backend-owned bounds for the supported generation form fields. */
 export interface GenerationLimits {
   minRadiusChunks: number;
@@ -192,6 +199,9 @@ export interface GenerationReport {
   worldComplete: boolean;
   exitCode: number | null;
   serverPid: number | null;
+  profileId: string;
+  minecraftVersion: string;
+  dataVersion: number;
   seed: string;
   preset: WorldPreset;
   centerX: number;
@@ -248,10 +258,14 @@ export interface GenerationRunsReport {
 
 /** Combined setup state for the Vanilla World wizard; it never starts or downloads anything. */
 export interface VanillaSetupReport {
+  profileId: string;
   targetMinecraftVersion: string;
   targetDataVersion: number;
   targetJavaMajor: number;
-  serverDatapackFormat: number;
+  generationSupported: boolean;
+  levelTypeSyntax: LevelTypeSyntax | null;
+  availablePresets: WorldPreset[];
+  serverDatapackFormat: number | null;
   generationLimits: GenerationLimits;
   java: JavaRuntimeReport | null;
   javaReady: boolean;

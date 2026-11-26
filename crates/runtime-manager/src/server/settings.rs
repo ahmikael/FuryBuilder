@@ -158,17 +158,6 @@ impl ServerSettingsStore {
         state.schema_version = SERVER_SETTINGS_SCHEMA_VERSION;
         persist(&self.path, &state)
     }
-
-    /// Withdraws every acceptance. Used when no selected JAR can identify one record.
-    pub fn clear_eulas(&self) -> Result<(), ServerError> {
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| ServerError::Busy("server settings lock poisoned".to_owned()))?;
-        state.eulas.clear();
-        state.schema_version = SERVER_SETTINGS_SCHEMA_VERSION;
-        persist(&self.path, &state)
-    }
 }
 
 fn load(path: &Path) -> Result<ServerSettingsFile, String> {
@@ -403,9 +392,6 @@ mod tests {
             .expect("clear first eula");
         assert!(store.eula_for("1.21.4", &first.jar_sha1).is_none());
         assert!(store.eula_for("1.20.6", &second.jar_sha1).is_some());
-
-        store.clear_eulas().expect("clear all eulas");
-        assert!(store.eula_for("1.20.6", &second.jar_sha1).is_none());
         let _ = fs::remove_dir_all(&dir);
     }
 

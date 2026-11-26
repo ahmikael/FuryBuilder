@@ -67,12 +67,12 @@ fn run(
     install: bool,
     clear: bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    let target = ServerTarget::for_profile(furybuilder_runtime_manager::target_profile());
     if let Some(path) = jar {
-        let report = manager.select_manual(path, &ServerTarget::baseline())?;
+        let report = manager.select_manual(path, &target)?;
         println!("{}", serde_json::to_string_pretty(&report)?);
     }
     if release || install {
-        let target = ServerTarget::baseline();
         let info = manager.release(&target)?;
         println!("{}", serde_json::to_string_pretty(&info)?);
         if install {
@@ -87,7 +87,7 @@ fn run(
         }
     }
     if discover || (!jar.is_some() && !release && !install && !clear) {
-        let report = manager.discover();
+        let report = manager.discover(&target);
         println!("{}", serde_json::to_string_pretty(&report)?);
     }
     if clear {

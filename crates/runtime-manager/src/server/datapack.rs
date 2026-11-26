@@ -16,9 +16,8 @@ use sha2::{Digest, Sha256};
 use zip::ZipArchive;
 
 use crate::error::ServerError;
-use crate::target::{target_datapack_format, target_minecraft_version};
 
-use super::types::{DatapackInspection, GenerationDatapack};
+use super::types::{DatapackInspection, GenerationDatapack, GenerationTarget};
 
 pub const MAX_DATAPACKS: usize = 16;
 pub const MAX_DATAPACK_BYTES: u64 = 64 * 1024 * 1024;
@@ -38,7 +37,7 @@ struct PackSection {
     supported_formats: Option<serde_json::Value>,
 }
 
-fn inspect_path(path: &Path) -> Result<GenerationDatapack, ServerError> {
+fn inspect_path(path: &Path, target: &GenerationTarget) -> Result<GenerationDatapack, ServerError> {
     let metadata = fs::symlink_metadata(path)
         .map_err(|error| ServerError::Invalid(format!("{}: {error}", path.display())))?;
     if metadata.file_type().is_symlink() {
@@ -173,11 +172,11 @@ fn inspect_path(path: &Path) -> Result<GenerationDatapack, ServerError> {
                 path.display()
             ))
         })?;
-    let expected_format = target_datapack_format();
+    let expected_format = target.datapack_format;
     let supported = supports_format(&meta.pack, expected_format);
     if pack_format > expected_format && !supported {
         return Err(ServerError::Unsupported {
-            target: target_minecraft_version().to_owned(),
+            target: target.minecraft_version.to_string(),
             detail: format!(
                 "{} declares data pack format {pack_format}, newer than {expected_format}",
                 path.display()
@@ -274,10 +273,10 @@ fn hex(bytes: &[u8]) -> String {
 
 /// Inspects every selected path without starting anything. Invalid entries are reported
 /// individually so the wizard can show the exact reason before the user tries to run.
-pub(crate) fn inspect_all(paths: &[String]) -> Vec<DatapackInspection> {
+pub(crate) fn inspect_all(target: &GenerationTarget, paths: &[String]) -> Vec<DatapackInspection> {
     paths
         .iter()
-        .map(|path| match inspect_path(Path::new(path)) {
+        .map(|path| match inspect_path(Path::new(path), target) {
             Ok(info) => DatapackInspection {
                 path: info.path,
                 name: info.name,
@@ -308,7 +307,10 @@ pub(crate) fn inspect_all(paths: &[String]) -> Vec<DatapackInspection> {
 
 /// Validates the complete selection, rejects duplicate names and returns the accepted pack
 /// records. The SHA-256 and size are stored in the run manifest and report.
-pub(crate) fn validate_selection(paths: &[String]) -> Result<Vec<GenerationDatapack>, ServerError> {
+pub(crate) fn validate_selection(
+    target: &GenerationTarget,
+    paths: &[String],
+) -> Result<Vec<GenerationDatapack>, ServerError> {
     if paths.len() > MAX_DATAPACKS {
         return Err(ServerError::Limit(format!(
             "at most {MAX_DATAPACKS} data packs can be used in one run"
@@ -318,7 +320,7 @@ pub(crate) fn validate_selection(paths: &[String]) -> Result<Vec<GenerationDatap
     let mut total = 0u64;
     let mut accepted = Vec::with_capacity(paths.len());
     for path in paths {
-        let info = inspect_path(Path::new(path))?;
+        let info = inspect_path(Path::new(path), target)?;
         let key = info.name.to_ascii_lowercase();
         if !seen.insert(key) {
             return Err(ServerError::Invalid(format!(
@@ -343,6 +345,7 @@ pub(crate) fn validate_selection(paths: &[String]) -> Result<Vec<GenerationDatap
 pub(crate) fn install(
     world_dir: &Path,
     datapacks: &[GenerationDatapack],
+    target: &GenerationTarget,
 ) -> Result<(), ServerError> {
     if datapacks.is_empty() {
         return Ok(());
@@ -356,7 +359,7 @@ pub(crate) fn install(
     })?;
     for datapack in datapacks {
         let source = PathBuf::from(&datapack.path);
-        let current = inspect_path(&source)?;
+        let current = inspect_path(&source, target)?;
         if current.sha256 != datapack.sha256 || current.size != datapack.size {
             return Err(ServerError::Invalid(format!(
                 "{} changed after it was validated; add it again",
@@ -417,6 +420,11 @@ mod tests {
         format!(r#"{{"pack":{{"pack_format":{format},"description":"test"}}}}"#).into_bytes()
     }
 
+    fn target() -> GenerationTarget {
+        GenerationTarget::for_profile(&minecraft_version::default_profile())
+            .expect("the default profile supports generation")
+    }
+
     #[test]
     fn accepts_a_valid_target_format_datapack() {
         let dir = std::env::temp_dir().join(format!(
@@ -434,15 +442,16 @@ mod tests {
                 ("data/example/function/hello.mcfunction", b"say hi\n", false),
             ],
         );
-        let info = inspect_path(&path).expect("valid datapack");
+        let info = inspect_path(&path, &target()).expect("valid datapack");
         assert_eq!(info.pack_format, 61);
         assert_eq!(info.size, fs::metadata(&path).unwrap().len());
         assert_eq!(info.sha256.len(), 64);
         assert!(info.warnings.is_empty());
-        let selected = validate_selection(&[path.display().to_string()]).expect("selection");
+        let selected =
+            validate_selection(&target(), &[path.display().to_string()]).expect("selection");
         assert_eq!(selected.len(), 1);
         let world = dir.join("world");
-        install(&world, &selected).expect("install");
+        install(&world, &selected, &target()).expect("install");
         assert!(world.join("datapacks").join("valid.zip").is_file());
         let _ = fs::remove_dir_all(&dir);
     }
@@ -458,7 +467,7 @@ mod tests {
         fs::create_dir_all(&dir).expect("dir");
         let newer = dir.join("newer.zip");
         write_zip(&newer, &[("pack.mcmeta", &meta(99), false)]);
-        assert!(inspect_path(&newer).is_err());
+        assert!(inspect_path(&newer, &target()).is_err());
         let traversal = dir.join("traversal.zip");
         write_zip(
             &traversal,
@@ -467,18 +476,18 @@ mod tests {
                 ("../escape.txt", b"bad", false),
             ],
         );
-        let error = inspect_path(&traversal).expect_err("traversal");
+        let error = inspect_path(&traversal, &target()).expect_err("traversal");
         assert!(error.to_string().contains("unsafe entry"));
         let missing = dir.join("missing.zip");
         write_zip(
             &missing,
             &[("data/example/function/a.mcfunction", b"say hi", false)],
         );
-        let error = inspect_path(&missing).expect_err("missing meta");
+        let error = inspect_path(&missing, &target()).expect_err("missing meta");
         assert!(error.to_string().contains("pack.mcmeta"));
         let link = dir.join("link.zip");
         std::fs::write(&link, b"not a zip").expect("fake zip");
-        assert!(inspect_path(&link).is_err());
+        assert!(inspect_path(&link, &target()).is_err());
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -493,12 +502,12 @@ mod tests {
         fs::create_dir_all(&dir).expect("dir");
         let old = dir.join("old.zip");
         write_zip(&old, &[("pack.mcmeta", &meta(48), false)]);
-        let info = inspect_path(&old).expect("older pack is accepted");
+        let info = inspect_path(&old, &target()).expect("older pack is accepted");
         assert!(!info.warnings.is_empty());
         let ranged = dir.join("ranged.zip");
         let meta = br#"{"pack":{"pack_format":80,"supported_formats":{"min_inclusive":50,"max_inclusive":70}}}"#;
         write_zip(&ranged, &[("pack.mcmeta", meta, false)]);
-        let info = inspect_path(&ranged).expect("supported range");
+        let info = inspect_path(&ranged, &target()).expect("supported range");
         assert_eq!(info.pack_format, 80);
         let _ = fs::remove_dir_all(&dir);
     }

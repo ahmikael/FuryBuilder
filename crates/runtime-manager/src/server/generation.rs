@@ -32,8 +32,8 @@ use super::process_tree::ProcessTree;
 use super::types::{
     GeneratedWorld, GenerationDatapack, GenerationEstimate, GenerationLimits, GenerationPhase,
     GenerationReport, GenerationRequest, GenerationRunInfo, GenerationRunsReport,
-    GenerationSnapshot, GenerationStopReason, RunManifest, SavedEula, WorldPreset,
-    RUN_MANIFEST_SCHEMA_VERSION,
+    GenerationSnapshot, GenerationStopReason, GenerationTarget, RunManifest, SavedEula,
+    WorldPreset, RUN_MANIFEST_SCHEMA_VERSION,
 };
 use crate::error::ServerError;
 
@@ -81,6 +81,7 @@ pub(crate) struct GenerationPlan {
     pub run_dir: PathBuf,
     pub world_dir: PathBuf,
     pub log_path: PathBuf,
+    pub target: GenerationTarget,
     pub java_exe: PathBuf,
     pub java_version: String,
     pub server_jar: PathBuf,
@@ -350,7 +351,20 @@ pub(crate) fn estimate(
     })
 }
 
-pub(crate) fn validate_request(request: &GenerationRequest) -> Result<(), ServerError> {
+pub(crate) fn validate_request(
+    request: &GenerationRequest,
+    target: &GenerationTarget,
+) -> Result<(), ServerError> {
+    if !target.supports(request.preset) {
+        return Err(ServerError::UnsupportedGeneration {
+            profile_id: target.profile_id.clone(),
+            detail: format!(
+                "the official Minecraft {} server cannot generate the `{}` preset",
+                target.minecraft_version,
+                request.preset.label()
+            ),
+        });
+    }
     if !request.consent {
         return Err(ServerError::ConsentRequired(
             "confirm that the official server will be started locally for this run".to_owned(),
@@ -436,7 +450,9 @@ pub(crate) fn validate_approval(
 
 fn manifest_is_valid(manifest: &RunManifest) -> bool {
     manifest.schema_version == RUN_MANIFEST_SCHEMA_VERSION
+        && !manifest.profile_id.is_empty()
         && !manifest.minecraft_version.is_empty()
+        && manifest.data_version > 0
         && is_sha1(&manifest.server_jar_sha1)
         && manifest.eula_accepted_at > 0
         && manifest.consent_at > 0
@@ -444,12 +460,13 @@ fn manifest_is_valid(manifest: &RunManifest) -> bool {
 
 pub(crate) fn prepare(
     runs_root: &Path,
+    target: &GenerationTarget,
     runtime: GenerationRuntime<'_>,
     request: &GenerationRequest,
     approval: RunApproval,
     datapacks: &[GenerationDatapack],
 ) -> Result<GenerationPlan, ServerError> {
-    validate_request(request)?;
+    validate_request(request, target)?;
     validate_approval(request, &approval, runtime.server)?;
     fs::create_dir_all(runs_root).map_err(|error| {
         ServerError::Io(format!(
@@ -485,6 +502,7 @@ pub(crate) fn prepare(
         world_dir: run_dir.join("world"),
         log_path: run_dir.join("logs").join("furybuilder-console.log"),
         run_dir: run_dir.clone(),
+        target: target.clone(),
         java_exe: runtime.java_exe.to_path_buf(),
         java_version: runtime.java_version.to_owned(),
         server_jar: runtime.server_jar.to_path_buf(),
@@ -519,7 +537,9 @@ pub(crate) fn prepare(
         radius_chunks: plan.radius_chunks,
         generate_structures: plan.generate_structures,
         datapacks: plan.datapacks.clone(),
-        minecraft_version: runtime.server.version.clone(),
+        profile_id: plan.target.profile_id.clone(),
+        minecraft_version: plan.target.minecraft_version.to_string(),
+        data_version: plan.target.data_version,
         server_jar_sha1: runtime.server.sha1.clone(),
         eula_accepted_at: approval.eula.accepted_at,
         consent_at: approval.consent_at,
@@ -534,10 +554,11 @@ pub(crate) fn prepare(
                 plan.generate_structures,
                 plan.view_distance,
                 plan.port,
-            ),
+                &plan.target,
+            )?,
         )
         .map_err(|error| ServerError::Io(format!("cannot write server.properties: {error}")))?;
-        datapack::install(&plan.world_dir, datapacks)?;
+        datapack::install(&plan.world_dir, datapacks, &plan.target)?;
         // Only written inside this run directory, only after an explicit acceptance for
         // this exact server JAR. The acceptance itself lives in server.json.
         fs::write(run_dir.join("eula.txt"), b"eula=true\n")
@@ -615,6 +636,9 @@ pub(crate) fn execute(
         world_complete: outcome.world_complete,
         exit_code: outcome.exit_code,
         server_pid: outcome.server_pid,
+        profile_id: plan.target.profile_id.clone(),
+        minecraft_version: plan.target.minecraft_version.to_string(),
+        data_version: plan.target.data_version,
         seed: plan.seed,
         preset: plan.preset,
         center_x: plan.center_x,
@@ -1208,8 +1232,10 @@ fn render_properties(
     generate_structures: bool,
     view_distance: u8,
     port: u16,
-) -> String {
-    format!(
+    target: &GenerationTarget,
+) -> Result<String, ServerError> {
+    let level_type = preset.level_type(target.level_type_syntax)?;
+    Ok(format!(
         "# Generated by FuryBuilder for one isolated Vanilla World generation run.\n\
          # External listeners are disabled: loopback only, no RCON/query/status.\n\
          server-ip=127.0.0.1\n\
@@ -1222,16 +1248,15 @@ fn render_properties(
          motd=FuryBuilder isolated worldgen\n\
          level-name=world\n\
          level-seed={seed}\n\
-         level-type={}\n\
+         level-type={level_type}\n\
          generator-settings=\n\
          generate-structures={generate_structures}\n\
          view-distance={view_distance}\n\
          simulation-distance={view_distance}\n\
          spawn-protection=0\n\
          sync-chunk-writes=true\n\
-         max-tick-time=-1\n",
-        preset.level_type()
-    )
+         max-tick-time=-1\n"
+    ))
 }
 
 fn forceload_commands(center_x: i32, center_z: i32, radius: u32) -> Vec<String> {
@@ -1507,6 +1532,9 @@ pub(crate) fn load_completed_world(
     }
     if report.seed != manifest.seed
         || report.preset != manifest.preset
+        || report.profile_id != manifest.profile_id
+        || report.minecraft_version != manifest.minecraft_version
+        || report.data_version != manifest.data_version
         || report.center_x != manifest.center_x
         || report.center_z != manifest.center_z
         || report.radius_chunks != manifest.radius_chunks
@@ -1554,6 +1582,9 @@ pub(crate) fn load_completed_world(
     Ok(GeneratedWorld {
         run_id: run_id.to_owned(),
         world_dir: world_dir.display().to_string(),
+        profile_id: manifest.profile_id,
+        minecraft_version: manifest.minecraft_version,
+        data_version: manifest.data_version,
         seed: manifest.seed,
         preset: manifest.preset,
         center_x: manifest.center_x,
@@ -1738,6 +1769,11 @@ mod tests {
 
     static FAKE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+    fn target() -> GenerationTarget {
+        GenerationTarget::for_profile(&minecraft_version::default_profile())
+            .expect("the baseline profile supports generation")
+    }
+
     fn request(seed: &str) -> GenerationRequest {
         GenerationRequest {
             seed: seed.to_owned(),
@@ -1757,17 +1793,17 @@ mod tests {
 
     #[test]
     fn validates_limits_and_rejects_seed_injection() {
-        assert!(validate_request(&request("FuryBuilder")).is_ok());
-        assert!(validate_request(&request("12345")).is_ok());
-        assert!(validate_request(&request("bad\nseed")).is_err());
-        assert!(validate_request(&request("with space")).is_err());
-        assert!(validate_request(&request("")).is_err());
-        assert!(validate_request(&request(&"a".repeat(65))).is_err());
+        assert!(validate_request(&request("FuryBuilder"), &target()).is_ok());
+        assert!(validate_request(&request("12345"), &target()).is_ok());
+        assert!(validate_request(&request("bad\nseed"), &target()).is_err());
+        assert!(validate_request(&request("with space"), &target()).is_err());
+        assert!(validate_request(&request(""), &target()).is_err());
+        assert!(validate_request(&request(&"a".repeat(65)), &target()).is_err());
 
         let mut no_consent = request("seed");
         no_consent.consent = false;
         assert!(matches!(
-            validate_request(&no_consent),
+            validate_request(&no_consent, &target()),
             Err(ServerError::ConsentRequired(_))
         ));
 
@@ -1777,23 +1813,23 @@ mod tests {
                 path: format!("pack-{index}.zip"),
             })
             .collect();
-        assert!(validate_request(&too_many_packs).is_err());
+        assert!(validate_request(&too_many_packs, &target()).is_err());
 
         let mut too_large = request("seed");
         too_large.radius_chunks = 17;
-        assert!(validate_request(&too_large).is_err());
+        assert!(validate_request(&too_large, &target()).is_err());
 
         let mut too_far = request("seed");
         too_far.center_x = 30_000_000;
-        assert!(validate_request(&too_far).is_err());
+        assert!(validate_request(&too_far, &target()).is_err());
 
         let mut no_memory = request("seed");
         no_memory.memory_mb = 128;
-        assert!(validate_request(&no_memory).is_err());
+        assert!(validate_request(&no_memory, &target()).is_err());
 
         let mut bad_view = request("seed");
         bad_view.view_distance = 32;
-        assert!(validate_request(&bad_view).is_err());
+        assert!(validate_request(&bad_view, &target()).is_err());
     }
 
     #[test]
@@ -1945,7 +1981,9 @@ mod tests {
             radius_chunks: 1,
             generate_structures: true,
             datapacks: Vec::new(),
+            profile_id: "java-classic-1.21.4".to_owned(),
             minecraft_version: "1.21.4".to_owned(),
+            data_version: 4189,
             server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
             eula_accepted_at: 1,
             consent_at: 2,
@@ -1971,7 +2009,15 @@ mod tests {
 
     #[test]
     fn properties_are_loopback_only_and_use_the_requested_level_type() {
-        let properties = render_properties("FuryBuilder", WorldPreset::LargeBiomes, true, 4, 51234);
+        let properties = render_properties(
+            "FuryBuilder",
+            WorldPreset::LargeBiomes,
+            true,
+            4,
+            51234,
+            &target(),
+        )
+        .expect("properties");
         assert!(properties.contains("server-ip=127.0.0.1\n"));
         assert!(properties.contains("server-port=51234\n"));
         assert!(properties.contains("level-seed=FuryBuilder\n"));
@@ -1982,9 +2028,108 @@ mod tests {
         assert!(properties.contains("enable-status=false\n"));
         assert!(properties.contains("online-mode=false\n"));
         assert!(!properties.contains("server-ip=0.0.0.0"));
-        let without = render_properties("seed", WorldPreset::Flat, false, 2, 1);
+        let without = render_properties("seed", WorldPreset::Flat, false, 2, 1, &target())
+            .expect("properties");
         assert!(without.contains("generate-structures=false\n"));
         assert!(without.contains("level-type=minecraft:flat\n"));
+    }
+
+    #[test]
+    fn every_generation_profile_uses_its_exact_version_facts() {
+        let mut facts = Vec::new();
+        for profile in minecraft_version::builtin_profiles()
+            .iter()
+            .filter(|profile| profile.family == minecraft_version::VersionFamily::Modern)
+        {
+            assert!(profile.capabilities.generate, "{}", profile.id);
+            let target = GenerationTarget::for_profile(profile).expect(profile.id.as_str());
+            assert_eq!(target.profile_id, profile.id);
+            assert_eq!(target.minecraft_version, profile.minecraft_version);
+            assert_eq!(target.data_version, profile.data_version);
+            assert_eq!(target.java_major, profile.java.recommended_major);
+            assert_eq!(
+                target.datapack_format,
+                profile.datapack_format.expect("data pack format")
+            );
+            assert_eq!(
+                target.level_type_syntax,
+                minecraft_version::LevelTypeSyntax::ModernNamespaced
+            );
+            assert_eq!(target.available_presets().len(), 4, "{}", profile.id);
+            for preset in target.available_presets() {
+                let expected = preset
+                    .level_type(target.level_type_syntax)
+                    .expect("level type");
+                let properties = render_properties("FuryBuilder", preset, true, 4, 25565, &target)
+                    .expect("properties");
+                assert!(
+                    properties.contains(&format!("level-type={expected}\n")),
+                    "{} {expected}",
+                    profile.id
+                );
+                assert!(properties.contains("generate-structures=true\n"));
+            }
+            facts.push((
+                profile.id.clone(),
+                profile.data_version,
+                target.java_major,
+                target.datapack_format,
+            ));
+        }
+        assert_eq!(facts.len(), 27);
+        for expected in [
+            ("java-classic-1.18.2".to_owned(), 2975, 17, 9),
+            ("java-classic-1.20.6".to_owned(), 3839, 21, 41),
+            ("java-classic-1.21.4".to_owned(), 4189, 21, 61),
+            ("java-classic-1.21.11".to_owned(), 4671, 21, 94),
+        ] {
+            assert!(facts.contains(&expected), "{expected:?}");
+        }
+    }
+
+    #[test]
+    fn generation_target_refuses_unverified_or_incomplete_profiles() {
+        let base = minecraft_version::default_profile();
+
+        let mut no_generation = base.clone();
+        no_generation.capabilities.generate = false;
+        assert!(matches!(
+            GenerationTarget::for_profile(&no_generation),
+            Err(ServerError::UnsupportedGeneration { .. })
+        ));
+
+        let mut no_server = base.clone();
+        no_server.server.official_jar = false;
+        assert!(matches!(
+            GenerationTarget::for_profile(&no_server),
+            Err(ServerError::UnsupportedGeneration { .. })
+        ));
+
+        let mut unknown_syntax = base.clone();
+        unknown_syntax.server.level_type_syntax = minecraft_version::LevelTypeSyntax::Unknown;
+        assert!(matches!(
+            GenerationTarget::for_profile(&unknown_syntax),
+            Err(ServerError::UnsupportedGeneration { .. })
+        ));
+
+        let mut no_datapack_format = base.clone();
+        no_datapack_format.datapack_format = None;
+        assert!(matches!(
+            GenerationTarget::for_profile(&no_datapack_format),
+            Err(ServerError::UnsupportedGeneration { .. })
+        ));
+
+        let mut no_presets = base;
+        no_presets.server.generation = minecraft_version::GenerationCapabilities {
+            normal: false,
+            flat: false,
+            large_biomes: false,
+            amplified: false,
+        };
+        assert!(matches!(
+            GenerationTarget::for_profile(&no_presets),
+            Err(ServerError::UnsupportedGeneration { .. })
+        ));
     }
 
     #[test]
@@ -2063,6 +2208,7 @@ mod tests {
             world_dir: run_dir.join("world"),
             log_path: run_dir.join("logs").join("furybuilder-console.log"),
             run_dir,
+            target: target(),
             java_exe: script.to_path_buf(),
             java_version: "21-test".to_owned(),
             server_jar: root.join("server.jar"),
@@ -2266,7 +2412,9 @@ public class FakeCrash {
                 radius_chunks: 1,
                 generate_structures: true,
                 datapacks: Vec::new(),
+                profile_id: "java-classic-1.21.4".to_owned(),
                 minecraft_version: "1.21.4".to_owned(),
+                data_version: 4189,
                 server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
                 eula_accepted_at: 1,
                 consent_at: 2,
@@ -2312,7 +2460,9 @@ public class FakeCrash {
             radius_chunks: 1,
             generate_structures: true,
             datapacks: Vec::new(),
+            profile_id: "java-classic-1.21.4".to_owned(),
             minecraft_version: "1.21.4".to_owned(),
+            data_version: 4189,
             server_jar_sha1: "4707d00eb834b446575d89a61a11b5d548d8c001".to_owned(),
             eula_accepted_at: 1,
             consent_at: 2,
@@ -2334,6 +2484,9 @@ public class FakeCrash {
             world_complete: true,
             exit_code: Some(0),
             server_pid: Some(10),
+            profile_id: manifest.profile_id.clone(),
+            minecraft_version: manifest.minecraft_version.clone(),
+            data_version: manifest.data_version,
             seed: manifest.seed.clone(),
             preset: manifest.preset,
             center_x: manifest.center_x,

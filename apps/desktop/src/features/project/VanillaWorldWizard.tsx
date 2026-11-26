@@ -67,8 +67,8 @@ const WORLD_PRESETS: { value: WorldPreset; label: string }[] = [
 type Busy = "load" | "eula" | "datapacks" | "start" | "cancel" | "import" | null;
 
 interface VanillaWorldWizardProps {
-  /** Version selected in the wizard; generation is refused when it differs from the verified target. */
-  version?: string;
+  /** Verified profile selected for this project; generation is bound to exactly this version. */
+  profileId?: string | undefined;
   /** Verified Java/assets/server facts from the Components step. Display only. */
   components?: ComponentStepSummary | null;
   onOpenWorld?: (runId: string, name: string) => Promise<boolean>;
@@ -166,7 +166,7 @@ function statusTone(ready: boolean): string {
 }
 
 export function VanillaWorldWizard({
-  version,
+  profileId,
   components = null,
   onOpenWorld,
 }: VanillaWorldWizardProps) {
@@ -192,13 +192,18 @@ export function VanillaWorldWizard({
   const [datapacks, setDatapacks] = useState<DatapackInspection[]>([]);
 
   const refresh = useCallback(async () => {
+    if (!profileId) {
+      setSetup(null);
+      setStatus(null);
+      return;
+    }
     const [nextSetup, nextStatus] = await Promise.all([
-      vanillaSetupCheck(),
+      vanillaSetupCheck(profileId),
       serverGenerationStatus(),
     ]);
     setSetup(nextSetup);
     setStatus(nextStatus);
-  }, []);
+  }, [profileId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -253,14 +258,10 @@ export function VanillaWorldWizard({
   }, [setup, radiusValue, timeLimitValue]);
 
   const active: GenerationSnapshot | null = status?.active ?? null;
-  const last = status?.last ?? null;
+  const last = status?.last && status.last.profileId === profileId ? status.last : null;
   const running = Boolean(active?.running);
   const limits = setup?.generationLimits ?? null;
-  const versionMismatch =
-    Boolean(version) &&
-    setup !== null &&
-    setup.targetMinecraftVersion.length > 0 &&
-    setup.targetMinecraftVersion !== version;
+  const targetMismatch = Boolean(profileId) && setup !== null && setup.profileId !== profileId;
   const currentEstimate =
     estimate &&
     estimate.radiusChunks === radiusValue &&
@@ -268,7 +269,10 @@ export function VanillaWorldWizard({
       ? estimate
       : null;
   const diskBlocked = currentEstimate !== null && !currentEstimate.fitsOnDisk;
-  const setupLocked = busy !== null || versionMismatch;
+  const setupLocked = busy !== null || !profileId || targetMismatch;
+  const availablePresets = setup?.availablePresets ?? [];
+  const presetOptions = WORLD_PRESETS.filter((entry) => availablePresets.includes(entry.value));
+  const activePreset = availablePresets.includes(preset) ? preset : (availablePresets[0] ?? preset);
   const javaStatus = components?.java
     ? summaryStatus(components.java, "java")
     : setupJavaStatus(setup);
@@ -304,9 +308,9 @@ export function VanillaWorldWizard({
   }
 
   async function acceptEula() {
-    if (!eulaChecked) return;
+    if (!eulaChecked || !profileId) return;
     await runBusy("eula", async () => {
-      const eula = await acceptServerEula(true);
+      const eula = await acceptServerEula(profileId, true);
       setEulaChecked(false);
       setNotice(
         `EULA accepted for Minecraft ${eula.minecraftVersion} (${eula.jarSha1.slice(0, 12)}…).`,
@@ -316,6 +320,7 @@ export function VanillaWorldWizard({
   }
 
   async function browseDatapacks() {
+    if (!profileId) return;
     await runBusy("datapacks", async () => {
       const { open } = await import("@tauri-apps/plugin-dialog");
       const selected = await open({
@@ -331,7 +336,7 @@ export function VanillaWorldWizard({
       const existing = new Set(datapacks.map((datapack) => datapack.path));
       const fresh = paths.filter((path) => !existing.has(path));
       if (fresh.length === 0) return;
-      const inspected = await inspectServerDatapacks(fresh);
+      const inspected = await inspectServerDatapacks(profileId, fresh);
       setDatapacks((current) => [...current, ...inspected]);
       const rejected = inspected.filter((datapack) => !datapack.valid).length;
       setNotice(
@@ -343,10 +348,8 @@ export function VanillaWorldWizard({
   }
 
   async function start() {
-    if (versionMismatch) {
-      setError(
-        `Vanilla generation is available only for Minecraft ${setup?.targetMinecraftVersion ?? "the verified target"}; the selected version is ${version}.`,
-      );
+    if (!profileId) {
+      setError("Choose a Minecraft version before starting Vanilla generation.");
       return;
     }
     if (diskBlocked && currentEstimate) {
@@ -357,7 +360,7 @@ export function VanillaWorldWizard({
     }
     const request: GenerationRequest = {
       seed: seed.trim(),
-      preset,
+      preset: activePreset,
       centerX: Number(centerX),
       centerZ: Number(centerZ),
       radiusChunks: Number(radius),
@@ -387,7 +390,7 @@ export function VanillaWorldWizard({
       return;
     }
     await runBusy("start", async () => {
-      const snapshot = await startServerGeneration(request);
+      const snapshot = await startServerGeneration(profileId, request);
       setStatus((current) => ({ active: snapshot, last: current?.last ?? null }));
       setConsentChecked(false);
       setNotice(
@@ -444,18 +447,29 @@ export function VanillaWorldWizard({
           generator. Target: Minecraft Java{" "}
           <span className="font-mono">{setup?.targetMinecraftVersion ?? "unknown"}</span> · DV{" "}
           <span className="font-mono">{setup?.targetDataVersion ?? "unknown"}</span> · Java{" "}
-          <span className="font-mono">{setup?.targetJavaMajor ?? "unknown"}</span>.
+          <span className="font-mono">{setup?.targetJavaMajor ?? "unknown"}</span> · level-type{" "}
+          <span className="font-mono">{setup?.levelTypeSyntax ?? "unknown"}</span>.
         </p>
 
-        {versionMismatch && setup ? (
+        {!profileId ? (
           <Alert variant="destructive">
             <TriangleAlert />
-            <AlertTitle>Generation is not verified for this version</AlertTitle>
+            <AlertTitle>Choose a version first</AlertTitle>
             <AlertDescription>
-              This build can generate a Vanilla World only for Minecraft{" "}
-              <span className="font-mono">{setup.targetMinecraftVersion}</span>. The selected
-              project version is <span className="font-mono">{version}</span>. Choose the verified
-              version, or create an Empty, Flat or Imported project instead.
+              Vanilla generation is bound to the exact project version. Return to the Version step
+              and select a supported release.
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {setup && !setup.generationSupported ? (
+          <Alert variant="destructive">
+            <TriangleAlert />
+            <AlertTitle>Generation is not available for this version</AlertTitle>
+            <AlertDescription>
+              {setup.blockers[0] ??
+                `This build cannot generate a Vanilla World for Minecraft ${setup.targetMinecraftVersion}.`}{" "}
+              Create an Empty, Flat or Imported project instead.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -550,23 +564,23 @@ export function VanillaWorldWizard({
               value={seed}
               maxLength={64}
               onChange={(event) => setSeed(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation seed"
             />
           </label>
           <label className="space-y-1.5 text-sm">
             <span className="text-muted-foreground">Preset</span>
             <Select
-              items={WORLD_PRESETS}
-              value={preset}
+              items={presetOptions}
+              value={activePreset}
               onValueChange={(value) => setPreset(value as WorldPreset)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked || presetOptions.length === 0}
             >
               <SelectTrigger className="w-full" aria-label="Vanilla world preset">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {WORLD_PRESETS.map((entry) => (
+                {presetOptions.map((entry) => (
                   <SelectItem key={entry.value} value={entry.value}>
                     {entry.label}
                   </SelectItem>
@@ -583,7 +597,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={radius}
               onChange={(event) => setRadius(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation radius in chunks"
             />
           </label>
@@ -591,7 +605,7 @@ export function VanillaWorldWizard({
             <Checkbox
               checked={generateStructures}
               onCheckedChange={(checked) => setGenerateStructures(checked === true)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Generate structures"
             />
             <span>Generate structures</span>
@@ -603,7 +617,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={centerX}
               onChange={(event) => setCenterX(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation center X"
             />
           </label>
@@ -614,7 +628,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={centerZ}
               onChange={(event) => setCenterZ(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation center Z"
             />
           </label>
@@ -627,7 +641,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={timeLimit}
               onChange={(event) => setTimeLimit(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation time limit seconds"
             />
           </label>
@@ -641,7 +655,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={memory}
               onChange={(event) => setMemory(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation memory limit"
             />
           </label>
@@ -654,7 +668,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={viewDistance}
               onChange={(event) => setViewDistance(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation view distance"
             />
           </label>
@@ -667,7 +681,7 @@ export function VanillaWorldWizard({
               className="font-mono"
               value={cpuThreads}
               onChange={(event) => setCpuThreads(event.target.value)}
-              disabled={running || versionMismatch}
+              disabled={running || setupLocked}
               aria-label="Vanilla generation CPU threads"
             />
           </label>
@@ -736,8 +750,8 @@ export function VanillaWorldWizard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium">Data packs</span>
             <span className="text-sm text-muted-foreground">
-              Format <span className="font-mono">{setup?.serverDatapackFormat ?? 61}</span> · local
-              .zip files are validated and copied into the isolated world only
+              Format <span className="font-mono">{setup?.serverDatapackFormat ?? "unknown"}</span> ·
+              local .zip files are validated and copied into the isolated world only
             </span>
             <Button
               size="sm"
@@ -747,7 +761,7 @@ export function VanillaWorldWizard({
               disabled={
                 busy !== null ||
                 running ||
-                versionMismatch ||
+                setupLocked ||
                 datapacks.length >= (limits?.maxDatapacks ?? 16)
               }
               aria-label="Add data packs"
@@ -811,7 +825,7 @@ export function VanillaWorldWizard({
             className="mt-0.5"
             checked={consentChecked}
             onCheckedChange={(checked) => setConsentChecked(checked === true)}
-            disabled={running || versionMismatch}
+            disabled={running || setupLocked}
             aria-label="Confirm local official server run"
           />
           <span>
@@ -828,7 +842,7 @@ export function VanillaWorldWizard({
             disabled={
               busy !== null ||
               running ||
-              versionMismatch ||
+              setupLocked ||
               diskBlocked ||
               !setup?.ready ||
               !consentChecked ||
@@ -906,6 +920,9 @@ export function VanillaWorldWizard({
               </span>
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              <span>
+                Minecraft <span className="font-mono">{last.minecraftVersion}</span>
+              </span>
               <span>
                 seed <span className="font-mono">{last.seed}</span>
               </span>

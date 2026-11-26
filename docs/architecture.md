@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | Classic Anvil **1.18–1.21.11** is admitted for import, block/biome editing, project snapshots and same-version export; **1.21.4**, `DataVersion` 4189, is the full baseline with generation. Split 26.x and legacy versions are detected and refused. |
+| ADR-001 | Classic Anvil **1.18–1.21.11** is admitted for import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR; **1.21.4**, `DataVersion` 4189, remains the full-support baseline. Split 26.x and legacy versions are detected and refused. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -189,8 +189,10 @@ the confirmed Minecraft version and DataVersion; both must match the fresh analy
 of the decoded world, and the copied `level.dat` before the project can open. A changed source
 must be analyzed and confirmed again; import never retargets it. Vanilla keeps
 the existing generation panel but receives the selected version and the verified component
-summary from Components; the Source step never asks for Java or the server JAR again. It refuses
-to generate when the version differs from the verified server target. The step owns the seed,
+summary from Components; the Source step never asks for Java or the server JAR again. The
+generation target is built from the exact selected profile, so the preset list, `level-type`
+syntax, Java major, data pack format and server JAR facts cannot drift from the project version.
+The step owns the seed,
 preset, radius/center, structures toggle, time limit and validated local data packs, and requires
 an explicit EULA acceptance for the selected JAR plus a separate per-run consent. It shows the
 backend-owned generation limits, expected chunk count, a conservative world-size estimate and the
@@ -333,9 +335,10 @@ The 1.18–1.21.x profiles share the modern classic section layout. The adapter 
 the fully generated `Status` spelling from exact release facts; the raw value is kept.
 The same release facts supply the vanilla biome registry for import diagnostics, not as
 an allowlist for source biome palettes. Raw chunk decoding is separate from save
-admission: every modern classic profile admits import, editing, snapshots and same-version
-export through its `capabilities`, while generation remains limited to the full 1.21.4 baseline
-and split/legacy profiles remain refused.
+admission: every modern classic profile admits import, editing, snapshots, same-version export
+and generation through its `capabilities`, while split/legacy profiles remain refused. The
+generation target is derived from the same profile, so `level-type`, Java major, data pack
+format and the required server JAR cannot be taken from another version.
 A loaded overlay uses that same profile to patch the original NBT's palette lists
 and packed indices. Section order, unrelated container tags and opaque block-entity
 payloads are verified before and after the region write. NBT equality compares

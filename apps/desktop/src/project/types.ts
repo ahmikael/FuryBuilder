@@ -92,6 +92,7 @@ export interface ProjectSummary {
   creationMode: CreationMode;
   targetMinecraftVersion: string;
   targetDataVersion: number;
+  targetProfileId: string;
   worldRevision: number;
   updatedAtMs: number;
   lastSavedAtMs: number;

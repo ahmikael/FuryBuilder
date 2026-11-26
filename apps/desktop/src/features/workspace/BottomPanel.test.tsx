@@ -202,6 +202,7 @@ const backend = {
     name: "FuryBuilder",
     version: "0.1.0",
     targetMinecraftVersion: "1.21.4",
+    targetProfileId: "java-classic-1.21.4",
     targetDataVersion: 4189,
   },
   error: null,

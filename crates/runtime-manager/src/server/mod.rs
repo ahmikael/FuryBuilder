@@ -43,14 +43,14 @@ pub use types::{
     DatapackInspection, DatapackSelection, GeneratedWorld, GenerationDatapack, GenerationEstimate,
     GenerationLimits, GenerationPhase, GenerationReport, GenerationRequest, GenerationRunInfo,
     GenerationRunsReport, GenerationSnapshot, GenerationStatusReport, GenerationStopReason,
-    InstalledServerJar, ManagedServerCacheReport, ManagedServerJar, RunManifest, SavedEula,
-    SavedServerJar, ServerDiscoveryReport, ServerJarReport, ServerProgress, ServerReleaseInfo,
-    ServerSource, ServerTarget, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES,
-    RUN_MANIFEST_SCHEMA_VERSION, SERVER_MANIFEST_SCHEMA_VERSION, SERVER_SETTINGS_SCHEMA_VERSION,
+    GenerationTarget, InstalledServerJar, ManagedServerCacheReport, ManagedServerJar, RunManifest,
+    SavedEula, SavedServerJar, ServerDiscoveryReport, ServerJarReport, ServerProgress,
+    ServerReleaseInfo, ServerSource, ServerTarget, WorldPreset, EULA_URL, MAX_SERVER_JAR_BYTES,
+    MIN_SERVER_JAR_BYTES, RUN_MANIFEST_SCHEMA_VERSION, SERVER_MANIFEST_SCHEMA_VERSION,
+    SERVER_SETTINGS_SCHEMA_VERSION,
 };
 
 use crate::error::ServerError;
-use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
 struct ActiveGeneration {
     run_id: String,
@@ -132,10 +132,14 @@ impl ServerManager {
         &self.inner.runs_root
     }
 
-    /// Validates selected local data packs without starting anything. The result is per-path
-    /// so the wizard can show why a pack is rejected.
-    pub fn inspect_datapacks(&self, paths: &[String]) -> Vec<DatapackInspection> {
-        datapack::inspect_all(paths)
+    /// Validates selected local data packs against the exact generation target without
+    /// starting anything. The result is per-path so the wizard can show why a pack is rejected.
+    pub fn inspect_datapacks(
+        &self,
+        target: &GenerationTarget,
+        paths: &[String],
+    ) -> Vec<DatapackInspection> {
+        datapack::inspect_all(target, paths)
     }
 
     /// Backend-owned generation bounds. The wizard never invents these limits.
@@ -154,8 +158,7 @@ impl ServerManager {
         generation::estimate(radius_chunks, time_limit_seconds, available)
     }
 
-    pub fn discover(&self) -> ServerDiscoveryReport {
-        let target = ServerTarget::baseline();
+    pub fn discover(&self, target: &ServerTarget) -> ServerDiscoveryReport {
         let (managed, managed_bytes, mut problems) = match self.inner.cache.list() {
             Ok((managed, bytes, problems)) => (managed, bytes, problems),
             Err(error) => (
@@ -167,7 +170,7 @@ impl ServerManager {
         if let Some(warning) = self.inner.settings.load_warning() {
             problems.push(warning.to_owned());
         }
-        let selected = self.selected(&target);
+        let selected = self.selected(target);
         let eula = selected
             .as_ref()
             .filter(|report| report.ready)
@@ -177,10 +180,12 @@ impl ServerManager {
                 self.inner.settings.eula_for(version, sha1)
             });
         let eula_matches_selected = eula.is_some();
+        let (target_minecraft_version, target_data_version, target_java_major) =
+            ServerDiscoveryReport::target(target);
         ServerDiscoveryReport {
-            target_minecraft_version: target_minecraft_version().to_owned(),
-            target_data_version: target_data_version(),
-            target_java_major: target_java_major(),
+            target_minecraft_version: target_minecraft_version.to_owned(),
+            target_data_version,
+            target_java_major,
             selected,
             eula,
             eula_matches_selected,
@@ -188,7 +193,7 @@ impl ServerManager {
             managed,
             managed_bytes,
             problems,
-            manual_hint: manual_hint(&target),
+            manual_hint: manual_hint(target),
         }
     }
 
@@ -510,14 +515,13 @@ impl ServerManager {
         Ok(eula)
     }
 
-    pub fn clear_eula(&self) -> Result<(), ServerError> {
-        let target = ServerTarget::baseline();
+    pub fn clear_eula(&self, target: &ServerTarget) -> Result<(), ServerError> {
         match self.inner.settings.selected(&target.minecraft_version) {
             Some(saved) => self
                 .inner
                 .settings
                 .clear_eula(&saved.minecraft_version, &saved.sha1),
-            None => self.inner.settings.clear_eulas(),
+            None => Ok(()),
         }
     }
 
@@ -534,6 +538,7 @@ impl ServerManager {
     pub fn start_generation(
         &self,
         java: &Path,
+        target: &GenerationTarget,
         request: GenerationRequest,
     ) -> Result<GenerationSnapshot, ServerError> {
         let _start = self
@@ -553,7 +558,7 @@ impl ServerManager {
                 ));
             }
         }
-        generation::validate_request(&request)?;
+        generation::validate_request(&request, target)?;
         let estimated = generation::estimated_world_bytes(generation::expected_chunks(&request));
         download_pipeline::ensure_space(&self.inner.runs_root, estimated)?;
         let datapack_paths: Vec<String> = request
@@ -561,22 +566,22 @@ impl ServerManager {
             .iter()
             .map(|datapack| datapack.path.clone())
             .collect();
-        let datapacks = datapack::validate_selection(&datapack_paths)?;
+        let datapacks = datapack::validate_selection(target, &datapack_paths)?;
         let consent_at = now_secs();
-        let target = ServerTarget::baseline();
+        let server_target = target.server_target();
         let saved = self
             .inner
             .settings
-            .selected(&target.minecraft_version)
+            .selected(&server_target.minecraft_version)
             .ok_or_else(|| {
                 ServerError::Invalid(format!(
                     "choose the Minecraft {} server JAR first",
-                    target_minecraft_version()
+                    server_target.minecraft_version
                 ))
             })?;
         let server_path = Path::new(&saved.path);
         let info = inspect_server_jar(server_path)?;
-        info.validate_for(&target)?;
+        info.validate_for(&server_target)?;
         if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
             return Err(ServerError::Invalid(
                 "the selected server JAR changed on disk; choose it again to re-verify".to_owned(),
@@ -593,20 +598,20 @@ impl ServerManager {
                 ))
             })?;
         let probe = probe_java(java).map_err(|error| ServerError::UnsupportedJava {
-            target: target_minecraft_version(),
+            target: target.minecraft_version.to_string(),
             detail: error.to_string(),
         })?;
-        let (status, warnings) = probe.classify();
+        let (status, warnings) = probe.classify_for(target.java_major);
         if !matches!(status, RuntimeStatus::Compatible | RuntimeStatus::Newer) {
             return Err(ServerError::UnsupportedJava {
-                target: target_minecraft_version(),
+                target: target.minecraft_version.to_string(),
                 detail: format!(
                     "Java {} is not usable for the required Java {}: {}",
                     probe
                         .version
                         .clone()
                         .unwrap_or_else(|| "unknown".to_owned()),
-                    target_java_major(),
+                    target.java_major,
                     warnings.join("; ")
                 ),
             });
@@ -614,6 +619,7 @@ impl ServerManager {
         let java_version = probe.version.clone().unwrap_or_default();
         let plan = generation::prepare(
             &self.inner.runs_root,
+            target,
             generation::GenerationRuntime {
                 java_exe: java,
                 java_version: &java_version,
@@ -816,11 +822,11 @@ mod tests {
 
     #[test]
     fn target_comes_from_the_version_profile() {
-        assert_eq!(target_minecraft_version(), "1.21.4");
-        assert_eq!(target_data_version(), 4189);
-        assert_eq!(target_java_major(), 21);
-        let target = ServerTarget::baseline();
-        assert_eq!(target.minecraft_version.as_str(), "1.21.4");
+        let profile = minecraft_version::default_profile();
+        let target = ServerTarget::for_profile(&profile);
+        assert_eq!(target.minecraft_version, profile.minecraft_version);
+        assert_eq!(target.data_version, profile.data_version);
+        assert_eq!(target.java_major, profile.java.recommended_major);
         assert!(!manual_hint(&target).is_empty());
     }
 }

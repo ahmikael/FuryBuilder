@@ -81,6 +81,7 @@ const snapshot: RenderSnapshot = snapshotFromBlocks(
 
 const worldInfo = {
   targetMinecraftVersion: "1.21.4",
+  targetProfileId: "java-classic-1.21.4",
   targetDataVersion: 4189,
   revision: 1,
   dimensions: [

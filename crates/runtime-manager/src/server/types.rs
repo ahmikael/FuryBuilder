@@ -1,8 +1,7 @@
-use minecraft_version::VersionId;
+use minecraft_version::{GenerationCapabilities, LevelTypeSyntax, VersionId, VersionProfile};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ServerError;
-use crate::target::{target_data_version, target_java_major, target_minecraft_version};
 
 /// Version of `<app-data>/server.json`. Schema 3 keeps one selection per exact Minecraft
 /// version and one explicit EULA acceptance per exact JAR/version; older schemas are not read.
@@ -44,14 +43,113 @@ impl ServerTarget {
         })
     }
 
-    /// The profile the isolated generation path still supports. Component provisioning is
-    /// no longer limited to it, but generation remains an explicit baseline capability.
-    pub fn baseline() -> Self {
-        let profile = crate::target::target_profile();
+    /// Exact server facts of a version profile. The profile is authoritative: a server JAR
+    /// for another version, DataVersion or Java major is never substituted.
+    pub fn for_profile(profile: &VersionProfile) -> Self {
         Self {
             minecraft_version: profile.minecraft_version.clone(),
             data_version: profile.data_version,
             java_major: profile.java.recommended_major,
+        }
+    }
+}
+
+/// Exact generation target of a project version.
+///
+/// Server provisioning only needs version/DataVersion/Java major; generation additionally
+/// needs the profile's `level-type` syntax, data pack format and preset capabilities. This
+/// type is built from a [`VersionProfile`] and refuses profiles whose generation was not
+/// verified or that have no official server JAR.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GenerationTarget {
+    pub profile_id: String,
+    pub minecraft_version: VersionId,
+    pub data_version: i32,
+    pub java_major: u32,
+    pub datapack_format: u32,
+    pub level_type_syntax: LevelTypeSyntax,
+    pub generation: GenerationCapabilities,
+}
+
+impl GenerationTarget {
+    pub fn for_profile(profile: &VersionProfile) -> Result<Self, ServerError> {
+        if !profile.capabilities.generate {
+            return Err(ServerError::UnsupportedGeneration {
+                profile_id: profile.id.clone(),
+                detail: "generation is not verified for this version".to_owned(),
+            });
+        }
+        if !profile.server.official_jar {
+            return Err(ServerError::UnsupportedGeneration {
+                profile_id: profile.id.clone(),
+                detail: "no official server JAR is available for this version".to_owned(),
+            });
+        }
+        if profile.server.level_type_syntax == LevelTypeSyntax::Unknown {
+            return Err(ServerError::UnsupportedGeneration {
+                profile_id: profile.id.clone(),
+                detail: "the server's level-type syntax is unknown for this version".to_owned(),
+            });
+        }
+        let datapack_format =
+            profile
+                .datapack_format
+                .ok_or_else(|| ServerError::UnsupportedGeneration {
+                    profile_id: profile.id.clone(),
+                    detail: "the version profile does not declare a data pack format".to_owned(),
+                })?;
+        if profile.data_version <= 0 || profile.java.recommended_major == 0 {
+            return Err(ServerError::UnsupportedGeneration {
+                profile_id: profile.id.clone(),
+                detail: "the version profile has incomplete server facts".to_owned(),
+            });
+        }
+        let target = Self {
+            profile_id: profile.id.clone(),
+            minecraft_version: profile.minecraft_version.clone(),
+            data_version: profile.data_version,
+            java_major: profile.java.recommended_major,
+            datapack_format,
+            level_type_syntax: profile.server.level_type_syntax,
+            generation: profile.server.generation,
+        };
+        if target.available_presets().is_empty() {
+            return Err(ServerError::UnsupportedGeneration {
+                profile_id: profile.id.clone(),
+                detail: "the official server cannot produce any supported preset".to_owned(),
+            });
+        }
+        Ok(target)
+    }
+
+    pub fn server_target(&self) -> ServerTarget {
+        ServerTarget {
+            minecraft_version: self.minecraft_version.clone(),
+            data_version: self.data_version,
+            java_major: self.java_major,
+        }
+    }
+
+    /// Presets the profile's official server can produce, in wizard order.
+    pub fn available_presets(&self) -> Vec<WorldPreset> {
+        [
+            WorldPreset::Normal,
+            WorldPreset::Flat,
+            WorldPreset::LargeBiomes,
+            WorldPreset::Amplified,
+        ]
+        .into_iter()
+        .filter(|preset| self.supports(*preset))
+        .collect()
+    }
+
+    pub fn supports(&self, preset: WorldPreset) -> bool {
+        match preset {
+            WorldPreset::Normal => self.generation.normal,
+            WorldPreset::Flat => self.generation.flat,
+            WorldPreset::LargeBiomes => self.generation.large_biomes,
+            WorldPreset::Amplified => self.generation.amplified,
         }
     }
 }
@@ -184,11 +282,11 @@ pub struct SavedServerJar {
 }
 
 impl ServerDiscoveryReport {
-    pub fn target() -> (&'static str, i32, u32) {
+    pub fn target(target: &ServerTarget) -> (&str, i32, u32) {
         (
-            target_minecraft_version(),
-            target_data_version(),
-            target_java_major(),
+            target.minecraft_version.as_str(),
+            target.data_version,
+            target.java_major,
         )
     }
 }
@@ -196,7 +294,7 @@ impl ServerDiscoveryReport {
 /// Official Minecraft EULA text. FuryBuilder never accepts it on the user's behalf.
 pub const EULA_URL: &str = "https://aka.ms/MinecraftEULA";
 /// Version of the `.furybuilder-run.json` manifest in a generation run directory.
-pub const RUN_MANIFEST_SCHEMA_VERSION: u32 = 2;
+pub const RUN_MANIFEST_SCHEMA_VERSION: u32 = 3;
 
 /// An explicit EULA acceptance tied to the exact server JAR that will be executed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,13 +328,32 @@ pub enum WorldPreset {
 }
 
 impl WorldPreset {
-    pub fn level_type(self) -> &'static str {
-        match self {
-            WorldPreset::Normal => "minecraft:normal",
-            WorldPreset::Flat => "minecraft:flat",
-            WorldPreset::LargeBiomes => "minecraft:large_biomes",
-            WorldPreset::Amplified => "minecraft:amplified",
-        }
+    /// The exact `level-type` value accepted by the profile's server. The spelling changed
+    /// across Minecraft families, so it is never hard-coded to the modern namespaced form.
+    pub fn level_type(self, syntax: LevelTypeSyntax) -> Result<&'static str, ServerError> {
+        let value = match (syntax, self) {
+            (LevelTypeSyntax::ModernNamespaced, WorldPreset::Normal) => "minecraft:normal",
+            (LevelTypeSyntax::ModernNamespaced, WorldPreset::Flat) => "minecraft:flat",
+            (LevelTypeSyntax::ModernNamespaced, WorldPreset::LargeBiomes) => {
+                "minecraft:large_biomes"
+            }
+            (LevelTypeSyntax::ModernNamespaced, WorldPreset::Amplified) => "minecraft:amplified",
+            (LevelTypeSyntax::LegacyCamelCase, WorldPreset::Normal) => "default",
+            (LevelTypeSyntax::LegacyCamelCase, WorldPreset::Flat) => "flat",
+            (LevelTypeSyntax::LegacyCamelCase, WorldPreset::LargeBiomes) => "largeBiomes",
+            (LevelTypeSyntax::LegacyCamelCase, WorldPreset::Amplified) => "amplified",
+            (LevelTypeSyntax::LegacyUpper, WorldPreset::Normal) => "DEFAULT",
+            (LevelTypeSyntax::LegacyUpper, WorldPreset::Flat) => "FLAT",
+            (LevelTypeSyntax::LegacyUpper, WorldPreset::LargeBiomes) => "LARGEBIOMES",
+            (LevelTypeSyntax::LegacyUpper, WorldPreset::Amplified) => "AMPLIFIED",
+            (LevelTypeSyntax::Unknown, _) => {
+                return Err(ServerError::UnsupportedGeneration {
+                    profile_id: "unknown".to_owned(),
+                    detail: "the server's level-type syntax is unknown".to_owned(),
+                });
+            }
+        };
+        Ok(value)
     }
 
     pub fn label(self) -> &'static str {
@@ -394,6 +511,10 @@ pub struct GenerationReport {
     pub world_complete: bool,
     pub exit_code: Option<i32>,
     pub server_pid: Option<u32>,
+    /// Exact project version this run was bound to.
+    pub profile_id: String,
+    pub minecraft_version: String,
+    pub data_version: i32,
     pub seed: String,
     pub preset: WorldPreset,
     pub center_x: i32,
@@ -465,6 +586,9 @@ pub struct GenerationRunsReport {
 pub struct GeneratedWorld {
     pub run_id: String,
     pub world_dir: String,
+    pub profile_id: String,
+    pub minecraft_version: String,
+    pub data_version: i32,
     pub seed: String,
     pub preset: WorldPreset,
     pub center_x: i32,
@@ -497,8 +621,10 @@ pub struct RunManifest {
     pub generate_structures: bool,
     #[serde(default)]
     pub datapacks: Vec<GenerationDatapack>,
-    /// Exact server facts and approval timestamps recorded before any process starts.
+    /// Exact project version and server facts recorded before any process starts.
+    pub profile_id: String,
     pub minecraft_version: String,
+    pub data_version: i32,
     pub server_jar_sha1: String,
     pub eula_accepted_at: u64,
     pub consent_at: u64,

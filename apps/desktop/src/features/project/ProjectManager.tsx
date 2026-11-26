@@ -601,6 +601,8 @@ export function ProjectManager() {
 
                 {mode === "vanilla" ? (
                   <VanillaWorldWizard
+                    key={currentProject?.targetProfileId ?? "no-profile"}
+                    profileId={currentProject?.targetProfileId}
                     onOpenWorld={(runId, projectName) => importGeneratedWorld(projectName, runId)}
                   />
                 ) : null}

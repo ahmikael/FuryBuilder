@@ -77,6 +77,7 @@ const summary: ProjectSummary = {
   name: "My Castle",
   creationMode: "flat",
   targetMinecraftVersion: "1.21.4",
+  targetProfileId: "java-classic-1.21.4",
   targetDataVersion: 4189,
   worldRevision: 4,
   updatedAtMs: 1_700_000_000_000,

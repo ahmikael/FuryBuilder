@@ -14,8 +14,8 @@ formats are not migrated.
   steps, plus a welcome screen that acts as the project hub for recent projects and recovery.
 - Official Minecraft version catalog with releases, snapshots and legacy/special manifest ids.
   A version needs a verified profile to advance; classic Anvil `1.18–1.21.11` is verified for
-  import, editing, project snapshots and same-version export, while `1.21.4` is the full
-  generation baseline.
+  import, editing, project snapshots and same-version export, and can generate with its exact
+  official server JAR; `1.21.4` remains the full-support baseline.
 - End-to-end import for all 27 classic Anvil releases from 1.18 through 1.21.11: exact
   `DataVersion`, profile dimensions and vertical bounds, editable block states and 4x4x4 biomes,
   byte-for-byte source copy and a version-bound project snapshot. Split 26.1+ and legacy layouts
@@ -23,6 +23,9 @@ formats are not migrated.
 - Same-version world export for every modern classic release: staged sibling folder, dirty-region
   rebuild, full output revalidation, source-tree hashes and byte-for-byte preservation of
   untouched files.
+- Vanilla World generation for every modern classic release: the exact `level-type` spelling,
+  Java major, data pack format and bounded `server.properties` come from the project profile,
+  and each run records its profile id, Minecraft version and `DataVersion`.
 - Managed client JAR download and an exact-version block/item catalog built from that JAR
   (1,097 blocks and 1,385 items for 1.21.4), plus manual `.minecraft`/client JAR selection and
   an explicit placeholder mode.

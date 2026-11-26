@@ -1108,7 +1108,8 @@ export function ProjectWizard() {
                   />
                 ) : mode === "vanilla" ? (
                   <VanillaWorldWizard
-                    version={effectiveVersion}
+                    key={selectedProfile?.id ?? "no-profile"}
+                    profileId={selectedProfile?.id}
                     components={componentStep?.summary ?? null}
                     onOpenWorld={(runId, projectName) => {
                       setGeneratedRequest({ runId, name: projectName });

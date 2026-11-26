@@ -15,7 +15,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use furybuilder_runtime_manager::{
-    DatapackSelection, GenerationRequest, ServerManager, ServerTarget, WorldPreset,
+    DatapackSelection, GenerationRequest, GenerationTarget, ServerManager, ServerTarget,
+    WorldPreset,
 };
 
 fn main() {
@@ -88,8 +89,11 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         root.join("servers"),
         root.join("version-manifest.json"),
     );
+    let profile = furybuilder_runtime_manager::target_profile();
+    let server_target = ServerTarget::for_profile(profile);
+    let generation_target = GenerationTarget::for_profile(profile)?;
     if let Some(jar) = jar {
-        let report = manager.select_manual(&jar, &ServerTarget::baseline())?;
+        let report = manager.select_manual(&jar, &server_target)?;
         eprintln!(
             "selected server JAR: {} {} DV {:?}",
             report.version.as_deref().unwrap_or("?"),
@@ -98,7 +102,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     if accept_eula {
-        let eula = manager.accept_eula(true, &ServerTarget::baseline())?;
+        let eula = manager.accept_eula(true, &server_target)?;
         eprintln!(
             "EULA explicitly accepted for {} sha1 {}",
             eula.minecraft_version, eula.jar_sha1
@@ -118,7 +122,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         consent,
         datapacks,
     };
-    let snapshot = manager.start_generation(&java, request)?;
+    let snapshot = manager.start_generation(&java, &generation_target, request)?;
     eprintln!("{}", serde_json::to_string_pretty(&snapshot)?);
     if let Some(seconds) = cancel_after {
         std::thread::sleep(Duration::from_secs(seconds));

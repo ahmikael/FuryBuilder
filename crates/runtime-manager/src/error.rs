@@ -82,6 +82,8 @@ pub enum ServerError {
     Invalid(String),
     #[error("server JAR does not match Minecraft {target}: {detail}")]
     Unsupported { target: String, detail: String },
+    #[error("world generation is not available for {profile_id}: {detail}")]
+    UnsupportedGeneration { profile_id: String, detail: String },
     #[error("server JAR network request failed: {0}")]
     Network(String),
     #[error("network access is disabled (offline mode)")]
@@ -101,10 +103,7 @@ pub enum ServerError {
     #[error("explicit generation consent is required: {0}")]
     ConsentRequired(String),
     #[error("Java runtime is not compatible with Minecraft {target}: {detail}")]
-    UnsupportedJava {
-        target: &'static str,
-        detail: String,
-    },
+    UnsupportedJava { target: String, detail: String },
     #[error("server JAR install was cancelled")]
     Cancelled,
 }
@@ -115,6 +114,7 @@ impl ServerError {
             ServerError::Io(_) => "io_error",
             ServerError::Invalid(_) => "invalid_argument",
             ServerError::Unsupported { .. } => "unsupported_version",
+            ServerError::UnsupportedGeneration { .. } => "unsupported_version",
             ServerError::Network(_) => "network_error",
             ServerError::Offline => "offline",
             ServerError::Checksum(_) => "checksum_mismatch",

@@ -144,6 +144,7 @@ const first: ProjectSummary = {
   name: "First Castle",
   creationMode: "flat",
   targetMinecraftVersion: "1.21.4",
+  targetProfileId: "java-classic-1.21.4",
   targetDataVersion: 4189,
   worldRevision: 4,
   updatedAtMs: 1_700_000_000_000,
@@ -160,6 +161,7 @@ const second: ProjectSummary = {
   name: "Second Base",
   creationMode: "empty",
   targetMinecraftVersion: "1.21.4",
+  targetProfileId: "java-classic-1.21.4",
   targetDataVersion: 4189,
   worldRevision: 1,
   updatedAtMs: 1_700_000_100_000,
@@ -308,13 +310,13 @@ const versionCatalog: VersionCatalogReport = {
           read: true,
           edit: true,
           write: true,
-          export: false,
-          generate: false,
+          export: true,
+          generate: true,
           assets: true,
         },
         notes: [
           "Classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft 1.21.5.",
-          "Generation is not enabled for this release yet.",
+          "Vanilla generation with the official Minecraft 1.21.5 server JAR is enabled for this release.",
         ],
       },
     },
@@ -391,6 +393,7 @@ function opened(summary: ProjectSummary) {
     },
     info: {
       targetMinecraftVersion: "1.21.4",
+      targetProfileId: "java-classic-1.21.4",
       targetDataVersion: 4189,
       revision: summary.worldRevision,
       dimensions: [],
@@ -786,7 +789,9 @@ describe("project wizard", () => {
     expect(
       screen.getByText("Read + write subset", { selector: "[data-slot=alert-title]" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Generation is not enabled for this release yet/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Vanilla generation with the official Minecraft 1\.21\.5 server JAR/),
+    ).toBeInTheDocument();
 
     await user.type(search, "1.21.5");
     expect(screen.getByText("1 version shown, grouped by release series.")).toBeInTheDocument();

@@ -2,9 +2,8 @@
 
 Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
 the full baseline. Every one of the 27 exact releases in that range can be imported, edited,
-saved through project snapshots and exported same-version. Only 1.21.4 additionally has
-verified generation; for the other releases that capability stays disabled until its own
-verification.
+saved through project snapshots, exported same-version and generated with that release's exact
+official server JAR.
 
 The version picker lists releases and snapshots from the official Mojang manifest. Project
 creation requires a profile with verified write support, so the modern classic releases can
@@ -52,9 +51,8 @@ affected sections. No fallback biome is substituted.
 
 A bare `.mca` file or a `region/` directory is not a complete save. The support matrix
 describes analysis and import boundaries. Only a version with a verified profile can be
-selected for a new project. The `1.18-1.21.11` row includes 1.21.4; same-version export is
-verified for every modern classic release, while generation is exposed only for the full
-baseline until P1-18 verifies it for every release.
+selected for a new project. The `1.18-1.21.11` row includes 1.21.4; same-version export and
+generation are enabled for every modern classic release.
 
 ## Java 26.1–26.3 split saves: inspection only
 
@@ -80,9 +78,9 @@ be imported into a project, compared, copied through world passthrough, or expor
 
 ## What is editable (classic 1.18–1.21.11)
 
-Import, block/biome editing, project snapshots and same-version export are enabled for every
-exact modern classic profile. The shared codec below is verified for all 27 releases.
-Generation remains limited to the full 1.21.4 baseline until its own verification.
+Import, block/biome editing, project snapshots, same-version export and generation are enabled
+for every exact modern classic profile. The shared codec below is verified for all 27 releases;
+generation additionally requires that release's official server JAR.
 
 | Category                             | Read            | Edit                 | Write                       | Passthrough     | Note                                                                                                                         |
 | ------------------------------------ | --------------- | -------------------- | --------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -107,6 +105,25 @@ Generation remains limited to the full 1.21.4 baseline until its own verificatio
 
 The machine-readable source is `crates/world-io/src/support_matrix.rs`; the same data is
 returned by `analyze_java_world` and shown in the Import World wizard.
+
+## Vanilla generation inputs (1.18–1.21.11)
+
+Generation is driven by the exact `VersionProfile`, never by a global baseline:
+
+- `level-type` uses the modern namespaced spelling for 1.18–1.21.11: `minecraft:normal`,
+  `minecraft:flat`, `minecraft:large_biomes`, `minecraft:amplified`. The same mapping is
+  defined for 1.13–1.15 (`default`, `flat`, `largeBiomes`, `amplified`) and 1.8–1.12
+  (`DEFAULT`, `FLAT`, `LARGEBIOMES`, `AMPLIFIED`) for the later families.
+- Java comes from the profile: 17 for 1.18–1.19 and 21 for 1.20.5–1.21.11.
+- The server JAR must declare the profile's exact version and `DataVersion`; its SHA-1, the
+  EULA acceptance and the per-run consent are recorded in `.furybuilder-run.json` schema 3.
+- Data packs are checked against the profile's `datapack_format`. A newer pack without a
+  matching `supported_formats` range is refused; an older one produces a warning.
+- `server.properties` binds the server to `127.0.0.1`, disables online mode/RCON/query/status,
+  and sets `level-seed`, the mapped `level-type`, `generate-structures`, view and simulation
+  distance, spawn protection and chunk sync.
+- A run is bounded by radius, time, memory and CPU. Only a completed run whose manifest,
+  report and generated world agree can be imported.
 
 ## Flattened biome conversion (1.13–1.17)
 
@@ -164,7 +181,7 @@ path.
 | `components/.../.furybuilder-assets.json`    | 1       | managed client JAR version, SHA-1, size, DataVersion and pack formats                      |
 | `components/.../.furybuilder-server.json`    | 2       | managed server version, SHA-1, size, DataVersion and Java major                            |
 | `server.json`                                | 3       | selected server per version and per-JAR/version EULA consent                               |
-| `.furybuilder-run.json`                      | 2       | generation version, JAR SHA-1, EULA time and per-run consent                               |
+| `.furybuilder-run.json`                      | 3       | generation profile/version/DataVersion, JAR SHA-1, EULA time and per-run consent           |
 
 Project files live inside the `.furybuilder` folder. The `components/...` manifests and
 `server.json` belong to the shared application-data component cache, not to one project.

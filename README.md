@@ -7,11 +7,10 @@ Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
 - **Target game versions:** Minecraft Java classic Anvil **1.18–1.21.11** (import, editing,
-  project snapshots and same-version export), with **1.21.4** (`DataVersion` 4189, Java 21) as
-  the full generation baseline.
+  project snapshots, same-version export and generation with the exact official server JAR).
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.18–1.21.11)
-  and `Vanilla World` (official local 1.21.4 generator after explicit dependency setup)
-  are available.
+  and `Vanilla World` (official local generator for the project's exact version after explicit
+  dependency setup) are available.
 - **License:** Apache-2.0 for FuryBuilder code; see `LICENSE` and `NOTICE`. Minecraft game
   assets are **not** distributed with this repository; see `docs/legal/third-party-notices.md`.
 
@@ -44,8 +43,9 @@ fixtures/              Small self-authored test structures (no Mojang assets)
 For the packaged Windows beta, see [docs/reference.md](docs/reference.md).
 In short: 64-bit Windows 10/11 with the WebView2 runtime; no Minecraft installation or Java
 runtime is required for `Empty Project`, `Flat base`, `Import World` or structure exchange.
-`Vanilla World` additionally needs Java 21 and the official Minecraft 1.21.4 `server.jar`,
-provided or downloaded only after explicit consent.
+`Vanilla World` additionally needs the Java major from the selected version profile (17 for
+1.18–1.19, 21 for newer releases) and that version's official Minecraft `server.jar`, provided
+or downloaded only after explicit consent.
 
 Building from source additionally needs:
 
@@ -97,15 +97,15 @@ The supported baseline, tested machine and maintained limitation list are in
 
 - Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
 - Classic Anvil Java 1.18–1.21.11 is supported for import, block/biome editing, project
-  snapshots and same-version export; only 1.21.4 additionally has generation. Snapshots, split
-  26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare `.mca`/`region/` is not
-  a complete world.
+  snapshots, same-version export and generation with the exact official server JAR. Snapshots,
+  split 26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare `.mca`/`region/`
+  is not a complete world.
 - Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are
   preserved raw, not recalculated or synthesized; the UI has no `VanillaRebuild` switch.
 - Structure interchange is Java `.nbt` only and refuses entities/block entities/unknown tags.
   A complete world-folder export exists in the verified backend path but has no one-click UI.
-- Vanilla World needs Java 21, the official server JAR and explicit EULA consent; parity checks
-  cover an untouched revision-1 base's block states only.
+- Vanilla World needs the profile's Java major, the exact official server JAR and explicit EULA
+  consent; parity checks cover an untouched revision-1 base's block states only.
 - MCP is read-only by default, resets on restart, uses a local Windows named pipe and needs a
   visible viewport for screenshots.
 - Autosave runs every 30 seconds; a damaged autosave is not recovered. The renderer's large-map
