@@ -43,6 +43,16 @@ fn bundled_demo_project_opens_through_the_versioned_store() {
     assert_eq!(detail.summary.target_data_version, 4189);
     assert_eq!(detail.summary.world_revision, 1);
     assert_eq!(detail.summary.schema_version, 2);
+    let capabilities = detail
+        .summary
+        .capabilities
+        .expect("the demo summary carries verified capabilities");
+    assert_eq!(
+        capabilities.support_level,
+        minecraft_version::SupportLevel::Full
+    );
+    assert!(capabilities.read && capabilities.edit && capabilities.write);
+    assert!(capabilities.export && capabilities.generate && capabilities.assets);
     assert_eq!(detail.target.profile_id, "java-classic-1.21.4");
     assert_eq!(detail.target.data_version, 4189);
     let snapshot_path = examples_root()

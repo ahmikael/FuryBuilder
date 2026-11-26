@@ -41,6 +41,7 @@ import {
 } from "@/project/types";
 import { useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
+import { VersionSupportBadge } from "@/features/version/VersionSupport";
 
 const RECENT_LIMIT = 6;
 
@@ -68,6 +69,7 @@ function RecentProject({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="truncate text-sm font-medium">{project.name}</span>
+          <VersionSupportBadge level={project.capabilities?.supportLevel} />
           {project.recoverable ? <Badge variant="secondary">Recoverable</Badge> : null}
           {warnings.length > 0 ? <Badge variant="outline">Check project</Badge> : null}
         </div>

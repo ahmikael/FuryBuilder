@@ -1,5 +1,11 @@
 /** Stable support levels exposed by the backend version profile. */
-export type SupportLevel = "full" | "read-write-subset" | "read-only" | "convert" | "out-of-scope";
+export type SupportLevel =
+  | "full"
+  | "read-write-subset"
+  | "read-only"
+  | "convert"
+  | "unverified"
+  | "out-of-scope";
 
 export type VersionType = "release" | "snapshot" | "old_beta" | "old_alpha";
 
@@ -80,6 +86,7 @@ export const SUPPORT_LEVEL_LABELS: Record<SupportLevel, string> = {
   "read-write-subset": "Read + write subset",
   "read-only": "Read-only",
   convert: "Convert only",
+  unverified: "Unverified",
   "out-of-scope": "Out of scope",
 };
 

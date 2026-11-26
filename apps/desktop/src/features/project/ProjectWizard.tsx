@@ -39,6 +39,7 @@ import {
   type CreateProjectOptions,
 } from "@/lib/project-api";
 import { fetchVersionCatalog } from "@/lib/version-api";
+import { projectCreationDisabledReason } from "@/project/version-support";
 import {
   CREATION_MODES,
   formatBytes,
@@ -167,6 +168,10 @@ function versionErrors({
     return [
       `The source DataVersion does not match the verified profile for Minecraft ${selected}.`,
     ];
+  }
+  const capabilityBlocker = projectCreationDisabledReason(entry.profile.capabilities, mode);
+  if (capabilityBlocker) {
+    return [capabilityBlocker];
   }
   return [];
 }

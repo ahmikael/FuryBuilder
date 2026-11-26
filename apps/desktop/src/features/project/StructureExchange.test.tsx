@@ -53,6 +53,15 @@ const summary: ProjectSummary = {
   bytes: 2048,
   schemaVersion: 1,
   recoverable: false,
+  capabilities: {
+    supportLevel: "full",
+    read: true,
+    edit: true,
+    write: true,
+    export: true,
+    generate: true,
+    assets: true,
+  },
 };
 
 function session(): SessionStatus {

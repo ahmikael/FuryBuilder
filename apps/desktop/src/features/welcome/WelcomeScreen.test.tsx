@@ -28,6 +28,15 @@ const first: ProjectSummary = {
   bytes: 2048,
   schemaVersion: 2,
   recoverable: false,
+  capabilities: {
+    supportLevel: "full",
+    read: true,
+    edit: true,
+    write: true,
+    export: true,
+    generate: true,
+    assets: true,
+  },
 };
 
 const second: ProjectSummary = {
@@ -45,6 +54,15 @@ const second: ProjectSummary = {
   bytes: 512,
   schemaVersion: 2,
   recoverable: true,
+  capabilities: {
+    supportLevel: "full",
+    read: true,
+    edit: true,
+    write: true,
+    export: true,
+    generate: true,
+    assets: true,
+  },
 };
 
 function seed(projects: ProjectSummary[] = [first, second]): void {
@@ -83,6 +101,7 @@ describe("welcome screen", () => {
     const rows = screen.getAllByRole("listitem");
     expect(rows[0]).toHaveTextContent("Second Base");
     expect(rows[0]).toHaveTextContent("Recoverable");
+    expect(rows[0]).toHaveTextContent("Full support");
     expect(rows[1]).toHaveTextContent("First Castle");
   });
 

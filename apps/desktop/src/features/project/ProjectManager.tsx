@@ -62,9 +62,12 @@ import {
 import { isTauriRuntime } from "@/lib/ipc";
 import { StructureExchange } from "@/features/project/StructureExchange";
 import { ProjectResourcePacks } from "@/features/project/ProjectResourcePacks";
+import { ProjectVersionSupport } from "@/features/project/ProjectVersionSupport";
+import { VersionSupportBadge } from "@/features/version/VersionSupport";
 import { VanillaParityPanel } from "@/features/project/VanillaParityPanel";
 import { VanillaWorldWizard } from "@/features/project/VanillaWorldWizard";
 import { ProjectWizard } from "@/features/project/ProjectWizard";
+import { capabilityDisabledReason } from "@/project/version-support";
 import { isManagerTab, projectIsDirty, useProjectStore } from "@/state/project-store";
 import { pushToast } from "@/state/toast-store";
 import { useWorldStore } from "@/state/world-store";
@@ -75,6 +78,7 @@ import {
   formatRelativeTime,
   importVersionForSource,
   projectSummaryWarnings,
+  type ProjectSummary,
 } from "@/project/types";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +94,7 @@ function ProjectRow({
   active,
   recoverable,
   warnings,
+  capabilities,
   onOpen,
   onRename,
   onCheckpoints,
@@ -99,6 +104,7 @@ function ProjectRow({
   active: boolean;
   recoverable: boolean;
   warnings: string[];
+  capabilities: ProjectSummary["capabilities"];
   onOpen: () => void;
   onRename: () => void;
   onCheckpoints: () => void;
@@ -118,6 +124,7 @@ function ProjectRow({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="truncate text-sm font-medium">{name}</span>
+            <VersionSupportBadge level={capabilities?.supportLevel} />
             {active ? <Badge>Open</Badge> : null}
             {recoverable ? <Badge variant="secondary">Recoverable</Badge> : null}
           </div>
@@ -194,6 +201,9 @@ export function ProjectManager() {
   );
   const targetVersion = currentProject?.targetMinecraftVersion;
   const targetDataVersion = currentProject?.targetDataVersion;
+  const writeDisabledReason = currentProject
+    ? capabilityDisabledReason(currentProject.capabilities, "write")
+    : null;
 
   // Without an open project, the welcome screen owns opening and the full-screen wizard
   // owns creation. The project dialog must never cover the empty shell.
@@ -421,6 +431,7 @@ export function ProjectManager() {
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card p-3">
                   <HardDrive className="size-4 text-primary" />
                   <span className="text-sm font-medium">{current.name}</span>
+                  <VersionSupportBadge level={currentProject?.capabilities?.supportLevel ?? null} />
                   <span className="font-mono text-xs text-muted-foreground">
                     rev {current.savedRevision}
                     {current.autosavedRevision !== null
@@ -434,7 +445,11 @@ export function ProjectManager() {
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={loading || !dirty}
+                      disabled={loading || !dirty || writeDisabledReason !== null}
+                      title={
+                        writeDisabledReason ??
+                        (dirty ? "Save the current revision" : "There are no unsaved changes")
+                      }
                       onClick={() => void useProjectStore.getState().save()}
                     >
                       {loading ? (
@@ -499,6 +514,7 @@ export function ProjectManager() {
                         name={project.name}
                         active={project.folder === activeFolder}
                         recoverable={project.recoverable}
+                        capabilities={project.capabilities}
                         warnings={projectSummaryWarnings(project)}
                         meta={`${creationModeLabel(project.creationMode)} · ${project.targetMinecraftVersion} · DV ${project.targetDataVersion} · rev ${project.worldRevision} · ${formatBytes(project.bytes)} · saved ${formatRelativeTime(project.lastSavedAtMs)}`}
                         onOpen={() => requestOpen(project.folder, project.name)}
@@ -947,7 +963,10 @@ export function ProjectManager() {
               </TabsContent>
               <TabsContent value="settings" className="m-0 pt-4">
                 {desktop && activeFolder ? (
-                  <ProjectResourcePacks key={activeFolder} folder={activeFolder} />
+                  <div className="flex flex-col gap-4">
+                    {currentProject ? <ProjectVersionSupport project={currentProject} /> : null}
+                    <ProjectResourcePacks key={activeFolder} folder={activeFolder} />
+                  </div>
                 ) : null}
               </TabsContent>
             </Tabs>

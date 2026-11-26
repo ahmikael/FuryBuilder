@@ -20,6 +20,11 @@ formats are not migrated.
   `DataVersion`, profile dimensions and vertical bounds, editable block states and 4x4x4 biomes,
   byte-for-byte source copy and a version-bound project snapshot. Split 26.1+ and legacy layouts
   remain refused.
+- Version capability contract across the wizard, welcome rows, project cards and Project
+  Settings: exact support badges plus explicit `Read`, `Edit`, `Save`, `Export`, `Generate` and
+  `Assets` states with visible reasons for unavailable actions. The `unverified` support level
+  is now rendered honestly instead of appearing as a blank badge, and project summaries carry
+  the verified capabilities of their target profile.
 - Same-version world export for every modern classic release: staged sibling folder, dirty-region
   rebuild, full output revalidation, source-tree hashes and byte-for-byte preservation of
   untouched files.

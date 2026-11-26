@@ -9,26 +9,13 @@ import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ErrorPresentation } from "@/lib/error-messages";
+import { VersionCapabilities, VersionSupportBadge } from "@/features/version/VersionSupport";
 import {
-  SUPPORT_LEVEL_LABELS,
-  supportLevelLabel,
   versionSeries,
-  type SupportLevel,
   type VersionCatalogEntry,
   type VersionCatalogReport,
   type VersionProfile,
 } from "@/project/version-types";
-
-const SUPPORT_BADGE_VARIANT: Record<
-  SupportLevel,
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  full: "default",
-  "read-write-subset": "secondary",
-  "read-only": "secondary",
-  convert: "secondary",
-  "out-of-scope": "destructive",
-};
 
 const LAYOUT_LABELS: Record<string, string> = {
   "classic-anvil": "Classic Anvil",
@@ -67,6 +54,12 @@ function supportNotice(profile: VersionProfile) {
         variant: "default" as const,
         title: "Convert only",
         body: "The world is imported and converted to a supported target; the original stays unchanged.",
+      };
+    case "unverified":
+      return {
+        variant: "default" as const,
+        title: "No verified world adapter",
+        body: "Release metadata is known, but this build cannot read, edit or save worlds of this version. It stays visible for planning only.",
       };
     case "out-of-scope":
       return {
@@ -151,15 +144,18 @@ function SelectedVersionCard({
         {profile ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={SUPPORT_BADGE_VARIANT[profile.capabilities.supportLevel]}>
-                {supportLevelLabel(profile.capabilities.supportLevel)}
-              </Badge>
+              <VersionSupportBadge level={profile.capabilities.supportLevel} />
               <span className="text-xs text-muted-foreground">
                 Released {entry.releaseTime.slice(0, 10)}
               </span>
             </div>
 
             <VersionFacts profile={profile} />
+
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">What this build can do</p>
+              <VersionCapabilities capabilities={profile.capabilities} />
+            </div>
 
             {notice ? (
               <Alert variant={notice.variant}>
@@ -363,17 +359,9 @@ export function ProjectVersionStep({
                               {entry.latestRelease ? <Badge variant="outline">Latest</Badge> : null}
                               {entry.recommended ? <Badge>Recommended</Badge> : null}
                             </span>
-                            <Badge
-                              variant={
-                                entry.profile
-                                  ? SUPPORT_BADGE_VARIANT[entry.profile.capabilities.supportLevel]
-                                  : "secondary"
-                              }
-                            >
-                              {entry.profile
-                                ? SUPPORT_LEVEL_LABELS[entry.profile.capabilities.supportLevel]
-                                : "No profile"}
-                            </Badge>
+                            <VersionSupportBadge
+                              level={entry.profile?.capabilities.supportLevel ?? null}
+                            />
                           </Button>
                         ))}
                       </div>

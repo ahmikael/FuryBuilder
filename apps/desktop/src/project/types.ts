@@ -1,4 +1,5 @@
 import type { WorldInfo } from "@/lib/contracts";
+import type { VersionCapabilities } from "@/project/version-types";
 import type { Bounds3 } from "@/renderer/types";
 import type { Scene } from "@/project/scene-types";
 
@@ -100,6 +101,8 @@ export interface ProjectSummary {
   bytes: number;
   schemaVersion: number;
   recoverable: boolean;
+  /** Verified target capabilities from the backend profile; null means no verified profile. */
+  capabilities: VersionCapabilities | null;
 }
 
 export type VanillaParityStatus = "matched" | "mismatched" | "refused";

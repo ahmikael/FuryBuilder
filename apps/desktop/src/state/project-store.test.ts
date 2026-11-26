@@ -86,6 +86,15 @@ const summary: ProjectSummary = {
   bytes: 8192,
   schemaVersion: 2,
   recoverable: false,
+  capabilities: {
+    supportLevel: "full",
+    read: true,
+    edit: true,
+    write: true,
+    export: true,
+    generate: true,
+    assets: true,
+  },
 };
 
 function session(overrides: Partial<SessionStatus> = {}): SessionStatus {

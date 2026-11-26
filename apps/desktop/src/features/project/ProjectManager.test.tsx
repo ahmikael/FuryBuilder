@@ -153,6 +153,15 @@ const first: ProjectSummary = {
   bytes: 2048,
   schemaVersion: 2,
   recoverable: false,
+  capabilities: {
+    supportLevel: "full",
+    read: true,
+    edit: true,
+    write: true,
+    export: true,
+    generate: true,
+    assets: true,
+  },
 };
 
 const second: ProjectSummary = {
@@ -170,6 +179,15 @@ const second: ProjectSummary = {
   bytes: 512,
   schemaVersion: 2,
   recoverable: true,
+  capabilities: {
+    supportLevel: "full",
+    read: true,
+    edit: true,
+    write: true,
+    export: true,
+    generate: true,
+    assets: true,
+  },
 };
 
 const worldAnalysis: JavaWorldAnalysis = {
@@ -539,6 +557,7 @@ describe("project manager", () => {
     expect(screen.getByText("Second Base")).toBeInTheDocument();
     expect(screen.getAllByText(/Flat base/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/recoverable/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Full support").length).toBeGreaterThan(0);
 
     await userEvent.setup().click(screen.getByRole("tab", { name: /New project/ }));
     expect(screen.getByRole("button", { name: /Vanilla World/ })).toBeEnabled();

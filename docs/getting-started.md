@@ -76,8 +76,11 @@ cargo test --workspace
    badge and can continue. All classic Anvil releases from 1.18 through 1.21.11 are verified for
    import, block/biome editing, project snapshots and same-version export; generation uses their
    exact official server JAR, `level-type`, Java major and data pack format. The card shows Java,
-   world height, layout, pack formats and every known limitation. Import asks only for
-   confirmation of the version detected from the source.
+   world height, layout, pack formats and every known limitation. It also lists the exact
+   `Read`, `Edit`, `Save`, `Export`, `Generate` and `Assets` capabilities: an unavailable action
+   stays visible with its reason, and `Next` is blocked when the selected version cannot perform
+   the operation the chosen mode needs. Import asks only for confirmation of the version detected
+   from the source.
 5. On **Source**, Empty has no parameters; Flat exposes the platform's layers, bottom Y and
    biome. Layers are written bottom-up, each 1–16 blocks thick up to the backend limit, and the
    whole source must stay inside the selected version's overworld height. Invalid layers are
@@ -109,6 +112,13 @@ a verified catalog. Projects are stored as folders inside `Documents/FuryBuilder
 to the app-data directory when the documents folder is unavailable). Treat that folder as
 application data: use the editor to rename, checkpoint and save, and do not hand-edit project
 files while the app is running.
+
+Recent projects on the welcome screen and project cards carry the verified support badge of
+their exact target profile. **Project Settings → Version and support** repeats the Minecraft
+version, `DataVersion`, profile id and the `Read`, `Edit`, `Save`, `Export`, `Generate` and
+`Assets` contract. An unavailable capability is shown with its reason instead of a silent grey
+control. The same facts come from the backend project summary; the UI never infers capabilities
+from a version string.
 
 ## 4. A tour of the window
 

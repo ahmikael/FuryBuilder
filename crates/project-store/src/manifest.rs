@@ -1,7 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use component_model::ComponentMode;
-use minecraft_version::{builtin_profiles, profile_for_version, VersionId, VersionProfile};
+use minecraft_version::{
+    builtin_profiles, profile_for_version, VersionId, VersionProfile, WorldCapabilities,
+};
 use scene_model::{ParametricScene, Scene};
 use serde::{Deserialize, Serialize};
 use workspace_model::WorkspacePolicy;
@@ -727,10 +729,17 @@ pub struct ProjectSummary {
     pub schema_version: u32,
     /// True when a previous session marker exists or the active snapshot needs recovery.
     pub recoverable: bool,
+    /// Verified capabilities of the project's built-in target profile. A summary never
+    /// invents them: an unknown profile stays `None` instead of inheriting defaults.
+    pub capabilities: Option<WorldCapabilities>,
 }
 
 impl ProjectSummary {
     pub fn from_manifest(folder: &str, manifest: &ProjectManifest, recoverable: bool) -> Self {
+        let capabilities = builtin_profiles()
+            .iter()
+            .find(|profile| profile.id == manifest.target.profile_id)
+            .map(|profile| profile.capabilities);
         Self {
             folder: folder.to_owned(),
             project_id: manifest.project_id.clone(),
@@ -746,6 +755,7 @@ impl ProjectSummary {
             bytes: manifest.world_bytes,
             schema_version: manifest.project_schema_version,
             recoverable,
+            capabilities,
         }
     }
 }

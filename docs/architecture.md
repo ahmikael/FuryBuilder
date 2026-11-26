@@ -178,8 +178,12 @@ the same `<app-data>/version-manifest.json` cache as provisioning; only manifest
 read. Releases are grouped by release series, the latest release and the recommended version
 are marked, and snapshots stay behind an explicit toggle. Each row carries the support badge of
 its verified profile. The card repeats the profile's Java major, world height, world layout,
-resource/datapack formats and catalog formats, plus honest notes. Versions without a verified
-profile remain visible for inspection but block `Next`; a snapshot without a profile is
+resource/datapack formats and catalog formats, plus honest notes. It also renders the exact
+`Read`, `Edit`, `Save`, `Export`, `Generate` and `Assets` capability contract: every unavailable
+action stays visible with its reason instead of becoming an unexplained grey control. The same
+contract blocks `Next` when a profile cannot read, edit, write, or generate the selected mode, so
+the wizard never advances to a backend refusal it could have explained. Versions without a
+verified profile remain visible for inspection but block `Next`; a snapshot without a profile is
 read-only/convertible by policy, never presented as writable. Import locks the selection to the
 version detected in `level.dat` and asks the user to confirm it.
 
@@ -302,6 +306,13 @@ current session, and exposes checkpoints and import/export; closing the project 
 dialog. Without a project, the welcome screen is the project hub and the full-screen wizard owns
 creation and import. The toolbar's Project action is disabled in that state with the reason, and
 the command palette does not offer the project manager command.
+
+The backend puts the verified capabilities of the project's exact target profile into every
+project summary. Welcome rows and project cards render the matching support badge, and the
+Project Settings version section repeats the version, `DataVersion`, profile id and the full
+capability contract. An unavailable capability is listed with its reason; a project summary with
+no resolvable profile says so and never inherits defaults from another release. Saving is
+disabled with the same reason if a profile cannot write.
 
 Recoverable projects carry a `Recoverable` badge, a short explanation, and a `Recover`
 action instead of `Open`; the card also summarises how many recent projects have a verified
