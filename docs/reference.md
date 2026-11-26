@@ -86,10 +86,10 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
   saves, legacy worlds and Minecraft versions outside 1.13–1.21.11. Other official versions
   are listed but cannot be created or edited. Java majors other than the profile's required
   major are not validated in this beta.
-- Generation was exercised end to end on the 1.21.4 reference machine. The other 1.18–1.21.11
-  profiles are covered by exact `level-type`, Java major, data pack format and
-  `server.properties` tests, not by downloading every official server JAR in this beta.
-  Flattened 1.13–1.17.1 generation and managed assets are not enabled yet.
+- Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
+  are covered by `level-type`, Java major, data pack format and `server.properties` tests.
+  Representatives of each flattened server series were inspected without launching them.
+  Flattened projects use explicit placeholder textures.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -107,7 +107,7 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Java 1.18–1.21.11 modern classic and 1.13–1.17.1 flattened classic are import/edit/snapshot/export verified; modern releases can generate with their exact official server JAR. Split 26.x and legacy versions stop at the profile check |
+| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Split 26.x and legacy versions stop at the profile check |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and legacy import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
@@ -115,8 +115,8 @@ checkpoint and keep the original world untouched.
 | KL-10 | World export     | Complete world-folder export is verified for all modern and flattened classic releases and has no one-click UI action |
 | KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                        |
 | KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                       |
-| KL-13 | Vanilla World    | Requires the profile's Java major (17 for 1.18–1.19, 21 for newer releases), the exact official server JAR, EULA and possibly a download |
-| KL-14 | Vanilla World    | Generation is bounded; only completed runs can become projects                         |
+| KL-13 | Vanilla World    | Requires the profile's Java major (8 for 1.13–1.16.5, 16 for 1.17–1.17.1, 17 for 1.18–1.20.4, 21 for 1.20.5–1.21.11), the exact official server JAR and EULA acceptance |
+| KL-14 | Vanilla World    | Only completed runs can become projects. Minecraft 1.13 generates only around its natural spawn without a player |
 | KL-15 | Vanilla parity   | Parity check is untouched-revision block states only, not general parity               |
 | KL-16 | Vanilla settings | Only `generate-structures` is exposed; data packs are validated against the exact data pack format, but their in-game effect is not verified |
 | KL-17 | Editor           | Box selection is two clicks; no drag selection or multi-selection                      |

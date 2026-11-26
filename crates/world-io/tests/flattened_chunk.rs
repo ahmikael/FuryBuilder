@@ -177,6 +177,40 @@ fn decode(
 }
 
 #[test]
+fn flattened_empty_proto_chunk_has_no_editor_sections() {
+    let profile = profile("1.13.2");
+    let mut nbt = chunk(&profile, 0, 0, Vec::new(), Vec::new());
+    let level = nbt
+        .root
+        .as_compound_mut()
+        .unwrap()
+        .get_mut("Level")
+        .unwrap()
+        .as_compound_mut()
+        .unwrap();
+    level.insert("Status".to_owned(), NbtValue::String("empty".to_owned()));
+    level.insert("Biomes".to_owned(), NbtValue::IntArray(Vec::new()));
+    let decoded = decode(&profile, nbt.clone(), 0, 0).expect("empty proto-chunk");
+    assert!(decoded.sections.is_empty());
+    assert_eq!(decoded.missing_sections.len(), 16);
+    assert_eq!(decoded.status.as_deref(), Some("empty"));
+
+    let level = nbt
+        .root
+        .as_compound_mut()
+        .unwrap()
+        .get_mut("Level")
+        .unwrap()
+        .as_compound_mut()
+        .unwrap();
+    level.insert(
+        "Status".to_owned(),
+        NbtValue::String("postprocessed".to_owned()),
+    );
+    assert!(decode(&profile, nbt, 0, 0).is_err());
+}
+
+#[test]
 fn flattened_sections_decode_across_the_packing_boundary() {
     for version in ["1.13.2", "1.15.2", "1.16.5", "1.17.1"] {
         let profile = profile(version);

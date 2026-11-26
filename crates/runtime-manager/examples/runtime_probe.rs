@@ -8,7 +8,7 @@
 //!   cargo run -p furybuilder-runtime-manager --example runtime_probe -- --root <dir> --java <java.exe> --install
 //!   cargo run -p furybuilder-runtime-manager --example runtime_probe -- --root <dir> --clear
 //!
-//! `--install` downloads the official Eclipse Temurin JRE only after you pass it, verifies
+//! `--install` downloads official Eclipse Temurin only after you pass it, verifies
 //! the announced SHA-256/size, safely extracts it into `<root>` and probes the result.
 
 use std::path::PathBuf;

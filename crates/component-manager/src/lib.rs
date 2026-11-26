@@ -666,7 +666,6 @@ impl ComponentManager {
         target: &ComponentTarget,
     ) -> Result<ComponentStatus, ComponentError> {
         target.validate()?;
-        self.ensure_managed_target(target)?;
         self.inner.assets.use_placeholder()?;
         Ok(self.assets_status(target, true, true))
     }
@@ -1986,8 +1985,10 @@ mod tests {
             })
             .expect("save source");
 
+        let flattened = minecraft_version::profile_for_id("java-classic-1.16.5").unwrap();
+        let flattened = ComponentTarget::from_profile(&flattened);
         let status = manager
-            .use_placeholder_assets(&target())
+            .use_placeholder_assets(&flattened)
             .expect("select placeholder");
         assert_eq!(status.kind, ComponentKind::Assets);
         assert_eq!(status.mode, Some(ComponentMode::Placeholder));
@@ -2001,7 +2002,7 @@ mod tests {
             .any(|note| note.contains("placeholder textures")));
 
         let report = manager
-            .status(&target(), &ComponentRequirements::EDITOR)
+            .status(&flattened, &ComponentRequirements::EDITOR)
             .expect("status");
         let assets = report.status(ComponentKind::Assets).expect("assets");
         assert_eq!(assets.mode, Some(ComponentMode::Placeholder));

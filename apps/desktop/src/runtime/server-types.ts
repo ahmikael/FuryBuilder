@@ -92,6 +92,7 @@ export type WorldPreset = "normal" | "flat" | "large_biomes" | "amplified";
 /** The `level-type` spelling the selected version's server accepts. */
 export type LevelTypeSyntax =
   | "modern-namespaced"
+  | "legacy-lower-case"
   | "legacy-camel-case"
   | "legacy-upper"
   | "unknown";

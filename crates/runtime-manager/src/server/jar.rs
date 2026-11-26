@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+use minecraft_version::{profile_for_version, JarPackVersion, JarVersionJson};
 use serde::Deserialize;
 use sha1::{Digest, Sha1};
 use zip::ZipArchive;
@@ -11,25 +12,26 @@ use crate::managed::hex;
 
 use super::types::{ServerTarget, MAX_SERVER_JAR_BYTES, MIN_SERVER_JAR_BYTES};
 
-const MAX_VERSION_JSON_BYTES: u64 = 64 * 1024;
-const MAX_ZIP_ENTRIES: usize = 10_000;
+const MAX_METADATA_BYTES: u64 = 64 * 1024;
+const MAX_ZIP_ENTRIES: usize = 40_000;
+const CLASSIC_MAIN: &str = "net.minecraft.server.MinecraftServer";
+
+// Mojang's exact downloads.server SHA-1 values for the releases without version.json.
+// An offline manual selection cannot establish identity from the file name or class alone.
+const SERVER_JARS_WITHOUT_VERSION_JSON: [(&str, &str); 3] = [
+    ("d0caafb8438ebd206f99930cfaecfa6c9a13dca0", "1.13"),
+    ("fe123682e9cb30031eae351764f653500b7396c9", "1.13.1"),
+    ("3737db93722a9e39eeada7c27e7aca28b144ffa7", "1.13.2"),
+];
 
 #[derive(Debug, Deserialize)]
 struct ServerVersionJson {
-    id: String,
-    world_version: i32,
+    #[serde(flatten)]
+    version: JarVersionJson,
     #[serde(default)]
     java_version: Option<u32>,
     #[serde(default)]
     protocol_version: Option<i32>,
-    #[serde(default)]
-    pack_version: Option<PackVersion>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PackVersion {
-    #[serde(default)]
-    resource: Option<i32>,
 }
 
 #[derive(Debug, Clone)]
@@ -38,12 +40,16 @@ pub struct ServerJarInfo {
     pub data_version: i32,
     pub java_major: Option<u32>,
     pub protocol_version: Option<i32>,
-    pub resource_pack_format: Option<i32>,
+    pub resource_pack_format: Option<u32>,
     pub sha1: String,
     pub size: u64,
 }
 
 impl ServerJarInfo {
+    pub(crate) fn known_official(&self) -> bool {
+        version_for_official_hash(&self.sha1).is_some()
+    }
+
     /// Checks the exact version, DataVersion and declared Java major against a project target.
     /// A mismatch is never repaired or substituted; the caller reports the actual facts.
     pub fn validate_for(&self, target: &ServerTarget) -> Result<(), ServerError> {
@@ -85,8 +91,8 @@ impl ServerJarInfo {
 ///
 /// - be a regular file in the expected size range;
 /// - be a readable ZIP;
-/// - contain exactly one root `version.json`;
-/// - contain a known server entry point (`bundler/Main` or `server/Main`).
+/// - contain a known server entry point;
+/// - contain exactly one root `version.json`, or match a pinned Mojang server JAR without one.
 ///
 /// Whether the declared version, DataVersion and Java major fit a project is checked by
 /// [`ServerJarInfo::validate_for`], so callers can report the actual facts of a stale file.
@@ -118,62 +124,109 @@ pub fn inspect_server_jar(path: &Path) -> Result<ServerJarInfo, ServerError> {
             archive.len()
         )));
     }
-    let mut version_names: Vec<String> = Vec::new();
+    let mut version_count = 0;
+    let mut modern_main = false;
+    let mut classic_main = false;
     for name in archive.file_names() {
         let name =
             name.map_err(|error| ServerError::Archive(format!("{}: {error}", path.display())))?;
-        if name == "version.json" {
-            version_names.push(name.into_owned());
+        match name.as_ref() {
+            "version.json" => version_count += 1,
+            "net/minecraft/bundler/Main.class" | "net/minecraft/server/Main.class" => {
+                modern_main = true;
+            }
+            "net/minecraft/server/MinecraftServer.class" => classic_main = true,
+            _ => {}
         }
     }
-    if version_names.len() != 1 {
-        return Err(ServerError::Archive(format!(
-            "{} must contain exactly one root version.json",
-            path.display()
-        )));
-    }
-    let version_json = {
-        let mut entry = archive
-            .by_name("version.json")
-            .map_err(|error| ServerError::Archive(format!("version.json: {error}")))?;
-        let mut bytes = Vec::new();
-        entry
-            .by_ref()
-            .take(MAX_VERSION_JSON_BYTES + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|error| ServerError::Archive(format!("version.json: {error}")))?;
-        if bytes.len() as u64 > MAX_VERSION_JSON_BYTES {
-            return Err(ServerError::Archive(
-                "version.json is larger than 64 KiB".to_owned(),
-            ));
-        }
-        serde_json::from_slice::<ServerVersionJson>(&bytes)
-            .map_err(|error| ServerError::Archive(format!("version.json: {error}")))?
-    };
-    let mut has_server_main = false;
-    for name in archive.file_names() {
-        let name =
-            name.map_err(|error| ServerError::Archive(format!("{}: {error}", path.display())))?;
-        if name == "net/minecraft/bundler/Main.class" || name == "net/minecraft/server/Main.class" {
-            has_server_main = true;
-            break;
-        }
-    }
-    if !has_server_main {
+    if !modern_main && !(classic_main && has_classic_entry_point(&mut archive)?) {
         return Err(ServerError::Archive(format!(
             "{} has no Minecraft server main class; client and library JARs are refused",
             path.display()
         )));
     }
-    Ok(ServerJarInfo {
-        version: version_json.id,
-        data_version: version_json.world_version,
-        java_major: version_json.java_version,
-        protocol_version: version_json.protocol_version,
-        resource_pack_format: version_json.pack_version.and_then(|pack| pack.resource),
-        sha1,
-        size,
-    })
+    match version_count {
+        1 => {
+            let bytes = read_metadata(&mut archive, "version.json")?;
+            let metadata: ServerVersionJson = serde_json::from_slice(&bytes)
+                .map_err(|error| ServerError::Archive(format!("version.json: {error}")))?;
+            let resource_pack_format = match metadata.version.pack_version {
+                Some(JarPackVersion::Combined(format)) => Some(format),
+                Some(JarPackVersion::Split { resource, .. }) => Some(resource),
+                Some(JarPackVersion::Versioned { resource_major, .. }) => Some(resource_major),
+                None => None,
+            };
+            Ok(ServerJarInfo {
+                version: metadata.version.id,
+                data_version: metadata.version.world_version,
+                java_major: metadata.java_version,
+                protocol_version: metadata.protocol_version,
+                resource_pack_format,
+                sha1,
+                size,
+            })
+        }
+        0 => {
+            let profile = version_for_official_hash(&sha1)
+                .and_then(|version| version.parse().ok())
+                .and_then(|version| profile_for_version(&version))
+                .ok_or_else(|| {
+                    ServerError::Archive(format!(
+                        "{} has no root version.json and does not match a known official server JAR",
+                        path.display()
+                    ))
+                })?;
+            Ok(ServerJarInfo {
+                version: profile.minecraft_version.to_string(),
+                data_version: profile.data_version,
+                java_major: Some(profile.java.recommended_major),
+                protocol_version: None,
+                resource_pack_format: profile.resource_pack_format,
+                sha1,
+                size,
+            })
+        }
+        _ => Err(ServerError::Archive(format!(
+            "{} must contain at most one root version.json",
+            path.display()
+        ))),
+    }
+}
+
+fn version_for_official_hash(sha1: &str) -> Option<&'static str> {
+    SERVER_JARS_WITHOUT_VERSION_JSON
+        .iter()
+        .find(|(hash, _)| hash.eq_ignore_ascii_case(sha1))
+        .map(|(_, version)| *version)
+}
+
+fn has_classic_entry_point(archive: &mut ZipArchive<File>) -> Result<bool, ServerError> {
+    let bytes = read_metadata(archive, "META-INF/MANIFEST.MF")?;
+    let manifest = std::str::from_utf8(&bytes)
+        .map_err(|error| ServerError::Archive(format!("META-INF/MANIFEST.MF: {error}")))?;
+    let mut mains = manifest
+        .lines()
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.split_once(": "))
+        .filter(|(key, _)| key.eq_ignore_ascii_case("Main-Class"));
+    Ok(mains.next().is_some_and(|(_, value)| value == CLASSIC_MAIN) && mains.next().is_none())
+}
+
+fn read_metadata(archive: &mut ZipArchive<File>, name: &str) -> Result<Vec<u8>, ServerError> {
+    let entry = archive
+        .by_name(name)
+        .map_err(|error| ServerError::Archive(format!("{name}: {error}")))?;
+    let mut bytes = Vec::new();
+    entry
+        .take(MAX_METADATA_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| ServerError::Archive(format!("{name}: {error}")))?;
+    if bytes.len() as u64 > MAX_METADATA_BYTES {
+        return Err(ServerError::Archive(format!(
+            "{name} is larger than 64 KiB"
+        )));
+    }
+    Ok(bytes)
 }
 
 pub fn sha1_file(path: &Path) -> Result<String, ServerError> {

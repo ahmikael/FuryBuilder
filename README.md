@@ -7,10 +7,10 @@ Application API over MCP.
 
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
 - **Target game versions:** Minecraft Java classic Anvil **1.13-1.21.11** (import, block/biome
-  editing, project snapshots and same-version export; modern releases also generate with the
-  exact official server JAR, plus exact per-version client-JAR block/item catalogs).
+  editing, project snapshots, same-version export and generation with the exact official server
+  JAR; exact per-version block/item catalogs are derived from client JARs).
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.13–1.21.11)
-  and `Vanilla World` (official local generator for the project's exact modern version after
+  and `Vanilla World` (official local generator for the project's exact version after
   explicit dependency setup) are available.
 - **License:** Apache-2.0 for FuryBuilder code; see `LICENSE` and `NOTICE`. Minecraft game
   assets are **not** distributed with this repository; see `docs/legal/third-party-notices.md`.
@@ -44,9 +44,9 @@ fixtures/              Small self-authored test structures (no Mojang assets)
 For the packaged Windows beta, see [docs/reference.md](docs/reference.md).
 In short: 64-bit Windows 10/11 with the WebView2 runtime; no Minecraft installation or Java
 runtime is required for `Empty Project`, `Flat base`, `Import World` or structure exchange.
-`Vanilla World` additionally needs the Java major from the selected version profile (17 for
-1.18–1.19, 21 for newer releases) and that version's official Minecraft `server.jar`, provided
-or downloaded only after explicit consent.
+`Vanilla World` additionally needs the profile's Java major (8 for 1.13–1.16.5, 16 for
+1.17–1.17.1, 17 for 1.18–1.20.4, 21 for 1.20.5–1.21.11) and that version's official
+Minecraft `server.jar`. Downloads and server launches require explicit actions.
 
 Building from source additionally needs:
 
@@ -98,8 +98,9 @@ The supported baseline, tested machine and maintained limitation list are in
 
 - Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
 - Classic Anvil Java 1.13–1.21.11 is supported for import, block/biome editing, project
-  snapshots and same-version export. Modern releases also generate with the exact official
-  server JAR; flattened 1.13–1.17.1 generation and managed assets are not enabled yet.
+  snapshots, same-version export and generation with the exact official server JAR.
+  Generated 1.13–1.17.1 projects use explicit placeholder textures. Minecraft 1.13
+  generates only around the natural spawn without a player.
   Snapshots, split 26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare
   `.mca`/`region/` is not a complete world.
 - Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are

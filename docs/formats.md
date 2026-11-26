@@ -52,11 +52,9 @@ affected sections. No fallback biome is substituted.
 
 A bare `.mca` file or a `region/` directory is not a complete save. The support matrix
 describes analysis and import boundaries. Only a version with a verified profile can be
-selected for a new project. The `1.18-1.21.11` row includes 1.21.4; same-version export and
-generation are enabled for every modern classic release. The `1.13-1.17.1` row covers all 19
-flattened classic releases: import, block/biome editing, project snapshots and same-version
-export are verified, while generation and the managed asset pipeline stay disabled until
-their own P2 stages.
+selected for a new project. The `1.18-1.21.11` row includes 1.21.4; the `1.13-1.17.1` row
+covers all 19 flattened classic releases. Both support import, block/biome editing, project
+snapshots, same-version export and generation with the exact official server JAR.
 
 P1 verification covers all 27 modern releases with import and same-version export round-trips.
 The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
@@ -90,10 +88,9 @@ be imported into a project, compared, copied through world passthrough, or expor
 
 ## What is editable (classic 1.13–1.21.11)
 
-Import, block/biome editing, project snapshots and same-version export are enabled for every
-exact classic profile in this range. Modern releases additionally enable generation; flattened
-generation and assets remain disabled until P2-06/P2-08. The shared codec is verified for all
-27 modern and all 19 flattened releases.
+Import, block/biome editing, project snapshots, same-version export and generation are enabled
+for every exact classic profile in this range. The shared codec is verified for all 27 modern
+and all 19 flattened releases.
 
 | Category                             | Read            | Edit                 | Write                       | Passthrough     | Note                                                                                                                         |
 | ------------------------------------ | --------------- | -------------------- | --------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------- |
@@ -124,18 +121,18 @@ returned by `analyze_java_world` and shown in the Import World wizard.
 Generation is driven by the exact `VersionProfile`, never by a global baseline:
 
 - `level-type` uses the modern namespaced spelling for 1.18–1.21.11: `minecraft:normal`,
-  `minecraft:flat`, `minecraft:large_biomes`, `minecraft:amplified`. The same mapping is
-  defined for 1.13–1.15 (`default`, `flat`, `largeBiomes`, `amplified`) and 1.8–1.12
-  (`DEFAULT`, `FLAT`, `LARGEBIOMES`, `AMPLIFIED`) for the later families; flattened generation
-  stays disabled until P2-06.
-- Java comes from the profile: 17 for 1.18–1.19 and 21 for 1.20.5–1.21.11.
-- The server JAR must declare the profile's exact version and `DataVersion`; its SHA-1, the
-  EULA acceptance and the per-run consent are recorded in `.furybuilder-run.json` schema 3.
+  `minecraft:flat`, `minecraft:large_biomes`, `minecraft:amplified`. The 1.13–1.15 mapping uses
+  `default`, `flat`, `largeBiomes`, `amplified`; 1.16–1.17.1 uses `largebiomes`.
+- Java comes from the exact profile: 8 for 1.13–1.16.5, 16 for 1.17–1.17.1,
+  17 for 1.18–1.20.4 and 21 for 1.20.5–1.21.11.
+- The server JAR must match the profile's exact version and `DataVersion`. For 1.13.x, which
+  has no internal `version.json`, the official SHA-1 identifies the exact profile. The selected
+  JAR's SHA-1, EULA acceptance and per-run consent are recorded in `.furybuilder-run.json` schema 3.
 - Data packs are checked against the profile's `datapack_format`. A newer pack without a
   matching `supported_formats` range is refused; an older one produces a warning.
-- `server.properties` binds the server to `127.0.0.1`, disables online mode/RCON/query/status,
-  and sets `level-seed`, the mapped `level-type`, `generate-structures`, view and simulation
-  distance, spawn protection and chunk sync.
+- `server.properties` binds the server to `127.0.0.1`, disables online mode/RCON/query, and
+  sets `level-seed`, `level-type`, `generate-structures` and view distance. Status and chunk
+  sync settings start with 1.16; simulation distance starts with 1.18.
 - A run is bounded by radius, time, memory and CPU. Only a completed run whose manifest,
   report and generated world agree can be imported.
 
@@ -184,12 +181,15 @@ and maps the chunk-wide biome array through the exact numeric registry. Mixed 1.
 footprints are normalized by center sampling at `(4x+2, 4z+2)`—the same choice as the vanilla
 1.15 upgrade—and the decoded chunk reports how many footprints were sampled. Unchanged
 footprints keep all original columns when written; changing one projected cell replaces that
-whole footprint. Heightmaps and every other tag remain raw.
+whole footprint. Heightmaps and every other tag remain raw. Final chunk status is
+`postprocessed` in 1.13.x and `full` from 1.14. Vanilla singleton palettes store 256 zero longs
+in `BlockStates`; an empty proto-chunk can have no biome values and contributes no editor
+sections.
 
 The region reader, import, overlay editing, region writer and same-version export all accept
 these releases. The writer patches only `Level.Sections[].Palette`/`BlockStates` and
 `Level.Biomes`; every other root/`Level`/section tag is compared with the source and must stay
-unchanged. Generation and the managed asset pipeline remain disabled until P2-06/P2-08.
+unchanged. Generated projects on these releases use placeholder textures.
 
 ## Flattened biome conversion (1.13–1.17)
 

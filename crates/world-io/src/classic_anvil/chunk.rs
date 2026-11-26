@@ -396,6 +396,7 @@ fn decode_block_states(
         layout.count,
         layout.minimum_bits,
         layout.packing,
+        false,
         x,
         z,
     )
@@ -412,6 +413,7 @@ pub(super) fn decode_block_section(
     count: usize,
     minimum_bits: u8,
     packing: LongPacking,
+    stores_singleton_indices: bool,
     x: i32,
     z: i32,
 ) -> Result<Section, AnvilError> {
@@ -454,6 +456,7 @@ pub(super) fn decode_block_section(
         palette.len(),
         count,
         &packed,
+        stores_singleton_indices,
         x,
         z,
     )?;
@@ -547,6 +550,7 @@ fn decode_biomes(
         palette.len(),
         layout.count,
         &packing,
+        false,
         x,
         z,
     )?;
@@ -562,6 +566,7 @@ fn decode_indices(
     palette_len: usize,
     count: usize,
     packing: &PackedLongs,
+    stores_singleton_indices: bool,
     x: i32,
     z: i32,
 ) -> Result<Vec<u16>, AnvilError> {
@@ -571,15 +576,16 @@ fn decode_indices(
         None => None,
     };
     if palette_len == 1 {
-        return if words.is_none_or(<[i64]>::is_empty) {
-            Ok(vec![0; count])
-        } else {
-            Err(invalid(
+        if words.is_none_or(<[i64]>::is_empty) {
+            return Ok(vec![0; count]);
+        }
+        if !stores_singleton_indices {
+            return Err(invalid(
                 x,
                 z,
                 format!("single-entry {label} palette has a non-empty data array"),
-            ))
-        };
+            ));
+        }
     }
     let words = words.ok_or_else(|| invalid(x, z, format!("{label} data is missing")))?;
     let expected = packing.word_count(count);

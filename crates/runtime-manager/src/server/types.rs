@@ -9,10 +9,10 @@ pub const SERVER_SETTINGS_SCHEMA_VERSION: u32 = 3;
 /// Version of the manifest stored next to a managed server JAR.
 pub const SERVER_MANIFEST_SCHEMA_VERSION: u32 = 2;
 
-/// Exact facts a server JAR must declare to belong to one project target.
+/// Exact facts a server JAR must match to belong to one project target.
 ///
-/// The server's own `version.json` carries the version id, `world_version` (DataVersion)
-/// and the required Java major. A JAR whose facts differ is never silently substituted.
+/// `version.json` supplies the version and DataVersion when present; the oldest supported
+/// servers are identified by pinned official checksums.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerTarget {
     pub minecraft_version: VersionId,
@@ -152,6 +152,10 @@ impl GenerationTarget {
             WorldPreset::Amplified => self.generation.amplified,
         }
     }
+
+    pub(crate) fn supports_forceload(&self) -> bool {
+        self.minecraft_version.as_str() != "1.13"
+    }
 }
 /// Hard cap for a downloaded/manual server JAR (the official baseline jar is ~54 MiB).
 pub const MAX_SERVER_JAR_BYTES: u64 = 200 * 1024 * 1024;
@@ -186,7 +190,7 @@ pub struct ServerJarReport {
     pub data_version: Option<i32>,
     pub java_major: Option<u32>,
     pub protocol_version: Option<i32>,
-    pub resource_pack_format: Option<i32>,
+    pub resource_pack_format: Option<u32>,
     pub sha1: Option<String>,
     pub size: Option<u64>,
     pub matches_official: Option<bool>,
@@ -342,6 +346,10 @@ impl WorldPreset {
             (LevelTypeSyntax::LegacyCamelCase, WorldPreset::Flat) => "flat",
             (LevelTypeSyntax::LegacyCamelCase, WorldPreset::LargeBiomes) => "largeBiomes",
             (LevelTypeSyntax::LegacyCamelCase, WorldPreset::Amplified) => "amplified",
+            (LevelTypeSyntax::LegacyLowerCase, WorldPreset::Normal) => "default",
+            (LevelTypeSyntax::LegacyLowerCase, WorldPreset::Flat) => "flat",
+            (LevelTypeSyntax::LegacyLowerCase, WorldPreset::LargeBiomes) => "largebiomes",
+            (LevelTypeSyntax::LegacyLowerCase, WorldPreset::Amplified) => "amplified",
             (LevelTypeSyntax::LegacyUpper, WorldPreset::Normal) => "DEFAULT",
             (LevelTypeSyntax::LegacyUpper, WorldPreset::Flat) => "FLAT",
             (LevelTypeSyntax::LegacyUpper, WorldPreset::LargeBiomes) => "LARGEBIOMES",

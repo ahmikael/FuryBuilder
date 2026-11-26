@@ -294,6 +294,7 @@ fn flattened_section(y: i8, name: &str, properties: &[(&str, &str)]) -> NbtValue
     NbtValue::compound([
         ("Y", NbtValue::Byte(y)),
         ("Palette", flattened_block_palette(&[(name, properties)])),
+        ("BlockStates", NbtValue::LongArray(vec![0; 256])),
     ])
 }
 
@@ -311,6 +312,14 @@ fn flattened_biomes(profile: &VersionProfile) -> NbtValue {
     NbtValue::IntArray(vec![plains; count])
 }
 
+fn flattened_full_status(profile: &VersionProfile) -> &'static str {
+    if profile.data_version < 1952 {
+        "postprocessed"
+    } else {
+        "full"
+    }
+}
+
 fn flattened_chunk_nbt(
     profile: &VersionProfile,
     x: i32,
@@ -326,7 +335,10 @@ fn flattened_chunk_nbt(
                 NbtValue::compound([
                     ("xPos", NbtValue::Int(x)),
                     ("zPos", NbtValue::Int(z)),
-                    ("Status", NbtValue::String("full".to_owned())),
+                    (
+                        "Status",
+                        NbtValue::String(flattened_full_status(profile).to_owned()),
+                    ),
                     (
                         "Sections",
                         NbtValue::List {
@@ -779,6 +791,7 @@ fn imports_every_flattened_classic_release_end_to_end() {
             "{label} bounds"
         );
         assert_eq!(report.chunks, 2, "{label}");
+        assert_eq!(report.non_full_chunks, 0, "{label}");
         assert_eq!(report.sections, 3, "{label}");
         assert_eq!(report.biome_sections, 3, "{label}");
         assert_eq!(report.block_entities, 2, "{label}");
@@ -961,7 +974,7 @@ fn exports_every_flattened_classic_release_same_version_and_verifies() {
         );
         assert_eq!(
             level.get("Status").and_then(NbtValue::as_string),
-            Some("full"),
+            Some(flattened_full_status(profile)),
             "{label}: Status"
         );
 

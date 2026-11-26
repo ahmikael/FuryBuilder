@@ -69,14 +69,23 @@ impl ReleaseFacts {
                 "The client JAR is the source of the full block and item catalog.".to_owned(),
             ]
         } else if flattened_classic {
-            vec![
+            let mut notes = vec![
                 format!(
                     "Flattened classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft {}.",
                     self.version
                 ),
-                "Vanilla generation is not enabled for this release yet.".to_owned(),
-                "The client JAR is the source of the full block and item catalog.".to_owned(),
-            ]
+                format!(
+                    "Vanilla generation uses the official Minecraft {} server JAR and Java {}. Choose placeholder textures for the generated project.",
+                    self.version, self.java_major
+                ),
+            ];
+            if self.version == "1.13" {
+                notes.push(
+                    "Minecraft 1.13 can only generate the natural spawn area without a player. The requested area must be inside the generated chunks."
+                        .to_owned(),
+                );
+            }
+            notes
         } else {
             vec![
                 "Release metadata is known, but this build has no verified world adapter for it."
@@ -110,7 +119,7 @@ impl ReleaseFacts {
                 edit: true,
                 write: true,
                 export: true,
-                generate: false,
+                generate: true,
                 assets: false,
             }
         } else {
@@ -538,7 +547,7 @@ mod tests {
                 5,
                 5,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -548,7 +557,7 @@ mod tests {
                 5,
                 5,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -558,7 +567,7 @@ mod tests {
                 6,
                 6,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -568,7 +577,7 @@ mod tests {
                 6,
                 6,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -578,7 +587,7 @@ mod tests {
                 6,
                 6,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -588,7 +597,7 @@ mod tests {
                 6,
                 6,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -598,7 +607,7 @@ mod tests {
                 7,
                 7,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
             facts!(
@@ -608,7 +617,7 @@ mod tests {
                 7,
                 7,
                 BiomeFormat::Section,
-                LevelTypeSyntax::ModernNamespaced,
+                LevelTypeSyntax::LegacyLowerCase,
                 (0, 256),
             ),
         ];
@@ -633,7 +642,7 @@ mod tests {
             assert_eq!(profile.pack_format_minors, None, "{id}");
             assert_eq!(profile.server.level_type_syntax, facts.level_type, "{id}");
             assert!(profile.server.official_jar, "{id}");
-            assert!(!profile.server.generation.normal, "{id}");
+            assert!(profile.server.generation.normal, "{id}");
             assert_eq!(
                 profile.content_catalog.registry_format,
                 CatalogRegistryFormat::Named,
@@ -682,7 +691,7 @@ mod tests {
             assert!(profile.capabilities.edit, "{id}");
             assert!(profile.capabilities.write, "{id}");
             assert!(profile.capabilities.export, "{id}");
-            assert!(!profile.capabilities.generate, "{id}");
+            assert!(profile.capabilities.generate, "{id}");
             assert!(!profile.capabilities.assets, "{id}");
             assert!(profile.capabilities.validate().is_ok(), "{id}");
             assert_eq!(

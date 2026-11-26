@@ -136,9 +136,9 @@ impl RuntimeManager {
         self.inner.settings.clear()
     }
 
-    /// Returns the current Eclipse Temurin JRE for exactly this Java major.
+    /// Returns the current Eclipse Temurin package for exactly this Java major.
     pub fn latest_temurin(&self, major: u32) -> Result<RuntimeReleaseInfo, RuntimeError> {
-        self.inner.adoptium.latest_jre(major)
+        self.inner.adoptium.latest(major)
     }
 
     pub fn managed_list(&self) -> Result<ManagedCacheReport, RuntimeError> {
@@ -190,7 +190,7 @@ impl RuntimeManager {
             downloaded: 0,
             total: 0,
         });
-        let release = self.inner.adoptium.latest_jre(major)?;
+        let release = self.inner.adoptium.latest(major)?;
         if release.major != major {
             return Err(RuntimeError::Invalid(format!(
                 "Adoptium returned Java {}, not Java {major}",

@@ -198,7 +198,11 @@ impl FlattenedFormat {
             },
             post_processing_key: "PostProcessing",
             light_enabled_key: modern_fields.then_some("isLightOn"),
-            full_status: "full",
+            full_status: if modern_fields {
+                "full"
+            } else {
+                "postprocessed"
+            },
         })
     }
 }

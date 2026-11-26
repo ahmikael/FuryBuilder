@@ -21,7 +21,7 @@ pub enum RuntimeError {
     Checksum(String),
     #[error("not enough free disk space: {0}")]
     DiskSpace(String),
-    #[error("runtime archive is not safe or not a Temurin JRE: {0}")]
+    #[error("runtime archive is not safe or not a Temurin runtime: {0}")]
     Archive(String),
     #[error("runtime limit exceeded: {0}")]
     Limit(String),

@@ -75,23 +75,21 @@ fn version_json(id: &str, world_version: i32, java_version: u32) -> Vec<u8> {
 }
 
 fn write_jar(path: &Path, version_json: &[u8], include_server_main: bool) {
+    let mut entries: Vec<(&str, &[u8])> = vec![("version.json", version_json)];
+    if include_server_main {
+        entries.push(("net/minecraft/bundler/Main.class", b"synthetic class"));
+    }
+    write_padded_jar(path, &entries);
+}
+
+fn write_padded_jar(path: &Path, entries: &[(&str, &[u8])]) {
     let file = fs::File::create(path).expect("create jar");
     let mut zip = zip::ZipWriter::new(file);
     let options =
         zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-    zip.start_file("version.json", options)
-        .expect("start version.json");
-    zip.write_all(version_json).expect("write version.json");
-    if include_server_main {
-        zip.start_file("net/minecraft/bundler/Main.class", options)
-            .expect("start main");
-        zip.write_all(b"not-a-real-main-class").expect("write main");
-        zip.start_file("META-INF/versions.list", options)
-            .expect("start versions.list");
-        zip.write_all(
-            b"1.21.4\t4707d00eb834b446575d89a61a11b5d548d8c001\tversions/1.21.4/server-1.21.4.jar",
-        )
-        .expect("write versions.list");
+    for (name, bytes) in entries {
+        zip.start_file(*name, options).expect("start entry");
+        zip.write_all(bytes).expect("write entry");
     }
     zip.start_file("padding.bin", options)
         .expect("start padding");
@@ -102,6 +100,43 @@ fn write_jar(path: &Path, version_json: &[u8], include_server_main: bool) {
         written += chunk.len();
     }
     zip.finish().expect("finish jar");
+}
+
+#[test]
+fn verifies_classic_entry_point_and_numeric_pack_format() {
+    let dir = TempDir::new("classic");
+    let jar = dir.path().join("server.jar");
+    let entry_point = ("net/minecraft/server/MinecraftServer.class", &b"class"[..]);
+    let server_manifest = (
+        "META-INF/MANIFEST.MF",
+        &b"Manifest-Version: 1.0\r\nMain-Class: net.minecraft.server.MinecraftServer\r\n\r\n"[..],
+    );
+    let client_manifest = (
+        "META-INF/MANIFEST.MF",
+        &b"Manifest-Version: 1.0\r\nMain-Class: net.minecraft.client.main.Main\r\n\r\n"[..],
+    );
+    let metadata = (
+        "version.json",
+        &br#"{"id":"1.14.4","world_version":1976,"protocol_version":498,"pack_version":4}"#[..],
+    );
+    let manager = dir.manager();
+    let exact = target("1.14.4", 1976, 8);
+    write_padded_jar(&jar, &[server_manifest, entry_point, metadata]);
+    let report = manager.select_manual(&jar, &exact).expect("classic server");
+    assert!(report.ready);
+    assert_eq!(report.resource_pack_format, Some(4));
+    assert_eq!(report.java_major, None);
+    assert_eq!(report.protocol_version, Some(498));
+    assert!(manager.selected(&exact).expect("re-inspected server").ready);
+
+    write_padded_jar(&jar, &[client_manifest, entry_point, metadata]);
+    assert!(manager.select_manual(&jar, &exact).is_err());
+
+    write_padded_jar(&jar, &[server_manifest, entry_point]);
+    let error = manager
+        .select_manual(&jar, &target("1.13.2", 1631, 8))
+        .expect_err("a class and manifest cannot prove the identity");
+    assert!(error.to_string().contains("known official server JAR"));
 }
 
 #[test]

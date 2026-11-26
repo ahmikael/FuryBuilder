@@ -65,11 +65,12 @@ impl AdoptiumClient {
         Self { client }
     }
 
-    pub fn latest_jre(&self, major: u32) -> Result<RuntimeReleaseInfo, RuntimeError> {
+    pub fn latest(&self, major: u32) -> Result<RuntimeReleaseInfo, RuntimeError> {
         crate::validate_java_major(major)?;
         let (os, architecture) = platform()?;
+        let image_type = temurin_image_type(major);
         let url = format!(
-            "{API_BASE}/assets/latest/{major}/hotspot?architecture={architecture}&image_type=jre&os={os}&vendor=eclipse&project=jdk"
+            "{API_BASE}/assets/latest/{major}/hotspot?architecture={architecture}&image_type={image_type}&os={os}&vendor=eclipse&project=jdk"
         );
         let body = self
             .client
@@ -167,7 +168,16 @@ fn normalize_sha256(value: &str) -> Result<String, RuntimeError> {
     Ok(value)
 }
 
-/// Selects exactly the requested Eclipse Temurin JRE. Kept pure so the response contract is
+fn temurin_image_type(major: u32) -> &'static str {
+    // Adoptium publishes Java 16 as a JDK but does not offer a standalone JRE.
+    if major == 16 {
+        "jdk"
+    } else {
+        "jre"
+    }
+}
+
+/// Selects exactly the requested Eclipse Temurin runtime. Kept pure so the response contract is
 /// tested without network access.
 pub fn parse_latest_release(
     body: &[u8],
@@ -175,6 +185,7 @@ pub fn parse_latest_release(
     architecture: &str,
     major: u32,
 ) -> Result<RuntimeReleaseInfo, RuntimeError> {
+    let image_type = temurin_image_type(major);
     let releases: Vec<AdoptiumRelease> = serde_json::from_slice(body)
         .map_err(|error| RuntimeError::Network(format!("invalid Adoptium JSON: {error}")))?;
     let release = releases
@@ -183,12 +194,12 @@ pub fn parse_latest_release(
             release.vendor == "eclipse"
                 && release.binary.os == os
                 && release.binary.architecture == architecture
-                && release.binary.image_type == "jre"
+                && release.binary.image_type == image_type
                 && release.version.major == major
         })
         .ok_or_else(|| {
             RuntimeError::Network(format!(
-                "Adoptium has no Java {major} JRE for {os}/{architecture}"
+                "Adoptium has no Java {major} {image_type} for {os}/{architecture}"
             ))
         })?;
     let sha256 = normalize_sha256(&release.binary.package.checksum)?;
@@ -214,7 +225,7 @@ pub fn parse_latest_release(
         vendor: "Eclipse Adoptium".to_owned(),
         os: os.to_owned(),
         arch: architecture.to_owned(),
-        image_type: "jre".to_owned(),
+        image_type: release.binary.image_type,
         source: "Adoptium API v3".to_owned(),
     })
 }
@@ -325,6 +336,31 @@ mod tests {
             }
         ]))
         .expect("adoptium json")
+    }
+
+    #[test]
+    fn java_16_selects_the_official_jdk_archive() {
+        let body = serde_json::json!([{
+            "release_name": "jdk-16.0.2+7",
+            "vendor": "eclipse",
+            "version": { "major": 16, "semver": "16.0.2+7" },
+            "binary": {
+                "os": "windows",
+                "architecture": "x64",
+                "image_type": "jdk",
+                "package": {
+                    "link": "https://github.com/adoptium/temurin16-binaries/releases/download/jdk-16.0.2%2B7/OpenJDK16U-jdk_x64_windows_hotspot_16.0.2_7.zip",
+                    "checksum": "a".repeat(64),
+                    "size": 203_448_494,
+                    "name": "OpenJDK16U-jdk_x64_windows_hotspot_16.0.2_7.zip"
+                }
+            }
+        }]);
+        let release = parse_latest_release(body.to_string().as_bytes(), "windows", "x64", 16)
+            .expect("official Java 16 package");
+        assert_eq!(release.major, 16);
+        assert_eq!(release.image_type, "jdk");
+        assert_eq!(release.size, 203_448_494);
     }
 
     #[test]

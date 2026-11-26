@@ -8,7 +8,7 @@
 //! - every Java candidate is executed with `-XshowSettings:properties -version`; its name is
 //!   never trusted and only the Java major required by the target profile is accepted;
 //! - a manual executable can be selected, but it must pass the same probe;
-//! - managed Eclipse Temurin JREs are selected by the Java major the project target needs,
+//! - managed Eclipse Temurin runtimes are selected by the Java major the project target needs,
 //!   downloaded only after an explicit request, from the official Adoptium API/allowlisted
 //!   GitHub hosts, verified by SHA-256 and size, extracted with zip-slip/symlink/size
 //!   protections into `<cache>/<major>/<release-id>`, probed and then published atomically;
@@ -38,7 +38,7 @@ mod types;
 /// are refused before any network request instead of guessing a compatible JRE.
 pub const JAVA_MAJORS: &[u32] = &[8, 16, 17, 21, 25];
 
-/// True when FuryBuilder can provision and verify a managed JRE for this Java major.
+/// True when FuryBuilder can provision and verify managed Java for this major.
 pub fn is_supported_java_major(major: u32) -> bool {
     JAVA_MAJORS.contains(&major)
 }

@@ -22,10 +22,10 @@ identifier and version from `version.json`.
 - No Minecraft installation and no Java runtime are required to start
   FuryBuilder or to use `Empty Project`/`Flat base`.
 - `Vanilla World` additionally needs the Java major from the selected version
-  profile (17 for 1.18–1.19, 21 for newer releases) and that version's official
+  profile (8, 16, 17 or 21 depending on the release) and that version's official
   `server.jar`. FuryBuilder offers to locate or download them only after explicit
   consent, verifies checksums and keeps them in its own cache. `Import World`
-  needs a user-owned classic Java 1.18–1.21.11 world folder.
+  needs a user-owned classic Java 1.13–1.21.11 world folder.
 
 The supported baseline, memory/disk guidance, tested reference machine and
 configurations that are not validated are in

@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | Classic Anvil **1.18–1.21.11** is admitted for import, block/biome editing, project snapshots, same-version export, generation with the exact official server JAR and copy-only same-family upgrade; **1.21.4**, `DataVersion` 4189, remains the full-support baseline. Split 26.x and legacy versions are detected and refused. |
+| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Split 26.x and legacy versions are detected and refused. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -365,6 +365,12 @@ admission: every modern classic profile admits import, editing, snapshots, same-
 and generation through its `capabilities`, while split/legacy profiles remain refused. The
 generation target is derived from the same profile, so `level-type`, Java major, data pack
 format and the required server JAR cannot be taken from another version.
+
+Flattened generation uses the same supervisor and approval flow. Server inspection recognizes
+the classic and direct entry points, the combined or split pack version formats, and the
+pinned Mojang checksums for 1.13.x JARs without internal version metadata. The run uses a
+Log4j configuration that disables message lookups on these releases and sends `/forceload`
+only when the server implements it (1.13.1 onward).
 
 The 1.13–1.17 decoder in `classic_anvil/flattened_chunk.rs` follows the pre-1.18 wrapper:
 `Level.Sections` with direct `Palette`/`BlockStates`, continuous index packing through 1.15

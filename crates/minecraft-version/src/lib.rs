@@ -464,8 +464,10 @@ pub struct ServerProfile {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum LevelTypeSyntax {
-    /// 1.16+ namespaced values such as `minecraft:flat`.
+    /// Namespaced values such as `minecraft:flat`.
     ModernNamespaced,
+    /// 1.16–1.17 lower-case values such as `largebiomes`.
+    LegacyLowerCase,
     /// 1.13–1.15 camel-case values such as `largeBiomes`.
     LegacyCamelCase,
     /// 1.8–1.12 upper-case values such as `LARGEBIOMES`.

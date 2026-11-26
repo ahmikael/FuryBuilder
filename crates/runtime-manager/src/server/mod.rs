@@ -2,9 +2,8 @@
 //!
 //! The JAR is resolved from Mojang's official `version_manifest_v2` → version JSON →
 //! `downloads.server`, verified by the announced SHA-1 and size, inspected for the target
-//! profile's `world_version` and published into an offline, deletable cache. A user can
-//! also select an existing local JAR, which must pass the same internal-version and server
-//! entry-point checks.
+//! profile's exact release and published into an offline, deletable cache. A user can
+//! also select an existing local JAR, which must pass the same version and server entry-point checks.
 //!
 //! Isolated generation requires an explicit EULA acceptance for that exact JAR and a
 //! separate per-run consent. The server is bound to loopback only, runs in a temporary
@@ -211,8 +210,7 @@ impl ServerManager {
     }
 
     /// Validates a manual `server.jar` path against the exact project target and records it
-    /// only after the internal `version.json`, DataVersion, Java major, server entry point and
-    /// hash have been checked.
+    /// only after its identity, server entry point and hash have been checked.
     pub fn select_manual(
         &self,
         path: &Path,
@@ -786,8 +784,10 @@ impl ServerManager {
         }
         if let Some(official) = official_sha1 {
             report.matches_official = Some(official.eq_ignore_ascii_case(&info.sha1));
+        } else if info.known_official() {
+            report.matches_official = Some(true);
         }
-        if source == ServerSource::Manual {
+        if source == ServerSource::Manual && report.matches_official.is_none() {
             report.warnings.push(
                 "manual JAR: exact version and DataVersion are verified from its version.json; Mojang metadata was not consulted"
                     .to_owned(),

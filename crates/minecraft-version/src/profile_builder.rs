@@ -302,7 +302,7 @@ fn family_defaults(
         }),
         VersionFamily::Flattened => {
             let section_biomes = minor_version(version).is_some_and(|minor| minor >= 15);
-            let modern_level_type = minor_version(version).is_some_and(|minor| minor >= 16);
+            let lowercase_level_type = minor_version(version).is_some_and(|minor| minor >= 16);
             Ok(FamilyDefaults {
                 world_layout: WorldLayout::ClassicAnvil,
                 chunk_family: ChunkFamily::SectionBiomes,
@@ -316,8 +316,8 @@ fn family_defaults(
                 structure_formats: no_structures(),
                 server: server_profile(
                     true,
-                    if modern_level_type {
-                        LevelTypeSyntax::ModernNamespaced
+                    if lowercase_level_type {
+                        LevelTypeSyntax::LegacyLowerCase
                     } else {
                         LevelTypeSyntax::LegacyCamelCase
                     },
@@ -683,7 +683,7 @@ mod tests {
         assert_eq!(profile.dimension_profiles[0].height, 256);
         assert_eq!(
             profile.server.level_type_syntax,
-            LevelTypeSyntax::ModernNamespaced
+            LevelTypeSyntax::LegacyLowerCase
         );
         assert_eq!(
             profile.content_catalog.item_model_format,

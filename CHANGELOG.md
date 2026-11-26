@@ -23,7 +23,14 @@ formats are not migrated.
   classic releases `1.13–1.17.1`. The writer patches only `Level.Sections[].Palette`/
   `BlockStates` and `Level.Biomes`; every other chunk tag is compared with the source and must
   stay unchanged. Column biomes apply an edited cell to every vertical section and refuse a
-  request for different values by height. Generation and managed assets remain disabled.
+  request for different values by height.
+- Vanilla World generation for all 19 flattened classic releases `1.13–1.17.1`, with
+  release-specific presets, properties and Java 8 or 16. The 1.13.x server JARs without
+  `version.json` are identified by official SHA-1. Minecraft 1.13 uses its natural spawn
+  area; 1.13.1 and later also support `/forceload`. Flattened projects use placeholder
+  textures while managed assets are unavailable.
+- Flattened world import reads vanilla singleton block palettes with packed zeroes and
+  empty proto-chunks without biomes. Same-version writes retain packed singleton indices.
 - Internal chunk decoding for flattened Java `1.13–1.17.1`: pre-1.18 `Level.Sections` with
   direct `Palette`/`BlockStates`, continuous index packing through 1.15 and padded words from
   1.16, chunk-wide numeric biomes and light-only halo validation. Mixed 1.13–1.14 column

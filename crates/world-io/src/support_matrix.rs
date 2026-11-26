@@ -115,7 +115,7 @@ fn versions() -> Vec<VersionSupport> {
             write: "verified_block_states_and_biomes".to_owned(),
             passthrough: "byte_for_byte".to_owned(),
             note: format!(
-                "Classic Anvil import, block/biome editing, project snapshots and same-version export are verified for every exact release in this range. Generation remains disabled until its own verification; Minecraft {} has full support.",
+                "Classic Anvil import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR are enabled for every release in this range. Minecraft {} has full support.",
                 target.minecraft_version
             ),
         },
@@ -129,7 +129,7 @@ fn versions() -> Vec<VersionSupport> {
             edit: "block_states_and_biomes".to_owned(),
             write: "verified_block_states_and_biomes".to_owned(),
             passthrough: "byte_for_byte".to_owned(),
-            note: "Flattened classic Anvil import, direct Level.Sections palette editing, chunk-wide biome editing, project snapshots and same-version export are verified for every exact release in this range. Generation remains disabled until its own verification.".to_owned(),
+            note: "Flattened classic Anvil import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR are enabled. Minecraft 1.13 generates only around natural spawn without a player.".to_owned(),
         },
         VersionSupport {
             id: "java-26.1-26.3-split".to_owned(),

@@ -26,6 +26,8 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use minecraft_version::LevelTypeSyntax;
+
 use super::datapack;
 use super::jar::{is_sha1, ServerJarInfo};
 use super::process_tree::ProcessTree;
@@ -50,6 +52,20 @@ const CANCEL_TIMEOUT: Duration = Duration::from_secs(15);
 const DEFAULT_SAVE_INTERVAL: Duration = Duration::from_secs(10);
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_MIN_GENERATION: Duration = Duration::from_secs(5);
+const FLATTENED_LOG_CONFIG_NAME: &str = "furybuilder-log4j2.xml";
+// Disable message lookups for the Log4j bundled with older vanilla servers.
+// Retain the console messages the supervisor uses to detect startup and saves.
+const FLATTENED_LOG_CONFIG: &str = r#"<Configuration status="WARN">
+  <Appenders>
+    <Console name="Console" target="SYSTEM_OUT">
+      <PatternLayout pattern="[%d{HH:mm:ss}] [%t/%level]: %msg{nolookups}%n"/>
+    </Console>
+  </Appenders>
+  <Loggers>
+    <Root level="info"><AppenderRef ref="Console"/></Root>
+  </Loggers>
+</Configuration>
+"#;
 const MIN_MEMORY_MB: u32 = 512;
 const MAX_MEMORY_MB: u32 = 4096;
 const MIN_TIME_LIMIT_SECONDS: u32 = 10;
@@ -142,7 +158,7 @@ struct Live {
     started: bool,
     saved: bool,
     bind_address: Option<String>,
-    forceload_sent: bool,
+    generation_started: bool,
     isolation_checked: bool,
     last_chunks: u64,
     last_progress: Instant,
@@ -558,6 +574,13 @@ pub(crate) fn prepare(
             )?,
         )
         .map_err(|error| ServerError::Io(format!("cannot write server.properties: {error}")))?;
+        if is_flattened(&plan.target) {
+            fs::write(
+                run_dir.join(FLATTENED_LOG_CONFIG_NAME),
+                FLATTENED_LOG_CONFIG,
+            )
+            .map_err(|error| ServerError::Io(format!("cannot write Log4j settings: {error}")))?;
+        }
         datapack::install(&plan.world_dir, datapacks, &plan.target)?;
         // Only written inside this run directory, only after an explicit acceptance for
         // this exact server JAR. The acceptance itself lives in server.json.
@@ -718,7 +741,7 @@ fn supervise(
         started: false,
         saved: false,
         bind_address: None,
-        forceload_sent: false,
+        generation_started: false,
         isolation_checked: false,
         last_chunks: 0,
         last_progress: start,
@@ -774,11 +797,14 @@ fn supervise(
                 }
             }
         }
-        if live.started && !live.forceload_sent {
-            for command in forceload_commands(plan.center_x, plan.center_z, plan.radius_chunks) {
-                let _ = guard.send(&command);
+        if live.started && !live.generation_started {
+            if plan.target.supports_forceload() {
+                for command in forceload_commands(plan.center_x, plan.center_z, plan.radius_chunks)
+                {
+                    let _ = guard.send(&command);
+                }
             }
-            live.forceload_sent = true;
+            live.generation_started = true;
             live.last_progress = now;
             live.last_save = now + Duration::from_secs(2);
             publish(
@@ -954,10 +980,13 @@ fn supervise(
                 Decision::Idle => (
                     GenerationStopReason::Incomplete,
                     "Generation stopped after no new chunks were written".to_owned(),
-                    Some(
+                    Some(if plan.target.supports_forceload() {
                         "the requested area is incomplete; no new chunks appeared before the idle limit"
-                            .to_owned(),
-                    ),
+                            .to_owned()
+                    } else {
+                        "Minecraft 1.13 only generates around the natural spawn without a player; the requested area is outside the generated chunks"
+                            .to_owned()
+                    }),
                 ),
                 Decision::TimeLimit => (
                     GenerationStopReason::TimeLimit,
@@ -1006,11 +1035,13 @@ fn stop_server(
         publish(
             snapshot,
             Some(GenerationPhase::Saving),
-            Some("Saving generated chunks and releasing forceloads"),
+            Some("Saving generated chunks"),
             start.elapsed(),
             *stats,
         );
-        let _ = guard.send("forceload remove all");
+        if plan.target.supports_forceload() {
+            let _ = guard.send("forceload remove all");
+        }
         let _ = guard.send("save-all flush");
         live.saved = false;
         let deadline = Instant::now() + SAVE_TIMEOUT.min(grace);
@@ -1110,6 +1141,11 @@ fn jvm_path(path: &Path) -> PathBuf {
 
 fn build_command(plan: &GenerationPlan) -> Command {
     let mut command = Command::new(jvm_path(&plan.java_exe));
+    if is_flattened(&plan.target) {
+        command.arg(format!(
+            "-Dlog4j.configurationFile={FLATTENED_LOG_CONFIG_NAME}"
+        ));
+    }
     command
         .current_dir(jvm_path(&plan.run_dir))
         .arg(format!("-Xms{}M", (plan.memory_mb / 4).clamp(128, 512)))
@@ -1235,15 +1271,14 @@ fn render_properties(
     target: &GenerationTarget,
 ) -> Result<String, ServerError> {
     let level_type = preset.level_type(target.level_type_syntax)?;
-    Ok(format!(
+    let mut properties = format!(
         "# Generated by FuryBuilder for one isolated Vanilla World generation run.\n\
-         # External listeners are disabled: loopback only, no RCON/query/status.\n\
+         # Loopback only, no RCON or query.\n\
          server-ip=127.0.0.1\n\
          server-port={port}\n\
          online-mode=false\n\
          enable-rcon=false\n\
          enable-query=false\n\
-         enable-status=false\n\
          max-players=1\n\
          motd=FuryBuilder isolated worldgen\n\
          level-name=world\n\
@@ -1252,11 +1287,23 @@ fn render_properties(
          generator-settings=\n\
          generate-structures={generate_structures}\n\
          view-distance={view_distance}\n\
-         simulation-distance={view_distance}\n\
          spawn-protection=0\n\
-         sync-chunk-writes=true\n\
          max-tick-time=-1\n"
-    ))
+    );
+    if target.level_type_syntax == LevelTypeSyntax::ModernNamespaced {
+        properties.push_str(&format!("simulation-distance={view_distance}\n"));
+    }
+    if matches!(
+        target.level_type_syntax,
+        LevelTypeSyntax::ModernNamespaced | LevelTypeSyntax::LegacyLowerCase
+    ) {
+        properties.push_str("enable-status=false\nsync-chunk-writes=true\n");
+    }
+    Ok(properties)
+}
+
+fn is_flattened(target: &GenerationTarget) -> bool {
+    target.minecraft_version.family() == minecraft_version::VersionFamily::Flattened
 }
 
 fn forceload_commands(center_x: i32, center_z: i32, radius: u32) -> Vec<String> {
@@ -2085,6 +2132,50 @@ mod tests {
         ] {
             assert!(facts.contains(&expected), "{expected:?}");
         }
+    }
+
+    #[test]
+    fn flattened_generation_uses_release_specific_presets_and_properties() {
+        let mut count = 0;
+        for profile in minecraft_version::builtin_profiles()
+            .iter()
+            .filter(|profile| profile.family == minecraft_version::VersionFamily::Flattened)
+        {
+            let target = GenerationTarget::for_profile(profile).expect(&profile.id);
+            let lowercase = target.data_version >= 2566;
+            let expected = [
+                "default",
+                "flat",
+                if lowercase {
+                    "largebiomes"
+                } else {
+                    "largeBiomes"
+                },
+                "amplified",
+            ];
+            let presets = target.available_presets();
+            assert_eq!(presets.len(), expected.len(), "{}", profile.id);
+            for (preset, level_type) in presets.into_iter().zip(expected) {
+                let properties =
+                    render_properties("42", preset, false, 4, 51234, &target).expect("properties");
+                assert!(properties.contains(&format!("level-type={level_type}\n")));
+                assert!(properties.contains("server-ip=127.0.0.1\n"));
+                assert!(properties.contains("enable-query=false\n"));
+                assert!(properties.contains("enable-rcon=false\n"));
+                assert!(properties.contains("generate-structures=false\n"));
+                assert!(!properties.contains("simulation-distance"));
+                assert_eq!(properties.contains("enable-status=false\n"), lowercase);
+                assert_eq!(properties.contains("sync-chunk-writes=true\n"), lowercase);
+            }
+            assert_eq!(
+                target.java_major,
+                if target.data_version >= 2724 { 16 } else { 8 }
+            );
+            assert_eq!(target.datapack_format, profile.datapack_format.unwrap());
+            assert_eq!(target.supports_forceload(), target.data_version != 1519);
+            count += 1;
+        }
+        assert_eq!(count, 19);
     }
 
     #[test]

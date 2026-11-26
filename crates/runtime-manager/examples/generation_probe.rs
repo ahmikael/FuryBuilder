@@ -2,7 +2,7 @@
 //!
 //! Examples:
 //!   cargo run -p furybuilder-runtime-manager --example generation_probe -- \
-//!     --root <dir> --java <java.exe> --jar <server.jar> --accept-eula --consent
+//!     --root <dir> --version <release> --java <java.exe> --jar <server.jar> --accept-eula --consent
 //!
 //! `--accept-eula` records the official EULA acceptance; `--consent` confirms starting the
 //! local Java server for this run. Neither happens implicitly. Optional:
@@ -15,8 +15,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use furybuilder_runtime_manager::{
-    DatapackSelection, GenerationRequest, GenerationTarget, ServerManager, ServerTarget,
-    WorldPreset,
+    DatapackSelection, GenerationRequest, GenerationTarget, ServerManager, WorldPreset,
 };
 
 fn main() {
@@ -31,6 +30,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let mut root: Option<PathBuf> = None;
     let mut java: Option<PathBuf> = None;
     let mut jar: Option<PathBuf> = None;
+    let mut version = None;
     let mut seed = "FuryBuilder".to_owned();
     let mut preset = WorldPreset::Normal;
     let mut center_x = 0i32;
@@ -50,6 +50,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "--root" => root = args.next().map(PathBuf::from),
             "--java" => java = args.next().map(PathBuf::from),
             "--jar" => jar = args.next().map(PathBuf::from),
+            "--version" => version = Some(args.next().ok_or("--version needs a release id")?),
             "--seed" => seed = args.next().unwrap_or_default(),
             "--preset" => {
                 preset = match args.next().as_deref() {
@@ -89,9 +90,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         root.join("servers"),
         root.join("version-manifest.json"),
     );
-    let profile = furybuilder_runtime_manager::target_profile();
-    let server_target = ServerTarget::for_profile(profile);
-    let generation_target = GenerationTarget::for_profile(profile)?;
+    let profile = match version {
+        Some(version) => minecraft_version::profile_for_version(&version.parse()?)
+            .ok_or_else(|| format!("unknown built-in Minecraft version: {version}"))?,
+        None => minecraft_version::default_profile(),
+    };
+    let generation_target = GenerationTarget::for_profile(&profile)?;
+    let server_target = generation_target.server_target();
     if let Some(jar) = jar {
         let report = manager.select_manual(&jar, &server_target)?;
         eprintln!(

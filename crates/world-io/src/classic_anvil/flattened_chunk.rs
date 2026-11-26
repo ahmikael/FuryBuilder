@@ -75,16 +75,6 @@ pub(super) fn decode_chunk(
         None => None,
     };
 
-    let projection = decode_flattened_chunk_biomes(nbt, profile, ColumnBiomePolicy::SampleCenter)
-        .map_err(|error| biome_error(x, z, error))?;
-    let mixed_biome_columns = projection.mixed_column_cells;
-    let mut biome_sections = projection
-        .sections
-        .into_iter()
-        .enumerate()
-        .map(|(y, section)| (y as i32, section))
-        .collect::<BTreeMap<_, _>>();
-
     let sections_value = level
         .get("Sections")
         .ok_or_else(|| invalid(x, z, "flattened chunk has no Sections list"))?;
@@ -105,6 +95,29 @@ pub(super) fn decode_chunk(
             ),
         ));
     }
+
+    // Vanilla can save an empty proto-chunk before it assigns biomes or blocks.
+    let empty_proto_chunk = status.as_deref() == Some("empty")
+        && items.is_empty()
+        && match level.get("Biomes") {
+            None => true,
+            Some(NbtValue::IntArray(ids)) => ids.is_empty(),
+            Some(_) => false,
+        };
+    let (mut biome_sections, mixed_biome_columns) = if empty_proto_chunk {
+        (BTreeMap::new(), 0)
+    } else {
+        let projection =
+            decode_flattened_chunk_biomes(nbt, profile, ColumnBiomePolicy::SampleCenter)
+                .map_err(|error| biome_error(x, z, error))?;
+        let sections = projection
+            .sections
+            .into_iter()
+            .enumerate()
+            .map(|(y, section)| (y as i32, section))
+            .collect();
+        (sections, projection.mixed_column_cells)
+    };
 
     let packing = format.packing;
     let mut sections = BTreeMap::new();
@@ -159,6 +172,7 @@ pub(super) fn decode_chunk(
                 BLOCK_SECTION_VOLUME,
                 4,
                 packing,
+                true,
                 x,
                 z,
             )?
@@ -358,8 +372,6 @@ fn patch_block_sections(
                 ))
             }
         };
-        compound.remove("Palette");
-        compound.remove("BlockStates");
         compound.insert(
             "Palette".to_owned(),
             NbtValue::List {
@@ -368,9 +380,9 @@ fn patch_block_sections(
             },
         );
         let packed = PackedLongs::new(section.palette_len() - 1, 4, packing);
-        if let Some(words) = packed_block_indices(section, packed) {
-            compound.insert("BlockStates".to_owned(), NbtValue::LongArray(words));
-        }
+        let word_count = packed.word_count(BLOCK_SECTION_VOLUME);
+        let words = packed_block_indices(section, packed).unwrap_or_else(|| vec![0; word_count]);
+        compound.insert("BlockStates".to_owned(), NbtValue::LongArray(words));
     }
     Ok(())
 }
