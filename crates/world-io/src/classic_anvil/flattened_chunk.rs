@@ -75,12 +75,9 @@ pub(super) fn decode_chunk(
         None => None,
     };
 
-    let projection = decode_flattened_chunk_biomes(nbt, profile, ColumnBiomePolicy::RequireUniform)
+    let projection = decode_flattened_chunk_biomes(nbt, profile, ColumnBiomePolicy::SampleCenter)
         .map_err(|error| biome_error(x, z, error))?;
-    debug_assert_eq!(
-        projection.mixed_column_cells, 0,
-        "RequireUniform cannot project mixed columns"
-    );
+    let mixed_biome_columns = projection.mixed_column_cells;
     let mut biome_sections = projection
         .sections
         .into_iter()
@@ -199,6 +196,7 @@ pub(super) fn decode_chunk(
         missing_sections,
         block_entities: compound_list_len(level, "TileEntities", x, z)?,
         entities: compound_list_len(level, "Entities", x, z)?,
+        mixed_biome_columns,
     })
 }
 

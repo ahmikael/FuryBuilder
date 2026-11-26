@@ -120,6 +120,10 @@ pub struct DecodedChunk {
     pub missing_sections: Vec<i32>,
     pub block_entities: usize,
     pub entities: usize,
+    /// Number of 1.13–1.14 4×4 column footprints reduced by center sampling
+    /// because their block columns held different biomes. Zero for 1.15+
+    /// volumetric biomes and modern section palettes.
+    pub mixed_biome_columns: usize,
 }
 
 impl DecodedChunk {
@@ -349,6 +353,7 @@ pub(super) fn decode_chunk(
         missing_sections,
         block_entities: compound_list_len(root, format.block_entities, x, z)?,
         entities: compound_list_len(root, format.entities, x, z)?,
+        mixed_biome_columns: 0,
     })
 }
 

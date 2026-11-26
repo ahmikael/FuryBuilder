@@ -1409,9 +1409,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P2-03` — biome adapters (column/section) + conversion. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P2-04` — blockstate/model/texture differences. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P2-04` — blockstate/model/texture differences. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
+**Следующий шаг после закрытия текущего фокуса:** `P2-05` — import/edit/export для 1.13–1.17. Если пункт распадается на несколько шагов, он всё равно остаётся одним до полной проверки.
 
 ### 21.0. Правила ведения
 
@@ -1584,7 +1584,7 @@ UI:
 
 - [x] `P2-01` Профили 1.13–1.17: DataVersion, Java, pack/datapack, dimensions, height.
 - [x] `P2-02` Chunk layout adapters 1.13–1.17.
-- [ ] `P2-03` Biome adapters (column/section) + conversion.
+- [x] `P2-03` Biome adapters (column/section) + conversion.
 - [ ] `P2-04` Blockstate/model/texture differences.
 - [ ] `P2-05` Import/edit/export для 1.13–1.17.
 - [ ] `P2-06` Generation: server flags/level-type/Java.
@@ -1692,6 +1692,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-26 | Биомы column/section 1.13–1.17 | `DecodedChunk` получил `mixed_biome_columns`: mixed 1.13–1.14 footprints нормализуются center sampling `(4x+2, 4z+2)` и считаются для будущего предупреждения, 1.15+ YZX-секции идут без сэмплинга. `patch_flattened_chunk_biomes` сохраняет неизменённые mixed footprints и заменяет все 16 колонок только при изменении projected cell; chunk-level round-trip проверяет сохранение блоков и биомов, неизвестные ID по-прежнему отклоняются. Reader/import/export закрыты до P2-05. shadcn: UI не менялся | см. `git log` | 797 Rust tests (74 suites), 437 TS tests + 1 skipped (438); clippy `-D warnings`, fmt, typecheck, oxlint, oxfmt, `git diff --check`; 7 chunk-тестов, включая center sampling count и patch round-trip |
 | 2026-11-26 | Chunk layout 1.13–1.17 | Добавлен внутренний decoder flattened-чанков 1.13–1.17: pre-1.18 `Level.Sections` с прямыми `Palette`/`BlockStates`, непрерывный bit stream до 1.15 и padded 64-bit words с 1.16 (17-entry palette: 320 → 342 longs), `Level.Biomes` через точный numeric registry, `Level.TileEntities`/`Entities`, `Level.Status`, light-only halo проверка 2048 байт. Секции вне диапазона, дубликаты, неверный `DataVersion`, palette overflow, короткие packed arrays и смешанные 4×4 column footprints отклоняются без подмены. Публичный reader/import/export по-прежнему закрыт; запись/overlay и допуск — в P2-05. shadcn: UI не менялся, компоненты и тема не затронуты | см. `git log` | 796 Rust tests (74 suites), 437 TS tests + 1 skipped (438); clippy `-D warnings`, fmt, typecheck, oxlint, oxfmt, `git diff --check`; 6 новых тестов: packing boundary 1.13.2/1.15.2/1.16.5/1.17.1, несовместимость padded/unpadded, halo, unknown/malformed biomes, дубликаты/границы/palette overflow/xPos, mixed columns |
 | 2026-11-26 | Профили 1.13–1.17 | Добавлены точные built-in профили 19 релизов `1.13`–`1.17.1`: DataVersion (1519–2730), Java 8 для 1.13–1.16.5 и 16 для 1.17+, resource/data pack formats 4–7 (включая 7 для 1.17.1), `java-classic-<version>` id, `Flattened` family, `ClassicAnvil` layout, `SectionBiomes`/column-vs-section biome family, измерение Overworld 0..256 для всех 1.13–1.17.1 (расширение до -64..384 начинается с 1.18), Nether/End 0..256, папки `region`/`DIM-1/region`/`DIM1/region`, `ItemModels`-каталог и level-type syntax (camelCase 1.13–1.15, namespaced 1.16+). Capabilities намеренно остаются `Unverified`: метаданные не допускают версии к проекту до P2-02/P2-05. Добавлен exact-metadata тест по всем 19 релизам и проверка, что 1.13.2/1.17.1 metadata ещё не считается reader. Тесты `modern_classic` и `java_chunk` сузились до `ModernPaletted`, чтобы не смешивать семейства. shadcn: UI не менялся, компоненты и тема не затронуты | см. `git log` | 789 Rust tests (73 suites), 437 TS tests + 1 skipped (438); clippy `-D warnings`, fmt, typecheck, oxlint, oxfmt, `git diff --check`; 19 exact profiles, 1.13.2/1.17.1 не допущены к reader, 27 modern DataVersion по-прежнему читаются |
 | 2026-11-26 | Закрытие P1 | Матрица §4.3 приведена к фактическому уровню: 26 modern classic релизов — `read + write subset`, `1.21.4` — `full`; split 26.1–26.3 — read-only диагностика. `docs/reference`, `docs/formats`, `docs/getting-started`, `README` и `CHANGELOG` синхронизированы: 27 релизов, точные профили и client-JAR каталоги, различие full/subset, E2E по четырём семействам, счётчики 1.21.4 как измеренный baseline. P1-32 отмечен, фокус переведён на P2-01. shadcn: UI не менялся | см. `git log` | docs-only; проверены матрица/формулировки, `git diff --check`; полный прогон 788 Rust tests (73 suites), 437 TS tests + 1 skipped (438), clippy `-D warnings`, fmt, typecheck, oxlint, oxfmt выполнен после последнего изменения кода |

@@ -370,9 +370,11 @@ The 1.13–1.17 decoder in `classic_anvil/flattened_chunk.rs` follows the pre-1.
 `Level.Sections` with direct `Palette`/`BlockStates`, continuous index packing through 1.15
 and padded words from 1.16, chunk-wide `Level.Biomes`, and light-only halo validation. The
 exact numeric biome registry and the column/section conversion live beside it. A mixed
-1.13–1.14 4×4 column footprint is refused until center sampling is explicitly authorized.
-This decoder is available to inspection and codec tests, but `version_support` still does not
-admit those `DataVersion`s to `JavaWorld::open`, import, editing or export.
+1.13–1.14 4×4 column footprint is normalized by center sampling and counted on the decoded
+chunk; writing a changed cell replaces the whole footprint, while untouched footprints keep
+their original columns. This decoder is available to inspection and codec tests, but
+`version_support` still does not admit those `DataVersion`s to `JavaWorld::open`, import,
+editing or export.
 A loaded overlay uses that same profile to patch the original NBT's palette lists
 and packed indices. Section order, unrelated container tags and opaque block-entity
 payloads are verified before and after the region write. NBT equality compares

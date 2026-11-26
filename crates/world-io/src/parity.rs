@@ -490,6 +490,7 @@ mod tests {
             missing_sections: Vec::new(),
             block_entities: 0,
             entities: 0,
+            mixed_biome_columns: 0,
         }
     }
 

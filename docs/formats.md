@@ -173,8 +173,10 @@ indices are one continuous bit stream in 1.13–1.15 and become padded per 64-bi
 so a 17-entry palette occupies 320 longs before 1.16 and 342 longs from 1.16. The internal
 decoder validates the exact `DataVersion`, palette values, section bounds and light-only halo
 records, and maps the chunk-wide biome array through the exact numeric registry. Mixed 1.13–1.14
-4×4 footprints are refused until center sampling is authorized. Heightmaps and every other tag
-remain raw.
+4×4 footprints are normalized by center sampling at `(4x+2, 4z+2)`—the same choice as the
+vanilla 1.15 upgrade—and the decoded chunk reports how many footprints were sampled. Unchanged
+footprints keep all original columns when written; changing one projected cell replaces that
+whole footprint. Heightmaps and every other tag remain raw.
 
 The decoder is not an admission path: the region reader, project wizard, editor and exporter
 still refuse these releases until the P2 adapter verifies the complete import/edit/export path.

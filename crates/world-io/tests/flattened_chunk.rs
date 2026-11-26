@@ -9,12 +9,12 @@
 use std::path::PathBuf;
 
 use minecraft_version::{profile_for_version, VersionProfile};
-use world_domain::DimensionKind;
+use world_domain::{BiomeSection, BiomeState, DimensionKind};
 use world_io::anvil::{
     AnvilError, ChunkCompression, JavaWorldDimension, RegionChunk, RegionChunkSummary,
 };
 use world_io::nbt::{NbtFile, NbtValue, TAG_COMPOUND};
-use world_io::DecodedChunk;
+use world_io::{patch_flattened_chunk_biomes, ColumnBiomePolicy, DecodedChunk};
 
 const BITS_PER_BLOCK: u8 = 5;
 const PALETTE_LEN: usize = 17;
@@ -217,6 +217,7 @@ fn flattened_sections_decode_across_the_packing_boundary() {
         assert_eq!(decoded.block_entities, 2, "{version}");
         assert_eq!(decoded.entities, 1, "{version}");
         assert_eq!(decoded.missing_sections.len(), 14, "{version}");
+        assert_eq!(decoded.mixed_biome_columns, 0, "{version}");
 
         let local_y = 4i32;
         let expected = format!(
@@ -280,27 +281,75 @@ fn padded_and_unpadded_arrays_are_not_interchangeable() {
 }
 
 #[test]
-fn mixed_column_biomes_are_refused_until_sampling_is_authorized() {
+fn mixed_column_biomes_use_center_sampling_and_are_counted() {
     let profile = profile("1.14.4");
     let indices = block_indices();
+    let data = pack_unpadded(&indices);
     let mut biomes = vec![1; 256];
-    biomes[0] = 2;
-    let error = decode(
+    biomes[0] = 2; // Footprint (0, 0) mixes desert and plains; its center is plains.
+    let decoded = decode(
         &profile,
         chunk(
             &profile,
             0,
             0,
-            vec![block_section(0, pack_unpadded(&indices))],
+            vec![block_section(0, data.clone()), block_section(1, data)],
             biomes,
         ),
         0,
         0,
     )
-    .expect_err("mixed 4x4 footprint");
-    assert!(
-        format!("{error}").contains("center sampling must be authorized"),
-        "{error}"
+    .expect("center sampling");
+    assert_eq!(decoded.mixed_biome_columns, 1);
+    assert_eq!(decoded.biome_at(0, 0, 0), Some("minecraft:plains"));
+    assert_eq!(decoded.biome_at(0, 20, 0), Some("minecraft:plains"));
+    let expected = format!("test:block_{}", ((4usize * 16 + 5) * 16 + 3) % PALETTE_LEN);
+    assert_eq!(decoded.block_at(3, 4, 5).unwrap().name(), expected.as_str());
+}
+
+#[test]
+fn mixed_columns_patch_only_the_changed_footprint_and_keep_blocks() {
+    let profile = profile("1.14.4");
+    let indices = block_indices();
+    let source = chunk(
+        &profile,
+        0,
+        0,
+        vec![
+            block_section(0, pack_unpadded(&indices)),
+            block_section(1, pack_unpadded(&indices)),
+        ],
+        {
+            let mut biomes = vec![1; 256];
+            biomes[0] = 2;
+            biomes
+        },
+    );
+    let decoded = decode(&profile, source.clone(), 0, 0).expect("decode source");
+    let plains: BiomeState = "minecraft:plains".parse().expect("biome");
+    let desert: BiomeState = "minecraft:desert".parse().expect("biome");
+    let mut edited: [BiomeSection; 16] =
+        std::array::from_fn(|_| BiomeSection::uniform(plains.clone()));
+    for section in &mut edited {
+        for y in 0..4 {
+            assert_eq!(section.set(0, y, 0, &desert), Some(true));
+        }
+    }
+
+    let patched =
+        patch_flattened_chunk_biomes(&source, &profile, &edited, ColumnBiomePolicy::SampleCenter)
+            .expect("patch sampled footprint");
+    let patched_decoded = decode(&profile, patched, 0, 0).expect("decode patched chunk");
+    assert_eq!(patched_decoded.mixed_biome_columns, 0);
+    assert_eq!(patched_decoded.biome_at(0, 0, 0), Some("minecraft:desert"));
+    assert_eq!(patched_decoded.biome_at(0, 20, 0), Some("minecraft:desert"));
+    assert_eq!(
+        patched_decoded.block_at(3, 4, 5).unwrap().name(),
+        decoded.block_at(3, 4, 5).unwrap().name()
+    );
+    assert_eq!(
+        patched_decoded.block_at(15, 31, 15).unwrap().name(),
+        decoded.block_at(15, 31, 15).unwrap().name()
     );
 }
 
