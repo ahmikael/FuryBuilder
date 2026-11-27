@@ -295,7 +295,7 @@ mod tests {
             entries: vec![
                 crate::catalog::CatalogEntry {
                     id: "minecraft:stone".to_owned(),
-                    legacy_id: None,
+                    legacy_ids: Vec::new(),
                     display_name: None,
                     category: None,
                     tags: Vec::new(),
@@ -315,7 +315,7 @@ mod tests {
                 },
                 crate::catalog::CatalogEntry {
                     id: "minecraft:dirt".to_owned(),
-                    legacy_id: None,
+                    legacy_ids: Vec::new(),
                     display_name: None,
                     category: None,
                     tags: Vec::new(),
@@ -335,7 +335,7 @@ mod tests {
                 },
                 crate::catalog::CatalogEntry {
                     id: "minecraft:sword".to_owned(),
-                    legacy_id: None,
+                    legacy_ids: Vec::new(),
                     display_name: None,
                     category: None,
                     tags: Vec::new(),
@@ -346,6 +346,7 @@ mod tests {
                         item_definition: true,
                         model_type: None,
                         model: None,
+                        legacy_ids: Vec::new(),
                     }),
                     flags: crate::catalog::CatalogFlags::default(),
                 },

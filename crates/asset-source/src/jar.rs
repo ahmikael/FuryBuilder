@@ -36,6 +36,9 @@ pub(crate) struct ClientJarVersion {
     pub id: String,
     pub world_version: i32,
     pub pack_formats: Option<JarPackFormats>,
+    /// Resource pack format even when the release has no data pack format (1.8–1.12.2).
+    pub resource_pack_format: Option<u32>,
+    pub datapack_format: Option<u32>,
     pub java_version: Option<u32>,
     pub internal_id: Option<String>,
 }
@@ -59,7 +62,12 @@ pub(crate) fn client_jar_version(
         Err(crate::archive::ArchiveError::Missing(_)) => {
             let id = launcher_id.ok_or("the client JAR has no internal version.json and no adjacent launcher metadata naming the version")?;
             let profile = id.parse().ok().and_then(|version| profile_for_version(&version))
-                .filter(|profile| profile.family == VersionFamily::Flattened)
+                .filter(|profile| {
+                    matches!(
+                        profile.family,
+                        VersionFamily::Flattened | VersionFamily::Numeric
+                    )
+                })
                 .ok_or_else(|| format!("Minecraft {id} has no exact built-in profile that supports a client JAR without version.json"))?;
             if !checksum_verified {
                 return Err("a client JAR without version.json must match the adjacent launcher metadata SHA-1".to_owned());
@@ -75,6 +83,8 @@ pub(crate) fn client_jar_version(
                         data,
                         minors: profile.pack_format_minors,
                     }),
+                resource_pack_format: profile.resource_pack_format,
+                datapack_format: profile.datapack_format,
                 java_version: None,
                 internal_id: None,
             });
@@ -105,6 +115,8 @@ pub(crate) fn client_jar_version(
         id: id.to_string(),
         world_version: version.world_version,
         pack_formats,
+        resource_pack_format: pack_formats.map(|formats| formats.resource),
+        datapack_format: pack_formats.map(|formats| formats.data),
         java_version,
         internal_id: Some(version.id),
     })

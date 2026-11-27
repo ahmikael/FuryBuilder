@@ -17,7 +17,9 @@ cannot advance.
 FuryBuilder has built-in metadata for all 46 Java releases from 1.13 through 1.21.11 and for
 all 52 releases from 1.0 through 1.12.2. The older profiles are metadata-only: they record the
 exact release, `DataVersion` where one exists, pack formats, layout and dimensions, but no
-pre-1.13 chunk adapter, import, export, generation or block/item catalog is enabled yet. The
+pre-1.13 chunk adapter, import, export or generation is enabled yet. A `1.8–1.12.2` client JAR
+does build a block/item catalog with numeric ids and metadata; pre-1.8 releases still have no
+catalog. The
 Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
 the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
 client JAR, or from the exact built-in profile for 1.13.x, which has no internal file. Starting
@@ -53,8 +55,10 @@ dimensions. Resource packs are absent before 1.6.1 and use format 1 from 1.6.1. 
 JARs exist from 1.2.5 onward, but generation remains disabled in this build.
 
 These profiles are visible in the version picker with an `unverified` badge. Selecting one does
-not create a project: import, editing, export, generation and client-JAR catalogs are still
-limited to the classic 1.13–1.21.11 releases above.
+not create a project: import, editing, export and generation are still limited to the classic
+1.13–1.21.11 releases above. The client-JAR catalog supports `1.8–1.12.2` with numeric block
+ids, per-variant metadata and item ids, but that catalog does not yet admit those worlds to
+the editor.
 
 ## Differences within modern classic Anvil
 

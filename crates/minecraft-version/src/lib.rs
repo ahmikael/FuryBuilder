@@ -9,6 +9,7 @@
 
 pub mod catalog;
 pub mod flattened_biomes;
+pub mod legacy_registry;
 pub mod modern_classic;
 pub mod profile_builder;
 pub mod profiles;
@@ -19,6 +20,7 @@ pub use catalog::{
     CatalogSource, LatestVersions, ManifestEntry, ManifestVersionType, VersionCatalog,
     VersionManifest, DEFAULT_MANIFEST_TTL, MANIFEST_CACHE_SCHEMA_VERSION, OFFICIAL_MANIFEST_URL,
 };
+pub use legacy_registry::{LegacyBlockState, LegacyItem, LegacyRegistry};
 pub use profile_builder::{
     build_profile_from_version_json, build_version_profile, read_client_jar_version_json,
     JarPackFormats, JarPackVersion, JarVersionJson, ProfileBuildError, ProfileBuildInput,

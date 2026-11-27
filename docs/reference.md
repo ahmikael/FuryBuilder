@@ -10,8 +10,9 @@ server JAR. The 19 flattened releases from 1.13 through 1.17.1 support the same 
 exact-version generation, managed or manual client JARs with exact block/item catalogs, and
 resource pack formats 4–7. Every flattened release passes the catalog-pinned project round-trip.
 Exact metadata-only profiles also cover all 52 releases from 1.0 through 1.12.2, but they are
-`unverified` and stop at the profile check. Snapshots, split 26.1+ releases and special manifest
-ids are visible and refused at project creation.
+`unverified` and stop at the profile check. Their `1.8–1.12.2` client JARs build block/item
+catalogs with numeric ids and metadata, though no pre-1.13 world can be opened. Snapshots,
+split 26.1+ releases and special manifest ids are visible and refused at project creation.
 
 **1.21.4** remains the only `full` profile. The other classic profiles use
 `read + write subset` and support same-version Java structure `.nbt` interchange. The managed
@@ -82,8 +83,9 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
   display capture.
 - Modded servers, data packs, other server versions, Bedrock worlds, snapshots, split 26.1+
   saves, pre-1.13 worlds and Minecraft versions outside 1.13–1.21.11. Exact metadata-only
-  profiles exist for 1.0–1.12.2, but no pre-1.13 world adapter, import, export, generation or
-  catalog is enabled. Other official versions are listed but cannot be created or edited. Java
+  profiles exist for 1.0–1.12.2, but no pre-1.13 world adapter, import, export or generation is
+  enabled; `1.8–1.12.2` client JARs build numeric block/item catalogs, while pre-1.8 catalogs
+  are not built. Other official versions are listed but cannot be created or edited. Java
   majors other than the profile's required major are not validated in this beta.
 - Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
   are covered by `level-type`, Java major, data pack format and `server.properties` tests.
@@ -108,7 +110,7 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Exact profiles for Java 1.0–1.12.2 are metadata-only and stop at the profile check; split 26.x and special manifest ids likewise cannot be edited |
+| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Exact profiles for Java 1.0–1.12.2 are metadata-only and stop at the profile check; `1.8–1.12.2` client JARs expose numeric block/item catalogs but cannot open or save a world. Split 26.x and special manifest ids likewise cannot be edited |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and pre-1.13 import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |

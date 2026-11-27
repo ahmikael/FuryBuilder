@@ -72,14 +72,19 @@ function blockEntry(
   };
   return {
     id,
-    legacyId: null,
+    legacyIds: [],
     displayName,
     category: null,
     tags,
     iconTexture,
     aliases: [],
     states,
-    itemForm: { itemDefinition: true, modelType: "minecraft:model", model: iconTexture },
+    itemForm: {
+      itemDefinition: true,
+      modelType: "minecraft:model",
+      model: iconTexture,
+      legacyIds: [],
+    },
     flags: {
       placeable: true,
       hasItem: true,

@@ -5,8 +5,8 @@
   "toVersion": "1.21.4",
   "fromDataVersion": 1,
   "toDataVersion": 1,
-  "fromSchemaVersion": 6,
-  "toSchemaVersion": 6,
+  "fromSchemaVersion": 7,
+  "toSchemaVersion": 7,
   "added": [
     {
       "id": "minecraft:copper_bulb",
@@ -67,7 +67,7 @@
       "states": null,
       "itemFormChanged": false,
       "flagsChanged": false,
-      "legacyIdChanged": false
+      "legacyIdsChanged": false
     }
   ],
   "unchanged": 1

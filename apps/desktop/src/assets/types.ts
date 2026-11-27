@@ -180,6 +180,8 @@ export interface CatalogStates {
 /** One explicit entry from the blockstate `variants` object. */
 export interface CatalogVariant {
   properties: Record<string, string>;
+  /** Exact numeric block ids for this variant; empty for named registries. */
+  legacyIds: CatalogLegacyId[];
   /** Weighted model choices declared by the variant. */
   models: CatalogVariantModel[];
 }
@@ -200,6 +202,8 @@ export interface CatalogItemForm {
   /** Top-level item definition model type, for example `minecraft:select`. */
   modelType: string | null;
   model: string | null;
+  /** Numeric item ids (id + damage) for numeric registries. */
+  legacyIds: CatalogLegacyId[];
 }
 
 /** Facts used by palette rules and placement; null means the fact is not known yet. */
@@ -223,8 +227,8 @@ export interface CatalogFlags {
 /** One block and/or item from the exact client JAR. */
 export interface CatalogEntry {
   id: string;
-  /** Numeric id and metadata for legacy versions; null for named registries. */
-  legacyId: CatalogLegacyId | null;
+  /** Numeric block ids (or item ids for item-only entries); empty for named registries. */
+  legacyIds: CatalogLegacyId[];
   displayName: string | null;
   category: string | null;
   tags: string[];

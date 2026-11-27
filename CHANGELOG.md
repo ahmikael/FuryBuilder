@@ -20,7 +20,7 @@ formats are not migrated.
   `1.8–1.12.2` records `DataVersion` 47 for 1.8.9, 169–1343 for 1.9–1.12.2, `-1` for
   1.8–1.8.8 and resource pack formats 1–3; pre-1.8 splits McRegion `1.0–1.1` (128-block
   height) from Anvil `1.2.1–1.7.10` (256-block height). The profiles are `unverified` and cannot
-  create projects; no pre-1.13 codec, catalog or generation is enabled.
+  create projects; no pre-1.13 codec or generation is enabled.
 - Exact built-in metadata for Java `1.13–1.17.1`: `DataVersion`, Java 8/16, resource and data
   pack formats 4–7, dimension folders and the 0–256 Overworld height (the extended height starts
   with 1.18), plus the column/section biome boundary.
@@ -87,7 +87,14 @@ formats are not migrated.
   versions and split 1.17 formats. Each fixture checks block, item, state and tag facts, then pins the
   catalog in a project and verifies create, edit, save, reopen, catalog rebuild, export and
   re-import with the unknown imported state preserved.
-- One catalog entry per block/item id, with optional legacy id/metadata, display name, category,
+- Numeric catalogs for Java `1.8–1.12.2` client JARs. A shared `1.12.2` registry attaches
+  block id+metadata and item id+damage to the catalog entries, explicit state variants and item
+  forms through their own `legacyIds` arrays. Legacy asset names are bridged by explicit renames,
+  and the JAR still decides which blocks and items exist. Official 1.8.9 and 1.12.2 JARs resolve
+  every catalog block state and all discovered item entries except the two smooth-sandstone items
+  that have no legacy item form; item-only entries that the legacy JAR layout cannot expose
+  remain a later legacy admission item. Pre-1.8 catalogs remain out of scope.
+- One catalog entry per block/item id, with numeric ids/metadata, display name, category,
   tags, icon, aliases, nested block states, item form and typed placement flags. Facts the JAR
   cannot prove stay `null` rather than being guessed; the snapshot no longer splits blocks and
   items into parallel arrays.

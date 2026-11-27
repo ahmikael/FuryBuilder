@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
+use minecraft_version::{LegacyRegistry, VersionId};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -28,10 +29,11 @@ use crate::bundle::normalize_id;
 use crate::catalog_flags::classify_flags;
 use crate::discovery::{inspect_asset_path, read_version_metadata};
 use crate::jar::{client_jar_version, file_sha1};
+use crate::legacy;
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
-pub const CATALOG_SCHEMA_VERSION: u32 = 6;
+pub const CATALOG_SCHEMA_VERSION: u32 = 7;
 /// A vanilla client JAR has a few thousand blockstates and items.
 pub const MAX_CATALOG_BLOCKS: usize = 32_768;
 pub const MAX_CATALOG_ITEMS: usize = 32_768;
@@ -66,8 +68,10 @@ const UNVERIFIED_JAR_WARNING: &str =
 #[serde(rename_all = "camelCase")]
 pub struct CatalogEntry {
     pub id: String,
-    /// Numeric id and optional metadata for legacy versions. `None` for named registries.
-    pub legacy_id: Option<CatalogLegacyId>,
+    /// Numeric block ids for numeric registries, or item ids for item-only entries.
+    /// Empty for named registries. A block whose metadata renders several flattened
+    /// names carries every id here; exact state variants narrow it further.
+    pub legacy_ids: Vec<CatalogLegacyId>,
     pub display_name: Option<String>,
     /// Category hint assigned by the catalog pass. `None` until categories are known.
     pub category: Option<String>,
@@ -121,6 +125,9 @@ pub struct CatalogStates {
 pub struct CatalogVariant {
     /// Property values named by the variant key. Empty when the file uses the single `""` key.
     pub properties: BTreeMap<String, String>,
+    /// Exact numeric block ids for this variant. Empty for named registries and for
+    /// variants whose metadata cannot be distinguished by the client JAR.
+    pub legacy_ids: Vec<CatalogLegacyId>,
     /// Weighted model choices declared by the variant. Vanilla usually has one.
     pub models: Vec<CatalogVariantModel>,
 }
@@ -146,6 +153,8 @@ pub struct CatalogItemForm {
     /// `minecraft:special`. `None` for legacy item models and definitions without a type.
     pub model_type: Option<String>,
     pub model: Option<String>,
+    /// Numeric item ids (id + damage) for numeric registries. Empty for named registries.
+    pub legacy_ids: Vec<CatalogLegacyId>,
 }
 
 /// Facts used by palette rules and placement. `None` means the fact is not known yet, not
@@ -549,8 +558,8 @@ fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, Cat
         display_path: jar_path.display().to_string(),
         version: version.id,
         data_version: version.world_version,
-        resource_pack_format: version.pack_formats.map(|formats| formats.resource),
-        datapack_format: version.pack_formats.map(|formats| formats.data),
+        resource_pack_format: version.resource_pack_format,
+        datapack_format: version.datapack_format,
         sha1: Some(sha1),
         checksum_verified,
         warnings,
@@ -603,6 +612,42 @@ struct ItemFacts {
     item_definition: bool,
     icon_texture: Option<String>,
     tags: Vec<String>,
+}
+
+fn legacy_item_asset_names(lang: &BTreeMap<String, String>) -> BTreeSet<String> {
+    lang.keys()
+        .filter_map(|key| key.strip_prefix("item."))
+        .filter_map(|rest| rest.split_once('.').map(|(asset, _)| asset))
+        .filter(|asset| !asset.is_empty())
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Attaches numeric ids only for the exact pre-1.13 release. The client JAR decides
+/// which entries exist; the registry only translates their names and metadata.
+fn annotate_legacy_ids(entries: &mut BTreeMap<String, CatalogEntry>, version: &str) {
+    let Ok(version) = version.parse::<VersionId>() else {
+        return;
+    };
+    let Some(registry) = LegacyRegistry::for_release(&version) else {
+        return;
+    };
+    for entry in entries.values_mut() {
+        let asset = entry.id.strip_prefix("minecraft:").unwrap_or(&entry.id);
+        if let Some(states) = &mut entry.states {
+            entry.legacy_ids = legacy::block_ids(registry, asset);
+            for variant in &mut states.variants {
+                variant.legacy_ids = legacy::variant_ids(registry, asset, &variant.properties);
+            }
+        }
+        if let Some(item_form) = &mut entry.item_form {
+            let ids = legacy::item_ids(registry, asset);
+            if entry.states.is_none() {
+                entry.legacy_ids = ids.clone();
+            }
+            item_form.legacy_ids = ids;
+        }
+    }
 }
 
 fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, CatalogError> {
@@ -670,6 +715,11 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         .count();
 
     let (lang, languages) = read_language(&mut archive, &entry_names, &mut warnings);
+    let legacy_numeric = resolved
+        .version
+        .parse::<VersionId>()
+        .ok()
+        .is_some_and(|version| LegacyRegistry::for_release(&version).is_some());
 
     let mut blocks: BTreeMap<String, BlockFacts> = BTreeMap::new();
     for (id, entry) in &blockstate_entries {
@@ -780,38 +830,68 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
                 );
             }
         }
-        for key in lang.keys() {
-            let Some(rest) = key.strip_prefix("item.") else {
-                continue;
-            };
-            let Some((namespace, path)) = rest.split_once('.') else {
-                continue;
-            };
-            if path.contains('.') {
-                continue;
+        if legacy_numeric {
+            // 1.12 and older name item language keys `item.<asset>.name`, not
+            // `item.<namespace>.<path>`. The asset name is the first segment; variant
+            // keys such as `item.skull.skeleton.name` still describe the base item.
+            for asset in legacy_item_asset_names(&lang) {
+                let id = format!("minecraft:{asset}");
+                let model_id = format!("minecraft:item/{asset}");
+                if !crate::bundle::valid_id(&id)
+                    || !item_model_ids.contains(&model_id)
+                    || !model_has_content(
+                        &mut archive,
+                        &model_index,
+                        &model_id,
+                        &mut model_content,
+                        &mut warnings,
+                    )
+                {
+                    continue;
+                }
+                items.entry(id).or_insert(ItemFacts {
+                    display_name: None,
+                    model: Some(model_id),
+                    model_type: None,
+                    item_definition: false,
+                    icon_texture: None,
+                    tags: Vec::new(),
+                });
             }
-            let id = format!("{namespace}:{path}");
-            let model_id = format!("{namespace}:item/{path}");
-            if !crate::bundle::valid_id(&id)
-                || !item_model_ids.contains(&model_id)
-                || !model_has_content(
-                    &mut archive,
-                    &model_index,
-                    &model_id,
-                    &mut model_content,
-                    &mut warnings,
-                )
-            {
-                continue;
+        } else {
+            for key in lang.keys() {
+                let Some(rest) = key.strip_prefix("item.") else {
+                    continue;
+                };
+                let Some((namespace, path)) = rest.split_once('.') else {
+                    continue;
+                };
+                if path.contains('.') {
+                    continue;
+                }
+                let id = format!("{namespace}:{path}");
+                let model_id = format!("{namespace}:item/{path}");
+                if !crate::bundle::valid_id(&id)
+                    || !item_model_ids.contains(&model_id)
+                    || !model_has_content(
+                        &mut archive,
+                        &model_index,
+                        &model_id,
+                        &mut model_content,
+                        &mut warnings,
+                    )
+                {
+                    continue;
+                }
+                items.entry(id).or_insert(ItemFacts {
+                    display_name: None,
+                    model: Some(model_id),
+                    model_type: None,
+                    item_definition: false,
+                    icon_texture: None,
+                    tags: Vec::new(),
+                });
             }
-            items.entry(id).or_insert(ItemFacts {
-                display_name: None,
-                model: Some(model_id),
-                model_type: None,
-                item_definition: false,
-                icon_texture: None,
-                tags: Vec::new(),
-            });
         }
     }
 
@@ -860,7 +940,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
             id.clone(),
             CatalogEntry {
                 id,
-                legacy_id: None,
+                legacy_ids: Vec::new(),
                 display_name: block.display_name,
                 category: None,
                 tags: block.tags,
@@ -884,7 +964,7 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
         let icon = item.icon_texture.clone().or(fallback_icon);
         let entry = entries.entry(id.clone()).or_insert_with(|| CatalogEntry {
             id,
-            legacy_id: None,
+            legacy_ids: Vec::new(),
             display_name: None,
             category: None,
             tags: Vec::new(),
@@ -899,12 +979,14 @@ fn build_catalog(resolved: &ResolvedClientJar) -> Result<CatalogSnapshot, Catalo
             item_definition: item.item_definition,
             model_type: item.model_type,
             model: item.model,
+            legacy_ids: Vec::new(),
         });
         entry.icon_texture = icon.or_else(|| entry.icon_texture.take());
         entry.tags.extend(item.tags);
         entry.tags.sort();
         entry.tags.dedup();
     }
+    annotate_legacy_ids(&mut entries, &resolved.version);
     for entry in entries.values_mut() {
         let has_variants = entry
             .states
@@ -1048,49 +1130,100 @@ fn read_language(
     entries: &[String],
     warnings: &mut Vec<String>,
 ) -> (BTreeMap<String, String>, usize) {
-    let languages = collect_asset_entries(entries, "lang", ".json");
-    let Some((_, entry)) = languages.iter().find(|(id, _)| id == "minecraft:en_us") else {
+    let json_languages = collect_asset_entries(entries, "lang", ".json");
+    let legacy_languages: Vec<(String, String)> = entries
+        .iter()
+        .filter_map(|name| {
+            let (namespace, path) = parse_namespaced_entry(name, "assets", "lang", ".lang")?;
+            Some((format!("{namespace}:{path}"), name.clone()))
+        })
+        .collect();
+    let languages = json_languages.len() + legacy_languages.len();
+    let legacy_style = if let Some((_, entry)) = json_languages
+        .iter()
+        .find(|(id, _)| id == "minecraft:en_us")
+    {
+        (entry, false)
+    } else if let Some((_, entry)) = legacy_languages
+        .iter()
+        .find(|(id, _)| id == "minecraft:en_us" || id == "minecraft:en_US")
+    {
+        (entry, true)
+    } else {
         push_warning(
             warnings,
-            "the client JAR has no assets/minecraft/lang/en_us.json; display names are unavailable"
+            "the client JAR has no assets/minecraft/lang/en_us.json, en_us.lang or en_US.lang; display names are unavailable"
                 .to_owned(),
         );
-        return (BTreeMap::new(), languages.len());
+        return (BTreeMap::new(), languages);
     };
+    let (entry, legacy_style) = legacy_style;
     let mut lang = BTreeMap::new();
-    if let Some(Value::Object(document)) = read_json(archive, entry, warnings) {
+    if legacy_style {
+        if let Ok(bytes) = archive.read_entry(entry, MAX_CATALOG_JSON_BYTES) {
+            parse_legacy_language(&String::from_utf8_lossy(&bytes), &mut lang, warnings);
+        }
+    } else if let Some(Value::Object(document)) = read_json(archive, entry, warnings) {
         for (key, value) in document {
-            if lang.len() >= MAX_CATALOG_LANG_ENTRIES {
-                push_warning(
-                    warnings,
-                    format!(
-                        "en_us has more than {MAX_CATALOG_LANG_ENTRIES} keys; the rest were ignored"
-                    ),
-                );
+            if !insert_lang(&mut lang, key, value.as_str(), warnings) {
                 break;
-            }
-            if let Some(value) = value.as_str() {
-                lang.insert(key, value.to_owned());
             }
         }
     }
-    (lang, languages.len())
+    (lang, languages)
+}
+
+fn parse_legacy_language(
+    text: &str,
+    lang: &mut BTreeMap<String, String>,
+    warnings: &mut Vec<String>,
+) {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        if !insert_lang(lang, key.to_owned(), Some(value), warnings) {
+            break;
+        }
+    }
+}
+
+fn insert_lang(
+    lang: &mut BTreeMap<String, String>,
+    key: String,
+    value: Option<&str>,
+    warnings: &mut Vec<String>,
+) -> bool {
+    if lang.len() >= MAX_CATALOG_LANG_ENTRIES {
+        push_warning(
+            warnings,
+            format!("en_us has more than {MAX_CATALOG_LANG_ENTRIES} keys; the rest were ignored"),
+        );
+        return false;
+    }
+    if let Some(value) = value {
+        lang.insert(key, value.to_owned());
+    }
+    true
 }
 
 fn block_display_name(lang: &BTreeMap<String, String>, id: &str) -> Option<String> {
     let (namespace, path) = id.split_once(':')?;
-    lang.get(&format!("block.{namespace}.{path}")).cloned()
+    lang.get(&format!("block.{namespace}.{path}"))
+        .or_else(|| lang.get(&format!("tile.{path}.name")))
+        .cloned()
 }
 
 fn item_display_name(lang: &BTreeMap<String, String>, id: &str, has_block: bool) -> Option<String> {
     let (namespace, path) = id.split_once(':')?;
     lang.get(&format!("item.{namespace}.{path}"))
+        .or_else(|| lang.get(&format!("item.{path}.name")))
         .cloned()
-        .or_else(|| {
-            has_block
-                .then(|| lang.get(&format!("block.{namespace}.{path}")).cloned())
-                .flatten()
-        })
+        .or_else(|| has_block.then(|| block_display_name(lang, id)).flatten())
 }
 
 fn parse_blockstate(document: &Value, entry: &str, warnings: &mut Vec<String>) -> BlockStateFacts {
@@ -1124,6 +1257,7 @@ fn parse_blockstate(document: &Value, entry: &str, warnings: &mut Vec<String>) -
             }
             facts.variants.push(CatalogVariant {
                 properties: properties.unwrap_or_default(),
+                legacy_ids: Vec::new(),
                 models,
             });
         }
@@ -1774,7 +1908,7 @@ mod tests {
         let entries: Vec<CatalogEntry> = (0..10_000)
             .map(|index| CatalogEntry {
                 id: format!("example:block_{index}"),
-                legacy_id: None,
+                legacy_ids: Vec::new(),
                 display_name: Some(format!("Test Block {index}")),
                 category: None,
                 tags: vec!["example:generated".to_owned()],
@@ -1793,6 +1927,7 @@ mod tests {
                     item_definition: true,
                     model_type: Some("minecraft:model".to_owned()),
                     model: Some(format!("example:block/block_{index}")),
+                    legacy_ids: Vec::new(),
                 }),
                 flags: CatalogFlags {
                     placeable: Some(true),
@@ -1830,7 +1965,7 @@ mod tests {
         catalog.entries = vec![
             CatalogEntry {
                 id: "minecraft:stone".to_owned(),
-                legacy_id: None,
+                legacy_ids: Vec::new(),
                 display_name: None,
                 category: None,
                 tags: Vec::new(),
@@ -1842,7 +1977,7 @@ mod tests {
             },
             CatalogEntry {
                 id: "minecraft:smooth_stone".to_owned(),
-                legacy_id: None,
+                legacy_ids: Vec::new(),
                 display_name: None,
                 category: None,
                 tags: Vec::new(),
@@ -2319,7 +2454,7 @@ mod tests {
             .expect("stone");
         let stone_states = stone.states.as_ref().expect("stone states");
         assert_eq!(stone.display_name.as_deref(), Some("Stone"));
-        assert!(stone.legacy_id.is_none());
+        assert!(stone.legacy_ids.is_empty());
         assert!(stone.category.is_none());
         assert!(stone.aliases.is_empty());
         assert!(stone_states.properties.is_empty());
@@ -3280,7 +3415,7 @@ mod tests {
             .expect_err("checksum mismatch must be refused");
         assert!(error.to_string().contains("SHA-1"), "{error}");
 
-        write_launcher_metadata(&jar, "1.12.2");
+        write_launcher_metadata(&jar, "1.12.3");
         let error = AssetCatalogService::new()
             .build(&source(&jar))
             .expect_err("an unknown exact profile must be refused");
@@ -3674,5 +3809,417 @@ mod tests {
             .expect("other project with no packs")
             .pack_issues
             .is_empty());
+    }
+
+    fn numeric_fixture_jar(dir: &TempDir) -> PathBuf {
+        let block = r#"{"variants":{"normal":{"model":"minecraft:block/stone"}}}"#;
+        let slab = r#"{"variants":{"half=bottom":{"model":"minecraft:block/stone"},"half=top":{"model":"minecraft:block/stone"}}}"#;
+        let facing = r#"{"variants":{"facing=north":{"model":"minecraft:block/stone"}}}"#;
+        let crop = r#"{"variants":{"age=0":{"model":"minecraft:block/stone"}}}"#;
+        let grass = r#"{"variants":{"snowy=false":{"model":"minecraft:block/stone"}}}"#;
+        let entries = vec![
+            (
+                "assets/minecraft/blockstates/white_wool.json",
+                block.as_bytes().to_vec(),
+            ),
+            (
+                "assets/minecraft/blockstates/oak_slab.json",
+                slab.as_bytes().to_vec(),
+            ),
+            (
+                "assets/minecraft/blockstates/furnace.json",
+                facing.as_bytes().to_vec(),
+            ),
+            (
+                "assets/minecraft/blockstates/lit_furnace.json",
+                facing.as_bytes().to_vec(),
+            ),
+            (
+                "assets/minecraft/blockstates/wheat.json",
+                crop.as_bytes().to_vec(),
+            ),
+            (
+                "assets/minecraft/blockstates/grass.json",
+                grass.as_bytes().to_vec(),
+            ),
+            (
+                "assets/minecraft/models/block/stone.json",
+                json_bytes(serde_json::json!({
+                    "textures": {"all": "minecraft:block/stone"}
+                })),
+            ),
+            (
+                "assets/minecraft/textures/block/stone.png",
+                tiny_png(),
+            ),
+            (
+                "assets/minecraft/models/item/white_wool.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/models/item/oak_slab.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/models/item/furnace.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/models/item/wheat.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/models/item/grass.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/models/item/dye.json",
+                json_bytes(serde_json::json!({"parent": "minecraft:block/stone"})),
+            ),
+            (
+                "assets/minecraft/lang/en_us.lang",
+                b"tile.white_wool.name=White Wool\ntile.oak_slab.name=Oak Slab\ntile.furnace.name=Furnace\ntile.lit_furnace.name=Burning Furnace\ntile.wheat.name=Wheat\ntile.grass.name=Grass Block\nitem.wheat.name=Wheat\nitem.dye.name=Dye\nitem.furnace.name=Furnace\n".to_vec(),
+            ),
+        ];
+        let path = write_entries_jar(dir, "numeric-1.12.2", &entries);
+        write_launcher_metadata(&path, "1.12.2");
+        path
+    }
+
+    #[test]
+    fn numeric_release_catalog_maps_block_and_item_ids() {
+        let dir = TempDir::new("numeric-catalog");
+        let path = numeric_fixture_jar(&dir);
+        let catalog = AssetCatalogService::new()
+            .catalog(&source(&path))
+            .expect("numeric catalog");
+
+        assert_eq!(catalog.minecraft_version, "1.12.2");
+        assert_eq!(catalog.data_version, 1343);
+        assert_eq!(catalog.resource_pack_format, Some(3));
+        assert_eq!(catalog.datapack_format, None);
+        assert_eq!(catalog.schema_version, CATALOG_SCHEMA_VERSION);
+        assert!(catalog
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("no internal version.json")));
+
+        let wool = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:white_wool")
+            .expect("white wool");
+        assert_eq!(
+            wool.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 35,
+                metadata: Some(0)
+            }]
+        );
+
+        let oak_slab = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:oak_slab")
+            .expect("oak slab");
+        assert_eq!(
+            oak_slab
+                .legacy_ids
+                .iter()
+                .map(|id| (id.id, id.metadata))
+                .collect::<Vec<_>>(),
+            vec![(125, Some(0)), (126, Some(0)), (126, Some(8))]
+        );
+        let bottom = oak_slab
+            .states
+            .as_ref()
+            .expect("slab states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("half").map(String::as_str) == Some("bottom"))
+            .expect("bottom slab");
+        assert_eq!(
+            bottom.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 126,
+                metadata: Some(0)
+            }]
+        );
+
+        let furnace = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:furnace")
+            .expect("furnace");
+        let north = furnace
+            .states
+            .as_ref()
+            .expect("furnace states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("facing").map(String::as_str) == Some("north"))
+            .expect("north furnace");
+        assert_eq!(
+            north.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 61,
+                metadata: Some(2)
+            }]
+        );
+        assert_eq!(
+            furnace.item_form.as_ref().expect("furnace item").legacy_ids,
+            vec![CatalogLegacyId {
+                id: 61,
+                metadata: Some(0)
+            }]
+        );
+
+        let lit = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:lit_furnace")
+            .expect("lit furnace");
+        let north = lit
+            .states
+            .as_ref()
+            .expect("lit furnace states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("facing").map(String::as_str) == Some("north"))
+            .expect("north lit furnace");
+        assert_eq!(
+            north.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 62,
+                metadata: Some(2)
+            }]
+        );
+
+        let wheat = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:wheat")
+            .expect("wheat");
+        assert_eq!(
+            wheat.legacy_ids,
+            (0..=7)
+                .map(|metadata| CatalogLegacyId {
+                    id: 59,
+                    metadata: Some(metadata)
+                })
+                .collect::<Vec<_>>()
+        );
+        let age_zero = wheat
+            .states
+            .as_ref()
+            .expect("wheat states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("age").map(String::as_str) == Some("0"))
+            .expect("age zero");
+        assert_eq!(
+            age_zero.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 59,
+                metadata: Some(0)
+            }]
+        );
+        assert_eq!(
+            wheat.item_form.as_ref().expect("wheat item").legacy_ids,
+            vec![CatalogLegacyId {
+                id: 296,
+                metadata: Some(0)
+            }]
+        );
+
+        let dye = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:dye")
+            .expect("dye");
+        assert!(dye.states.is_none());
+        assert_eq!(
+            dye.legacy_ids.len(),
+            16,
+            "the shared dye item owns every damage value"
+        );
+        assert_eq!(
+            dye.item_form.as_ref().expect("dye item").legacy_ids.len(),
+            16
+        );
+
+        let grass = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:grass")
+            .expect("grass");
+        assert_eq!(
+            grass.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 2,
+                metadata: Some(0)
+            }]
+        );
+    }
+
+    #[test]
+    #[ignore = "requires FURYBUILDER_LEGACY_JAR pointing at an official 1.8-1.12.2 client.jar with its launcher JSON"]
+    fn real_legacy_catalog_reports_numeric_coverage() {
+        let jar = std::env::var("FURYBUILDER_LEGACY_JAR").expect("FURYBUILDER_LEGACY_JAR");
+        let catalog = AssetCatalogService::new()
+            .build(&AssetSourceSetting {
+                kind: "client_jar".to_owned(),
+                path: jar,
+            })
+            .expect("legacy catalog");
+        let blocks = catalog
+            .entries
+            .iter()
+            .filter(|entry| entry.states.is_some())
+            .count();
+        let blocks_with_ids = catalog
+            .entries
+            .iter()
+            .filter(|entry| entry.states.is_some() && !entry.legacy_ids.is_empty())
+            .count();
+        let items_with_ids = catalog
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry
+                    .item_form
+                    .as_ref()
+                    .is_some_and(|item| !item.legacy_ids.is_empty())
+            })
+            .count();
+        let missing_blocks = catalog
+            .entries
+            .iter()
+            .filter(|entry| entry.states.is_some() && entry.legacy_ids.is_empty())
+            .map(|entry| entry.id.clone())
+            .collect::<Vec<_>>();
+        let missing_items = catalog
+            .entries
+            .iter()
+            .filter(|entry| {
+                entry
+                    .item_form
+                    .as_ref()
+                    .is_some_and(|item| item.legacy_ids.is_empty())
+            })
+            .map(|entry| entry.id.clone())
+            .collect::<Vec<_>>();
+        println!(
+            "{} blocks ({blocks_with_ids} with numeric ids), {items_with_ids} items with numeric ids",
+            blocks
+        );
+        println!("missing block ids: {}", missing_blocks.join(", "));
+        println!("missing item ids: {}", missing_items.join(", "));
+        assert!(
+            missing_blocks.is_empty(),
+            "every block state asset must resolve a numeric id"
+        );
+        assert!(
+            missing_items.iter().all(|id| matches!(
+                id.as_str(),
+                "minecraft:smooth_red_sandstone" | "minecraft:smooth_sandstone"
+            )),
+            "unexpected item without a numeric id: {missing_items:?}"
+        );
+        assert!(blocks_with_ids > 300, "expected broad block coverage");
+        assert!(items_with_ids > 250, "expected broad item coverage");
+
+        let wool = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:white_wool")
+            .expect("white wool");
+        assert_eq!(
+            wool.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 35,
+                metadata: Some(0)
+            }]
+        );
+        let wheat = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:wheat")
+            .expect("wheat");
+        assert_eq!(
+            wheat.legacy_ids.iter().map(|id| id.id).min(),
+            Some(59),
+            "wheat block id"
+        );
+        assert_eq!(
+            wheat.item_form.as_ref().expect("wheat item").legacy_ids,
+            vec![CatalogLegacyId {
+                id: 296,
+                metadata: Some(0)
+            }],
+            "the wheat item id is not the block id"
+        );
+
+        let oak_slab = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:oak_slab")
+            .expect("oak slab");
+        let bottom = oak_slab
+            .states
+            .as_ref()
+            .expect("slab states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("half").map(String::as_str) == Some("bottom"))
+            .expect("bottom slab variant");
+        assert_eq!(
+            bottom.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 126,
+                metadata: Some(0)
+            }]
+        );
+
+        let furnace = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:furnace")
+            .expect("furnace");
+        let north = furnace
+            .states
+            .as_ref()
+            .expect("furnace states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("facing").map(String::as_str) == Some("north"))
+            .expect("north furnace");
+        assert_eq!(
+            north.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 61,
+                metadata: Some(2)
+            }]
+        );
+        let lit_furnace = catalog
+            .entries
+            .iter()
+            .find(|entry| entry.id == "minecraft:lit_furnace")
+            .expect("lit furnace");
+        let lit_north = lit_furnace
+            .states
+            .as_ref()
+            .expect("lit furnace states")
+            .variants
+            .iter()
+            .find(|variant| variant.properties.get("facing").map(String::as_str) == Some("north"))
+            .expect("north lit furnace");
+        assert_eq!(
+            lit_north.legacy_ids,
+            vec![CatalogLegacyId {
+                id: 62,
+                metadata: Some(2)
+            }]
+        );
     }
 }

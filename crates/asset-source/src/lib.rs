@@ -24,6 +24,7 @@ mod catalog_diff;
 mod catalog_flags;
 mod discovery;
 mod jar;
+mod legacy;
 mod pack_store;
 mod resource_pack;
 mod settings;

@@ -108,7 +108,7 @@ pub struct CatalogEntryChange {
     pub states: Option<CatalogStatesChange>,
     pub item_form_changed: bool,
     pub flags_changed: bool,
-    pub legacy_id_changed: bool,
+    pub legacy_ids_changed: bool,
 }
 
 /// An optional string value that differs between the two snapshots.
@@ -419,7 +419,7 @@ fn diff_entry(id: &str, from: &CatalogEntry, to: &CatalogEntry) -> Option<Catalo
     let states = diff_states(from.states.as_ref(), to.states.as_ref());
     let item_form_changed = from.item_form != to.item_form;
     let flags_changed = from.flags != to.flags;
-    let legacy_id_changed = from.legacy_id != to.legacy_id;
+    let legacy_ids_changed = from.legacy_ids != to.legacy_ids;
 
     if display_name.is_none()
         && category.is_none()
@@ -431,7 +431,7 @@ fn diff_entry(id: &str, from: &CatalogEntry, to: &CatalogEntry) -> Option<Catalo
         && states.is_none()
         && !item_form_changed
         && !flags_changed
-        && !legacy_id_changed
+        && !legacy_ids_changed
     {
         return None;
     }
@@ -448,7 +448,7 @@ fn diff_entry(id: &str, from: &CatalogEntry, to: &CatalogEntry) -> Option<Catalo
         states,
         item_form_changed,
         flags_changed,
-        legacy_id_changed,
+        legacy_ids_changed,
     })
 }
 
@@ -585,7 +585,7 @@ mod tests {
     ) -> CatalogEntry {
         CatalogEntry {
             id: id.to_owned(),
-            legacy_id: None,
+            legacy_ids: Vec::new(),
             display_name: display_name.map(str::to_owned),
             category: None,
             tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
@@ -605,6 +605,7 @@ mod tests {
             variant_count: 1,
             variants: vec![CatalogVariant {
                 properties: BTreeMap::new(),
+                legacy_ids: Vec::new(),
                 models: vec![CatalogVariantModel {
                     model: Some(model.to_owned()),
                     x_rotation: 0,
@@ -624,6 +625,7 @@ mod tests {
             item_definition: true,
             model_type: Some("minecraft:model".to_owned()),
             model: Some("minecraft:item/example".to_owned()),
+            legacy_ids: Vec::new(),
         });
         entry
     }
@@ -923,6 +925,7 @@ mod tests {
         to_states.multipart = true;
         to_states.variants.push(CatalogVariant {
             properties: BTreeMap::new(),
+            legacy_ids: Vec::new(),
             models: Vec::new(),
         });
 
@@ -970,6 +973,7 @@ mod tests {
             item_definition: false,
             model_type: None,
             model: Some("minecraft:item/other".to_owned()),
+            legacy_ids: Vec::new(),
         });
 
         let diff = CatalogDiff::between(

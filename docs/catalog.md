@@ -101,6 +101,27 @@ entity-only blockstates never become items or blocks. Entity render blockstates
 (`item_frame`, `glow_item_frame`) are skipped with a warning, and empty or special item models
 keep a `null` icon instead of borrowing a `particle` placeholder.
 
+Java `1.8–1.12.2` uses the same pre-flattening asset layout: per-block
+`assets/minecraft/blockstates/<name>.json`, item models under `models/item`, singular
+`textures/block`/`textures/item`, and a legacy `lang/en_us.lang` (1.8.x names it `en_US.lang`).
+These JARs have no root `version.json`, so the exact release is resolved from SHA-1-matched
+adjacent launcher metadata and the built-in numeric profile; the snapshot carries an explicit
+warning. The blockstate files are the authority for which block states exist, while the shared
+numeric registry supplies the numeric ids and metadata for their pre-flattening asset names.
+Asset renames are bridged explicitly (`silver_*` → `light_gray_*`, stained hardened clay →
+terracotta, `stonebrick` → `stone_bricks`, `reeds` → `sugar_cane`, and similar); no rename is
+guessed from a loose name match. The catalog entry id remains the asset name shipped by the JAR
+(for example `minecraft:reeds`), because that is the id the 1.8–1.12 asset pipeline proves; the
+flattened registry name is used to resolve the numeric ids. Normalizing those legacy entry ids
+to their flattened names is part of the legacy admission/work pass, not a silent catalog rename.
+A block entry carries every numeric block id its asset can describe, each state variant carries
+the exact id+metadata for its declared properties, and an item form carries its own numeric item
+id+damage (which may differ from the block id, for example wheat block 59 and wheat item 296).
+Numeric ids are attached only when the exact JAR ships the corresponding asset and only for exact
+`1.8–1.12.2` releases; a 1.8 catalog cannot claim a 1.12 entry. Two smooth-sandstone blocks have
+no separate numeric item form before 1.13, so their catalog item entries remain without numeric
+item ids instead of borrowing a different id.
+
 ## Snapshot contract
 
 `CatalogSnapshot` contains:
@@ -114,11 +135,13 @@ keep a `null` icon instead of borrowing a `particle` placeholder.
 - one `CatalogEntry` per id, merging its block and item forms. An entry with block states
   has `states`; an entry with an item form has `itemForm`; a normal block with an item has
   both, while block-only technical entries and item-only entries have one;
-- `legacyId`/`metadata` for numeric registries, `displayName`, `category`, direct `tags`,
-  `iconTexture` and aliases. Named-registry entries have `legacyId: null`. `category` stays
-  `null` because neither the client JAR nor its tags carry Minecraft's creative-tab
-  assignment; the desktop palette derives advisory creative-style groups instead. Aliases stay
-  empty until a versioned alias source exists;
+- `legacyIds` for numeric registries: an array of `{id, metadata}` on the entry, on every
+  explicit state variant and on the item form. Named-registry entries and variants that cannot
+  be distinguished by the JAR have an empty array. The same bullet carries `displayName`,
+  `category`, direct `tags`, `iconTexture` and aliases. `category` stays `null` because neither
+  the client JAR nor its tags carry Minecraft's creative-tab assignment; the desktop palette
+  derives advisory creative-style groups instead. Aliases stay empty until a versioned alias
+  source exists;
 - declared property keys and values under `states`, whether those values are complete, and
   the single declared default state when it is unambiguous;
 - every explicit `variants` entry with its exact property key and weighted model choices,
@@ -271,7 +294,7 @@ one:
   are only inferred when icon, display name, tags and block/item form all match and the pairing
   is unique in both directions. Ambiguous or non-vanilla pairs remain in `added`/`removed`.
 - `changed` covers common entries: display name, category, icon, aliases, tags, item form,
-  flags, legacy id, and detailed state changes (block form, property keys, accepted values,
+  flags, numeric ids, and detailed state changes (block form, property keys, accepted values,
   default state, completeness, variant count/list, multipart and model).
 - `unchanged` counts common entries with none of those changes. The diff also carries both
   catalog ids, versions, `DataVersion`s and schema versions.
@@ -337,9 +360,12 @@ project.
 - Releases before item definitions fall back to item models and language keys. Only a real,
   non-empty `models/item/<path>` model backed by a valid id is admitted; templates
   (`item/generated`), empty placeholders (`item/air`), wall-fan variants and entity-backed
-  blockstates are excluded. Numeric ids and pre-1.8 registries remain outside the catalog and
-  belong to the legacy stage; exact metadata-only profiles for 1.0–1.12.2 do not build a
-  catalog.
+  blockstates are excluded. For numeric releases the language fallback reads the legacy
+  `item.<asset>.name` keys (lowercase asset names only) instead of the modern
+  `item.<namespace>.<path>` form, and display names still prefer the legacy `tile.*`/`item.*`
+  keys. This legacy language file is not a complete localization source, so some old items keep
+  a `null` display name. Catalogs are built for `1.8–1.12.2`; pre-1.8 registries remain outside
+  the catalog and belong to the later legacy stage.
 - Entity render blockstates are not blocks. `item_frame` and `glow_item_frame` have blockstate
   files for the entity renderer, so they are skipped with a warning while their item forms stay
   item-only. An imported world containing such names still preserves the stored id and
@@ -357,12 +383,19 @@ project.
   empty item models and special items. Every flattened fixture builds the exact catalog,
   checks block/item/state/tag facts, pins it in a project, edits, saves, reopens, rebuilds
   the catalog from the same JAR, exports and re-imports while checking the edit and the
-  preserved unknown state. Real-JAR verification counted 598/789 blocks/items for `1.13.2`,
+  preserved unknown state. Numeric fixtures cover legacy language parsing, slab/type and furnace
+  lit/unlit variants, grass/red-bed renames, shared dye damage values and the block-id-versus-
+  item-id split for wheat. Real-JAR verification counted 598/789 blocks/items for `1.13.2`,
   676/876 for `1.14.4`, 680/883 for `1.15.2`, 763/975 for `1.16.5` and 898/1,099 for `1.17.1`,
-  matching the PrismarineJS registries with no missing or extra entries. A real 1.21.4 client
-  JAR currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
-  173 item tag files, 14 atlases and 990 distinct palette icon textures. Icons are served lazily
-  in bounded batches; the 256-texture measurement is in Performance and memory.
+  matching the PrismarineJS registries with no missing or extra entries. Official 1.8.9 and
+  1.12.2 JARs resolve every block state asset to a numeric block id; 336 (1.8.9) and 409
+  (1.12.2) catalog item entries receive numeric item ids. Every discovered item entry resolves
+  except the two smooth-sandstone items without a legacy item form; legacy item-only entries
+  that the pre-flattening layout cannot expose are a later legacy admission item. A real 1.21.4
+  client JAR currently reports 1,097 blockstate entries, 1,385 item
+  definitions, 186 block tag files, 173 item tag files, 14 atlases and 990 distinct palette icon
+  textures. Icons are served lazily in bounded batches; the 256-texture measurement is in
+  Performance and memory.
 
 ## Safety bounds
 
