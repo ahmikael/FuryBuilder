@@ -3060,18 +3060,24 @@ mod tests {
     }
 
     #[test]
-    fn every_flattened_profile_supplies_formats_without_internal_version_json() {
+    fn flattened_profiles_supply_formats_from_internal_or_launcher_metadata() {
         let dir = TempDir::new("flat-profiles");
-        // 1.13.2-1.16.5 client JARs have no root version.json. Launcher metadata names the
-        // exact release; the built-in profile supplies the remaining catalog facts.
-        for (version, data_version, pack_format) in [
-            ("1.13.2", 1631, 4),
-            ("1.14.4", 1976, 4),
-            ("1.15.2", 2230, 5),
-            ("1.16.5", 2586, 6),
-            ("1.17.1", 2730, 7),
+        // Only 1.13.x client JARs lack a root version.json. 1.14–1.14.2 use a build-suffixed
+        // id, 1.14.3–1.16.5 a plain id with a numeric pack version, and 1.17+ split formats.
+        for (version, data_version, pack_format, internal_id) in [
+            ("1.13.2", 1631, 4, None),
+            (
+                "1.14.2",
+                1963,
+                4,
+                Some("1.14.2 / f647ba8dc371474797bee24b2b312ff4"),
+            ),
+            ("1.14.4", 1976, 4, Some("1.14.4")),
+            ("1.15.2", 2230, 5, Some("1.15.2")),
+            ("1.16.5", 2586, 6, Some("1.16.5")),
+            ("1.17.1", 2730, 7, Some("1.17.1")),
         ] {
-            let entries = vec![
+            let mut entries = vec![
                 (
                     "assets/minecraft/blockstates/stone.json",
                     json_bytes(serde_json::json!({
@@ -3086,6 +3092,21 @@ mod tests {
                 ),
                 ("assets/minecraft/textures/block/stone.png", tiny_png()),
             ];
+            if let Some(internal_id) = internal_id {
+                let pack_version = if data_version < 2724 {
+                    serde_json::json!(pack_format)
+                } else {
+                    serde_json::json!({"resource": pack_format, "data": pack_format})
+                };
+                entries.push((
+                    "version.json",
+                    json_bytes(serde_json::json!({
+                        "id": internal_id,
+                        "world_version": data_version,
+                        "pack_version": pack_version,
+                    })),
+                ));
+            }
             let jar = write_entries_jar(&dir, version, &entries);
             write_launcher_metadata(&jar, version);
             let catalog = AssetCatalogService::new()
@@ -3095,12 +3116,21 @@ mod tests {
             assert_eq!(catalog.data_version, data_version);
             assert_eq!(catalog.resource_pack_format, Some(pack_format));
             assert_eq!(catalog.datapack_format, Some(pack_format));
-            assert!(
+            assert_eq!(
                 catalog
                     .warnings
                     .iter()
                     .any(|warning| warning.contains("no internal version.json")),
+                internal_id.is_none(),
                 "{version}: {:?}",
+                catalog.warnings
+            );
+            assert!(
+                !catalog
+                    .warnings
+                    .iter()
+                    .any(|warning| warning.contains("SHA-1 was not verified")),
+                "{version}: launcher checksum was not verified: {:?}",
                 catalog.warnings
             );
         }

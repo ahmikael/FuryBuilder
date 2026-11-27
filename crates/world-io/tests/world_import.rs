@@ -1,6 +1,6 @@
 //! Tests for read-only analysis and editable block import of classic Java worlds (M8.6).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -16,6 +16,7 @@ use project_store::{
     AssetsComponent, ComponentMode, EditorState, ImportOptions, ProjectComponents, ProjectStore,
     SaveKind, SourceFile,
 };
+use sha1::{Digest, Sha1};
 use world_domain::BlockPos;
 use world_io::nbt::{self, NbtFile, NbtValue, TAG_COMPOUND, TAG_STRING};
 use world_io::world_import::{
@@ -407,52 +408,252 @@ fn write_flattened_world_for_profile(root: &Path, profile: &VersionProfile) {
     fs::write(root.join("custom-unknown.dat"), b"keep me").expect("write unknown file");
 }
 
-fn write_catalog_jar(root: &Path, profile: &minecraft_version::VersionProfile) -> PathBuf {
+const TINY_PNG: &[u8] = &[
+    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
+    0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+    0x89, 0x00, 0x00, 0x00, 0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00,
+    0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d, 0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae,
+    0x42, 0x60, 0x82,
+];
+
+fn catalog_json(value: serde_json::Value) -> Vec<u8> {
+    serde_json::to_vec(&value).expect("serialize catalog fixture JSON")
+}
+
+fn catalog_display_name(id: &str) -> &'static str {
+    match id {
+        "stone" => "Stone",
+        "dirt" => "Dirt",
+        "gold_block" => "Block of Gold",
+        "oak_stairs" => "Oak Stairs",
+        "water" => "Water",
+        "item_frame" => "Item Frame",
+        "diamond_sword" => "Diamond Sword",
+        "beehive" => "Beehive",
+        "netherite_block" => "Block of Netherite",
+        "copper_block" => "Block of Copper",
+        other => panic!("no catalog display name for {other}"),
+    }
+}
+
+fn write_catalog_launcher_metadata(jar: &Path, profile: &VersionProfile) {
+    let bytes = fs::read(jar).expect("read catalog JAR for launcher metadata");
+    let digest = Sha1::digest(&bytes);
+    let sha1: String = digest.iter().map(|byte| format!("{byte:02x}")).collect();
+    let metadata = serde_json::json!({
+        "id": profile.minecraft_version.as_str(),
+        "type": "release",
+        "downloads": {
+            "client": {
+                "sha1": sha1,
+                "size": bytes.len(),
+                "url": "https://piston-data.mojang.com/v1/objects/client.jar",
+            }
+        }
+    });
+    fs::write(
+        jar.with_extension("json"),
+        serde_json::to_vec(&metadata).expect("catalog launcher metadata JSON"),
+    )
+    .expect("write catalog launcher metadata");
+}
+
+/// Synthetic exact-version client JAR. It follows the real asset layout of the profile:
+/// 1.13.x has no internal `version.json` and relies on adjacent launcher metadata, 1.14–1.14.2
+/// carries a build-suffixed id, 1.14–1.16 uses a numeric `pack_version`, and 1.17+ uses the
+/// split resource/data object. Blockstates, item models, plural tags and entity-backed
+/// blockstates are all represented so the catalog can be checked end to end.
+fn write_catalog_jar(root: &Path, profile: &VersionProfile) -> PathBuf {
     let path = root.join(format!("catalog-{}.jar", profile.minecraft_version));
     let file = fs::File::create(&path).expect("create catalog JAR");
     let mut zip = zip::ZipWriter::new(file);
     let options = SimpleFileOptions::default();
-    let version = serde_json::json!({
-        "id": profile.minecraft_version.as_str(),
-        "name": profile.minecraft_version.as_str(),
-        "world_version": profile.data_version,
-        "pack_version": {
-            "resource": profile.resource_pack_format.unwrap_or(0),
-            "data": profile.datapack_format.unwrap_or(0),
-        },
-    });
-    let mut files = vec![(
-        "version.json".to_owned(),
-        serde_json::to_vec(&version).expect("catalog version JSON"),
-    )];
-    for (id, model) in [
-        ("stone", "minecraft:block/stone"),
-        ("dirt", "minecraft:block/dirt"),
-        ("gold_block", "minecraft:block/gold_block"),
-    ] {
+    let version = profile.minecraft_version.as_str();
+    let flattened = profile.family == VersionFamily::Flattened;
+    let mut files: Vec<(String, Vec<u8>)> = Vec::new();
+
+    // 1.13.x client JARs are the only flattened releases without a root version.json.
+    if !(flattened && version.starts_with("1.13")) {
+        let internal_id = if flattened && matches!(version, "1.14" | "1.14.1" | "1.14.2") {
+            let build = match version {
+                "1.14" => "5dac5567e13e46bdb0c1d90aa8d8b3f7",
+                "1.14.1" => "a8f78b0d43c74598a199d6d80cda413f",
+                _ => "f647ba8dc371474797bee24b2b312ff4",
+            };
+            format!("{version} / {build}")
+        } else {
+            version.to_owned()
+        };
+        let pack_version = if flattened && profile.data_version < 2724 {
+            serde_json::json!(profile.resource_pack_format.unwrap_or(0))
+        } else {
+            serde_json::json!({
+                "resource": profile.resource_pack_format.unwrap_or(0),
+                "data": profile.datapack_format.unwrap_or(0),
+            })
+        };
         files.push((
-            format!("assets/minecraft/blockstates/{id}.json"),
-            format!(r#"{{"variants":{{"":{{"model":"{model}"}}}}}}"#).into_bytes(),
-        ));
-        files.push((
-            format!("assets/minecraft/models/block/{id}.json"),
-            format!(r#"{{"textures":{{"all":"minecraft:block/{id}"}}}}"#).into_bytes(),
+            "version.json".to_owned(),
+            catalog_json(serde_json::json!({
+                "id": internal_id,
+                "name": version,
+                "world_version": profile.data_version,
+                "pack_version": pack_version,
+            })),
         ));
     }
+
+    let mut extras = Vec::new();
+    if profile.data_version >= 2225 {
+        extras.push(("beehive", "beehive_side"));
+    }
+    if profile.data_version >= 2566 {
+        extras.push(("netherite_block", "netherite_block"));
+    }
+    if profile.data_version >= 2724 {
+        extras.push(("copper_block", "copper_block"));
+    }
+    let mut blocks = vec![
+        "stone",
+        "dirt",
+        "gold_block",
+        "oak_stairs",
+        "water",
+        "item_frame",
+    ];
+    blocks.extend(extras.iter().map(|(id, _)| *id));
+
+    let mut lang = serde_json::Map::new();
+    for id in blocks.iter().copied() {
+        let model = format!("minecraft:block/{id}");
+        let blockstate = if id == "oak_stairs" {
+            let mut variants = serde_json::Map::new();
+            for facing in ["north", "east", "south", "west"] {
+                for half in ["bottom", "top"] {
+                    for shape in [
+                        "straight",
+                        "inner_left",
+                        "inner_right",
+                        "outer_left",
+                        "outer_right",
+                    ] {
+                        for waterlogged in ["false", "true"] {
+                            variants.insert(
+                                format!(
+                                    "facing={facing},half={half},shape={shape},waterlogged={waterlogged}"
+                                ),
+                                serde_json::json!({ "model": model.clone() }),
+                            );
+                        }
+                    }
+                }
+            }
+            serde_json::json!({ "variants": variants })
+        } else {
+            serde_json::json!({ "variants": { "": { "model": model.clone() } } })
+        };
+        files.push((
+            format!("assets/minecraft/blockstates/{id}.json"),
+            catalog_json(blockstate),
+        ));
+
+        let texture = extras
+            .iter()
+            .find(|(extra_id, _)| *extra_id == id)
+            .map(|(_, texture)| *texture)
+            .unwrap_or(match id {
+                "oak_stairs" => "oak_planks",
+                "water" => "water_still",
+                other => other,
+            });
+        files.push((
+            format!("assets/minecraft/models/block/{id}.json"),
+            catalog_json(serde_json::json!({
+                "textures": { "all": format!("minecraft:block/{texture}") }
+            })),
+        ));
+        lang.insert(
+            format!("block.minecraft.{id}"),
+            serde_json::json!(catalog_display_name(id)),
+        );
+        if id != "water" {
+            let item_model = if id == "item_frame" {
+                serde_json::json!({
+                    "textures": { "layer0": "minecraft:item/item_frame" }
+                })
+            } else {
+                serde_json::json!({ "parent": model })
+            };
+            files.push((
+                format!("assets/minecraft/models/item/{id}.json"),
+                catalog_json(item_model),
+            ));
+            lang.insert(
+                format!("item.minecraft.{id}"),
+                serde_json::json!(catalog_display_name(id)),
+            );
+        }
+    }
+
+    files.push((
+        "assets/minecraft/models/item/diamond_sword.json".to_owned(),
+        catalog_json(serde_json::json!({
+            "textures": { "layer0": "minecraft:item/diamond_sword" }
+        })),
+    ));
+    lang.insert(
+        "item.minecraft.diamond_sword".to_owned(),
+        serde_json::json!("Diamond Sword"),
+    );
+    // An empty item model must never become an item.
+    files.push((
+        "assets/minecraft/models/item/air.json".to_owned(),
+        catalog_json(serde_json::json!({})),
+    ));
+    lang.insert("item.minecraft.air".to_owned(), serde_json::json!("Air"));
+
+    let mut textures = vec![
+        "block/stone".to_owned(),
+        "block/dirt".to_owned(),
+        "block/gold_block".to_owned(),
+        "block/oak_planks".to_owned(),
+        "block/water_still".to_owned(),
+        "block/item_frame".to_owned(),
+        "item/diamond_sword".to_owned(),
+        "item/item_frame".to_owned(),
+    ];
+    for (_, texture) in &extras {
+        textures.push(format!("block/{texture}"));
+    }
+    for texture in &textures {
+        files.push((
+            format!("assets/minecraft/textures/{texture}.png"),
+            TINY_PNG.to_vec(),
+        ));
+    }
+
+    let block_tag_folder = if flattened { "blocks" } else { "block" };
+    files.push((
+        format!("data/minecraft/tags/{block_tag_folder}/stairs.json"),
+        catalog_json(serde_json::json!({ "values": ["minecraft:oak_stairs"] })),
+    ));
+    let item_tag_folder = if flattened { "items" } else { "item" };
+    files.push((
+        format!("data/minecraft/tags/{item_tag_folder}/planks.json"),
+        catalog_json(serde_json::json!({ "values": ["minecraft:oak_stairs"] })),
+    ));
+
     files.push((
         "assets/minecraft/lang/en_us.json".to_owned(),
-        serde_json::to_vec(&serde_json::json!({
-            "block.minecraft.stone": "Stone",
-            "block.minecraft.dirt": "Dirt",
-            "block.minecraft.gold_block": "Block of Gold",
-        }))
-        .expect("catalog language JSON"),
+        catalog_json(serde_json::Value::Object(lang)),
     ));
+
     for (name, bytes) in files {
         zip.start_file(name, options).expect("start catalog entry");
         zip.write_all(&bytes).expect("write catalog entry");
     }
     zip.finish().expect("finish catalog JAR");
+    write_catalog_launcher_metadata(&path, profile);
     path
 }
 
@@ -1042,22 +1243,250 @@ fn exports_every_flattened_classic_release_same_version_and_verifies() {
 }
 
 #[test]
-fn flattened_projects_save_and_reopen_edits() {
+fn flattened_catalog_projects_create_edit_save_reopen_export_and_verify() {
     let mut tested = 0;
     for profile in builtin_profiles()
         .iter()
         .filter(|profile| profile.family == VersionFamily::Flattened)
     {
         let label = profile.minecraft_version.as_str();
-        let dir = TempDir::new(&format!("flattened-project-{label}"));
+        let dir = TempDir::new(&format!("flattened-catalog-{label}"));
         let root = dir.path().join("world");
         write_flattened_world_for_profile(&root, profile);
+        let jar = write_catalog_jar(dir.path(), profile);
+        let catalog = AssetCatalogService::new()
+            .catalog(&asset_source::AssetSourceSetting {
+                kind: "client_jar".to_owned(),
+                path: jar.to_string_lossy().into_owned(),
+            })
+            .unwrap_or_else(|error| panic!("{label}: build catalog: {error}"));
+
+        assert_eq!(catalog.minecraft_version, label, "{label}: version");
+        assert_eq!(
+            catalog.data_version, profile.data_version,
+            "{label}: DataVersion"
+        );
+        assert_eq!(
+            catalog.resource_pack_format, profile.resource_pack_format,
+            "{label}: resource pack format"
+        );
+        assert_eq!(
+            catalog.datapack_format, profile.datapack_format,
+            "{label}: data pack format"
+        );
+        assert!(
+            catalog.catalog_id.starts_with(&format!("java-{label}-")),
+            "{label}: catalog id"
+        );
+        assert_eq!(catalog.catalog_hash.len(), 64, "{label}: catalog hash");
+        assert_eq!(
+            catalog
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("no internal version.json")),
+            label.starts_with("1.13"),
+            "{label}: only 1.13.x relies on launcher metadata"
+        );
+        assert!(
+            !catalog
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("SHA-1 was not verified")),
+            "{label}: launcher metadata must verify the JAR"
+        );
+
+        let mut expected = BTreeSet::from([
+            "minecraft:diamond_sword",
+            "minecraft:dirt",
+            "minecraft:gold_block",
+            "minecraft:item_frame",
+            "minecraft:oak_stairs",
+            "minecraft:stone",
+            "minecraft:water",
+        ]);
+        let mut extra_count = 0;
+        for (threshold, id) in [
+            (2225, "minecraft:beehive"),
+            (2566, "minecraft:netherite_block"),
+            (2724, "minecraft:copper_block"),
+        ] {
+            if profile.data_version >= threshold {
+                expected.insert(id);
+                extra_count += 1;
+            }
+        }
+        let ids = catalog
+            .entries
+            .iter()
+            .map(|entry| entry.id.as_str())
+            .collect::<Vec<_>>();
+        assert!(
+            ids.windows(2).all(|window| window[0] < window[1]),
+            "{label}: catalog entries must be sorted and unique"
+        );
+        let actual = ids.iter().copied().collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual.len(),
+            catalog.entries.len(),
+            "{label}: duplicate catalog ids"
+        );
+        assert_eq!(actual, expected, "{label}: exact catalog entries");
+        assert_eq!(catalog.counts.blocks, 5 + extra_count, "{label}: blocks");
+        assert_eq!(catalog.counts.items, 6 + extra_count, "{label}: items");
+        assert_eq!(
+            catalog.counts.blocks_with_items,
+            4 + extra_count,
+            "{label}: block items"
+        );
+        assert_eq!(catalog.counts.item_only, 2, "{label}: item-only entries");
+        assert_eq!(
+            catalog.counts.item_definitions, 0,
+            "{label}: flattened JARs use item models"
+        );
+        assert_eq!(catalog.counts.block_tags, 1, "{label}: block tags");
+        assert_eq!(catalog.counts.item_tags, 1, "{label}: item tags");
+
+        let find_entry = |id: &str| {
+            catalog
+                .entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .unwrap_or_else(|| panic!("{label}: catalog is missing {id}"))
+        };
+
+        let stairs = find_entry("minecraft:oak_stairs");
+        let states = stairs.states.as_ref().expect("stairs block states");
+        assert!(states.property_values_complete, "{label}: complete stairs");
+        assert_eq!(states.variant_count, 80, "{label}: stairs variants");
+        assert_eq!(states.variants.len(), 80, "{label}: stairs variant list");
+        assert!(
+            states.default_properties.is_none(),
+            "{label}: multiple variants have no single default"
+        );
+        assert_eq!(
+            states
+                .properties
+                .get("facing")
+                .expect("facing")
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["east", "north", "south", "west"],
+            "{label}: facing values"
+        );
+        assert_eq!(
+            states
+                .properties
+                .get("half")
+                .expect("half")
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["bottom", "top"],
+            "{label}: half values"
+        );
+        assert_eq!(
+            states
+                .properties
+                .get("shape")
+                .expect("shape")
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec![
+                "inner_left",
+                "inner_right",
+                "outer_left",
+                "outer_right",
+                "straight"
+            ],
+            "{label}: shape values"
+        );
+        assert_eq!(
+            states
+                .properties
+                .get("waterlogged")
+                .expect("waterlogged")
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            vec!["false", "true"],
+            "{label}: waterlogged values"
+        );
+        assert_eq!(
+            stairs.tags,
+            vec!["minecraft:planks".to_owned(), "minecraft:stairs".to_owned()],
+            "{label}: direct block and item tags"
+        );
+        assert_eq!(
+            stairs
+                .item_form
+                .as_ref()
+                .and_then(|form| form.model.as_deref()),
+            Some("minecraft:item/oak_stairs"),
+            "{label}: stairs item model"
+        );
+
+        let water = find_entry("minecraft:water");
+        assert!(water.states.is_some(), "{label}: water block");
+        assert!(water.item_form.is_none(), "{label}: water has no item");
+        let frame = find_entry("minecraft:item_frame");
+        assert!(frame.states.is_none(), "{label}: item frame is not a block");
+        assert!(frame.item_form.is_some(), "{label}: item frame item");
+        assert!(
+            catalog
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("item_frame")
+                    && warning.contains("entity render model")),
+            "{label}: entity blockstate warning"
+        );
+        assert!(
+            catalog
+                .entries
+                .iter()
+                .all(|entry| entry.id != "minecraft:air"),
+            "{label}: empty item model must not become an item"
+        );
+
+        for (threshold, id, texture) in [
+            (2225, "minecraft:beehive", "beehive_side"),
+            (2566, "minecraft:netherite_block", "netherite_block"),
+            (2724, "minecraft:copper_block", "copper_block"),
+        ] {
+            if profile.data_version >= threshold {
+                let entry = find_entry(id);
+                assert!(entry.states.is_some(), "{label}: {id} block");
+                assert!(entry.item_form.is_some(), "{label}: {id} item");
+                assert_eq!(
+                    entry.icon_texture,
+                    Some(format!("minecraft:block/{texture}")),
+                    "{label}: {id} icon"
+                );
+            } else {
+                assert!(
+                    catalog.entries.iter().all(|entry| entry.id.as_str() != id),
+                    "{label}: {id} must not exist before its release"
+                );
+            }
+        }
 
         let (world, _) =
             load_java_world(&root).unwrap_or_else(|error| panic!("{label}: import: {error}"));
+        let assets = AssetsComponent {
+            mode: ComponentMode::Manual,
+            client_jar_sha1: catalog.client_jar_sha1.clone(),
+            catalog_id: Some(catalog.catalog_id.clone()),
+            catalog_hash: Some(catalog.catalog_hash.clone()),
+            pack_stack: Vec::new(),
+        };
+        let pins = ProjectComponents {
+            assets: Some(assets),
+            ..ProjectComponents::default()
+        };
         let store = ProjectStore::new(dir.path().join("projects"));
         let folder = format!("{label}.furybuilder");
-        store
+        let detail = store
             .create_imported(
                 label,
                 EditorState::default(),
@@ -1065,10 +1494,30 @@ fn flattened_projects_save_and_reopen_edits() {
                 "world",
                 ImportOptions {
                     folder: Some(&folder),
-                    components: ProjectComponents::default(),
+                    components: pins.clone(),
                 },
             )
             .unwrap_or_else(|error| panic!("{label}: create project: {error}"));
+
+        let project_dir = store.root().join(&detail.summary.folder);
+        let source_world = project_dir.join(project_store::SOURCE_DIR).join("world");
+        let copied = world_io::passthrough_java_world(&root, &source_world)
+            .unwrap_or_else(|error| panic!("{label}: copy source: {error}"));
+        let files = copied
+            .files
+            .iter()
+            .map(|file| SourceFile {
+                relative_path: format!(
+                    "world/{}",
+                    file.relative_path.to_string_lossy().replace('\\', "/")
+                ),
+                bytes: file.bytes,
+                sha256: file.sha256.clone(),
+            })
+            .collect::<Vec<_>>();
+        store
+            .record_source_tree(&folder, "world", &files)
+            .unwrap_or_else(|error| panic!("{label}: record source: {error}"));
 
         let (_, mut opened, _) = store
             .open(&folder)
@@ -1089,9 +1538,40 @@ fn flattened_projects_save_and_reopen_edits() {
         let (reopened_detail, reopened, _) = store
             .open(&folder)
             .unwrap_or_else(|error| panic!("{label}: reopen project: {error}"));
+        assert_eq!(reopened_detail.components, pins, "{label}: catalog pin");
         assert_eq!(
             reopened_detail.target.profile_id, profile.id,
             "{label}: profile pin"
+        );
+        let rebuilt = AssetCatalogService::new()
+            .catalog(&asset_source::AssetSourceSetting {
+                kind: "client_jar".to_owned(),
+                path: jar.to_string_lossy().into_owned(),
+            })
+            .unwrap_or_else(|error| panic!("{label}: rebuild catalog from pin: {error}"));
+        assert_eq!(
+            rebuilt.catalog_id, catalog.catalog_id,
+            "{label}: rebuilt catalog id"
+        );
+        assert_eq!(
+            rebuilt.catalog_hash, catalog.catalog_hash,
+            "{label}: rebuilt catalog hash"
+        );
+        assert_eq!(
+            rebuilt.client_jar_sha1, catalog.client_jar_sha1,
+            "{label}: rebuilt client JAR"
+        );
+        assert_eq!(
+            rebuilt.resource_pack_format, profile.resource_pack_format,
+            "{label}: rebuilt resource pack format"
+        );
+        assert_eq!(
+            rebuilt.datapack_format, profile.datapack_format,
+            "{label}: rebuilt data pack format"
+        );
+        assert_eq!(
+            rebuilt.entries, catalog.entries,
+            "{label}: rebuilt catalog entries"
         );
         assert_eq!(
             reopened
@@ -1115,6 +1595,75 @@ fn flattened_projects_save_and_reopen_edits() {
                 .name(),
             "minecraft:unknown_machine",
             "{label}: unknown imported state must survive"
+        );
+
+        let before = snapshot(&source_world);
+        let mut overlay = WorldOverlay::open(&source_world)
+            .unwrap_or_else(|error| panic!("{label}: open overlay: {error}"));
+        overlay
+            .set_block(OVERWORLD, 0, 0, 0, &gold)
+            .unwrap_or_else(|error| panic!("{label}: overlay block edit: {error}"));
+        overlay
+            .set_biome(OVERWORLD, 0, 0, 0, &desert)
+            .unwrap_or_else(|error| panic!("{label}: overlay biome edit: {error}"));
+        let destination = dir.path().join("export");
+        let report = export_java_world(&overlay, &destination)
+            .unwrap_or_else(|error| panic!("{label}: export: {error}"));
+        assert!(report.source_unchanged, "{label}: source changed");
+        assert!(report.source_tree_verified, "{label}: source not hashed");
+        assert!(
+            report.copied_files_match_source,
+            "{label}: copied files differ"
+        );
+        assert!(report.output_revalidated, "{label}: export not revalidated");
+        assert_eq!(snapshot(&source_world), before, "{label}: source bytes");
+
+        let (exported, _) = load_java_world(&destination)
+            .unwrap_or_else(|error| panic!("{label}: reopen export: {error}"));
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(0, 0, 0))
+                .unwrap(),
+            gold,
+            "{label}: exported edit"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(1, 0, 0))
+                .unwrap()
+                .name(),
+            "minecraft:unknown_machine",
+            "{label}: exported unknown state"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(16, 0, 0))
+                .unwrap()
+                .name(),
+            "minecraft:dirt",
+            "{label}: untouched neighbour chunk"
+        );
+        assert_eq!(
+            exported
+                .get_biome(OVERWORLD, BlockPos::new(0, 0, 0))
+                .unwrap()
+                .unwrap()
+                .as_str(),
+            "minecraft:desert",
+            "{label}: exported biome edit"
+        );
+        let upper_biome = exported
+            .get_biome(OVERWORLD, BlockPos::new(0, 16, 0))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            upper_biome.as_str(),
+            if profile.biome_format == BiomeFormat::Column {
+                "minecraft:desert"
+            } else {
+                "minecraft:plains"
+            },
+            "{label}: column edits propagate through all sections"
         );
         tested += 1;
     }

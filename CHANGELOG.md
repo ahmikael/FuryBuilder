@@ -77,6 +77,11 @@ formats are not migrated.
   for representative `1.18.2`, `1.19.4`, `1.20.6` and `1.21.4` projects is used to create,
   edit, save, reopen, rebuild the pinned catalog, export and re-import the world while checking
   the edit and preserved unknown states.
+- Flattened catalog fixtures for all 19 releases `1.13`–`1.17.1`: exact synthetic client JARs
+  model 1.13 launcher metadata, 1.14–1.14.2 build-suffixed ids, numeric 1.14–1.16 pack
+  versions and split 1.17 formats. Each fixture checks block, item, state and tag facts, then pins the
+  catalog in a project and verifies create, edit, save, reopen, catalog rebuild, export and
+  re-import with the unknown imported state preserved.
 - One catalog entry per block/item id, with optional legacy id/metadata, display name, category,
   tags, icon, aliases, nested block states, item form and typed placement flags. Facts the JAR
   cannot prove stay `null` rather than being guessed; the snapshot no longer splits blocks and

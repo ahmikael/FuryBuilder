@@ -30,13 +30,16 @@ through `.minecraft` target discovery.
 
 A direct JAR is also self-describing for catalog construction, independent of the application's
 current target. `CatalogBuilder` normally reads its internal `version.json` and records that
-exact version, `DataVersion` and pack formats. Client JARs for 1.13.2 through 1.16.5 have no
-root `version.json`; for those, the adjacent launcher metadata (`<stem>.json`, or `client.json`
-beside `client.jar`) names the exact release and the matching built-in profile supplies
-`DataVersion` and pack formats. That fallback always adds a warning and is refused when the
-metadata is absent, invalid, or names a release without an exact built-in profile. When both
-sources exist, their version ids must agree. This lets fixtures and version diffs compare
-catalogs across releases. A project-pinned rebuild must still reproduce the manifest's
+exact version, `DataVersion` and pack formats. Client JARs for 1.13.x are the only flattened
+releases without a root `version.json`; for those, the adjacent launcher metadata
+(`<stem>.json`, or `client.json` beside `client.jar`) names the exact release and the matching
+built-in profile supplies `DataVersion` and pack formats. That fallback always adds a warning
+and is refused when the metadata is absent, invalid, or names a release without an exact
+built-in profile. From 1.14 on, the internal file is present: 1.14–1.14.2 append a
+`release / build-hash` id that is normalized to the release, and 1.14.3+ use the plain release
+id. Adjacent launcher metadata is still used for checksum verification whenever it is present.
+When both sources exist, their version ids must agree. This lets fixtures and version diffs
+compare catalogs across releases. A project-pinned rebuild must still reproduce the manifest's
 `catalogId`, `catalogHash`, client JAR SHA-1, Minecraft version and `DataVersion`; any mismatch
 is a conflict, never a silent substitution.
 
@@ -73,7 +76,7 @@ the pack's root `assets/` entries. It does not apply `pack.mcmeta` overlays.
 | JAR path | Catalog use |
 | --- | --- |
 | `version.json` | Exact version id, `DataVersion`, resource/data pack formats |
-| adjacent `<stem>.json`/`client.json` | Version id and client SHA-1/size when the JAR has no internal `version.json` (1.13.2–1.16.5) |
+| adjacent `<stem>.json`/`client.json` | Version id and client SHA-1/size when the JAR has no internal `version.json` (1.13.x); checksum metadata is verified for every release |
 | `assets/<ns>/blockstates/<block>.json` | Block ids, variant/multipart properties, first model |
 | `assets/<ns>/models/block/*.json` | Model parent chain and block icon texture |
 | `assets/<ns>/models/item/*.json` | Item icon textures and the item-model fallback for pre-item-definition releases |
@@ -347,10 +350,13 @@ project.
   each modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`): it builds the exact catalog,
   imports the world, creates a project pinned to that catalog, edits a block, saves, reopens,
   rebuilds the catalog from the same JAR, exports the world and re-imports the export while
-  checking the edit, the pin and preserved unknown states. Flattened fixtures cover
-  `1.13.2`–`1.17.1`: launcher-metadata resolution, internal `version.json`, checksum refusal,
-  version folders, weighted variants, plural tags, entity blockstates, wall fans, empty item
-  models and special items. Real-JAR verification counted 598/789 blocks/items for `1.13.2`,
+  checking the edit, the pin and preserved unknown states. Flattened fixtures cover all 19
+  releases `1.13`–`1.17.1`: launcher-metadata resolution, internal `version.json`, checksum
+  refusal, version folders, weighted variants, plural tags, entity blockstates, wall fans,
+  empty item models and special items. Every flattened fixture builds the exact catalog,
+  checks block/item/state/tag facts, pins it in a project, edits, saves, reopens, rebuilds
+  the catalog from the same JAR, exports and re-imports while checking the edit and the
+  preserved unknown state. Real-JAR verification counted 598/789 blocks/items for `1.13.2`,
   676/876 for `1.14.4`, 680/883 for `1.15.2`, 763/975 for `1.16.5` and 898/1,099 for `1.17.1`,
   matching the PrismarineJS registries with no missing or extra entries. A real 1.21.4 client
   JAR currently reports 1,097 blockstate entries, 1,385 item definitions, 186 block tag files,
