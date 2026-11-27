@@ -138,7 +138,9 @@ impl ReleaseFacts {
                     self.version,
                     if anvil { "Anvil" } else { "McRegion" }
                 ),
-                "The exact profile is recorded, but this build has no verified legacy world adapter yet."
+                "The exact profile is required for read-only analysis because level.dat cannot identify one release."
+                    .to_owned(),
+                "Pre-1.8 analysis and byte-for-byte passthrough are enabled; editing, project import and conversion are not."
                     .to_owned(),
             ]
         } else {
@@ -176,6 +178,16 @@ impl ReleaseFacts {
                 export: true,
                 generate: false,
                 assets: true,
+            }
+        } else if legacy_classic {
+            WorldCapabilities {
+                support_level: SupportLevel::ReadOnly,
+                read: true,
+                edit: false,
+                write: false,
+                export: true,
+                generate: false,
+                assets: false,
             }
         } else {
             WorldCapabilities {
@@ -1338,14 +1350,14 @@ mod tests {
             );
             assert_eq!(
                 profile.capabilities.support_level,
-                SupportLevel::Unverified,
+                SupportLevel::ReadOnly,
                 "{id}"
             );
             assert!(profile.capabilities.validate().is_ok(), "{id}");
-            assert!(!profile.capabilities.read, "{id}");
+            assert!(profile.capabilities.read, "{id}");
             assert!(!profile.capabilities.edit, "{id}");
             assert!(!profile.capabilities.write, "{id}");
-            assert!(!profile.capabilities.export, "{id}");
+            assert!(profile.capabilities.export, "{id}");
             assert!(!profile.capabilities.generate, "{id}");
             assert!(!profile.capabilities.assets, "{id}");
             assert!(

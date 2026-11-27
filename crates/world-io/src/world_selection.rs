@@ -15,12 +15,23 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::anvil::{parse_region_file_name, JavaWorld, LevelDat, RegionFile};
+use crate::anvil::{
+    parse_region_file_name, JavaWorld, LegacyLevelDat, LegacyWorldLayout, LevelDat, RegionFile,
+};
 use crate::passthrough::is_link_like;
 use crate::{split_anvil, version_support};
 
 /// Layout identifier used by the supported classic Anvil reader.
 pub const CLASSIC_ANVIL_LAYOUT: &str = "classic_anvil";
+/// Layout identifier for pre-1.8 McRegion saves (`.mcr`, Y 0-127).
+pub const LEGACY_MCREGION_LAYOUT: &str = "legacy_mcr";
+/// Layout identifier for pre-1.8 early classic Anvil saves (`.mca`, Y 0-255).
+pub const LEGACY_ANVIL_LAYOUT: &str = "legacy_anvil";
+
+/// Returns true for both pre-1.8 container layouts.
+pub fn is_legacy_layout(layout: &str) -> bool {
+    matches!(layout, LEGACY_MCREGION_LAYOUT | LEGACY_ANVIL_LAYOUT)
+}
 
 /// Known folders that a Java save may contain next to `level.dat`.
 const KNOWN_FOLDERS: &[&str] = &[
@@ -237,10 +248,10 @@ fn classify_file(path: &Path, bytes: u64, report: &mut WorldSelectionReport) {
     }
     if extension == "mcr" {
         report.kind = WorldSelectionKind::RegionFile;
-        report.layout = "legacy_mcr".to_owned();
+        report.layout = LEGACY_MCREGION_LAYOUT.to_owned();
         report.region_files = 1;
         report.blockers.push(format!(
-            "{name} is a legacy McRegion file, not a complete world save; the legacy format is not supported"
+            "{name} is a legacy McRegion region container, not a complete world save: it has no level.dat, dimensions or sidecar folders. Select the world folder that contains it."
         ));
         return;
     }
@@ -264,10 +275,10 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
         let (direct_mca, direct_mcr) = count_direct_regions(root);
         if direct_mcr > 0 {
             report.kind = WorldSelectionKind::RegionDirectory;
-            report.layout = "legacy_mcr".to_owned();
+            report.layout = LEGACY_MCREGION_LAYOUT.to_owned();
             report.region_files = direct_mcr;
             report.blockers.push(
-                "the selected folder contains legacy .mcr region files and no level.dat; the legacy format is not supported"
+                "the selected folder contains legacy .mcr region files and no level.dat; select the parent world folder that contains level.dat"
                     .to_owned(),
             );
             return;
@@ -296,28 +307,32 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
     }
 
     report.kind = WorldSelectionKind::WorldFolder;
-    let level = if level_entry.as_ref().is_some_and(is_link_like) {
+    let mut level = None;
+    if level_entry.as_ref().is_some_and(is_link_like) {
         report
             .blockers
             .push("level.dat is a link or reparse point".to_owned());
-        None
-    } else {
+    } else if level_entry.is_some() {
         match LevelDat::read(&level_path) {
-            Ok(level) => {
-                report.data_version = Some(level.data_version);
-                report.version_id = Some(level.version_id);
-                report.version_name = level.version_name.clone();
-                report.level_name = level.level_name.clone();
-                Some(level)
+            Ok(modern) => {
+                report.data_version = Some(modern.data_version);
+                report.version_id = Some(modern.version_id);
+                report.version_name = modern.version_name.clone();
+                report.level_name = modern.level_name.clone();
+                level = Some(modern);
             }
-            Err(error) => {
-                report
-                    .blockers
-                    .push(format!("level.dat is missing or unreadable: {error}"));
-                None
-            }
+            Err(modern_error) => match LegacyLevelDat::read(&level_path) {
+                Ok(legacy) => {
+                    classify_legacy_directory(root, legacy, report);
+                    return;
+                }
+                Err(_) => report.blockers.push(format!(
+                    "level.dat is missing or unreadable: {modern_error}"
+                )),
+            },
         }
-    };
+    }
+
     let split = split_markers || level.as_ref().is_some_and(split_anvil::matches_release);
     let layout = detect_layout(root, split);
     report.layout = layout.to_owned();
@@ -338,10 +353,12 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
         "mixed" => report.blockers.push(
             "the world mixes classic terrain folders with 26.1+ split layout markers or metadata".to_owned(),
         ),
-        "legacy_mcr" => {
+        LEGACY_MCREGION_LAYOUT => {
             report.complete_save = level.is_some();
-            report.blockers
-                .push("the legacy McRegion layout is detected but not supported".to_owned());
+            report.blockers.push(
+                "level.dat carries a modern DataVersion but region/ contains only legacy .mcr files; the save mixes incompatible formats"
+                    .to_owned(),
+            );
         }
             "level_dat_only" => report.blockers.push(
                 "level.dat exists but no classic region/ or split dimension folders were found; this is not a complete save"
@@ -366,6 +383,81 @@ fn classify_directory(root: &Path, report: &mut WorldSelectionReport) {
             version_support::default_version_profile().minecraft_version
         ));
     }
+}
+
+fn classify_legacy_directory(
+    root: &Path,
+    level: LegacyLevelDat,
+    report: &mut WorldSelectionReport,
+) {
+    report.layout = if level.format_version == 19132 {
+        LEGACY_MCREGION_LAYOUT.to_owned()
+    } else {
+        LEGACY_ANVIL_LAYOUT.to_owned()
+    };
+    report.data_version = None;
+    report.version_id = Some(level.format_version);
+    report.version_name = None;
+    report.level_name = level.level_name.clone();
+    report.complete_save = false;
+
+    let layout = match LegacyWorldLayout::open(root) {
+        Ok(layout) => layout,
+        Err(error) => {
+            report
+                .blockers
+                .push(format!("the legacy world cannot be opened: {error}"));
+            return;
+        }
+    };
+    for dimension in &layout.dimensions {
+        let coordinates = match layout.region_coordinates(&dimension.id) {
+            Ok(coordinates) => coordinates,
+            Err(error) => {
+                report.blockers.push(format!(
+                    "dimension {} cannot be listed: {error}",
+                    dimension.id
+                ));
+                continue;
+            }
+        };
+        let mut region_files = 0usize;
+        let mut chunks = 0usize;
+        for (region_x, region_z) in coordinates {
+            match layout.read_region(&dimension.id, region_x, region_z) {
+                Ok(region) => {
+                    region_files += 1;
+                    chunks += region.entries().len();
+                }
+                Err(error) => report.blockers.push(format!(
+                    "region ({region_x}, {region_z}) in {} is unreadable: {error}",
+                    dimension.id
+                )),
+            }
+        }
+        report.region_files += region_files;
+        report.chunks += chunks;
+        report.dimensions.push(SelectionDimension {
+            id: dimension.id.clone(),
+            folder: relative_folder(root, &dimension.folder),
+            region_files,
+            chunks,
+        });
+    }
+    report.complete_save = report.blockers.is_empty();
+    report.supported = false;
+    report.warnings.push(
+        "pre-1.8 level.dat stores only the container version (19132 McRegion or 19133 Anvil), not one exact release; choose an exact version for read-only analysis or passthrough"
+            .to_owned(),
+    );
+    report.warnings.push(
+        "Minecraft 1.8-1.8.8 share the same pre-DataVersion container but remain metadata-only; do not treat the detected layout as an exact version"
+            .to_owned(),
+    );
+    report.warnings.push(
+        "the legacy layout is read-only: FuryBuilder analyzes and copies it byte for byte, but does not edit, import it as an editable project or convert it yet"
+            .to_owned(),
+    );
 }
 
 fn inventory_classic(world: &JavaWorld, root: &Path, report: &mut WorldSelectionReport) {
@@ -440,7 +532,7 @@ fn detect_layout(root: &Path, split: bool) -> &'static str {
         && has_region_file(&root.join("region"), "mcr")
         && !has_region_file(&root.join("region"), "mca")
     {
-        "legacy_mcr"
+        LEGACY_MCREGION_LAYOUT
     } else if region_dir {
         CLASSIC_ANVIL_LAYOUT
     } else if root.join("level.dat").symlink_metadata().is_ok() {

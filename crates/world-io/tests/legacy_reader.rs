@@ -228,6 +228,168 @@ fn clay_biomes() -> [u8; 256] {
     biomes
 }
 
+fn snapshot(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+    let mut files = BTreeMap::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(directory) = stack.pop() {
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_dir() {
+                stack.push(path);
+            } else if file_type.is_file() {
+                files.insert(
+                    path.strip_prefix(root).unwrap_or(&path).to_path_buf(),
+                    fs::read(&path).expect("read snapshot file"),
+                );
+            }
+        }
+    }
+    files
+}
+
+#[test]
+fn legacy_selection_and_analysis_are_read_only() {
+    for (version, layout, height) in [
+        ("1.1", world_io::LEGACY_MCREGION_LAYOUT, 128),
+        ("1.7.10", world_io::LEGACY_ANVIL_LAYOUT, 256),
+    ] {
+        let dir = TempDir::new(version);
+        let profile = profile_of(version);
+        let chunk = chunk_nbt(
+            &profile,
+            0,
+            0,
+            &[(0, 0, 0, 1, 0), (1, 10, 1, 2, 0)],
+            &clay_biomes(),
+        );
+        write_world(dir.path(), &profile, &[(0, 0, chunk)]);
+
+        let selection = world_io::classify_world_selection(dir.path());
+        assert_eq!(selection.kind, world_io::WorldSelectionKind::WorldFolder);
+        assert!(selection.complete_save, "{:?}", selection.blockers);
+        assert!(!selection.supported);
+        assert_eq!(selection.layout, layout);
+        assert_eq!(selection.version_id, Some(level_format(&profile)));
+        assert_eq!(selection.data_version, None);
+        assert_eq!((selection.region_files, selection.chunks), (1, 1));
+        assert!(
+            selection
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("not one exact release")),
+            "{:?}",
+            selection.warnings
+        );
+
+        let analysis = world_io::analyze_java_world(dir.path());
+        assert!(analysis.complete_save);
+        assert!(!analysis.supported);
+        assert_eq!(analysis.layout, layout);
+        assert_eq!((analysis.regions, analysis.chunks), (1, 1));
+        assert_eq!(analysis.dimensions[0].id, "minecraft:overworld");
+        assert_eq!(analysis.dimensions[0].height, Some(height));
+        assert_eq!(analysis.block_entities, None);
+
+        let exact = world_io::analyze_legacy_world(dir.path(), &profile);
+        assert!(exact.complete_save);
+        assert!(!exact.supported);
+        assert!(exact.blockers.is_empty(), "{:?}", exact.blockers);
+        assert_eq!(exact.version_name.as_deref(), Some(version));
+        assert_eq!(exact.version_id, Some(level_format(&profile)));
+        assert_eq!(exact.dimensions[0].height, Some(height));
+        assert_eq!(exact.block_entities, Some(1));
+        assert_eq!(exact.entities, Some(1));
+        assert!(
+            exact
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("read-only profile")),
+            "{:?}",
+            exact.warnings
+        );
+
+        let wrong = if height == 128 {
+            profile_of("1.7.10")
+        } else {
+            profile_of("1.1")
+        };
+        let wrong_analysis = world_io::analyze_legacy_world(dir.path(), &wrong);
+        assert!(!wrong_analysis.blockers.is_empty());
+    }
+}
+
+#[test]
+fn legacy_passthrough_copies_bytes_and_verifies_the_copy() {
+    let dir = TempDir::new("passthrough");
+    let profile = profile_of("1.7.10");
+    let world = dir.path().join("world");
+    let chunk = chunk_nbt(&profile, 0, 0, &[(0, 0, 0, 1, 0)], &clay_biomes());
+    write_world(
+        &world,
+        &profile,
+        &[
+            (0, 0, chunk),
+            (1, 0, chunk_nbt(&profile, 1, 0, &[], &clay_biomes())),
+        ],
+    );
+    let before = snapshot(&world);
+    let destination = dir.path().join("copy");
+
+    let refusal = world_io::passthrough_java_world(&world, dir.path().join("wrong-entry"))
+        .expect_err("the classic passthrough must require a legacy profile");
+    assert_eq!(refusal.code(), "unsupported_version", "{refusal}");
+    assert!(!dir.path().join("wrong-entry").exists());
+
+    let report = world_io::passthrough_legacy_world(&world, &destination, &profile)
+        .expect("legacy passthrough");
+    assert_eq!((report.regions, report.chunks), (1, 2));
+    assert_eq!(report.files.len(), before.len());
+    assert_eq!(snapshot(&world), before, "the source must stay unchanged");
+    assert_eq!(
+        snapshot(&destination),
+        before,
+        "the copy must be byte-identical"
+    );
+
+    let selection = world_io::classify_world_selection(&destination);
+    assert!(selection.complete_save, "{:?}", selection.blockers);
+    assert_eq!(selection.layout, world_io::LEGACY_ANVIL_LAYOUT);
+
+    let mismatch =
+        world_io::passthrough_legacy_world(&world, dir.path().join("mismatch"), &profile_of("1.1"))
+            .expect_err("McRegion profile on an Anvil world");
+    assert_eq!(mismatch.code(), "unsupported_version", "{mismatch}");
+    assert!(!dir.path().join("mismatch").exists());
+}
+
+#[test]
+fn legacy_passthrough_honours_chunk_validation_switches() {
+    let dir = TempDir::new("passthrough-options");
+    let profile = profile_of("1.1");
+    let world = dir.path().join("world");
+    let chunk = chunk_nbt(&profile, 0, 0, &[(0, 0, 0, 1, 0)], &clay_biomes());
+    write_world(&world, &profile, &[(0, 0, chunk)]);
+
+    let report = world_io::passthrough_legacy_world_with_options(
+        &world,
+        dir.path().join("headers-only"),
+        &profile,
+        world_io::PassthroughOptions {
+            validate_chunks: false,
+            ..world_io::PassthroughOptions::default()
+        },
+    )
+    .expect("header-only passthrough");
+    assert!(!report.chunk_validation);
+    assert_eq!(report.chunks, 1);
+}
+
 #[test]
 fn mcregion_world_decodes_xzy_blocks_metadata_and_biomes() {
     let dir = TempDir::new("mcregion");

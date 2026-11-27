@@ -29,7 +29,7 @@ pub fn supports_data_version(data_version: i32) -> bool {
 pub fn supported_data_versions() -> Vec<i32> {
     let mut versions = builtin_profiles()
         .iter()
-        .filter(|profile| profile.capabilities.read)
+        .filter(|profile| profile.capabilities.read && profile.data_version > 0)
         .map(|profile| profile.data_version)
         .collect::<Vec<_>>();
     versions.sort_unstable();

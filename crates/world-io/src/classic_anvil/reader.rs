@@ -394,22 +394,21 @@ impl JavaWorld {
     }
 }
 
-/// A pre-1.8 Java world bound to an exact built-in legacy profile.
+/// Version-independent layout facts for a pre-1.8 save.
 ///
-/// `level.dat` only distinguishes McRegion from classic Anvil, so the caller
-/// chooses the exact release profile. The reader validates that the profile's
-/// layout, region extension and dimension heights match the save before any
-/// chunk is decoded.
+/// `level.dat` only distinguishes McRegion (19132) from early classic Anvil
+/// (19133). This report validates the folders, region containers and dimension
+/// bounds without choosing one exact release and without decoding chunks, so
+/// the selection classifier can describe the save before a profile is known.
 #[derive(Debug, Clone, PartialEq)]
-pub struct LegacyWorld {
+pub struct LegacyWorldLayout {
     pub root: PathBuf,
     pub level: LegacyLevelDat,
-    pub profile: VersionProfile,
     pub dimensions: Vec<JavaWorldDimension>,
 }
 
-impl LegacyWorld {
-    pub fn open(root: impl AsRef<Path>, profile: &VersionProfile) -> Result<Self, AnvilError> {
+impl LegacyWorldLayout {
+    pub fn open(root: impl AsRef<Path>) -> Result<Self, AnvilError> {
         let root = root.as_ref();
         let metadata = fs::symlink_metadata(root).map_err(|error| io_error(root, &error))?;
         if metadata.file_type().is_symlink() {
@@ -419,25 +418,13 @@ impl LegacyWorld {
             return Err(AnvilError::NotDirectory(root.display().to_string()));
         }
 
-        let format = LegacyFormat::for_profile(profile)?;
         let level = LegacyLevelDat::read(root.join("level.dat"))?;
-        if level.format_version != format.level_format_version {
-            return Err(AnvilError::UnsupportedLayout(format!(
-                "level.dat format {} is {}, but profile `{}` expects {}",
-                level.format_version,
-                if level.format_version == 19132 {
-                    "McRegion"
-                } else {
-                    "classic Anvil"
-                },
-                profile.id,
-                if format.level_format_version == 19132 {
-                    "McRegion"
-                } else {
-                    "classic Anvil"
-                },
-            )));
-        }
+        let (extension, height) = legacy_layout_parts(level.format_version).ok_or_else(|| {
+            AnvilError::UnsupportedLayout(format!(
+                "level.dat format {} is not a pre-1.8 level format",
+                level.format_version
+            ))
+        })?;
 
         if crate::split_anvil::has_markers(root) {
             return Err(AnvilError::UnsupportedLayout(
@@ -458,7 +445,7 @@ impl LegacyWorld {
         }
 
         let mut dimensions = Vec::new();
-        for spec in &profile.dimension_profiles {
+        for spec in legacy_dimension_profiles(height) {
             let dimension_root = Path::new(&spec.folder)
                 .parent()
                 .unwrap_or_else(|| Path::new(""));
@@ -466,19 +453,108 @@ impl LegacyWorld {
             if !is_overworld && !require_directory(&root.join(dimension_root))? {
                 continue;
             }
-            reject_mixed_region_extensions(&root.join(&spec.folder), format.region_extension)?;
-            dimensions.push(discover_dimension_with_extension(
-                root,
-                spec,
-                format.region_extension,
-            )?);
+            reject_mixed_region_extensions(&root.join(&spec.folder), extension)?;
+            dimensions.push(discover_dimension_with_extension(root, &spec, extension)?);
         }
 
         Ok(Self {
             root: root.to_path_buf(),
             level,
-            profile: profile.clone(),
             dimensions,
+        })
+    }
+
+    /// Region container extension declared by the level format.
+    pub fn region_extension(&self) -> &'static str {
+        if self.level.format_version == 19132 {
+            "mcr"
+        } else {
+            "mca"
+        }
+    }
+
+    pub fn dimension(&self, id: &str) -> Option<&JavaWorldDimension> {
+        self.dimensions.iter().find(|dimension| dimension.id == id)
+    }
+
+    pub fn region_coordinates(&self, dimension_id: &str) -> Result<Vec<(i32, i32)>, AnvilError> {
+        let dimension = self
+            .dimension(dimension_id)
+            .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
+        list_region_coordinates_with_extension(&dimension.region_folder, self.region_extension())
+    }
+
+    pub fn read_region(
+        &self,
+        dimension_id: &str,
+        region_x: i32,
+        region_z: i32,
+    ) -> Result<RegionFile, AnvilError> {
+        let dimension = self
+            .dimension(dimension_id)
+            .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
+        RegionFile::open_for_profile_with_extension(
+            dimension.region_folder.join(format!(
+                "r.{region_x}.{region_z}.{}",
+                self.region_extension()
+            )),
+            None,
+            self.region_extension(),
+        )
+    }
+}
+
+/// A pre-1.8 Java world bound to an exact built-in legacy profile.
+///
+/// `level.dat` only distinguishes McRegion from classic Anvil, so the caller
+/// chooses the exact release profile. The reader validates that the profile's
+/// layout, region extension and dimension heights match the save before any
+/// chunk is decoded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LegacyWorld {
+    pub root: PathBuf,
+    pub level: LegacyLevelDat,
+    pub profile: VersionProfile,
+    pub dimensions: Vec<JavaWorldDimension>,
+}
+
+impl LegacyWorld {
+    pub fn open(root: impl AsRef<Path>, profile: &VersionProfile) -> Result<Self, AnvilError> {
+        let layout = LegacyWorldLayout::open(root)?;
+        let format = LegacyFormat::for_profile(profile)?;
+        if layout.level.format_version != format.level_format_version {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "level.dat format {} is {}, but profile `{}` expects {}",
+                layout.level.format_version,
+                if layout.level.format_version == 19132 {
+                    "McRegion"
+                } else {
+                    "classic Anvil"
+                },
+                profile.id,
+                if format.level_format_version == 19132 {
+                    "McRegion"
+                } else {
+                    "classic Anvil"
+                },
+            )));
+        }
+        if layout
+            .dimensions
+            .iter()
+            .any(|dimension| dimension.height != format.height || dimension.min_y != 0)
+        {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "profile `{}` has dimensions that do not match the pre-1.8 level format",
+                profile.id
+            )));
+        }
+
+        Ok(Self {
+            root: layout.root,
+            level: layout.level,
+            profile: profile.clone(),
+            dimensions: layout.dimensions,
         })
     }
 
@@ -1254,6 +1330,41 @@ fn optional_string(
         ))),
         None => Ok(None),
     }
+}
+
+fn legacy_layout_parts(format_version: i32) -> Option<(&'static str, i32)> {
+    match format_version {
+        19132 => Some(("mcr", 128)),
+        19133 => Some(("mca", 256)),
+        _ => None,
+    }
+}
+
+fn legacy_dimension_profiles(height: i32) -> [minecraft_version::DimensionProfile; 3] {
+    use minecraft_version::{DimensionKind as ProfileDimensionKind, DimensionProfile};
+    [
+        DimensionProfile {
+            id: "minecraft:overworld".to_owned(),
+            kind: ProfileDimensionKind::Overworld,
+            min_y: 0,
+            height,
+            folder: "region".to_owned(),
+        },
+        DimensionProfile {
+            id: "minecraft:the_nether".to_owned(),
+            kind: ProfileDimensionKind::Nether,
+            min_y: 0,
+            height,
+            folder: "DIM-1/region".to_owned(),
+        },
+        DimensionProfile {
+            id: "minecraft:the_end".to_owned(),
+            kind: ProfileDimensionKind::End,
+            min_y: 0,
+            height,
+            folder: "DIM1/region".to_owned(),
+        },
+    ]
 }
 
 fn discover_dimension(

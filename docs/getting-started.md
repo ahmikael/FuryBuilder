@@ -77,8 +77,9 @@ cargo test --workspace
    import, block/biome editing, project snapshots, same-version export and generation with their
    exact official server JAR, `level-type`, Java major and data pack format. Numeric classic
    releases 1.8.9–1.12.2 support the same import/edit/snapshot/same-version export subset
-   without generation. Exact metadata-only profiles remain for 1.8–1.8.8 and 1.0–1.7.10; they
-   are shown as `unverified` and cannot continue.
+   without generation. Java 1.0–1.7.10 profiles are `read-only`: exact-profile analysis and
+   byte-for-byte passthrough work, but they cannot create editable projects. Java 1.8–1.8.8
+   remain `unverified` metadata-only; both stop at this step.
    Managed and manual client JARs with exact block/item catalogs are available for 1.13–1.17.1
    and 1.8–1.12.2 as well; **Placeholder** remains an explicit fallback. The card shows Java,
    world height, layout, pack formats and every known limitation. It also lists the exact
@@ -296,7 +297,8 @@ Unsupported versions, entities, block entities and unknown tags block import.
 
 Classic Java 1.13–1.21.11 and numeric 1.8.9–1.12.2 world layouts are supported. A single `.mca`
 file or a bare `region/` directory is not a complete world and is refused; split 26.1+ and
-pre-1.8 saves are detected but cannot be imported. Archive entries are bounded, and traversal,
+1.8–1.8.8 saves are detected but cannot be imported. Pre-1.8 saves stop at read-only analysis
+and byte-for-byte passthrough, not editable import. Archive entries are bounded, and traversal,
 absolute paths, symlinks, duplicate names and oversized entries are refused. Edits
 are stored in the project overlay; the source folder or archive is never written. Untouched
 chunk data, entities, block entities, heightmaps, light and POI are preserved as raw source
@@ -373,7 +375,7 @@ notice instead of pretending the curated list is the exact-version catalog.
 | `Core offline`                          | The Rust backend did not start; check the terminal running `pnpm tauri:dev`.                      |
 | Textures are checkerboards              | Choose a verified client source in the project wizard's **Components** step.                     |
 | Vanilla World is blocked                | The wizard's **Components** or **Source** step names the missing Java, server JAR or EULA step.    |
-| Import is rejected                      | Only classic 1.13–1.21.11 and numeric 1.8.9–1.12.2 world folders or `.zip` archives containing `level.dat` are supported; split 26.1+, 1.8–1.8.8 and pre-1.8 saves are refused. |
+| Import is rejected                      | Only classic 1.13–1.21.11 and numeric 1.8.9–1.12.2 world folders or `.zip` archives containing `level.dat` are editable; split 26.1+ and 1.8–1.8.8 saves are refused. Pre-1.8 saves are read-only analysis/passthrough only. |
 | Structure export is blocked             | The `.nbt` adapter refuses entities, block entities or unknown tags instead of dropping them.     |
 | A large paste only shows a pink preview | That is the staged path for pastes of 65,536+ non-air blocks. Press `Ctrl+V` again or confirm it. |
 | Recovery banner after a crash           | Read the reason and choose whether to keep the verified autosave or discard it.                   |

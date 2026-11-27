@@ -5085,19 +5085,16 @@ mod version_catalog_tests {
         );
         assert!(recommended.unavailable_reason.is_none());
 
-        let metadata_only = &report.versions[3];
-        assert_eq!(metadata_only.id, "1.0");
-        let profile = metadata_only
-            .profile
-            .as_ref()
-            .expect("metadata-only profile");
+        let read_only = &report.versions[3];
+        assert_eq!(read_only.id, "1.0");
+        let profile = read_only.profile.as_ref().expect("read-only profile");
         assert_eq!(
             profile.capabilities.support_level,
-            minecraft_version::SupportLevel::Unverified
+            minecraft_version::SupportLevel::ReadOnly
         );
-        assert!(!profile.capabilities.read);
+        assert!(profile.capabilities.read);
         assert!(!profile.capabilities.write);
-        assert!(metadata_only.unavailable_reason.is_none());
+        assert!(read_only.unavailable_reason.is_none());
     }
 
     #[test]

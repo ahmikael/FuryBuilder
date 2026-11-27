@@ -17,6 +17,7 @@ use std::fs;
 use std::path::Path;
 
 use minecraft_version::modern_classic::ModernClassicRelease;
+use minecraft_version::VersionProfile;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use world_domain::{ChunkPos, DimensionKind, World};
@@ -25,11 +26,13 @@ use crate::passthrough::{is_link_like, PassthroughError};
 use crate::split_anvil;
 use crate::support_matrix::{support_matrix, SupportMatrix};
 use crate::world_codec::world_codec;
-use crate::world_selection::classify_world_selection;
+use crate::world_selection::{
+    classify_world_selection, is_legacy_layout, WorldSelectionReport, LEGACY_MCREGION_LAYOUT,
+};
 use crate::world_source::{ArchiveReport, WorldSourceKind};
 
 use super::format::ChunkLayoutFormat;
-use super::reader::{AnvilError, JavaWorld};
+use super::reader::{AnvilError, JavaWorld, LegacyWorld};
 
 /// Maximum allocated source chunks that can be decoded into one editable project.
 pub const MAX_IMPORT_CHUNKS: usize = 20_000;
@@ -160,50 +163,41 @@ pub fn analyze_java_world(root: impl AsRef<Path>) -> JavaWorldAnalysis {
 
 pub(super) fn inspect_root(root: &Path) -> JavaWorldAnalysis {
     let selection = classify_world_selection(root);
-    let mut analysis = JavaWorldAnalysis {
-        root: root.display().to_string(),
-        layout: selection.layout.clone(),
-        selection_kind: selection.kind.as_str().to_owned(),
-        complete_save: selection.complete_save,
-        supported: false,
-        data_version: selection.data_version,
-        version_id: selection.version_id,
-        version_name: selection.version_name.clone(),
-        level_name: selection.level_name.clone(),
-        declared_dimensions: selection.declared_dimensions,
-        dimensions: Vec::new(),
-        regions: 0,
-        chunks: 0,
-        block_entities: None,
-        entities: None,
-        source_bytes: if selection.supported {
-            source_size(root)
-        } else {
-            0
-        },
-        source_path: root.display().to_string(),
-        source_kind: WorldSourceKind::Folder,
-        archive: None,
-        warnings: selection.warnings.clone(),
-        blockers: selection.blockers,
-        support_matrix: support_matrix(),
-    };
+    let mut analysis = base_analysis(root, &selection);
     if analysis.layout == split_anvil::LAYOUT {
         analysis.regions = selection.region_files;
         analysis.chunks = selection.chunks;
         analysis.dimensions = selection
             .dimensions
-            .into_iter()
+            .iter()
             .map(|dimension| ImportDimensionAnalysis {
-                kind: match dimension.id.as_str() {
-                    "minecraft:overworld" => DimensionKind::Overworld,
-                    "minecraft:the_nether" => DimensionKind::Nether,
-                    "minecraft:the_end" => DimensionKind::End,
-                    _ => DimensionKind::Custom,
-                },
-                id: dimension.id,
+                kind: dimension_kind(&dimension.id),
+                id: dimension.id.clone(),
                 min_y: None,
                 height: None,
+                region_files: dimension.region_files,
+                chunks: dimension.chunks,
+            })
+            .collect();
+        return analysis;
+    }
+
+    if is_legacy_layout(&analysis.layout) {
+        analysis.regions = selection.region_files;
+        analysis.chunks = selection.chunks;
+        let height = if analysis.layout == LEGACY_MCREGION_LAYOUT {
+            128
+        } else {
+            256
+        };
+        analysis.dimensions = selection
+            .dimensions
+            .iter()
+            .map(|dimension| ImportDimensionAnalysis {
+                kind: dimension_kind(&dimension.id),
+                id: dimension.id.clone(),
+                min_y: Some(0),
+                height: Some(height),
                 region_files: dimension.region_files,
                 chunks: dimension.chunks,
             })
@@ -231,6 +225,85 @@ pub(super) fn inspect_root(root: &Path) -> JavaWorldAnalysis {
 
     finish_analysis(&mut analysis);
     analysis
+}
+
+/// Analyzes a pre-1.8 save with an exact built-in legacy profile.
+///
+/// `level.dat` does not identify one release, so the caller supplies the
+/// profile. The function decodes every allocated chunk through that profile,
+/// but it still does not create an editable project: pre-1.8 releases are
+/// read-only and byte-preserving passthrough only.
+pub fn analyze_legacy_world(root: impl AsRef<Path>, profile: &VersionProfile) -> JavaWorldAnalysis {
+    let root = root.as_ref();
+    let selection = classify_world_selection(root);
+    let mut analysis = base_analysis(root, &selection);
+    if !selection.complete_save || !is_legacy_layout(&selection.layout) {
+        return analysis;
+    }
+    let world = match LegacyWorld::open(root, profile) {
+        Ok(world) => world,
+        Err(error) => {
+            analysis.blockers.push(error.to_string());
+            return analysis;
+        }
+    };
+    analysis.version_name = Some(profile.minecraft_version.to_string());
+    analysis.version_id = Some(world.level.format_version);
+    analysis.data_version = None;
+    analysis.level_name = world.level.level_name.clone();
+    if let Err(error) = inspect_legacy_world(&world, &mut analysis) {
+        analysis.blockers.push(error.to_string());
+    }
+    if analysis.chunks == 0 && analysis.blockers.is_empty() {
+        analysis
+            .warnings
+            .push("the world contains no allocated chunks".to_owned());
+    }
+    analysis.warnings.push(format!(
+        "Minecraft {} was used as the exact read-only profile; pre-1.8 chunks are decoded and copied, not edited, imported as an editable project or converted",
+        profile.minecraft_version
+    ));
+    analysis
+}
+
+fn base_analysis(root: &Path, selection: &WorldSelectionReport) -> JavaWorldAnalysis {
+    JavaWorldAnalysis {
+        root: root.display().to_string(),
+        layout: selection.layout.clone(),
+        selection_kind: selection.kind.as_str().to_owned(),
+        complete_save: selection.complete_save,
+        supported: false,
+        data_version: selection.data_version,
+        version_id: selection.version_id,
+        version_name: selection.version_name.clone(),
+        level_name: selection.level_name.clone(),
+        declared_dimensions: selection.declared_dimensions.clone(),
+        dimensions: Vec::new(),
+        regions: 0,
+        chunks: 0,
+        block_entities: None,
+        entities: None,
+        source_bytes: if selection.complete_save {
+            source_size(root)
+        } else {
+            0
+        },
+        source_path: root.display().to_string(),
+        source_kind: WorldSourceKind::Folder,
+        archive: None,
+        warnings: selection.warnings.clone(),
+        blockers: selection.blockers.clone(),
+        support_matrix: support_matrix(),
+    }
+}
+
+fn dimension_kind(id: &str) -> DimensionKind {
+    match id {
+        "minecraft:overworld" => DimensionKind::Overworld,
+        "minecraft:the_nether" => DimensionKind::Nether,
+        "minecraft:the_end" => DimensionKind::End,
+        _ => DimensionKind::Custom,
+    }
 }
 
 /// Sums regular files below a world folder without following symlinks. This is a size hint
@@ -319,6 +392,48 @@ fn inspect_world(world: &JavaWorld, analysis: &mut JavaWorldAnalysis) -> Result<
             for summary in region.summarize_all()? {
                 block_entities += summary.block_entities;
                 entities += summary.entities;
+            }
+        }
+        analysis.regions += coordinates.len();
+        analysis.dimensions.push(ImportDimensionAnalysis {
+            id: dimension.id.clone(),
+            kind: dimension.kind,
+            min_y: Some(dimension.min_y),
+            height: Some(dimension.height),
+            region_files: coordinates.len(),
+            chunks: dimension_chunks,
+        });
+    }
+    analysis.block_entities = Some(block_entities);
+    analysis.entities = Some(entities);
+    Ok(())
+}
+
+fn inspect_legacy_world(
+    world: &LegacyWorld,
+    analysis: &mut JavaWorldAnalysis,
+) -> Result<(), AnvilError> {
+    let mut block_entities = 0;
+    let mut entities = 0;
+    for dimension in &world.dimensions {
+        let coordinates = world.region_coordinates(&dimension.id)?;
+        let mut dimension_chunks = 0usize;
+        for (region_x, region_z) in &coordinates {
+            let region = world.read_region(&dimension.id, *region_x, *region_z)?;
+            let entries = region.entries();
+            dimension_chunks += entries.len();
+            analysis.chunks += entries.len();
+            if analysis.chunks > MAX_IMPORT_CHUNKS {
+                analysis.blockers.push(format!(
+                    "the world has more than {MAX_IMPORT_CHUNKS} allocated chunks"
+                ));
+                return Ok(());
+            }
+            for entry in entries {
+                let chunk = region.read_chunk(entry.x, entry.z)?;
+                let decoded = world.decode_chunk(&dimension.id, &chunk)?;
+                block_entities += decoded.block_entities;
+                entities += decoded.entities;
             }
         }
         analysis.regions += coordinates.len();

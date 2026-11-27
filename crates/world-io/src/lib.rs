@@ -33,9 +33,9 @@ pub use classic_anvil::{
 
 pub use anvil::{
     region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LegacyLevelDat,
-    LegacyWorld, LevelDat, RegionChunk, RegionChunkSummary, RegionEntry, RegionFile,
-    ANVIL_HEADER_BYTES, ANVIL_LOCATION_ENTRIES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_REGION_EXTENSION,
-    ANVIL_SECTOR_BYTES, MAX_LEVEL_DAT_BYTES, MAX_REGION_FILE_BYTES,
+    LegacyWorld, LegacyWorldLayout, LevelDat, RegionChunk, RegionChunkSummary, RegionEntry,
+    RegionFile, ANVIL_HEADER_BYTES, ANVIL_LOCATION_ENTRIES, ANVIL_REGION_AXIS_CHUNKS,
+    ANVIL_REGION_EXTENSION, ANVIL_SECTOR_BYTES, MAX_LEVEL_DAT_BYTES, MAX_REGION_FILE_BYTES,
 };
 pub use derived::{
     analyze_java_world_derived, inspect_chunk_derived, ChunkDerivedData, ChunkFingerprints,
@@ -70,9 +70,10 @@ pub use parity::{
 };
 pub use passthrough::{
     passthrough_java_world, passthrough_java_world_observed, passthrough_java_world_with_options,
-    CopiedFile, CopyObserver, NoopCopyObserver, PassthroughError, PassthroughOptions,
-    PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES, MAX_PASSTHROUGH_FILE_BYTES,
-    MAX_PASSTHROUGH_TOTAL_BYTES,
+    passthrough_legacy_world, passthrough_legacy_world_observed,
+    passthrough_legacy_world_with_options, CopiedFile, CopyObserver, NoopCopyObserver,
+    PassthroughError, PassthroughOptions, PassthroughReport, SkippedEntry, MAX_PASSTHROUGH_FILES,
+    MAX_PASSTHROUGH_FILE_BYTES, MAX_PASSTHROUGH_TOTAL_BYTES,
 };
 pub use region_write::{
     verified_write_support, write_region_from_overlay, write_region_from_overlay_with_policy,
@@ -96,13 +97,15 @@ pub use world_export::{
     WorldExportOptions, WorldExportReport, MAX_EXPORT_REGIONS,
 };
 pub use world_import::{
-    analyze_java_world, load_java_world, load_java_world_with_options, ImportDimensionAnalysis,
-    JavaWorldAnalysis, JavaWorldLoadReport, WorldImportError, WorldImportOptions,
-    MAX_IMPORT_CHUNKS, MAX_IMPORT_NON_AIR_BLOCKS, MAX_IMPORT_SECTIONS, SUPPORTED_LAYOUT,
+    analyze_java_world, analyze_legacy_world, load_java_world, load_java_world_with_options,
+    ImportDimensionAnalysis, JavaWorldAnalysis, JavaWorldLoadReport, WorldImportError,
+    WorldImportOptions, MAX_IMPORT_CHUNKS, MAX_IMPORT_NON_AIR_BLOCKS, MAX_IMPORT_SECTIONS,
+    SUPPORTED_LAYOUT,
 };
 pub use world_selection::{
-    classify_world_selection, SelectionDimension, SelectionRegionFile, WorldSelectionKind,
-    WorldSelectionReport, CLASSIC_ANVIL_LAYOUT,
+    classify_world_selection, is_legacy_layout, SelectionDimension, SelectionRegionFile,
+    WorldSelectionKind, WorldSelectionReport, CLASSIC_ANVIL_LAYOUT, LEGACY_ANVIL_LAYOUT,
+    LEGACY_MCREGION_LAYOUT,
 };
 pub use world_source::{
     analyze_world_source, prepare_world_source, ArchiveReport, ImportStrategy, PreparedWorldSource,

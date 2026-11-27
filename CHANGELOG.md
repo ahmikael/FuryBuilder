@@ -16,17 +16,21 @@ formats are not migrated.
   A version needs a verified profile to advance; classic Anvil `1.18–1.21.11` is verified for
   import, editing, project snapshots and same-version export, and can generate with its exact
   official server JAR; `1.21.4` remains the full-support baseline.
-- Exact metadata-only profiles for Java `1.8-1.8.8` and `1.0-1.7.10`. Numeric
+- Exact profiles for Java `1.8-1.8.8` and `1.0-1.7.10`. Numeric
   `1.8-1.12.2` records `DataVersion` 47 for 1.8.9, 169-1343 for 1.9-1.12.2, `-1` for
   1.8-1.8.8 and resource pack formats 1-3; pre-1.8 splits McRegion `1.0-1.1` (128-block
-  height) from Anvil `1.2.1-1.7.10` (256-block height). These profiles are `unverified` and
-  cannot create projects; pre-1.8 import and generation are not enabled.
-- Read-only McRegion and early-Anvil reader for `1.0-1.7.10`. It validates `level.dat`
-  `Version` 19132/19133, binds an exact profile to the `.mcr`/`.mca` container and dimension
-  height, and decodes flat `Level.Blocks`/`Data`/`Biomes` chunks through the shared numeric
-  registry. `TerrainPopulated` maps to `full`/`partial`; unknown ids, malformed arrays, mixed
-  containers and `DataVersion` tags are rejected. Import, passthrough and writing remain
-  disabled.
+  height) from Anvil `1.2.1-1.7.10` (256-block height). The `1.0-1.7.10` profiles are
+  `read-only` and cannot create editable projects; `1.8-1.8.8` remain `unverified`.
+  Pre-1.8 generation is not enabled.
+- Read-only McRegion and early-Anvil analysis and passthrough for `1.0-1.7.10`. The
+  selection classifier recognizes `.mcr` and pre-DataVersion `.mca` saves and inventories
+  their dimensions, regions and chunks without guessing an exact release. With an exact
+  profile, the adapter validates `level.dat` `Version` 19132/19133 and every flat
+  `Level.Blocks`/`Data`/`Biomes` chunk through the shared numeric registry;
+  `TerrainPopulated` maps to `full`/`partial`, and unknown ids, malformed arrays, mixed
+  containers and `DataVersion` tags are rejected. `passthrough_legacy_world` copies the
+  complete save byte for byte and re-validates the copy. Editing, editable project import
+  and conversion remain disabled.
 - Import, block/biome editing, project snapshots and same-version export for the 15 numeric
   classic releases `1.8.9-1.12.2`. The writer patches only `Level.Sections[].Blocks`/`Data`/
   `Add` and `Level.Biomes`; unknown tags and untouched sections stay byte-for-byte. Column

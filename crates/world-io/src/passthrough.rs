@@ -19,11 +19,12 @@ use std::io::{ErrorKind, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use minecraft_version::VersionProfile;
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::anvil::{AnvilError, JavaWorld};
-use crate::world_selection::classify_world_selection;
+use crate::anvil::{AnvilError, JavaWorld, JavaWorldDimension, LegacyWorld, RegionFile};
+use crate::world_selection::{classify_world_selection, is_legacy_layout};
 
 pub const MAX_PASSTHROUGH_FILES: usize = 100_000;
 pub const MAX_PASSTHROUGH_FILE_BYTES: u64 = 8 * 1024 * 1024 * 1024;
@@ -114,6 +115,8 @@ pub enum PassthroughError {
     InvalidDestination(String),
     #[error("selection is not a complete world save: {0}")]
     NotAWorldSave(String),
+    #[error("pre-1.8 worlds require an exact legacy version profile; use the legacy passthrough entry point")]
+    LegacyProfileRequired,
     #[error("refusing to follow symlink, junction or reparse point: {0}")]
     Symlink(String),
     #[error("unsupported file type in world: {0}")]
@@ -142,6 +145,7 @@ impl PassthroughError {
             PassthroughError::DestinationInsideSource(_)
             | PassthroughError::InvalidDestination(_) => "invalid_argument",
             PassthroughError::NotAWorldSave(_) => "unsupported_format",
+            PassthroughError::LegacyProfileRequired => "unsupported_version",
             PassthroughError::Symlink(_) => "unsafe_path",
             PassthroughError::NotRegularFile(_) => "unsupported_format",
             PassthroughError::LimitExceeded(_) => "limit_exceeded",
@@ -185,15 +189,8 @@ pub fn passthrough_java_world_observed(
     total_bytes: u64,
     observer: &dyn CopyObserver,
 ) -> Result<PassthroughReport, PassthroughError> {
-    if observer.is_cancelled() {
-        return Err(PassthroughError::Cancelled);
-    }
     let source_path = source.as_ref();
-    let source_metadata =
-        fs::symlink_metadata(source_path).map_err(|error| io_error(source_path, &error))?;
-    if is_link_like(&source_metadata) {
-        return Err(PassthroughError::Symlink(source_path.display().to_string()));
-    }
+    ensure_source_root(source_path)?;
     let selection = classify_world_selection(source_path);
     if !selection.complete_save {
         return Err(PassthroughError::NotAWorldSave(
@@ -204,16 +201,121 @@ pub fn passthrough_java_world_observed(
             },
         ));
     }
+    if is_legacy_layout(&selection.layout) {
+        return Err(PassthroughError::LegacyProfileRequired);
+    }
+    passthrough_world_observed(
+        source_path,
+        destination.as_ref(),
+        options,
+        total_bytes,
+        observer,
+        |path| JavaWorld::open(path),
+    )
+}
+
+/// Copies a pre-1.8 world with an exact legacy profile.
+///
+/// `level.dat` identifies only the container, so the caller selects the release.
+/// The profile is used to validate every chunk; the copy itself stays byte for byte.
+pub fn passthrough_legacy_world(
+    source: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
+    profile: &VersionProfile,
+) -> Result<PassthroughReport, PassthroughError> {
+    passthrough_legacy_world_observed(
+        source,
+        destination,
+        profile,
+        PassthroughOptions::default(),
+        0,
+        &NoopCopyObserver,
+    )
+}
+
+pub fn passthrough_legacy_world_with_options(
+    source: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
+    profile: &VersionProfile,
+    options: PassthroughOptions,
+) -> Result<PassthroughReport, PassthroughError> {
+    passthrough_legacy_world_observed(source, destination, profile, options, 0, &NoopCopyObserver)
+}
+
+/// Legacy counterpart of [`passthrough_java_world_observed`].
+pub fn passthrough_legacy_world_observed(
+    source: impl AsRef<Path>,
+    destination: impl AsRef<Path>,
+    profile: &VersionProfile,
+    options: PassthroughOptions,
+    total_bytes: u64,
+    observer: &dyn CopyObserver,
+) -> Result<PassthroughReport, PassthroughError> {
+    let source_path = source.as_ref();
+    ensure_source_root(source_path)?;
+    let selection = classify_world_selection(source_path);
+    if !selection.complete_save {
+        return Err(PassthroughError::NotAWorldSave(
+            if selection.blockers.is_empty() {
+                source_path.display().to_string()
+            } else {
+                selection.blockers.join("; ")
+            },
+        ));
+    }
+    if !is_legacy_layout(&selection.layout) {
+        return Err(PassthroughError::Anvil(AnvilError::UnsupportedLayout(
+            format!(
+                "{} is not a pre-1.8 McRegion or early Anvil world",
+                source_path.display()
+            ),
+        )));
+    }
+    passthrough_world_observed(
+        source_path,
+        destination.as_ref(),
+        options,
+        total_bytes,
+        observer,
+        |path| LegacyWorld::open(path, profile),
+    )
+}
+
+fn ensure_source_root(source_path: &Path) -> Result<(), PassthroughError> {
+    let metadata =
+        fs::symlink_metadata(source_path).map_err(|error| io_error(source_path, &error))?;
+    if is_link_like(&metadata) {
+        return Err(PassthroughError::Symlink(source_path.display().to_string()));
+    }
+    Ok(())
+}
+
+fn passthrough_world_observed<W: PassthroughWorld>(
+    source_path: &Path,
+    destination: &Path,
+    options: PassthroughOptions,
+    total_bytes: u64,
+    observer: &dyn CopyObserver,
+    open: impl Fn(&Path) -> Result<W, AnvilError>,
+) -> Result<PassthroughReport, PassthroughError> {
+    if observer.is_cancelled() {
+        return Err(PassthroughError::Cancelled);
+    }
+    let source_metadata =
+        fs::symlink_metadata(source_path).map_err(|error| io_error(source_path, &error))?;
+    if is_link_like(&source_metadata) {
+        return Err(PassthroughError::Symlink(source_path.display().to_string()));
+    }
     if !source_metadata.is_dir() {
         return Err(PassthroughError::Anvil(AnvilError::NotDirectory(
             source_path.display().to_string(),
         )));
     }
     let source = fs::canonicalize(source_path).map_err(|error| io_error(source_path, &error))?;
-    let world = JavaWorld::open(&source)?;
+    let world = open(&source)?;
     let (regions, chunks) = validate_world(&world, options.validate_chunks)?;
 
-    let destination = resolve_destination(&source, destination.as_ref())?;
+    let destination = resolve_destination(&source, destination)?;
     let parent = destination
         .parent()
         .ok_or_else(|| PassthroughError::InvalidDestination(destination.display().to_string()))?;
@@ -247,7 +349,7 @@ pub fn passthrough_java_world_observed(
         return Err(PassthroughError::Cancelled);
     }
 
-    let copied = JavaWorld::open(guard.path())?;
+    let copied = open(guard.path())?;
     let (copied_regions, copied_chunks) = validate_world(&copied, options.validate_chunks)?;
     if copied_regions != regions || copied_chunks != chunks {
         return Err(PassthroughError::VerificationFailed {
@@ -264,13 +366,62 @@ pub fn passthrough_java_world_observed(
     Ok(report)
 }
 
-fn validate_world(
-    world: &JavaWorld,
+trait PassthroughWorld {
+    fn dimensions(&self) -> &[JavaWorldDimension];
+    fn region_coordinates(&self, dimension_id: &str) -> Result<Vec<(i32, i32)>, AnvilError>;
+    fn read_region(
+        &self,
+        dimension_id: &str,
+        region_x: i32,
+        region_z: i32,
+    ) -> Result<RegionFile, AnvilError>;
+}
+
+impl PassthroughWorld for JavaWorld {
+    fn dimensions(&self) -> &[JavaWorldDimension] {
+        &self.dimensions
+    }
+
+    fn region_coordinates(&self, dimension_id: &str) -> Result<Vec<(i32, i32)>, AnvilError> {
+        JavaWorld::region_coordinates(self, dimension_id)
+    }
+
+    fn read_region(
+        &self,
+        dimension_id: &str,
+        region_x: i32,
+        region_z: i32,
+    ) -> Result<RegionFile, AnvilError> {
+        JavaWorld::read_region(self, dimension_id, region_x, region_z)
+    }
+}
+
+impl PassthroughWorld for LegacyWorld {
+    fn dimensions(&self) -> &[JavaWorldDimension] {
+        &self.dimensions
+    }
+
+    fn region_coordinates(&self, dimension_id: &str) -> Result<Vec<(i32, i32)>, AnvilError> {
+        LegacyWorld::region_coordinates(self, dimension_id)
+    }
+
+    fn read_region(
+        &self,
+        dimension_id: &str,
+        region_x: i32,
+        region_z: i32,
+    ) -> Result<RegionFile, AnvilError> {
+        LegacyWorld::read_region(self, dimension_id, region_x, region_z)
+    }
+}
+
+fn validate_world<W: PassthroughWorld>(
+    world: &W,
     validate_chunks: bool,
 ) -> Result<(usize, usize), PassthroughError> {
     let mut regions = 0usize;
     let mut chunks = 0usize;
-    for dimension in &world.dimensions {
+    for dimension in world.dimensions() {
         for (region_x, region_z) in world.region_coordinates(&dimension.id)? {
             let region = world.read_region(&dimension.id, region_x, region_z)?;
             regions += 1;

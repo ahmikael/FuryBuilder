@@ -172,12 +172,12 @@ fn versions() -> Vec<VersionSupport> {
             minecraft_versions: "1.0-1.7.10".to_owned(),
             data_versions: "predates DataVersion".to_owned(),
             layout: "mcregion_and_anvil".to_owned(),
-            status: "detected_unsupported".to_owned(),
-            read: "metadata_only".to_owned(),
+            status: "read_only".to_owned(),
+            read: "supported_subset".to_owned(),
             edit: "none".to_owned(),
             write: "none".to_owned(),
-            passthrough: "none".to_owned(),
-            note: "Exact profiles for all 28 releases are built in: 1.0-1.1 are McRegion with 128-block dimensions, and 1.2.1-1.7.10 are classic Anvil with 256-block dimensions. A read-only flat-chunk reader validates the level format, container extension and dimension height and decodes Level.Blocks/Data/Biomes; import, conversion and passthrough are not enabled yet.".to_owned(),
+            passthrough: "byte_for_byte".to_owned(),
+            note: "Exact profiles for all 28 releases are built in: 1.0-1.1 are McRegion with 128-block dimensions, and 1.2.1-1.7.10 are classic Anvil with 256-block dimensions. Lifecycle detection, exact-profile chunk validation and byte-for-byte passthrough are enabled; editing, project import and conversion are not. Minecraft 1.8-1.8.8 share the pre-DataVersion container but remain metadata-only.".to_owned(),
         },
         VersionSupport {
             id: "bedrock".to_owned(),
@@ -448,21 +448,22 @@ mod tests {
     }
 
     #[test]
-    fn legacy_profiles_are_metadata_only() {
+    fn legacy_profiles_are_read_only_with_byte_preserving_passthrough() {
         let matrix = support_matrix();
         let legacy = matrix
             .versions
             .iter()
             .find(|version| version.id == "pre-1.13-legacy")
             .expect("legacy row");
-        assert_eq!(legacy.status, "detected_unsupported");
-        assert_eq!(legacy.read, "metadata_only");
+        assert_eq!(legacy.status, "read_only");
+        assert_eq!(legacy.read, "supported_subset");
         assert_eq!(legacy.edit, "none");
         assert_eq!(legacy.write, "none");
-        assert_eq!(legacy.passthrough, "none");
+        assert_eq!(legacy.passthrough, "byte_for_byte");
         assert!(legacy.note.contains("all 28 releases"), "{}", legacy.note);
         assert!(legacy.note.contains("McRegion"), "{}", legacy.note);
         assert!(legacy.note.contains("classic Anvil"), "{}", legacy.note);
+        assert!(legacy.note.contains("1.8-1.8.8 share"), "{}", legacy.note);
     }
 
     #[test]
