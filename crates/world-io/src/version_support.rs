@@ -12,6 +12,9 @@ pub fn profile_for(data_version: i32) -> Option<VersionProfile> {
 }
 
 pub(crate) fn read_profile(data_version: i32) -> Option<&'static VersionProfile> {
+    if data_version <= 0 {
+        return None;
+    }
     builtin_profiles()
         .iter()
         .find(|profile| profile.data_version == data_version && profile.capabilities.read)

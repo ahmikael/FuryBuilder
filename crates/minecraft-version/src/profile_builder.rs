@@ -19,7 +19,7 @@ use crate::{
     ContentCatalogProfile, DimensionKind, DimensionProfile, GenerationCapabilities,
     ItemModelFormat, JavaRequirement, LevelTypeSyntax, PackFormatMinors, ServerProfile,
     StructureProfile, StructureSupport, VersionFamily, VersionId, VersionProfile,
-    WorldCapabilities, WorldLayout,
+    WorldCapabilities, WorldLayout, UNKNOWN_DATA_VERSION,
 };
 
 const MAX_JAR_VERSION_JSON_BYTES: u64 = 1024 * 1024;
@@ -42,7 +42,13 @@ pub fn build_version_profile(
     input: ProfileBuildInput,
 ) -> Result<VersionProfile, ProfileBuildError> {
     if input.data_version <= 0 {
-        return Err(ProfileBuildError::InvalidDataVersion(input.data_version));
+        let predates_data_version = input.version
+            < "1.8.9"
+                .parse()
+                .expect("the first release with DataVersion must parse");
+        if input.data_version != UNKNOWN_DATA_VERSION || !predates_data_version {
+            return Err(ProfileBuildError::InvalidDataVersion(input.data_version));
+        }
     }
     if input.java_major == 0 {
         return Err(ProfileBuildError::InvalidJavaMajor);
@@ -350,21 +356,36 @@ fn family_defaults(
             structure_formats: no_structures(),
             server: server_profile(true, LevelTypeSyntax::LegacyUpper, capabilities.generate),
         }),
-        VersionFamily::Legacy => Ok(FamilyDefaults {
-            world_layout: WorldLayout::McRegion,
-            chunk_family: ChunkFamily::Legacy,
-            biome_format: BiomeFormat::Column,
-            dimension_profiles: classic_dimensions((0, 128), (0, 128)),
-            content_catalog: ContentCatalogProfile {
-                registry_format: CatalogRegistryFormat::Legacy,
-                blockstate_format: BlockstateFormat::LegacyMetadata,
-                item_model_format: ItemModelFormat::LegacyMetadata,
-                creative_categories: false,
-                data_components: false,
-            },
-            structure_formats: no_structures(),
-            server: server_profile(false, LevelTypeSyntax::LegacyUpper, false),
-        }),
+        VersionFamily::Legacy => {
+            let anvil = version >= &"1.2.1".parse().expect("the first Anvil release must parse");
+            let server_jar = version
+                >= &"1.2.5"
+                    .parse()
+                    .expect("the first legacy server JAR must parse");
+            Ok(FamilyDefaults {
+                world_layout: if anvil {
+                    WorldLayout::ClassicAnvil
+                } else {
+                    WorldLayout::McRegion
+                },
+                chunk_family: ChunkFamily::Legacy,
+                biome_format: BiomeFormat::Column,
+                dimension_profiles: if anvil {
+                    classic_dimensions((0, 256), (0, 256))
+                } else {
+                    classic_dimensions((0, 128), (0, 128))
+                },
+                content_catalog: ContentCatalogProfile {
+                    registry_format: CatalogRegistryFormat::Legacy,
+                    blockstate_format: BlockstateFormat::LegacyMetadata,
+                    item_model_format: ItemModelFormat::LegacyMetadata,
+                    creative_categories: false,
+                    data_components: false,
+                },
+                structure_formats: no_structures(),
+                server: server_profile(server_jar, LevelTypeSyntax::LegacyUpper, false),
+            })
+        }
         VersionFamily::Unknown => Err(ProfileBuildError::UnsupportedFamily(family)),
     }
 }
@@ -748,6 +769,83 @@ mod tests {
             older.server.level_type_syntax,
             LevelTypeSyntax::LegacyCamelCase
         );
+    }
+
+    #[test]
+    fn accepts_the_unknown_data_version_only_before_1_8_9() {
+        let build = |id: &str, data_version: i32| {
+            build_version_profile(ProfileBuildInput {
+                version: version(id),
+                data_version,
+                java_major: 8,
+                resource_pack_format: Some(1),
+                datapack_format: None,
+                pack_format_minors: None,
+                capabilities: WorldCapabilities {
+                    support_level: SupportLevel::Unverified,
+                    read: false,
+                    edit: false,
+                    write: false,
+                    export: false,
+                    generate: false,
+                    assets: false,
+                },
+                notes: Vec::new(),
+            })
+        };
+
+        assert!(build("1.8.8", UNKNOWN_DATA_VERSION).is_ok());
+        assert!(build("1.7.10", UNKNOWN_DATA_VERSION).is_ok());
+        assert!(matches!(
+            build("1.8.9", UNKNOWN_DATA_VERSION),
+            Err(ProfileBuildError::InvalidDataVersion(value)) if value == UNKNOWN_DATA_VERSION
+        ));
+        assert!(matches!(
+            build("1.12.2", -2),
+            Err(ProfileBuildError::InvalidDataVersion(-2))
+        ));
+    }
+
+    #[test]
+    fn legacy_profiles_split_mcregion_and_anvil_by_release() {
+        let build = |id: &str| {
+            build_version_profile(ProfileBuildInput {
+                version: version(id),
+                data_version: UNKNOWN_DATA_VERSION,
+                java_major: 8,
+                resource_pack_format: None,
+                datapack_format: None,
+                pack_format_minors: None,
+                capabilities: WorldCapabilities {
+                    support_level: SupportLevel::Unverified,
+                    read: false,
+                    edit: false,
+                    write: false,
+                    export: false,
+                    generate: false,
+                    assets: false,
+                },
+                notes: Vec::new(),
+            })
+            .expect("legacy profile")
+        };
+
+        let mcregion = build("1.1");
+        assert_eq!(mcregion.id, "java-mcregion-1.1");
+        assert_eq!(mcregion.world_layout, WorldLayout::McRegion);
+        assert_eq!(mcregion.dimension_profiles[0].height, 128);
+        assert!(!mcregion.server.official_jar);
+
+        let anvil = build("1.7.10");
+        assert_eq!(anvil.id, "java-classic-1.7.10");
+        assert_eq!(anvil.world_layout, WorldLayout::ClassicAnvil);
+        assert_eq!(anvil.dimension_profiles[0].height, 256);
+        assert!(anvil.server.official_jar);
+
+        let early_anvil = build("1.2.1");
+        assert_eq!(early_anvil.world_layout, WorldLayout::ClassicAnvil);
+        assert_eq!(early_anvil.dimension_profiles[0].height, 256);
+        assert!(!early_anvil.server.official_jar);
     }
 
     #[test]

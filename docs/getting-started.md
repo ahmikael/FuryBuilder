@@ -75,9 +75,10 @@ cargo test --workspace
    including legacy and special ids, but only a version with a verified profile has a support
    badge and can continue. All classic Anvil releases from 1.13 through 1.21.11 support
    import, block/biome editing, project snapshots, same-version export and generation with their
-   exact official server JAR, `level-type`, Java major and data pack format. Managed and manual
-   client JARs with exact block/item catalogs are available for 1.13–1.17.1 as well;
-   **Placeholder** remains an explicit fallback. The card shows Java,
+   exact official server JAR, `level-type`, Java major and data pack format. Exact metadata-only
+   profiles also cover Java 1.0–1.12.2; they are shown as `unverified` and cannot continue.
+   Managed and manual client JARs with exact block/item catalogs are available for 1.13–1.17.1
+   as well; **Placeholder** remains an explicit fallback. The card shows Java,
    world height, layout, pack formats and every known limitation. It also lists the exact
    `Read`, `Edit`, `Save`, `Export`, `Generate` and `Assets` capabilities: an unavailable action
    stays visible with its reason, and `Next` is blocked when the selected version cannot perform
@@ -292,7 +293,7 @@ Unsupported versions, entities, block entities and unknown tags block import.
    editable overlay.
 
 Classic Java 1.13–1.21.11 world layouts are supported. A single `.mca` file or a bare
-`region/` directory is not a complete world and is refused; split 26.1+ and legacy McRegion
+`region/` directory is not a complete world and is refused; split 26.1+ and all pre-1.13
 saves are detected but cannot be imported. Archive entries are bounded, and traversal,
 absolute paths, symlinks, duplicate names and oversized entries are refused. Edits
 are stored in the project overlay; the source folder or archive is never written. Untouched
@@ -370,7 +371,7 @@ notice instead of pretending the curated list is the exact-version catalog.
 | `Core offline`                          | The Rust backend did not start; check the terminal running `pnpm tauri:dev`.                      |
 | Textures are checkerboards              | Choose a verified client source in the project wizard's **Components** step.                     |
 | Vanilla World is blocked                | The wizard's **Components** or **Source** step names the missing Java, server JAR or EULA step.    |
-| Import is rejected                      | Only classic 1.13–1.21.11 world folders or `.zip` archives containing `level.dat` are supported; split 26.1+ and legacy saves are refused. |
+| Import is rejected                      | Only classic 1.13–1.21.11 world folders or `.zip` archives containing `level.dat` are supported; split 26.1+ and all pre-1.13 saves are refused. |
 | Structure export is blocked             | The `.nbt` adapter refuses entities, block entities or unknown tags instead of dropping them.     |
 | A large paste only shows a pink preview | That is the staged path for pastes of 65,536+ non-air blocks. Press `Ctrl+V` again or confirm it. |
 | Recovery banner after a crash           | Read the reason and choose whether to keep the verified autosave or discard it.                   |

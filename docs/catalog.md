@@ -338,7 +338,8 @@ project.
   non-empty `models/item/<path>` model backed by a valid id is admitted; templates
   (`item/generated`), empty placeholders (`item/air`), wall-fan variants and entity-backed
   blockstates are excluded. Numeric ids and pre-1.8 registries remain outside the catalog and
-  belong to the legacy stage.
+  belong to the legacy stage; exact metadata-only profiles for 1.0–1.12.2 do not build a
+  catalog.
 - Entity render blockstates are not blocks. `item_frame` and `glow_item_frame` have blockstate
   files for the entity renderer, so they are skipped with a warning while their item forms stay
   item-only. An imported world containing such names still preserves the stored id and

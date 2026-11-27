@@ -670,7 +670,7 @@ fn build_version_catalog_report(catalog: &VersionCatalog) -> VersionCatalogRepor
         .map(|entry| {
             let profile = profiles
                 .iter()
-                .find(|profile| profile.capabilities.write && profile.minecraft_version.as_str() == entry.id)
+                .find(|profile| profile.minecraft_version.as_str() == entry.id)
                 .cloned();
             let version_id = entry.id.to_string();
             let unavailable_reason = profile.is_none().then(|| {
@@ -5023,6 +5023,14 @@ mod version_catalog_tests {
           "time": "2024-12-03T10:12:57+00:00",
           "releaseTime": "2024-12-03T10:12:57+00:00",
           "sha1": "cccccccccccccccccccccccccccccccccccccccc"
+        },
+        {
+          "id": "1.0",
+          "type": "release",
+          "url": "https://piston-meta.mojang.com/v1/packages/ddd/1.0.json",
+          "time": "2011-11-17T22:00:00+00:00",
+          "releaseTime": "2011-11-17T22:00:00+00:00",
+          "sha1": "dddddddddddddddddddddddddddddddddddddddd"
         }
       ]
     }"#;
@@ -5036,13 +5044,13 @@ mod version_catalog_tests {
     }
 
     #[test]
-    fn report_marks_latest_and_recommended_and_exposes_subset_profiles() {
+    fn report_marks_latest_and_recommended_and_exposes_known_profiles() {
         let report = report();
         assert_eq!(report.source, "network");
         assert_eq!(report.latest_release, "1.21.5");
         assert_eq!(report.latest_snapshot, "26.1-snapshot-3");
         assert_eq!(report.recommended, "1.21.4");
-        assert_eq!(report.versions.len(), 3);
+        assert_eq!(report.versions.len(), 4);
 
         let latest = &report.versions[0];
         assert_eq!(latest.id, "1.21.5");
@@ -5076,6 +5084,20 @@ mod version_catalog_tests {
             minecraft_version::SupportLevel::Full
         );
         assert!(recommended.unavailable_reason.is_none());
+
+        let metadata_only = &report.versions[3];
+        assert_eq!(metadata_only.id, "1.0");
+        let profile = metadata_only
+            .profile
+            .as_ref()
+            .expect("metadata-only profile");
+        assert_eq!(
+            profile.capabilities.support_level,
+            minecraft_version::SupportLevel::Unverified
+        );
+        assert!(!profile.capabilities.read);
+        assert!(!profile.capabilities.write);
+        assert!(metadata_only.unavailable_reason.is_none());
     }
 
     #[test]

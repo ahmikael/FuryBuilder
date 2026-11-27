@@ -7,7 +7,7 @@ use std::sync::LazyLock;
 
 use crate::{
     build_version_profile, PackFormatMinors, ProfileBuildInput, SupportLevel, VersionFamily,
-    VersionId, VersionProfile, WorldCapabilities,
+    VersionId, VersionProfile, WorldCapabilities, UNKNOWN_DATA_VERSION,
 };
 
 /// Stable id of the verified 1.21.4 classic Anvil profile.
@@ -17,8 +17,8 @@ struct ReleaseFacts {
     version: &'static str,
     data_version: i32,
     java_major: u32,
-    resource_pack_format: u32,
-    datapack_format: u32,
+    resource_pack_format: Option<u32>,
+    datapack_format: Option<u32>,
     pack_format_minors: Option<PackFormatMinors>,
 }
 
@@ -34,8 +34,26 @@ impl ReleaseFacts {
             version,
             data_version,
             java_major,
+            resource_pack_format: Some(resource_pack_format),
+            datapack_format: Some(datapack_format),
+            pack_format_minors: None,
+        }
+    }
+
+    /// Releases before 1.13 have no data pack format. Resource packs may also
+    /// be absent before 1.6.1.
+    const fn pre_flattened(
+        version: &'static str,
+        data_version: i32,
+        java_major: u32,
+        resource_pack_format: Option<u32>,
+    ) -> Self {
+        Self {
+            version,
+            data_version,
+            java_major,
             resource_pack_format,
-            datapack_format,
+            datapack_format: None,
             pack_format_minors: None,
         }
     }
@@ -50,6 +68,8 @@ impl ReleaseFacts {
         let full = self.version == "1.21.4";
         let modern_classic = version_id.family() == VersionFamily::Modern;
         let flattened_classic = version_id.family() == VersionFamily::Flattened;
+        let numeric_classic = version_id.family() == VersionFamily::Numeric;
+        let legacy_classic = version_id.family() == VersionFamily::Legacy;
         let notes = if full {
             vec![
                 "Block-state and biome writes are verified for classic Anvil 1.21.4.".to_owned(),
@@ -87,6 +107,33 @@ impl ReleaseFacts {
                 );
             }
             notes
+        } else if numeric_classic {
+            let mut notes = vec![
+                format!(
+                    "Minecraft {} stores numeric block ids plus metadata in classic Anvil chunks.",
+                    self.version
+                ),
+                "The exact profile is recorded, but this build has no verified numeric world adapter yet."
+                    .to_owned(),
+            ];
+            if self.data_version == UNKNOWN_DATA_VERSION {
+                notes.push(
+                    "This release predates the DataVersion tag; -1 is recorded instead of inventing a value."
+                        .to_owned(),
+                );
+            }
+            notes
+        } else if legacy_classic {
+            let anvil = version_id >= "1.2.1".parse().expect("the first Anvil release must parse");
+            vec![
+                format!(
+                    "Minecraft {} predates the DataVersion tag and uses the pre-1.8 {} chunk format.",
+                    self.version,
+                    if anvil { "Anvil" } else { "McRegion" }
+                ),
+                "The exact profile is recorded, but this build has no verified legacy world adapter yet."
+                    .to_owned(),
+            ]
         } else {
             vec![
                 "Release metadata is known, but this build has no verified world adapter for it."
@@ -128,8 +175,8 @@ impl ReleaseFacts {
             version: version_id,
             data_version: self.data_version,
             java_major: self.java_major,
-            resource_pack_format: Some(self.resource_pack_format),
-            datapack_format: Some(self.datapack_format),
+            resource_pack_format: self.resource_pack_format,
+            datapack_format: self.datapack_format,
             pack_format_minors: self.pack_format_minors,
             capabilities,
             notes,
@@ -142,6 +189,64 @@ impl ReleaseFacts {
 // per-release launcher JSON; DataVersion and pack formats come from version.json
 // inside each official client JAR. No JAR content is bundled.
 const RELEASES: &[ReleaseFacts] = &[
+    // Numeric classic Anvil. 1.8.9 is the first release that writes DataVersion
+    // 47; 1.8-1.8.8 predate the tag. Resource packs use format 1 in 1.8,
+    // 2 in 1.9-1.10.2 and 3 in 1.11-1.12.2. There is no data pack format.
+    ReleaseFacts::pre_flattened("1.8", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.1", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.2", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.3", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.4", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.5", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.6", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.7", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.8", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.8.9", 47, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.9", 169, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.9.1", 175, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.9.2", 176, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.9.3", 183, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.9.4", 184, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.10", 510, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.10.1", 511, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.10.2", 512, 8, Some(2)),
+    ReleaseFacts::pre_flattened("1.11", 819, 8, Some(3)),
+    ReleaseFacts::pre_flattened("1.11.1", 921, 8, Some(3)),
+    ReleaseFacts::pre_flattened("1.11.2", 922, 8, Some(3)),
+    ReleaseFacts::pre_flattened("1.12", 1139, 8, Some(3)),
+    ReleaseFacts::pre_flattened("1.12.1", 1241, 8, Some(3)),
+    ReleaseFacts::pre_flattened("1.12.2", 1343, 8, Some(3)),
+    // Pre-1.8. 1.0-1.1 use McRegion with 128-block dimensions; 1.2.1-1.7.10
+    // use classic Anvil with 256-block dimensions. Resource packs start at
+    // 1.6.1; there is no data pack format.
+    ReleaseFacts::pre_flattened("1.7.10", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.9", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.8", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.7", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.6", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.5", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.4", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.3", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.7.2", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.6.4", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.6.2", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.6.1", UNKNOWN_DATA_VERSION, 8, Some(1)),
+    ReleaseFacts::pre_flattened("1.5.2", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.5.1", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.4.7", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.4.6", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.4.5", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.4.4", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.4.2", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.3.2", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.3.1", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.2.5", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.2.4", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.2.3", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.2.2", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.2.1", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.1", UNKNOWN_DATA_VERSION, 8, None),
+    ReleaseFacts::pre_flattened("1.0", UNKNOWN_DATA_VERSION, 8, None),
     // Flattened classic Anvil. Pack formats are the shared resource/data values
     // declared by each release's version.json; 1.17.1 stays at format 7.
     ReleaseFacts::new("1.13", 1519, 8, 4, 4),
@@ -212,8 +317,14 @@ pub fn java_classic_1_21_4() -> VersionProfile {
     profile_for_id(JAVA_CLASSIC_1_21_4_ID).expect("the default profile must be built in")
 }
 
-/// Returns the built-in profile that owns a Minecraft `DataVersion`.
+/// Returns the built-in profile that owns a positive Minecraft `DataVersion`.
+///
+/// [`UNKNOWN_DATA_VERSION`] is not addressable: several pre-1.8.9 releases share
+/// it, so callers must resolve those profiles by version id instead.
 pub fn profile_for_data_version(data_version: i32) -> Option<VersionProfile> {
+    if data_version <= 0 {
+        return None;
+    }
     builtin_profiles()
         .iter()
         .find(|profile| profile.data_version == data_version)
@@ -690,6 +801,524 @@ mod tests {
             assert_eq!(
                 profile_for_data_version(facts.data_version).as_ref(),
                 Some(&profile),
+                "{id}"
+            );
+        }
+    }
+
+    #[test]
+    fn numeric_release_metadata_covers_every_exact_version() {
+        struct Facts {
+            version: &'static str,
+            data_version: i32,
+            resource_pack_format: Option<u32>,
+        }
+
+        const RELEASES: [Facts; 24] = [
+            Facts {
+                version: "1.8",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.1",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.2",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.3",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.4",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.5",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.6",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.7",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.8",
+                data_version: UNKNOWN_DATA_VERSION,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.8.9",
+                data_version: 47,
+                resource_pack_format: Some(1),
+            },
+            Facts {
+                version: "1.9",
+                data_version: 169,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.9.1",
+                data_version: 175,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.9.2",
+                data_version: 176,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.9.3",
+                data_version: 183,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.9.4",
+                data_version: 184,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.10",
+                data_version: 510,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.10.1",
+                data_version: 511,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.10.2",
+                data_version: 512,
+                resource_pack_format: Some(2),
+            },
+            Facts {
+                version: "1.11",
+                data_version: 819,
+                resource_pack_format: Some(3),
+            },
+            Facts {
+                version: "1.11.1",
+                data_version: 921,
+                resource_pack_format: Some(3),
+            },
+            Facts {
+                version: "1.11.2",
+                data_version: 922,
+                resource_pack_format: Some(3),
+            },
+            Facts {
+                version: "1.12",
+                data_version: 1139,
+                resource_pack_format: Some(3),
+            },
+            Facts {
+                version: "1.12.1",
+                data_version: 1241,
+                resource_pack_format: Some(3),
+            },
+            Facts {
+                version: "1.12.2",
+                data_version: 1343,
+                resource_pack_format: Some(3),
+            },
+        ];
+
+        for facts in RELEASES {
+            let id = facts.version;
+            let profile = profile_for_version(&version(id)).expect(id);
+            assert_eq!(profile.id, format!("java-classic-{id}"), "{id}");
+            assert_eq!(profile.family, VersionFamily::Numeric, "{id}");
+            assert_eq!(profile.data_version, facts.data_version, "{id}");
+            assert_eq!(profile.world_layout, WorldLayout::ClassicAnvil, "{id}");
+            assert_eq!(profile.chunk_family, ChunkFamily::NumericIds, "{id}");
+            assert_eq!(profile.biome_format, BiomeFormat::Column, "{id}");
+            assert_eq!(profile.java.minimum_major, 8, "{id}");
+            assert_eq!(profile.java.recommended_major, 8, "{id}");
+            assert_eq!(
+                profile.resource_pack_format, facts.resource_pack_format,
+                "{id}"
+            );
+            assert_eq!(profile.datapack_format, None, "{id}");
+            assert_eq!(profile.pack_format_minors, None, "{id}");
+            assert_eq!(
+                profile.server.level_type_syntax,
+                LevelTypeSyntax::LegacyUpper,
+                "{id}"
+            );
+            assert!(profile.server.official_jar, "{id}");
+            assert!(!profile.server.generation.normal, "{id}");
+            assert!(!profile.server.generation.flat, "{id}");
+            assert!(!profile.server.generation.large_biomes, "{id}");
+            assert!(!profile.server.generation.amplified, "{id}");
+            assert_eq!(
+                profile.content_catalog.registry_format,
+                CatalogRegistryFormat::NumericIds,
+                "{id}"
+            );
+            assert_eq!(
+                profile.content_catalog.blockstate_format,
+                BlockstateFormat::LegacyMetadata,
+                "{id}"
+            );
+            assert_eq!(
+                profile.content_catalog.item_model_format,
+                ItemModelFormat::LegacyMetadata,
+                "{id}"
+            );
+            assert!(!profile.content_catalog.data_components, "{id}");
+            assert_eq!(
+                profile
+                    .dimension_profiles
+                    .iter()
+                    .map(|dimension| (
+                        dimension.id.as_str(),
+                        dimension.min_y,
+                        dimension.height,
+                        dimension.folder.as_str(),
+                    ))
+                    .collect::<Vec<_>>(),
+                [
+                    ("minecraft:overworld", 0, 256, "region"),
+                    ("minecraft:the_nether", 0, 256, "DIM-1/region"),
+                    ("minecraft:the_end", 0, 256, "DIM1/region"),
+                ],
+                "{id}"
+            );
+            assert_eq!(
+                profile.capabilities.support_level,
+                SupportLevel::Unverified,
+                "{id}"
+            );
+            assert!(profile.capabilities.validate().is_ok(), "{id}");
+            assert!(!profile.capabilities.read, "{id}");
+            assert!(!profile.capabilities.edit, "{id}");
+            assert!(!profile.capabilities.write, "{id}");
+            assert!(!profile.capabilities.export, "{id}");
+            assert!(!profile.capabilities.generate, "{id}");
+            assert!(!profile.capabilities.assets, "{id}");
+            assert!(!profile.structure_formats.java_nbt.import, "{id}");
+            assert!(!profile.structure_formats.java_nbt.export, "{id}");
+            if facts.data_version > 0 {
+                assert_eq!(
+                    profile_for_data_version(facts.data_version).as_ref(),
+                    Some(&profile),
+                    "{id}"
+                );
+            } else {
+                assert!(
+                    profile_for_data_version(UNKNOWN_DATA_VERSION).is_none(),
+                    "{id}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn legacy_release_metadata_covers_every_exact_version() {
+        struct Facts {
+            version: &'static str,
+            layout: WorldLayout,
+            height: i32,
+            resource_pack_format: Option<u32>,
+            server_jar: bool,
+        }
+
+        const ANVIL: WorldLayout = WorldLayout::ClassicAnvil;
+        const MCR: WorldLayout = WorldLayout::McRegion;
+        const RELEASES: [Facts; 28] = [
+            Facts {
+                version: "1.7.10",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.9",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.8",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.7",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.6",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.5",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.4",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.3",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.7.2",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.6.4",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.6.2",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.6.1",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: Some(1),
+                server_jar: true,
+            },
+            Facts {
+                version: "1.5.2",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.5.1",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.4.7",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.4.6",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.4.5",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.4.4",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.4.2",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.3.2",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.3.1",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.2.5",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: true,
+            },
+            Facts {
+                version: "1.2.4",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: false,
+            },
+            Facts {
+                version: "1.2.3",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: false,
+            },
+            Facts {
+                version: "1.2.2",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: false,
+            },
+            Facts {
+                version: "1.2.1",
+                layout: ANVIL,
+                height: 256,
+                resource_pack_format: None,
+                server_jar: false,
+            },
+            Facts {
+                version: "1.1",
+                layout: MCR,
+                height: 128,
+                resource_pack_format: None,
+                server_jar: false,
+            },
+            Facts {
+                version: "1.0",
+                layout: MCR,
+                height: 128,
+                resource_pack_format: None,
+                server_jar: false,
+            },
+        ];
+
+        for facts in RELEASES {
+            let id = facts.version;
+            let profile = profile_for_version(&version(id)).expect(id);
+            let prefix = if facts.layout == WorldLayout::McRegion {
+                "java-mcregion"
+            } else {
+                "java-classic"
+            };
+            assert_eq!(profile.id, format!("{prefix}-{id}"), "{id}");
+            assert_eq!(profile.family, VersionFamily::Legacy, "{id}");
+            assert_eq!(profile.data_version, UNKNOWN_DATA_VERSION, "{id}");
+            assert_eq!(profile.world_layout, facts.layout, "{id}");
+            assert_eq!(profile.chunk_family, ChunkFamily::Legacy, "{id}");
+            assert_eq!(profile.biome_format, BiomeFormat::Column, "{id}");
+            assert_eq!(profile.java.minimum_major, 8, "{id}");
+            assert_eq!(profile.java.recommended_major, 8, "{id}");
+            assert_eq!(
+                profile.resource_pack_format, facts.resource_pack_format,
+                "{id}"
+            );
+            assert_eq!(profile.datapack_format, None, "{id}");
+            assert_eq!(profile.pack_format_minors, None, "{id}");
+            assert_eq!(
+                profile.server.level_type_syntax,
+                LevelTypeSyntax::LegacyUpper,
+                "{id}"
+            );
+            assert_eq!(profile.server.official_jar, facts.server_jar, "{id}");
+            assert!(!profile.server.generation.normal, "{id}");
+            assert!(!profile.server.generation.flat, "{id}");
+            assert!(!profile.server.generation.large_biomes, "{id}");
+            assert!(!profile.server.generation.amplified, "{id}");
+            assert_eq!(
+                profile.content_catalog.registry_format,
+                CatalogRegistryFormat::Legacy,
+                "{id}"
+            );
+            assert_eq!(
+                profile.content_catalog.blockstate_format,
+                BlockstateFormat::LegacyMetadata,
+                "{id}"
+            );
+            assert_eq!(
+                profile.content_catalog.item_model_format,
+                ItemModelFormat::LegacyMetadata,
+                "{id}"
+            );
+            assert!(!profile.content_catalog.creative_categories, "{id}");
+            assert!(!profile.content_catalog.data_components, "{id}");
+            assert_eq!(
+                profile
+                    .dimension_profiles
+                    .iter()
+                    .map(|dimension| (
+                        dimension.id.as_str(),
+                        dimension.min_y,
+                        dimension.height,
+                        dimension.folder.as_str(),
+                    ))
+                    .collect::<Vec<_>>(),
+                [
+                    ("minecraft:overworld", 0, facts.height, "region"),
+                    ("minecraft:the_nether", 0, facts.height, "DIM-1/region"),
+                    ("minecraft:the_end", 0, facts.height, "DIM1/region"),
+                ],
+                "{id}"
+            );
+            assert_eq!(
+                profile.capabilities.support_level,
+                SupportLevel::Unverified,
+                "{id}"
+            );
+            assert!(profile.capabilities.validate().is_ok(), "{id}");
+            assert!(!profile.capabilities.read, "{id}");
+            assert!(!profile.capabilities.edit, "{id}");
+            assert!(!profile.capabilities.write, "{id}");
+            assert!(!profile.capabilities.export, "{id}");
+            assert!(!profile.capabilities.generate, "{id}");
+            assert!(!profile.capabilities.assets, "{id}");
+            assert!(
+                profile_for_data_version(UNKNOWN_DATA_VERSION).is_none(),
                 "{id}"
             );
         }

@@ -271,6 +271,13 @@ pub enum VersionFamily {
     Unknown,
 }
 
+/// Sentinel for world formats that predate the `DataVersion` tag.
+///
+/// Minecraft treats a missing `DataVersion` as `-1`. Releases before 1.8.9
+/// predate the tag; their profiles record this sentinel instead of inventing
+/// a number. It is never a valid project target.
+pub const UNKNOWN_DATA_VERSION: i32 = -1;
+
 /// A complete, verified description of one Minecraft Java version.
 ///
 /// Profiles are facts, not guesses: every field is filled from a version
@@ -282,6 +289,7 @@ pub struct VersionProfile {
     /// Stable profile id, for example `java-classic-1.21.4`.
     pub id: String,
     pub minecraft_version: VersionId,
+    /// Exact `DataVersion`, or [`UNKNOWN_DATA_VERSION`] before 1.8.9.
     pub data_version: i32,
     pub release_type: ReleaseType,
     pub family: VersionFamily,

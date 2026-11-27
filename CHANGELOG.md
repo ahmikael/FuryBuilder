@@ -16,6 +16,11 @@ formats are not migrated.
   A version needs a verified profile to advance; classic Anvil `1.18–1.21.11` is verified for
   import, editing, project snapshots and same-version export, and can generate with its exact
   official server JAR; `1.21.4` remains the full-support baseline.
+- Exact metadata-only profiles for all 52 Java releases from `1.0` through `1.12.2`. Numeric
+  `1.8–1.12.2` records `DataVersion` 47 for 1.8.9, 169–1343 for 1.9–1.12.2, `-1` for
+  1.8–1.8.8 and resource pack formats 1–3; pre-1.8 splits McRegion `1.0–1.1` (128-block
+  height) from Anvil `1.2.1–1.7.10` (256-block height). The profiles are `unverified` and cannot
+  create projects; no pre-1.13 codec, catalog or generation is enabled.
 - Exact built-in metadata for Java `1.13–1.17.1`: `DataVersion`, Java 8/16, resource and data
   pack formats 4–7, dimension folders and the 0–256 Overworld height (the extended height starts
   with 1.18), plus the column/section biome boundary.

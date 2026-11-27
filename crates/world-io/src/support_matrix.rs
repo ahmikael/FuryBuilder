@@ -156,16 +156,28 @@ fn versions() -> Vec<VersionSupport> {
             note: "Moving snapshot target; not supported.".to_owned(),
         },
         VersionSupport {
-            id: "pre-1.13-legacy".to_owned(),
-            minecraft_versions: "pre-1.13".to_owned(),
-            data_versions: "varies".to_owned(),
-            layout: "legacy_mcr".to_owned(),
+            id: "java-classic-1.8-1.12-numeric".to_owned(),
+            minecraft_versions: "1.8-1.12.2".to_owned(),
+            data_versions: "47, 169-1343; 1.8-1.8.8 predate DataVersion".to_owned(),
+            layout: "classic_anvil".to_owned(),
             status: "detected_unsupported".to_owned(),
-            read: "legacy_marker".to_owned(),
+            read: "metadata_only".to_owned(),
             edit: "none".to_owned(),
             write: "none".to_owned(),
             passthrough: "none".to_owned(),
-            note: "Legacy .mcr markers are detected and refused; no McRegion chunk parser or writer exists.".to_owned(),
+            note: "Exact profiles for all 24 releases are built in, including numeric block ids plus metadata and column biomes. No numeric chunk codec, import, export or generation is enabled yet.".to_owned(),
+        },
+        VersionSupport {
+            id: "pre-1.13-legacy".to_owned(),
+            minecraft_versions: "1.0-1.7.10".to_owned(),
+            data_versions: "predates DataVersion".to_owned(),
+            layout: "mcregion_and_anvil".to_owned(),
+            status: "detected_unsupported".to_owned(),
+            read: "metadata_only".to_owned(),
+            edit: "none".to_owned(),
+            write: "none".to_owned(),
+            passthrough: "none".to_owned(),
+            note: "Exact profiles for all 28 releases are built in: 1.0-1.1 are McRegion with 128-block dimensions, and 1.2.1-1.7.10 are classic Anvil with 256-block dimensions. No legacy chunk parser, import, conversion or passthrough is enabled yet.".to_owned(),
         },
         VersionSupport {
             id: "bedrock".to_owned(),
@@ -407,6 +419,41 @@ mod tests {
         );
         assert!(subset.note.contains("all 19 releases"), "{}", subset.note);
         assert!(subset.note.contains("client JAR"), "{}", subset.note);
+    }
+
+    #[test]
+    fn numeric_and_legacy_profiles_are_metadata_only() {
+        let matrix = support_matrix();
+        let numeric = matrix
+            .versions
+            .iter()
+            .find(|version| version.id == "java-classic-1.8-1.12-numeric")
+            .expect("numeric classic row");
+        assert_eq!(numeric.status, "detected_unsupported");
+        assert_eq!(numeric.read, "metadata_only");
+        assert_eq!(numeric.edit, "none");
+        assert_eq!(numeric.write, "none");
+        assert_eq!(numeric.passthrough, "none");
+        assert!(numeric.note.contains("all 24 releases"), "{}", numeric.note);
+        assert!(
+            numeric.note.contains("No numeric chunk codec"),
+            "{}",
+            numeric.note
+        );
+
+        let legacy = matrix
+            .versions
+            .iter()
+            .find(|version| version.id == "pre-1.13-legacy")
+            .expect("legacy row");
+        assert_eq!(legacy.status, "detected_unsupported");
+        assert_eq!(legacy.read, "metadata_only");
+        assert_eq!(legacy.edit, "none");
+        assert_eq!(legacy.write, "none");
+        assert_eq!(legacy.passthrough, "none");
+        assert!(legacy.note.contains("all 28 releases"), "{}", legacy.note);
+        assert!(legacy.note.contains("McRegion"), "{}", legacy.note);
+        assert!(legacy.note.contains("classic Anvil"), "{}", legacy.note);
     }
 
     #[test]
