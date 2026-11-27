@@ -138,9 +138,9 @@ impl ReleaseFacts {
                     self.version,
                     if anvil { "Anvil" } else { "McRegion" }
                 ),
-                "The exact profile is required for read-only analysis because level.dat cannot identify one release."
+                "The exact profile is required for analysis because level.dat cannot identify one release."
                     .to_owned(),
-                "Pre-1.8 analysis and byte-for-byte passthrough are enabled; editing, project import and conversion are not."
+                "Pre-1.8 analysis, byte-for-byte passthrough and conversion by the exact official server are enabled; editing and editable project import are not."
                     .to_owned(),
             ]
         } else {
@@ -181,7 +181,7 @@ impl ReleaseFacts {
             }
         } else if legacy_classic {
             WorldCapabilities {
-                support_level: SupportLevel::ReadOnly,
+                support_level: SupportLevel::Convert,
                 read: true,
                 edit: false,
                 write: false,
@@ -1350,7 +1350,7 @@ mod tests {
             );
             assert_eq!(
                 profile.capabilities.support_level,
-                SupportLevel::ReadOnly,
+                SupportLevel::Convert,
                 "{id}"
             );
             assert!(profile.capabilities.validate().is_ok(), "{id}");

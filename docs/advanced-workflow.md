@@ -396,8 +396,9 @@ and avoid treating the tested ceiling as a normal working radius.
 - Import World supports classic Java 1.13–1.21.11 layouts, including the 19 flattened releases
   from 1.13 through 1.17.1, plus numeric classic 1.8.9–1.12.2. A bare `.mca` or `region/`
   directory is not a world. Split, mixed and 1.8–1.8.8 layouts are detected but not supported.
-  Pre-1.8 McRegion and early-Anvil saves get read-only analysis and byte-for-byte passthrough
-  with an exact profile; they cannot be imported as editable projects.
+  Pre-1.8 McRegion and early-Anvil saves get exact-profile analysis, byte-for-byte passthrough
+  and a copy-only official-server conversion path; they cannot be imported as editable projects
+  until the wizard target selection and conversion report are wired.
 - Edits to imported worlds preserve untouched raw data. Heightmaps, light, ticks, block
   entities, entities and POI are not semantically recalculated after an edit; the optional
   `VanillaRebuild` writer policy invalidates some derived data for the vanilla engine to

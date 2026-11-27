@@ -286,7 +286,7 @@ function stepErrors(
       errors.push("Analyze the selected source again.");
     }
     if (source.importStrategy !== "importAsIs") {
-      errors.push("Choose Import as-is; conversion is not available in this build.");
+      errors.push("Choose Import as-is; the wizard does not offer conversion yet.");
     }
     return errors;
   }

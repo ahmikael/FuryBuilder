@@ -11,10 +11,12 @@ exact-version generation, managed or manual client JARs with exact block/item ca
 resource pack formats 4–7. Every flattened release passes the catalog-pinned project round-trip.
 The 15 numeric releases from 1.8.9 through 1.12.2 add import, block/biome editing, snapshots and
 same-version export, but not generation; their client JARs build block/item catalogs with
-numeric ids and metadata. The 28 releases from 1.0 through 1.7.10 are `read-only`: exact-profile
-analysis and byte-for-byte passthrough work, but they cannot create editable projects. Java
-1.8–1.8.8 remain `unverified` metadata-only and stop at the profile check. Snapshots,
-split 26.1+ releases and special manifest ids are visible and refused at project creation.
+numeric ids and metadata. The 28 releases from 1.0 through 1.7.10 are `convert-only`:
+exact-profile analysis and byte-for-byte passthrough work, and the backend can upgrade a copy
+with the exact official server JAR of a writable 1.13+ target, but they cannot create editable
+projects or advance the wizard yet. Java 1.8–1.8.8 remain `unverified` metadata-only and stop
+at the profile check. Snapshots, split 26.1+ releases and special manifest ids are visible and
+refused at project creation.
 
 **1.21.4** remains the only `full` profile. The other classic and numeric profiles use
 `read + write subset` and support same-version Java structure `.nbt` interchange. The managed
@@ -84,13 +86,13 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
 - Integrated/discrete switching, multi-GPU laptops, other GPU vendors and remote-desktop
   display capture.
 - Modded servers, data packs, other server versions, Bedrock worlds, snapshots, split 26.1+
-  saves and Minecraft versions outside 1.13–1.21.11 and 1.8.9–1.12.2. Exact read-only profiles
-  exist for 1.0–1.7.10: layout analysis, exact-profile chunk validation and byte-for-byte
-  passthrough work, but editable project import, export through the block writer and generation
-  are not enabled. Java 1.8–1.8.8 remain metadata-only. `1.8–1.12.2` client JARs build numeric
-  block/item catalogs, while pre-1.8 catalogs are not built. Other official versions are listed
-  but cannot be created or edited. Java majors other than the profile's required major are not
-  validated in this beta.
+  saves and Minecraft versions outside 1.13–1.21.11 and 1.8.9–1.12.2. Exact convert-only
+  profiles exist for 1.0–1.7.10: layout analysis, exact-profile chunk validation, byte-for-byte
+  passthrough and official-server conversion of a copy work, but editable project import,
+  export through the block writer and generation are not enabled. Java 1.8–1.8.8 remain
+  metadata-only. `1.8–1.12.2` client JARs build numeric block/item catalogs, while pre-1.8
+  catalogs are not built. Other official versions are listed but cannot be created or edited.
+  Java majors other than the profile's required major are not validated in this beta.
 - Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
   are covered by `level-type`, Java major, data pack format and `server.properties` tests.
   Representatives of each flattened server series were inspected without launching them, so a
@@ -99,7 +101,8 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
   catalog-pinned project create/edit/save/reopen/export/re-import fixture. Numeric 1.8.9–1.12.2
   worlds are covered by synthetic import/edit/export/re-import fixtures; no real numeric save
   or numeric generation run is recorded. The pre-1.8 analysis and passthrough path is covered by
-  synthetic McRegion and early-Anvil fixtures; no real 1.0–1.7.10 save is recorded either.
+  synthetic McRegion and early-Anvil fixtures, and the conversion supervisor is covered with a
+  fake official server; no real 1.0–1.7.10 save or real server upgrade is recorded either.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -117,8 +120,8 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Numeric Java 1.8.9–1.12.2 supports the same import/edit/save/export subset without generation; `1.8–1.12.2` client JARs expose numeric block/item catalogs. Java 1.0–1.7.10 profiles are read-only: exact-profile analysis and byte-for-byte passthrough work, but editable import and conversion do not. Java 1.8–1.8.8 remain metadata-only. Split 26.x and special manifest ids likewise cannot be edited |
-| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and pre-1.8 saves stop at read-only analysis and passthrough |
+| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Numeric Java 1.8.9–1.12.2 supports the same import/edit/save/export subset without generation; `1.8–1.12.2` client JARs expose numeric block/item catalogs. Java 1.0–1.7.10 profiles are convert-only: exact-profile analysis, byte-for-byte passthrough and official-server conversion of a copy work, but editable import and in-place conversion do not. Java 1.8–1.8.8 remain metadata-only. Split 26.x and special manifest ids likewise cannot be edited |
+| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and pre-1.8 saves stop at read-only analysis, passthrough and backend official-server conversion until the wizard wiring ships |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
 | KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                    |

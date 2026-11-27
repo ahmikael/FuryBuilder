@@ -84,6 +84,8 @@ pub enum ServerError {
     Unsupported { target: String, detail: String },
     #[error("world generation is not available for {profile_id}: {detail}")]
     UnsupportedGeneration { profile_id: String, detail: String },
+    #[error("world conversion is not available for {profile_id}: {detail}")]
+    UnsupportedConversion { profile_id: String, detail: String },
     #[error("server JAR network request failed: {0}")]
     Network(String),
     #[error("network access is disabled (offline mode)")]
@@ -106,6 +108,8 @@ pub enum ServerError {
     UnsupportedJava { target: String, detail: String },
     #[error("server JAR install was cancelled")]
     Cancelled,
+    #[error("world conversion verification failed: {0}")]
+    Verification(String),
 }
 
 impl ServerError {
@@ -115,6 +119,7 @@ impl ServerError {
             ServerError::Invalid(_) => "invalid_argument",
             ServerError::Unsupported { .. } => "unsupported_version",
             ServerError::UnsupportedGeneration { .. } => "unsupported_version",
+            ServerError::UnsupportedConversion { .. } => "unsupported_version",
             ServerError::Network(_) => "network_error",
             ServerError::Offline => "offline",
             ServerError::Checksum(_) => "checksum_mismatch",
@@ -126,6 +131,7 @@ impl ServerError {
             ServerError::ConsentRequired(_) => "consent_required",
             ServerError::UnsupportedJava { .. } => "unsupported_runtime",
             ServerError::Cancelled => "cancelled",
+            ServerError::Verification(_) => "verification_failed",
         }
     }
 }

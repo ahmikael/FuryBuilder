@@ -14,6 +14,7 @@
 //! Importing the generated world into the Rust World Core belongs to M9.7.
 
 mod cache;
+mod conversion;
 mod datapack;
 mod generation;
 mod jar;
@@ -31,11 +32,12 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use minecraft_version::VersionId;
+use minecraft_version::{profile_for_id, VersionId};
 
 use crate::probe::probe_java;
 use crate::types::RuntimeStatus;
 
+pub use conversion::{ConversionRequest, ConvertedWorld};
 pub use jar::{inspect_server_jar, sha1_file, ServerJarInfo};
 pub use mojang::VERSION_MANIFEST_URL;
 pub use types::{
@@ -663,6 +665,132 @@ impl ServerManager {
             }
         });
         Ok(snapshot)
+    }
+
+    /// Converts one pre-1.8 world through the exact official server JAR of a writable modern
+    /// target. The source is copied into an isolated run, the server is started with
+    /// `--forceUpgrade`, and the upgraded copy is reopened and decoded before it is returned.
+    /// The source world is never started or written.
+    #[allow(clippy::too_many_arguments)]
+    pub fn convert_legacy_world(
+        &self,
+        java: &Path,
+        source: impl AsRef<Path>,
+        source_profile_id: &str,
+        target_profile_id: &str,
+        request: ConversionRequest,
+    ) -> Result<ConvertedWorld, ServerError> {
+        let _start = self
+            .inner
+            .generation_start_lock
+            .try_lock()
+            .map_err(|_| ServerError::Busy("another server run is starting".to_owned()))?;
+        let source_profile = profile_for_id(source_profile_id).ok_or_else(|| {
+            ServerError::UnsupportedConversion {
+                profile_id: source_profile_id.to_owned(),
+                detail: "the source profile is not built into this FuryBuilder".to_owned(),
+            }
+        })?;
+        let target_profile = profile_for_id(target_profile_id).ok_or_else(|| {
+            ServerError::UnsupportedConversion {
+                profile_id: target_profile_id.to_owned(),
+                detail: "the target profile is not built into this FuryBuilder".to_owned(),
+            }
+        })?;
+        conversion::validate_pair(&source_profile, &target_profile)?;
+        conversion::validate_request(&request)?;
+        if !target_profile.server.official_jar {
+            return Err(ServerError::UnsupportedConversion {
+                profile_id: target_profile.id,
+                detail: "no official server JAR is available for this target".to_owned(),
+            });
+        }
+        let server_target = ServerTarget::for_profile(&target_profile);
+        let saved = self
+            .inner
+            .settings
+            .selected(&server_target.minecraft_version)
+            .ok_or_else(|| {
+                ServerError::Invalid(format!(
+                    "choose the Minecraft {} server JAR before converting a world",
+                    server_target.minecraft_version
+                ))
+            })?;
+        let server_path = Path::new(&saved.path);
+        let info = inspect_server_jar(server_path)?;
+        info.validate_for(&server_target)?;
+        if !info.sha1.eq_ignore_ascii_case(&saved.sha1) || info.size != saved.size {
+            return Err(ServerError::Invalid(
+                "the selected server JAR changed on disk; choose it again to re-verify".to_owned(),
+            ));
+        }
+        let eula = self
+            .inner
+            .settings
+            .eula_for(&info.version, &info.sha1)
+            .ok_or_else(|| {
+                ServerError::EulaRequired(format!(
+                    "read and accept {EULA_URL} for the Minecraft {} server JAR with SHA-1 {} before conversion",
+                    info.version, info.sha1
+                ))
+            })?;
+        let probe = probe_java(java).map_err(|error| ServerError::UnsupportedJava {
+            target: target_profile.minecraft_version.to_string(),
+            detail: error.to_string(),
+        })?;
+        let (status, warnings) = probe.classify_for(target_profile.java.recommended_major);
+        if !matches!(status, RuntimeStatus::Compatible | RuntimeStatus::Newer) {
+            return Err(ServerError::UnsupportedJava {
+                target: target_profile.minecraft_version.to_string(),
+                detail: format!(
+                    "Java {} is not usable for the required Java {}: {}",
+                    probe
+                        .version
+                        .clone()
+                        .unwrap_or_else(|| "unknown".to_owned()),
+                    target_profile.java.recommended_major,
+                    warnings.join("; ")
+                ),
+            });
+        }
+        let java_version = probe.version.clone().unwrap_or_default();
+        let consent_at = generation::now_millis() / 1000;
+        let plan = conversion::prepare_run(
+            &self.inner.runs_root.join(conversion::CONVERSIONS_DIR_NAME),
+            source.as_ref(),
+            &source_profile,
+            &target_profile,
+            conversion::ConversionRuntime {
+                java_exe: java,
+                java_version: &java_version,
+                server_jar: server_path,
+                server_version: &info.version,
+                server_sha1: &info.sha1,
+            },
+            &request,
+            &eula,
+            consent_at,
+        )?;
+        let guard = conversion::ConversionRun::new(plan.run_dir().to_path_buf());
+        match conversion::execute(&plan) {
+            Ok(report) => {
+                guard.keep();
+                Ok(report)
+            }
+            Err(error) => {
+                drop(guard);
+                Err(error)
+            }
+        }
+    }
+
+    /// Resolves a completed conversion run only when its manifest, report and exact upgraded
+    /// world still agree. The returned world directory is input for normal project import.
+    pub fn converted_world(&self, run_id: &str) -> Result<ConvertedWorld, ServerError> {
+        conversion::load_converted_world(
+            &self.inner.runs_root.join(conversion::CONVERSIONS_DIR_NAME),
+            run_id,
+        )
     }
 
     pub fn generation_status(&self) -> GenerationStatusReport {

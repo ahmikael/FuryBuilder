@@ -447,7 +447,7 @@ fn classify_legacy_directory(
     report.complete_save = report.blockers.is_empty();
     report.supported = false;
     report.warnings.push(
-        "pre-1.8 level.dat stores only the container version (19132 McRegion or 19133 Anvil), not one exact release; choose an exact version for read-only analysis or passthrough"
+        "pre-1.8 level.dat stores only the container version (19132 McRegion or 19133 Anvil), not one exact release; choose an exact version for analysis, passthrough or conversion"
             .to_owned(),
     );
     report.warnings.push(
@@ -455,7 +455,7 @@ fn classify_legacy_directory(
             .to_owned(),
     );
     report.warnings.push(
-        "the legacy layout is read-only: FuryBuilder analyzes and copies it byte for byte, but does not edit, import it as an editable project or convert it yet"
+        "the legacy layout does not edit in place: FuryBuilder analyzes and copies it byte for byte, and can upgrade it with an exact official server JAR"
             .to_owned(),
     );
 }

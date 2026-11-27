@@ -20,8 +20,9 @@ FuryBuilder has built-in metadata for all 46 Java releases from 1.13 through 1.2
 all 52 releases from 1.0 through 1.12.2. The 15 numeric releases from 1.8.9 through 1.12.2 have
 a verified chunk adapter; 1.8–1.8.8 and 1.0–1.7.10 are metadata-only for project admission
 because they predate the `DataVersion` tag. A read-only flat-chunk adapter analyzes
-1.0–1.7.10 and copies those saves byte for byte, but they cannot be edited or imported as an
-editable project. A `1.8–1.12.2` client JAR builds a block/item catalog with numeric ids and
+1.0–1.7.10 and copies those saves byte for byte. Those releases can also be converted by the
+exact official server JAR of a writable 1.13+ target; the source stays untouched. A
+`1.8–1.12.2` client JAR builds a block/item catalog with numeric ids and
 metadata; pre-1.8 releases still have no catalog. The
 Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
 the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
@@ -43,7 +44,7 @@ The exact facts come from the built-in profiles and are checked against each cli
 internal `version.json`; 1.13.x has no internal file and is identified by SHA-1-matched launcher
 metadata instead.
 
-## Pre-1.13 profiles: numeric Anvil and read-only legacy
+## Pre-1.13 profiles: numeric Anvil and convert-only legacy
 
 The 24 releases from 1.8 through 1.12.2 use numeric block ids plus metadata in classic Anvil
 chunks, column biomes and Y 0–255. `DataVersion` is 47 for 1.8.9, 169–184 for 1.9–1.9.4,
@@ -76,17 +77,26 @@ profile/container mismatch, mixed `.mcr` and `.mca` region files, custom dimensi
 unexpected region heights. Both layouts store one flat `Level.Blocks` array in XZY order and one
 metadata nibble per position in `Level.Data`; `Level.Biomes` holds 256 columns. Blocks resolve
 through the shared numeric registry, `TerrainPopulated` maps to `full` or `partial`, and unknown
-block ids, biome ids or malformed arrays are rejected without substitution. Read-only analysis
-and byte-for-byte passthrough are enabled; editing, editable project import and conversion are
-not. The same pre-DataVersion container is shared with 1.8–1.8.8, so the detected layout is never
-presented as an exact release.
+block ids, biome ids or malformed arrays are rejected without substitution. Read-only analysis,
+byte-for-byte passthrough and conversion by an exact official server JAR are enabled; editing
+and editable project import are not. The same pre-DataVersion container is shared with
+1.8–1.8.8, so the detected layout is never presented as an exact release.
 
-The 1.8–1.8.8 metadata-only profiles and the 1.0–1.7.10 read-only profiles are visible in the
-version picker. The 1.0–1.7.10 profiles carry a `read-only` badge because exact-profile analysis
-and passthrough are enabled. Selecting any of them does not create an editable project: import, editing and
-generation are limited to the classic 1.13–1.21.11 and numeric 1.8.9–1.12.2 releases above. The
-client-JAR catalog still supports all of `1.8–1.12.2` with numeric block ids, per-variant
-metadata and item ids.
+Conversion is an isolated copy-only run: the source tree is validated and copied byte for byte
+into a run directory, an exact writable 1.13+ server JAR is started with `--forceUpgrade` on
+a loopback-only isolated run, and the upgraded world is reopened and fully decoded before it is
+published as a run result. The original source is never started or written. The target must be newer, have a
+positive `DataVersion`, an official server JAR, and classic Anvil read/write/export support;
+downgrade, same-version and 1.8–1.8.8 metadata-only targets are refused. The backend engine is
+available; the wizard's Convert strategy remains disabled until the conversion report and
+target selection are wired in the next legacy stage.
+
+The 1.8–1.8.8 metadata-only profiles and the 1.0–1.7.10 convert-only profiles are visible in the
+version picker. The 1.0–1.7.10 profiles carry a `convert` badge because exact-profile analysis,
+passthrough and official-server conversion are enabled. Selecting any of them does not create an
+editable project: import, editing and generation are limited to the classic 1.13–1.21.11 and
+numeric 1.8.9–1.12.2 releases above. The client-JAR catalog still supports all of `1.8–1.12.2`
+with numeric block ids, per-variant metadata and item ids.
 
 ## Differences within modern classic Anvil
 
@@ -113,7 +123,7 @@ affected sections. No fallback biome is substituted.
 | Java 1.13-1.17.1    | 1519-2730   | classic Anvil (flattened)         | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 1.8.9-1.12.2   | 47, 169-1343 | classic Anvil (numeric ids)      | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 1.8-1.8.8      | predates DataVersion | classic Anvil (numeric ids) | `detected_unsupported` | `metadata_only`         | `none`                    | `none`                             | `none`          |
-| Java 1.0-1.7.10     | predates DataVersion | McRegion (1.0-1.1), classic Anvil (1.2.1-1.7.10) | `read_only` | `supported_subset` | `none`             | `none`                             | `byte_for_byte` |
+| Java 1.0-1.7.10     | predates DataVersion | McRegion (1.0-1.1), classic Anvil (1.2.1-1.7.10) | `convert` | `supported_subset` | `none`             | `none`                             | `byte_for_byte` |
 | Java 26.1-26.3      | 4786-5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`                    | `none`                             | `none`          |
 | Java 26.4 snapshots | 5119+       | split                             | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
 | Bedrock Edition     | n/a         | Bedrock                           | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
@@ -125,8 +135,8 @@ covers all 19 flattened classic releases. Both support import, block/biome editi
 snapshots, same-version export and generation with the exact official server JAR. The
 `1.8.9-1.12.2` row supports the same import/edit/save/export subset but not generation.
 The `1.8-1.8.8` row is metadata-only for project admission and cannot advance the wizard. The
-`1.0-1.7.10` row is read-only: backend analysis and byte-for-byte passthrough are available, but
-it cannot create an editable project or advance the wizard.
+`1.0-1.7.10` row is convert-only: backend analysis, byte-for-byte passthrough and official-server
+conversion are available, but it cannot create an editable project or advance the wizard.
 
 P1 verification covers all 27 modern releases with import and same-version export round-trips.
 The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per

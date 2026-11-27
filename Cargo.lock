@@ -1086,6 +1086,7 @@ dependencies = [
  "flate2",
  "furybuilder-download-pipeline",
  "furybuilder-minecraft-version",
+ "furybuilder-world-io",
  "libc",
  "serde",
  "serde_json",

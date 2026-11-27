@@ -20,17 +20,22 @@ formats are not migrated.
   `1.8-1.12.2` records `DataVersion` 47 for 1.8.9, 169-1343 for 1.9-1.12.2, `-1` for
   1.8-1.8.8 and resource pack formats 1-3; pre-1.8 splits McRegion `1.0-1.1` (128-block
   height) from Anvil `1.2.1-1.7.10` (256-block height). The `1.0-1.7.10` profiles are
-  `read-only` and cannot create editable projects; `1.8-1.8.8` remain `unverified`.
+  `convert-only` and cannot create editable projects; `1.8-1.8.8` remain `unverified`.
   Pre-1.8 generation is not enabled.
-- Read-only McRegion and early-Anvil analysis and passthrough for `1.0-1.7.10`. The
+- Convert-only McRegion and early-Anvil analysis and passthrough for `1.0-1.7.10`. The
   selection classifier recognizes `.mcr` and pre-DataVersion `.mca` saves and inventories
   their dimensions, regions and chunks without guessing an exact release. With an exact
   profile, the adapter validates `level.dat` `Version` 19132/19133 and every flat
   `Level.Blocks`/`Data`/`Biomes` chunk through the shared numeric registry;
   `TerrainPopulated` maps to `full`/`partial`, and unknown ids, malformed arrays, mixed
   containers and `DataVersion` tags are rejected. `passthrough_legacy_world` copies the
-  complete save byte for byte and re-validates the copy. Editing, editable project import
-  and conversion remain disabled.
+  complete save byte for byte and re-validates the copy. Editing and editable project import
+  remain disabled.
+- Copy-only official-server conversion for `1.0-1.7.10`. A pre-1.8 save is validated and
+  copied into an isolated run, the exact writable `1.13+` server JAR is started with
+  `--forceUpgrade`, and the upgraded world is reopened and fully decoded before it is
+  reported. The source is never started or written; downgrade, same-version and
+  metadata-only targets are refused. The wizard Convert strategy is not wired yet.
 - Import, block/biome editing, project snapshots and same-version export for the 15 numeric
   classic releases `1.8.9-1.12.2`. The writer patches only `Level.Sections[].Blocks`/`Data`/
   `Add` and `Level.Biomes`; unknown tags and untouched sections stay byte-for-byte. Column

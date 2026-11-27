@@ -1690,7 +1690,7 @@ pub async fn project_import_world(
         if strategy != world_io::ImportStrategy::ImportAsIs {
             return Err(AppError::new(
                 ErrorCode::UnsupportedVersion,
-                "conversion is not available for this source; choose Import as-is",
+                "the project wizard does not offer conversion yet; choose Import as-is",
             ));
         }
         ensure_not_cancelled(context.attempt)?;
@@ -5085,16 +5085,16 @@ mod version_catalog_tests {
         );
         assert!(recommended.unavailable_reason.is_none());
 
-        let read_only = &report.versions[3];
-        assert_eq!(read_only.id, "1.0");
-        let profile = read_only.profile.as_ref().expect("read-only profile");
+        let convertible = &report.versions[3];
+        assert_eq!(convertible.id, "1.0");
+        let profile = convertible.profile.as_ref().expect("convert profile");
         assert_eq!(
             profile.capabilities.support_level,
-            minecraft_version::SupportLevel::ReadOnly
+            minecraft_version::SupportLevel::Convert
         );
         assert!(profile.capabilities.read);
         assert!(!profile.capabilities.write);
-        assert!(read_only.unavailable_reason.is_none());
+        assert!(convertible.unavailable_reason.is_none());
     }
 
     #[test]

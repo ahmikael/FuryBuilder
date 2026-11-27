@@ -11,10 +11,10 @@ Application API over MCP.
   JAR; exact per-version block/item catalogs are derived from client JARs). All 19 flattened
   releases 1.13–1.17.1 pass the catalog-pinned project round-trip. Numeric classic **1.8.9-1.12.2**
   adds the same import/edit/snapshot/same-version export subset without generation, and its
-  client JARs build block/item catalogs with numeric ids and metadata. Exact read-only
-  profiles cover Java 1.0-1.7.10: layout analysis, exact-profile chunk validation and
-  byte-for-byte passthrough are available, but editable project import and conversion are not.
-  Java 1.8-1.8.8 remain metadata-only.
+  client JARs build block/item catalogs with numeric ids and metadata. Exact convert-only
+  profiles cover Java 1.0-1.7.10: layout analysis, exact-profile chunk validation, byte-for-byte
+  passthrough and conversion by the exact official server JAR of a writable 1.13+ target are
+  available, but editable project import is not. Java 1.8-1.8.8 remain metadata-only.
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.13–1.21.11 and
   1.8.9–1.12.2) and `Vanilla World` (official local generator for the project's exact version
   after explicit dependency setup) are available.

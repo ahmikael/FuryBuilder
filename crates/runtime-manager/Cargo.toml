@@ -14,6 +14,7 @@ sha2 = { workspace = true }
 thiserror = { workspace = true }
 download-pipeline = { path = "../download-pipeline", package = "furybuilder-download-pipeline" }
 minecraft-version = { path = "../minecraft-version", package = "furybuilder-minecraft-version" }
+world-io = { path = "../world-io", package = "furybuilder-world-io" }
 flate2 = { workspace = true }
 zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 

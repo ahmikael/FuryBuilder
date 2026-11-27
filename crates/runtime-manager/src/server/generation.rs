@@ -28,6 +28,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use minecraft_version::LevelTypeSyntax;
 
+use super::conversion::CONVERSIONS_DIR_NAME;
 use super::datapack;
 use super::jar::{is_sha1, ServerJarInfo};
 use super::process_tree::ProcessTree;
@@ -52,10 +53,10 @@ const CANCEL_TIMEOUT: Duration = Duration::from_secs(15);
 const DEFAULT_SAVE_INTERVAL: Duration = Duration::from_secs(10);
 const DEFAULT_IDLE_TIMEOUT: Duration = Duration::from_secs(30);
 const DEFAULT_MIN_GENERATION: Duration = Duration::from_secs(5);
-const FLATTENED_LOG_CONFIG_NAME: &str = "furybuilder-log4j2.xml";
+pub(crate) const FLATTENED_LOG_CONFIG_NAME: &str = "furybuilder-log4j2.xml";
 // Disable message lookups for the Log4j bundled with older vanilla servers.
 // Retain the console messages the supervisor uses to detect startup and saves.
-const FLATTENED_LOG_CONFIG: &str = r#"<Configuration status="WARN">
+pub(crate) const FLATTENED_LOG_CONFIG: &str = r#"<Configuration status="WARN">
   <Appenders>
     <Console name="Console" target="SYSTEM_OUT">
       <PatternLayout pattern="[%d{HH:mm:ss}] [%t/%level]: %msg{nolookups}%n"/>
@@ -1125,7 +1126,7 @@ fn failure_outcome(
 
 /// Java on Windows does not reliably open `\\?\` verbatim paths. furybuilder keeps them for
 /// safe Rust filesystem access, but the JVM gets a normal drive/UNC path.
-fn jvm_path(path: &Path) -> PathBuf {
+pub(crate) fn jvm_path(path: &Path) -> PathBuf {
     #[cfg(windows)]
     {
         let text = path.display().to_string();
@@ -1243,7 +1244,7 @@ fn is_loopback_bind(address: &str) -> bool {
     address.starts_with("127.") || address == "[::1]" || address == "0:0:0:0:0:0:0:1"
 }
 
-fn strip_ansi(line: &str) -> String {
+pub(crate) fn strip_ansi(line: &str) -> String {
     let mut output = String::with_capacity(line.len());
     let mut characters = line.chars();
     while let Some(character) = characters.next() {
@@ -1434,7 +1435,7 @@ fn count_region_header(
     Ok(count)
 }
 
-fn pick_loopback_port() -> Result<u16, ServerError> {
+pub(crate) fn pick_loopback_port() -> Result<u16, ServerError> {
     let listener = TcpListener::bind(("127.0.0.1", 0)).map_err(|error| {
         ServerError::Io(format!(
             "cannot reserve an ephemeral loopback port for the isolated server: {error}"
@@ -1448,7 +1449,7 @@ fn pick_loopback_port() -> Result<u16, ServerError> {
         })
 }
 
-fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), ServerError> {
+pub(crate) fn write_json<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), ServerError> {
     let bytes = serde_json::to_vec_pretty(value).map_err(|error| {
         ServerError::Io(format!("cannot serialize {}: {error}", path.display()))
     })?;
@@ -1668,6 +1669,9 @@ pub(crate) fn scan_runs(runs_root: &Path) -> GenerationRunsReport {
         if metadata.file_type().is_symlink() || !metadata.is_dir() {
             continue;
         }
+        if entry.file_name() == std::ffi::OsStr::new(CONVERSIONS_DIR_NAME) {
+            continue;
+        }
         let manifest_path = path.join(RUN_MANIFEST_NAME);
         if !manifest_path.is_file() {
             problems.push(format!(
@@ -1801,7 +1805,7 @@ fn directory_size(root: &Path) -> u64 {
     bytes
 }
 
-fn now_millis() -> u64 {
+pub(crate) fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u64::MAX as u128) as u64)
@@ -2514,8 +2518,10 @@ public class FakeCrash {
         .expect("manifest");
         fs::write(run_dir.join("keep.txt"), b"run data").expect("run data");
         fs::write(root.join("keep.txt"), b"not ours").expect("unrelated file");
+        fs::create_dir_all(root.join(CONVERSIONS_DIR_NAME)).expect("conversion runs");
         let report = scan_runs(&root);
         assert_eq!(report.runs.len(), 1);
+        assert!(report.problems.is_empty(), "{:?}", report.problems);
         assert_eq!(report.runs[0].run_id, "run-1");
         assert_eq!(report.runs[0].status, "incomplete");
         assert_eq!(report.runs[0].expected_chunks, 9);

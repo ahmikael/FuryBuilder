@@ -260,7 +260,7 @@ pub fn analyze_legacy_world(root: impl AsRef<Path>, profile: &VersionProfile) ->
             .push("the world contains no allocated chunks".to_owned());
     }
     analysis.warnings.push(format!(
-        "Minecraft {} was used as the exact read-only profile; pre-1.8 chunks are decoded and copied, not edited, imported as an editable project or converted",
+        "Minecraft {} was used as the exact read-only profile; pre-1.8 chunks are decoded and copied, and conversion is an explicit separate official-server step",
         profile.minecraft_version
     ));
     analysis

@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Numeric classic Anvil **1.8.9–1.12.2** supports the same import/edit/save/export subset without generation. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Exact read-only profiles cover Java 1.0–1.7.10: layout detection, exact-profile chunk validation and byte-for-byte passthrough are available, while editing, editable project import and conversion are refused. Java 1.8–1.8.8 remain metadata-only. Split 26.x is detected but not admitted. |
+| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Numeric classic Anvil **1.8.9–1.12.2** supports the same import/edit/save/export subset without generation. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Exact convert-only profiles cover Java 1.0–1.7.10: layout detection, exact-profile chunk validation, byte-for-byte passthrough and conversion of a copy by an exact writable 1.13+ official server JAR are available, while editing and editable project import are refused. Java 1.8–1.8.8 remain metadata-only. Split 26.x is detected but not admitted. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -368,8 +368,12 @@ adapter that validates `level.dat` `Version` 19132/19133, binds an exact built-i
 `.mcr`/`.mca` container and dimension height, and decodes the flat `Level.Blocks`/`Data`/`Biomes`
 arrays. The selection classifier inventories those saves and `passthrough_java_world` refuses
 them with an explicit legacy-profile error; `passthrough_legacy_world` validates every chunk with
-the exact profile and copies the tree byte for byte. They are still not admitted to editable
-projects, conversion or native editing. The generation target
+the exact profile and copies the tree byte for byte. Those releases are not admitted to editable
+projects or native editing. `ServerManager::convert_legacy_world` copies such a save into an
+isolated run, starts the exact writable 1.13+ server JAR with `--forceUpgrade`, requires a fresh
+EULA acceptance and explicit consent, and reopens and fully decodes the upgraded copy before the
+run is reported as importable. Downgrade, same-version and metadata-only targets are refused.
+The source is never started or written. The generation target
 is derived from the same profile, so `level-type`, Java major, data pack format and the required
 server JAR cannot be taken from another version.
 
