@@ -851,7 +851,10 @@ mod tests {
     use crate::source::SourceFile;
     use crate::store::CreateOptions;
     use crate::EditorState;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use world_domain::{BiomeSection, BlockPos, BlockSchemaEntry, ChunkPos, Section};
+
+    static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn registry(blocks: &[&str]) -> BlockRegistry {
         BlockRegistry::from_schema(blocks.iter().map(|name| BlockSchemaEntry {
@@ -878,9 +881,10 @@ mod tests {
 
     fn store() -> (PathBuf, ProjectStore) {
         let root = std::env::temp_dir().join(format!(
-            "furybuilder-upgrade-{}-{}",
+            "furybuilder-upgrade-{}-{}-{}",
             std::process::id(),
-            now_ms()
+            now_ms(),
+            FIXTURE_COUNTER.fetch_add(1, Ordering::SeqCst)
         ));
         let _ = fs::remove_dir_all(&root);
         let store = ProjectStore::new(root.join("projects"));
