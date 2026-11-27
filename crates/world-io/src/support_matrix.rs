@@ -129,7 +129,7 @@ fn versions() -> Vec<VersionSupport> {
             edit: "block_states_and_biomes".to_owned(),
             write: "verified_block_states_and_biomes".to_owned(),
             passthrough: "byte_for_byte".to_owned(),
-            note: "Flattened classic Anvil import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR are enabled. Minecraft 1.13 generates only around natural spawn without a player.".to_owned(),
+            note: "Flattened classic Anvil import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR are enabled for all 19 releases. Exact client JAR catalogs and resource packs 4-7 are verified. Minecraft 1.13 generates only around natural spawn without a player.".to_owned(),
         },
         VersionSupport {
             id: "java-26.1-26.3-split".to_owned(),
@@ -405,6 +405,8 @@ mod tests {
             "{}",
             subset.note
         );
+        assert!(subset.note.contains("all 19 releases"), "{}", subset.note);
+        assert!(subset.note.contains("client JAR"), "{}", subset.note);
     }
 
     #[test]

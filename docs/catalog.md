@@ -127,7 +127,7 @@ keep a `null` icon instead of borrowing a `particle` placeholder.
 - typed `flags` for placement rules. A flag is `null` when the fact is not known yet, never
   a guessed `false`. `placeable`, `hasItem` and `hasVariants` follow directly from the JAR;
   `obtainable`, `creativeOnly`, `technical`, `fluid`, `airlike` and `blockEntity` use explicit
-  vanilla registry rules for 1.18–1.21.11. Non-vanilla namespaces leave those rules `null`
+  vanilla registry rules for the supported vanilla range. Non-vanilla namespaces leave those rules `null`
   instead of claiming vanilla semantics; transparent/full-cube/gravity/waterloggable/tinted
   geometry flags also remain `null` until a later pass;
 - counts for blockstates, models, item definitions, textures, languages, tags and atlases;

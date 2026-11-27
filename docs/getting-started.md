@@ -75,8 +75,9 @@ cargo test --workspace
    including legacy and special ids, but only a version with a verified profile has a support
    badge and can continue. All classic Anvil releases from 1.13 through 1.21.11 support
    import, block/biome editing, project snapshots, same-version export and generation with their
-   exact official server JAR, `level-type`, Java major and data pack format. Choose
-   **Placeholder** textures for 1.13–1.17.1 projects. The card shows Java,
+   exact official server JAR, `level-type`, Java major and data pack format. Managed and manual
+   client JARs with exact block/item catalogs are available for 1.13–1.17.1 as well;
+   **Placeholder** remains an explicit fallback. The card shows Java,
    world height, layout, pack formats and every known limitation. It also lists the exact
    `Read`, `Edit`, `Save`, `Export`, `Generate` and `Assets` capabilities: an unavailable action
    stays visible with its reason, and `Next` is blocked when the selected version cannot perform

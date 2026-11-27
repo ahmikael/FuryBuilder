@@ -393,16 +393,18 @@ and avoid treating the tested ceiling as a normal working radius.
   `.litematic` and legacy `.schematic` are not enabled.
 - Structure import refuses entities, block entities and unknown tags. Export contains block
   states only.
-- Import World supports classic Java 1.18–1.21.11 layouts. A bare `.mca` or `region/` directory
-  is not a world. Split, mixed and legacy layouts are detected but not supported.
+- Import World supports classic Java 1.13–1.21.11 layouts, including the 19 flattened releases
+  from 1.13 through 1.17.1. A bare `.mca` or `region/` directory is not a world. Split, mixed
+  and legacy layouts are detected but not supported.
 - Edits to imported worlds preserve untouched raw data. Heightmaps, light, ticks, block
   entities, entities and POI are not semantically recalculated after an edit; the optional
   `VanillaRebuild` writer policy invalidates some derived data for the vanilla engine to
   rebuild, as documented in the format notes.
-- The complete world-folder export is verified for every modern classic release in the
-  backend/test path. This alpha does not expose it as a one-click user action; the user-facing
-  export is a structure `.nbt`. Generation is enabled for every modern classic release with its
-  exact official server JAR; split 26.x and legacy versions stay disabled.
+- The complete world-folder export is verified for every modern and flattened classic release
+  in the backend/test path. This alpha does not expose it as a one-click user action; the
+  user-facing export is a structure `.nbt`. Generation is enabled for every modern and
+  flattened classic release with its exact official server JAR; split 26.x and legacy versions
+  stay disabled.
 - Reference overlays (PNG blueprint plane and `.nbt` schematic ghost) were researched only.
   The overlay UI is intentionally not enabled; do not expect reference guides in the editor.
 - MCP has no scene-graph write tools and no direct file/shell access. Semantic and parametric

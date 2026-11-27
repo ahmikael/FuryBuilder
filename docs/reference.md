@@ -7,7 +7,8 @@ The version picker reads the full official Mojang manifest. All 27 classic Anvil
 1.18 through 1.21.11 have a profile that verifies import, block/biome editing, project
 snapshots and same-version export, and enables generation with that release's exact official
 server JAR. The 19 flattened releases from 1.13 through 1.17.1 support the same world operations,
-exact-version generation, managed or manual client JARs and resource pack formats 4–7.
+exact-version generation, managed or manual client JARs with exact block/item catalogs, and
+resource pack formats 4–7. Every flattened release passes the catalog-pinned project round-trip.
 Snapshots, split 26.1+ releases and legacy/special ids are visible and refused at project creation.
 
 **1.21.4** remains the only `full` profile. The other classic profiles use
@@ -42,7 +43,7 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 | `Import World` (1.13–1.21.11)     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
 | Structure `.nbt` import/export    | No                | No                            | No                                  | No                    | No                                                |
 | Real textures / exact catalog     | No                | Yes                           | No                                  | No                    | First download only; cached afterwards            |
-| `Vanilla World` generation        | No                | Optional; `Placeholder` works | Yes, profile major (17 or 21)       | Yes                   | Downloads; generation can run offline after cache |
+| `Vanilla World` generation        | No                | Optional; `Placeholder` works | Yes, profile major (8/16/17/21)     | Yes                   | Downloads; generation can run offline after cache |
 | MCP bridge (external AI client)   | No                | No                            | No                                  | No                    | No (local named pipe)                             |
 | Installing a newer beta           | No                | No                            | No                                  | No                    | Yes (manual installer download)                   |
 
@@ -64,7 +65,7 @@ remains available, while uncached component downloads fail with an `offline` err
 | GPU               | NVIDIA GeForce GTX 1060 3 GB, driver `32.0.15.6094`; only one physical display adapter                                         |
 | WebView2          | `157.0.4341.60`                                                                                                                |
 | Application       | FuryBuilder `0.2.0`                                                                                                            |
-| Java (optional)   | Eclipse Temurin `21.0.13.1+2` for Vanilla World and server tests                                                               |
+| Java (optional)   | Eclipse Temurin `21.0.13.1+2` for Vanilla World and server tests; Temurin 8/16 installed for flattened component checks        |
 | Server (optional) | Official Minecraft Java `1.21.4` server JAR, SHA-1 `4707d00eb834b446575d89a61a11b5d548d8c001`                                  |
 | MCP client        | OpenCode CLI `2.3.2` is the verified client; other clients are not guaranteed                                                  |
 
@@ -83,8 +84,10 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
   major are not validated in this beta.
 - Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
   are covered by `level-type`, Java major, data pack format and `server.properties` tests.
-  Representatives of each flattened server series were inspected without launching them.
-  Client JARs for all 19 flattened releases were checked through catalog and render asset loading.
+  Representatives of each flattened server series were inspected without launching them, so a
+  real flattened-server generation run is not yet recorded. Client JARs for all 19 flattened
+  releases were checked through catalog and render asset loading, and every release passes the
+  catalog-pinned project create/edit/save/reopen/export/re-import fixture.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.

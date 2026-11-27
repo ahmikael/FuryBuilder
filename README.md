@@ -8,7 +8,8 @@ Application API over MCP.
 - **Platform:** Windows first (Tauri 2 + WebView2), macOS/Linux later.
 - **Target game versions:** Minecraft Java classic Anvil **1.13-1.21.11** (import, block/biome
   editing, project snapshots, same-version export and generation with the exact official server
-  JAR; exact per-version block/item catalogs are derived from client JARs).
+  JAR; exact per-version block/item catalogs are derived from client JARs). All 19 flattened
+  releases 1.13–1.17.1 pass the catalog-pinned project round-trip.
 - **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.13–1.21.11)
   and `Vanilla World` (official local generator for the project's exact version after
   explicit dependency setup) are available.

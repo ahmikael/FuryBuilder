@@ -1,19 +1,24 @@
 # Formats and world support
 
-Target: Minecraft Java **1.18–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
-the full baseline. Every one of the 27 exact releases in that range can be imported, edited,
-saved through project snapshots, exported same-version, generated with that release's exact
-official server JAR, and upgraded to a newer same-family release through a verified copy.
+Target: Minecraft Java **1.13–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
+the full baseline. Every one of the 46 exact releases in that range can be imported, edited,
+saved through project snapshots, exported same-version and generated with that release's exact
+official server JAR. Modern classic releases can also be upgraded to a newer same-family
+release through a verified copy. Exact client-JAR block/item catalogs cover all 19 flattened
+releases and the modern releases with single-integer pack formats; 1.21.9–1.21.11 keep the
+explicit placeholder workflow until major/minor pack formats are supported.
 
 The version picker lists releases and snapshots from the official Mojang manifest. Project
-creation requires a profile with verified write support, so the modern classic releases can
-advance the wizard. Snapshots and split 26.1+ releases are listed but stop at the profile check.
+creation requires a profile with verified write support, so the modern and flattened classic
+releases can advance the wizard. Snapshots and split 26.1+ releases are listed but stop at the
+profile check.
 
-FuryBuilder has built-in metadata for all 27 Java releases from 1.18 through 1.21.11. The
+FuryBuilder has built-in metadata for all 46 Java releases from 1.13 through 1.21.11. The
 Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
 the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
-client JAR. Starting with 1.21.9, pack formats have both a major and a minor component (for
-example, 1.21.11 uses data pack format `94.1`). For these classic Anvil releases, the vanilla
+client JAR, or from the exact built-in profile for 1.13.x, which has no internal file. Starting
+with 1.21.9, pack formats have both a major and a minor component (for example, 1.21.11 uses
+data pack format `94.1`). For these classic Anvil releases, the vanilla
 Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. These facts
 alone do not create a split or legacy adapter. The dimension set, vertical bounds and region
 folder are read from the exact profile's
@@ -21,6 +26,13 @@ folder are read from the exact profile's
 snapshots encode the same set and reject a dimension whose bounds differ from the profile.
 Render snapshots carry the selected dimension's `minY`/`height`, and the viewport uses them for
 chunk borders instead of a fixed Y range.
+
+The 19 flattened releases from 1.13 through 1.17.1 use `DataVersion` 1519–2730, Java 8 for
+1.13–1.16.5 and 16 for 1.17–1.17.1, and resource/data pack formats 4–7. Their Overworld,
+Nether and End span Y 0–255, with region folders `region`, `DIM-1/region` and `DIM1/region`.
+The exact facts come from the built-in profiles and are checked against each client JAR's
+internal `version.json`; 1.13.x has no internal file and is identified by SHA-1-matched launcher
+metadata instead.
 
 ## Differences within modern classic Anvil
 
@@ -59,9 +71,11 @@ snapshots, same-version export and generation with the exact official server JAR
 P1 verification covers all 27 modern releases with import and same-version export round-trips.
 The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
 modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`), rebuilding the exact catalog from the
-same client JAR after reopen. P2 verification adds import, edit, project save/reopen and
-same-version export for all 19 flattened releases. Both families support same-version Java
-structure interchange; `Full` remains limited to 1.21.4.
+same client JAR after reopen. P2 verification covers all 19 flattened releases with import,
+edit, project save/reopen and same-version export, and runs the same catalog-pinned project
+round-trip for every release. Client JARs for all 19 were also checked against real official
+archives. Both families support same-version Java structure interchange; `Full` remains limited
+to 1.21.4.
 
 ## Java 26.1–26.3 split saves: inspection only
 
@@ -115,7 +129,7 @@ and all 19 flattened releases.
 The machine-readable source is `crates/world-io/src/support_matrix.rs`; the same data is
 returned by `analyze_java_world` and shown in the Import World wizard.
 
-## Vanilla generation inputs (1.18–1.21.11)
+## Vanilla generation inputs (1.13–1.21.11)
 
 Generation is driven by the exact `VersionProfile`, never by a global baseline:
 
@@ -313,7 +327,7 @@ id and hash always describe the base client JAR, not these packs.
 
 The backend can export a complete new world folder, not a bare `.mca`:
 
-1. Validate a supported classic 1.18–1.21.11 source and a new destination.
+1. Validate a supported classic 1.13–1.21.11 source and a new destination.
 2. Copy every file byte for byte, skipping only `session.lock`.
 3. Rebuild only dirty regions; untouched records are compared byte for byte.
 4. Reopen and decode every staged region and chunk.
@@ -343,7 +357,7 @@ Before import, export or copy, the selected path is classified:
 
 | Selection                                       | Result                                        |
 | ----------------------------------------------- | --------------------------------------------- |
-| Full classic 1.18–1.21.11 save                 | supported import/edit/snapshot/export path     |
+| Full classic 1.13–1.21.11 save                 | supported import/edit/snapshot/export path     |
 | Full save, other `DataVersion`                  | version blocker                               |
 | Full 26.1+ split save                           | layout blocker; regions inventoried read-only |
 | Classic `region/` plus split markers            | mixed-layout blocker                          |
