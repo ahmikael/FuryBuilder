@@ -1,4 +1,4 @@
-//! Numeric block/item registry used by Java 1.8–1.12.2 worlds.
+//! Numeric block/item registry used by Java 1.0–1.12.2 worlds.
 //!
 //! Pre-flattening saves store a numeric block id plus a 4-bit metadata value,
 //! and items store a numeric item id plus a damage value. The same numeric id
@@ -7,10 +7,12 @@
 //! 59 and item 296).
 //!
 //! The table is the 1.12.2 registry, which is the superset of the supported
-//! 1.8–1.12.2 releases. Numeric ids of existing entries are stable across those
-//! releases; entries added in a later release are simply absent from older
-//! worlds. Catalog annotation only attaches ids whose block or item is present
-//! in the exact client JAR, so a 1.8 catalog cannot claim a 1.12 entry.
+//! 1.8–1.12.2 releases and of the pre-1.8 releases. Numeric ids of existing
+//! entries are stable across those releases; entries added in a later release
+//! are simply absent from older worlds. The pre-1.8 reader therefore uses the
+//! same table as a lookup superset, not as a per-release block catalog claim.
+//! Catalog annotation only attaches ids whose block or item is present in the
+//! exact client JAR, so a 1.8 catalog cannot claim a 1.12 entry.
 //!
 //! Data provenance: the flattening names were cross-checked against
 //! PrismarineJS `minecraft-data` `data/pc/common/legacy.json` (the same
@@ -102,6 +104,20 @@ impl LegacyRegistry {
     /// numeric registries are not claimed without an exact fixture.
     pub fn for_release(version: &VersionId) -> Option<&'static Self> {
         if !version.is_release() || version.family() != VersionFamily::Numeric {
+            return None;
+        }
+        Some(Self::shared())
+    }
+
+    /// Returns the shared registry for a pre-1.8 release (1.0–1.7.10).
+    ///
+    /// Numeric block ids are append-only across these releases; entries added
+    /// later are simply absent from older worlds. The shared 1.12.2 superset
+    /// therefore resolves every id that can occur, while malformed or modded
+    /// ids above the table are rejected. This is not a per-release block
+    /// catalog claim.
+    pub fn for_legacy(version: &VersionId) -> Option<&'static Self> {
+        if !version.is_release() || version.family() != VersionFamily::Legacy {
             return None;
         }
         Some(Self::shared())
@@ -367,5 +383,21 @@ mod tests {
         for id in ["1.7.10", "1.13", "1.13.2", "1.21.4", "1.12-pre4"] {
             assert!(LegacyRegistry::for_release(&version(id)).is_none(), "{id}");
         }
+    }
+
+    #[test]
+    fn pre_1_8_releases_share_the_numeric_lookup_superset() {
+        for id in ["1.0", "1.1", "1.2.1", "1.6.4", "1.7.10"] {
+            assert!(LegacyRegistry::for_legacy(&version(id)).is_some(), "{id}");
+        }
+        for id in ["1.8", "1.8.9", "1.12.2", "1.13", "1.21.4", "1.12-pre4"] {
+            assert!(LegacyRegistry::for_legacy(&version(id)).is_none(), "{id}");
+        }
+        let registry = LegacyRegistry::for_legacy(&version("1.7.10")).unwrap();
+        assert_eq!(
+            registry.block(5, 2).map(|block| block.name.as_str()),
+            Some("minecraft:birch_planks")
+        );
+        assert_eq!(registry.block(253, 0), None);
     }
 }

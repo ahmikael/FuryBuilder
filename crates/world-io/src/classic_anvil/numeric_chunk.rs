@@ -283,7 +283,7 @@ fn decode_block_section(
         .ok_or_else(|| invalid(x, z, "numeric block ids do not form a valid section"))
 }
 
-fn decode_column_biomes(
+pub(super) fn decode_column_biomes(
     level: &BTreeMap<String, NbtValue>,
     registry: LegacyBiomeRegistry,
     x: i32,
@@ -302,7 +302,7 @@ fn decode_column_biomes(
             ))
         }
         Some(_) => return Err(invalid(x, z, "Level.Biomes is not a byte array")),
-        None => return Err(invalid(x, z, "numeric chunk has no Level.Biomes array")),
+        None => return Err(invalid(x, z, "chunk has no Level.Biomes array")),
     };
     let mut names = Vec::with_capacity(BIOME_COLUMNS);
     for (index, byte) in bytes.iter().enumerate() {
@@ -356,7 +356,11 @@ fn sample_columns(names: &[&'static str]) -> (Vec<String>, Vec<u16>, usize) {
     (palette, cells, mixed)
 }
 
-fn legacy_state(legacy: &LegacyBlockState, x: i32, z: i32) -> Result<BlockState, AnvilError> {
+pub(super) fn legacy_state(
+    legacy: &LegacyBlockState,
+    x: i32,
+    z: i32,
+) -> Result<BlockState, AnvilError> {
     BlockState::new(legacy.name.clone(), legacy.properties.clone()).map_err(|error| {
         invalid(
             x,
@@ -842,7 +846,7 @@ fn byte_array(value: Option<&NbtValue>) -> Option<&[u8]> {
     }
 }
 
-fn nibble(bytes: Option<&[u8]>, index: usize) -> u16 {
+pub(super) fn nibble(bytes: Option<&[u8]>, index: usize) -> u16 {
     let Some(bytes) = bytes else {
         return 0;
     };

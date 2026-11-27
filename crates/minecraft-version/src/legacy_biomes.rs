@@ -1,10 +1,12 @@
-//! Numeric biome registry for the pre-flattening Java releases (1.8–1.12.2).
+//! Numeric biome registry for the pre-flattening Java releases (1.0–1.12.2).
 //!
 //! Numeric worlds store one biome id per block column in `Level.Biomes`. The
 //! ids are the same registry used by 1.13–1.17, but the pre-1.13 names are
 //! exposed with modern flattened names: id 8 is `minecraft:nether_wastes`, not
-//! the 1.13 `minecraft:nether` alias. ID 127 (`the_void`) only exists from 1.9;
-//! ids 40–50 and 168+ were introduced after the numeric world format.
+//! the 1.13 `minecraft:nether` alias. The valid id set grows by release:
+//! 1.0–1.1 has ids 0–20, 1.2–1.6 adds jungle 21–23, and 1.7 adds 24–39 and
+//! the mutated/deep variants. ID 127 (`the_void`) only exists from 1.9; ids
+//! 40–50 and 168+ were introduced after the numeric world format.
 //!
 //! This is data only. Unknown ids are rejected by the chunk decoder instead of
 //! being replaced with a default biome.
@@ -16,24 +18,41 @@ use crate::{VersionFamily, VersionId, VersionKind};
 pub struct LegacyBiomeRegistry {
     inner: FlattenedBiomeRegistry,
     series: u32,
+    legacy: bool,
 }
 
 impl LegacyBiomeRegistry {
-    /// Returns the registry for an exact Java release from 1.8 through 1.12.2.
+    /// Returns the registry for an exact Java release from 1.0 through 1.12.2.
     pub fn for_release(version: &VersionId) -> Option<Self> {
-        if !version.is_release() || version.family() != VersionFamily::Numeric {
+        if !version.is_release() {
             return None;
         }
         let VersionKind::Release { numbers } = &version.kind else {
             return None;
         };
-        let [1, series @ 8..=12, ..] = numbers.as_slice() else {
-            return None;
-        };
-        Some(Self {
-            inner: FlattenedBiomeRegistry::from_series(*series),
-            series: *series,
-        })
+        match version.family() {
+            VersionFamily::Numeric => {
+                let [1, series @ 8..=12, ..] = numbers.as_slice() else {
+                    return None;
+                };
+                Some(Self {
+                    inner: FlattenedBiomeRegistry::from_series(*series),
+                    series: *series,
+                    legacy: false,
+                })
+            }
+            VersionFamily::Legacy => {
+                let [1, series @ 0..=7, ..] = numbers.as_slice() else {
+                    return None;
+                };
+                Some(Self {
+                    inner: FlattenedBiomeRegistry::from_series(*series),
+                    series: *series,
+                    legacy: true,
+                })
+            }
+            _ => None,
+        }
     }
 
     /// Returns the modern name of a numeric biome id that exists in the release.
@@ -51,10 +70,21 @@ impl LegacyBiomeRegistry {
         (0..=167).find(|id| self.name(*id) == Some(name))
     }
 
-    /// Pre-1.13 saves only contain the base ids, their mutation ids, and the
-    /// void after 1.8. 40–50, 168+ and the gaps in between belong to later
-    /// releases and would otherwise be read from the shared 1.12 registry.
+    /// Pre-1.13 saves only contain ids that existed in the release. Later
+    /// releases and the gaps between mutation ids would otherwise be read from
+    /// the shared 1.12 registry.
     fn is_valid_id(self, id: i32) -> bool {
+        if self.legacy {
+            return match self.series {
+                0..=1 => (0..=20).contains(&id),
+                2..=6 => (0..=23).contains(&id),
+                7 => matches!(
+                    id,
+                    0..=39 | 129..=134 | 140 | 149 | 151 | 155..=158 | 160..=167
+                ),
+                _ => false,
+            };
+        }
         matches!(
             id,
             0..=39 | 129..=134 | 140 | 149 | 151 | 155..=158 | 160..=167
@@ -71,19 +101,50 @@ mod tests {
     }
 
     #[test]
-    fn only_exact_numeric_releases_get_the_registry() {
-        for id in ["1.8", "1.8.9", "1.9.4", "1.10.2", "1.11.2", "1.12.2"] {
+    fn only_exact_numeric_and_legacy_releases_get_the_registry() {
+        for id in [
+            "1.0", "1.1", "1.2.1", "1.6.4", "1.7.10", "1.8", "1.8.9", "1.9.4", "1.10.2", "1.11.2",
+            "1.12.2",
+        ] {
             assert!(
                 LegacyBiomeRegistry::for_release(&version(id)).is_some(),
                 "{id}"
             );
         }
-        for id in ["1.7.10", "1.13", "1.12-pre4", "1.21.4"] {
+        for id in ["1.13", "1.12-pre4", "1.21.4"] {
             assert!(
                 LegacyBiomeRegistry::for_release(&version(id)).is_none(),
                 "{id}"
             );
         }
+    }
+
+    #[test]
+    fn legacy_releases_only_accept_biomes_that_existed_then() {
+        let one_zero = LegacyBiomeRegistry::for_release(&version("1.0")).unwrap();
+        assert_eq!(one_zero.name(20), Some("minecraft:mountain_edge"));
+        assert_eq!(one_zero.name(21), None, "jungle was added in 1.2");
+        assert_eq!(one_zero.name(24), None, "deep ocean was added in 1.7");
+        assert_eq!(one_zero.name(127), None);
+
+        let one_two = LegacyBiomeRegistry::for_release(&version("1.2.1")).unwrap();
+        assert_eq!(one_two.name(21), Some("minecraft:jungle"));
+        assert_eq!(one_two.name(23), Some("minecraft:jungle_edge"));
+        assert_eq!(one_two.name(24), None);
+
+        let one_seven = LegacyBiomeRegistry::for_release(&version("1.7.10")).unwrap();
+        assert_eq!(one_seven.name(24), Some("minecraft:deep_ocean"));
+        assert_eq!(one_seven.name(39), Some("minecraft:badlands_plateau"));
+        assert_eq!(one_seven.name(127), None);
+        assert_eq!(
+            one_seven.name(167),
+            Some("minecraft:modified_badlands_plateau")
+        );
+        assert_eq!(one_seven.name(168), None);
+        assert_eq!(
+            (0..=167).filter(|id| one_seven.name(*id).is_some()).count(),
+            61
+        );
     }
 
     #[test]

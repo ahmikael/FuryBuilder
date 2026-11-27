@@ -177,7 +177,7 @@ fn versions() -> Vec<VersionSupport> {
             edit: "none".to_owned(),
             write: "none".to_owned(),
             passthrough: "none".to_owned(),
-            note: "Exact profiles for all 28 releases are built in: 1.0-1.1 are McRegion with 128-block dimensions, and 1.2.1-1.7.10 are classic Anvil with 256-block dimensions. No legacy chunk parser, import, conversion or passthrough is enabled yet.".to_owned(),
+            note: "Exact profiles for all 28 releases are built in: 1.0-1.1 are McRegion with 128-block dimensions, and 1.2.1-1.7.10 are classic Anvil with 256-block dimensions. A read-only flat-chunk reader validates the level format, container extension and dimension height and decodes Level.Blocks/Data/Biomes; import, conversion and passthrough are not enabled yet.".to_owned(),
         },
         VersionSupport {
             id: "bedrock".to_owned(),

@@ -6,6 +6,7 @@ pub mod chunk;
 pub(super) mod flattened_biomes;
 pub(super) mod flattened_chunk;
 pub(crate) mod format;
+pub(super) mod legacy_chunk;
 pub(super) mod numeric_chunk;
 pub mod overlay;
 pub mod reader;
@@ -62,6 +63,9 @@ impl WorldCodec for ClassicAnvilCodec {
             }
             VersionFamily::Numeric => {
                 numeric_chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
+            }
+            VersionFamily::Legacy => {
+                legacy_chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
             }
             _ => chunk::decode_chunk(nbt, position.x, position.z, dimension, profile),
         }

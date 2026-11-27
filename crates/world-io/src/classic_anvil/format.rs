@@ -237,6 +237,74 @@ impl NumericFormat {
     }
 }
 
+/// On-disk layout of the pre-1.8 releases (1.0–1.7.10).
+///
+/// `1.0`–`1.1` use McRegion `.mcr` containers and 128-block dimensions;
+/// `1.2.1`–`1.7.10` use classic Anvil `.mca` containers and 256-block
+/// dimensions. Both store one flat `Level.Blocks` array instead of sections.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LegacyFormat {
+    pub height: i32,
+    pub region_extension: &'static str,
+    pub level_format_version: i32,
+}
+
+impl LegacyFormat {
+    pub(crate) fn for_profile(profile: &VersionProfile) -> Result<Self, AnvilError> {
+        if profile.family != VersionFamily::Legacy
+            || profile.chunk_family != minecraft_version::ChunkFamily::Legacy
+            || profile.biome_format != minecraft_version::BiomeFormat::Column
+        {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "profile `{}` is not a pre-1.8 legacy chunk profile",
+                profile.id
+            )));
+        }
+        let (region_extension, level_format_version, height) = match profile.world_layout {
+            minecraft_version::WorldLayout::McRegion => ("mcr", 19132, 128),
+            minecraft_version::WorldLayout::ClassicAnvil => ("mca", 19133, 256),
+            _ => {
+                return Err(AnvilError::UnsupportedLayout(format!(
+                    "profile `{}` has no pre-1.8 world layout",
+                    profile.id
+                )))
+            }
+        };
+        if profile.dimension_profiles.is_empty()
+            || profile
+                .dimension_profiles
+                .iter()
+                .any(|dimension| dimension.min_y != 0 || dimension.height != height)
+        {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "profile `{}` must use Y 0..{height} for every pre-1.8 dimension",
+                profile.id
+            )));
+        }
+        Ok(Self {
+            height,
+            region_extension,
+            level_format_version,
+        })
+    }
+
+    pub(crate) fn is_full(self, status: Option<&str>) -> bool {
+        status == Some(self.full_status())
+    }
+
+    pub(crate) fn full_status(self) -> &'static str {
+        "full"
+    }
+
+    pub(crate) fn blocks_len(self) -> usize {
+        16 * 16 * self.height as usize
+    }
+
+    pub(crate) fn data_len(self) -> usize {
+        self.blocks_len() / 2
+    }
+}
+
 /// The on-disk chunk layout selected for a profile, independent of whether the
 /// release is admitted to projects.
 #[derive(Clone, Copy, Debug)]
@@ -244,6 +312,7 @@ pub(crate) enum ChunkLayoutFormat {
     Modern(&'static ClassicChunkFormat),
     Flattened(FlattenedFormat),
     Numeric(NumericFormat),
+    Legacy(LegacyFormat),
 }
 
 impl ChunkLayoutFormat {
@@ -251,6 +320,7 @@ impl ChunkLayoutFormat {
         match profile.family {
             VersionFamily::Flattened => Ok(Self::Flattened(FlattenedFormat::for_profile(profile)?)),
             VersionFamily::Numeric => Ok(Self::Numeric(NumericFormat::for_profile(profile)?)),
+            VersionFamily::Legacy => Ok(Self::Legacy(LegacyFormat::for_profile(profile)?)),
             _ => Ok(Self::Modern(ClassicChunkFormat::for_profile(profile)?)),
         }
     }
@@ -260,6 +330,7 @@ impl ChunkLayoutFormat {
             Self::Modern(format) => format.is_full(status),
             Self::Flattened(format) => status == Some(format.full_status),
             Self::Numeric(format) => format.is_full(status),
+            Self::Legacy(format) => format.is_full(status),
         }
     }
 
@@ -268,6 +339,7 @@ impl ChunkLayoutFormat {
             Self::Modern(format) => format.full_status,
             Self::Flattened(format) => format.full_status,
             Self::Numeric(format) => format.full_status(),
+            Self::Legacy(format) => format.full_status(),
         }
     }
 }

@@ -1,11 +1,11 @@
-//! Read-only Minecraft Java Anvil world adapter for verified classic profiles.
+//! Read-only Minecraft Java world adapter for classic Anvil and McRegion saves.
 //!
 //! This module deliberately has no write path. It reads `level.dat`, discovers the
 //! classic (pre-26.1) dimension folders and decodes region files one chunk at a time.
 //! Region chunks are returned as bounded [`NbtFile`] values so callers can preserve
 //! unknown fields instead of re-encoding a partial chunk.
 //!
-//! Region format notes (modern classic Anvil):
+//! Region format notes (Anvil `.mca` and McRegion `.mcr`):
 //! - the file starts with two 4 KiB tables: 1024 locations and 1024 timestamps;
 //! - a location is a 24-bit sector offset plus an 8-bit sector count;
 //! - a chunk record is `length: u32`, `compression: u8`, then `length - 1` bytes;
@@ -13,7 +13,9 @@
 //!
 //! External chunks, LZ4 and custom compression are refused with explicit errors. The
 //! classic layout is validated before a single chunk is decoded; the 26.1+ split layout
-//! is refused instead of being misread as an empty Overworld.
+//! is refused instead of being misread as an empty Overworld. Pre-1.8 saves have no
+//! `DataVersion`; [`LegacyLevelDat`] validates their `level.dat` format version and
+//! [`LegacyWorld`] binds an exact legacy profile to the region extension and height.
 
 use std::collections::BTreeMap;
 use std::fs::{self, File};
@@ -28,7 +30,7 @@ use world_domain::DimensionKind;
 use crate::nbt::{self, NbtError, NbtFile, NbtValue, MAX_NBT_BYTES, TAG_COMPOUND};
 use crate::version_support;
 
-use super::format::{ClassicChunkFormat, DATA_VERSION};
+use super::format::{ClassicChunkFormat, LegacyFormat, DATA_VERSION};
 
 pub const ANVIL_REGION_EXTENSION: &str = "mca";
 pub const ANVIL_SECTOR_BYTES: u64 = 4096;
@@ -208,6 +210,62 @@ impl LevelDat {
     }
 }
 
+/// Version metadata read from a pre-1.8 `level.dat`.
+///
+/// These saves predate `DataVersion`; `Data.Version` is an integer level-format
+/// version (`19132` for McRegion, `19133` for classic Anvil). It identifies the
+/// container/layout but not one exact release, so an exact built-in profile must
+/// be supplied by the caller.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LegacyLevelDat {
+    pub format_version: i32,
+    pub level_name: Option<String>,
+    pub raw: NbtFile,
+}
+
+impl LegacyLevelDat {
+    pub fn read(path: impl AsRef<Path>) -> Result<Self, AnvilError> {
+        let path = path.as_ref();
+        let bytes = read_file_bounded(path, MAX_LEVEL_DAT_BYTES)?;
+        Self::from_gzip(&bytes)
+    }
+
+    pub fn from_gzip(bytes: &[u8]) -> Result<Self, AnvilError> {
+        let file = nbt::read_gzip(bytes)?;
+        let root = file
+            .root
+            .as_compound()
+            .ok_or_else(|| AnvilError::InvalidLevel("root tag is not a compound".to_owned()))?;
+        let data = compound_field(root, "Data", "level.dat")?;
+        if data.contains_key("DataVersion") {
+            return Err(AnvilError::InvalidLevel(
+                "level.dat carries a DataVersion tag; this is not a pre-1.8 save".to_owned(),
+            ));
+        }
+        let format_version = int_field(data, "Version", "level.dat")?;
+        if !matches!(format_version, 19132 | 19133) {
+            return Err(AnvilError::InvalidLevel(format!(
+                "level.dat Version {format_version} is not a pre-1.8 level format"
+            )));
+        }
+        let level_name = optional_string(data, "LevelName", "level.dat")?;
+        Ok(Self {
+            format_version,
+            level_name,
+            raw: file,
+        })
+    }
+
+    /// Returns the container/layout declared by `level.dat`.
+    pub fn layout(&self) -> minecraft_version::WorldLayout {
+        match self.format_version {
+            19132 => minecraft_version::WorldLayout::McRegion,
+            19133 => minecraft_version::WorldLayout::ClassicAnvil,
+            _ => minecraft_version::WorldLayout::Unknown,
+        }
+    }
+}
+
 /// A standard dimension folder in a classic Anvil world.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JavaWorldDimension {
@@ -336,6 +394,141 @@ impl JavaWorld {
     }
 }
 
+/// A pre-1.8 Java world bound to an exact built-in legacy profile.
+///
+/// `level.dat` only distinguishes McRegion from classic Anvil, so the caller
+/// chooses the exact release profile. The reader validates that the profile's
+/// layout, region extension and dimension heights match the save before any
+/// chunk is decoded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LegacyWorld {
+    pub root: PathBuf,
+    pub level: LegacyLevelDat,
+    pub profile: VersionProfile,
+    pub dimensions: Vec<JavaWorldDimension>,
+}
+
+impl LegacyWorld {
+    pub fn open(root: impl AsRef<Path>, profile: &VersionProfile) -> Result<Self, AnvilError> {
+        let root = root.as_ref();
+        let metadata = fs::symlink_metadata(root).map_err(|error| io_error(root, &error))?;
+        if metadata.file_type().is_symlink() {
+            return Err(AnvilError::Symlink(root.display().to_string()));
+        }
+        if !metadata.is_dir() {
+            return Err(AnvilError::NotDirectory(root.display().to_string()));
+        }
+
+        let format = LegacyFormat::for_profile(profile)?;
+        let level = LegacyLevelDat::read(root.join("level.dat"))?;
+        if level.format_version != format.level_format_version {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "level.dat format {} is {}, but profile `{}` expects {}",
+                level.format_version,
+                if level.format_version == 19132 {
+                    "McRegion"
+                } else {
+                    "classic Anvil"
+                },
+                profile.id,
+                if format.level_format_version == 19132 {
+                    "McRegion"
+                } else {
+                    "classic Anvil"
+                },
+            )));
+        }
+
+        if crate::split_anvil::has_markers(root) {
+            return Err(AnvilError::UnsupportedLayout(
+                "pre-1.8 world contains 26.1+ split markers".to_owned(),
+            ));
+        }
+        if !require_directory(&root.join("region"))? {
+            return Err(AnvilError::UnsupportedLayout(
+                "classic Overworld region/ folder is missing".to_owned(),
+            ));
+        }
+        let custom_dimensions = classic_custom_dimensions(root)?;
+        if !custom_dimensions.is_empty() {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "pre-1.8 worlds with custom dimensions are not supported: {}",
+                custom_dimensions.join(", ")
+            )));
+        }
+
+        let mut dimensions = Vec::new();
+        for spec in &profile.dimension_profiles {
+            let dimension_root = Path::new(&spec.folder)
+                .parent()
+                .unwrap_or_else(|| Path::new(""));
+            let is_overworld = spec.kind == minecraft_version::DimensionKind::Overworld;
+            if !is_overworld && !require_directory(&root.join(dimension_root))? {
+                continue;
+            }
+            reject_mixed_region_extensions(&root.join(&spec.folder), format.region_extension)?;
+            dimensions.push(discover_dimension_with_extension(
+                root,
+                spec,
+                format.region_extension,
+            )?);
+        }
+
+        Ok(Self {
+            root: root.to_path_buf(),
+            level,
+            profile: profile.clone(),
+            dimensions,
+        })
+    }
+
+    pub fn dimension(&self, id: &str) -> Option<&JavaWorldDimension> {
+        self.dimensions.iter().find(|dimension| dimension.id == id)
+    }
+
+    /// Opens one `.mcr`/`.mca` region file of a discovered dimension.
+    pub fn read_region(
+        &self,
+        dimension_id: &str,
+        region_x: i32,
+        region_z: i32,
+    ) -> Result<RegionFile, AnvilError> {
+        let dimension = self
+            .dimension(dimension_id)
+            .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
+        let format = LegacyFormat::for_profile(&self.profile)?;
+        RegionFile::open_for_profile_with_extension(
+            dimension.region_folder.join(format!(
+                "r.{region_x}.{region_z}.{}",
+                format.region_extension
+            )),
+            Some(self.profile.clone()),
+            format.region_extension,
+        )
+    }
+
+    /// Lists the region coordinates for the profile's container extension.
+    pub fn region_coordinates(&self, dimension_id: &str) -> Result<Vec<(i32, i32)>, AnvilError> {
+        let dimension = self
+            .dimension(dimension_id)
+            .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
+        let format = LegacyFormat::for_profile(&self.profile)?;
+        list_region_coordinates_with_extension(&dimension.region_folder, format.region_extension)
+    }
+
+    /// Decodes a legacy chunk with the world's exact profile and dimension bounds.
+    pub fn decode_chunk(
+        &self,
+        dimension_id: &str,
+        chunk: &RegionChunk,
+    ) -> Result<super::chunk::DecodedChunk, AnvilError> {
+        let dimension = self
+            .dimension(dimension_id)
+            .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
+        chunk.decode(dimension, &self.profile)
+    }
+}
+
 /// One allocated chunk record in a region header.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegionEntry {
@@ -432,15 +625,31 @@ pub struct RegionFile {
 
 impl RegionFile {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, AnvilError> {
-        Self::open_for_profile(path, None)
+        Self::open_with_extension(path, None, ANVIL_REGION_EXTENSION)
     }
 
     pub(crate) fn open_for_profile(
         path: impl AsRef<Path>,
         profile: Option<VersionProfile>,
     ) -> Result<Self, AnvilError> {
+        Self::open_with_extension(path, profile, ANVIL_REGION_EXTENSION)
+    }
+
+    pub(crate) fn open_for_profile_with_extension(
+        path: impl AsRef<Path>,
+        profile: Option<VersionProfile>,
+        extension: &str,
+    ) -> Result<Self, AnvilError> {
+        Self::open_with_extension(path, profile, extension)
+    }
+
+    fn open_with_extension(
+        path: impl AsRef<Path>,
+        profile: Option<VersionProfile>,
+        extension: &str,
+    ) -> Result<Self, AnvilError> {
         let path = path.as_ref();
-        let (region_x, region_z) = parse_region_file_name(path)?;
+        let (region_x, region_z) = parse_region_file_name_with_extension(path, extension)?;
         let file_len = file_len_checked(path, MAX_REGION_FILE_BYTES)?;
         if file_len < ANVIL_HEADER_BYTES as u64 || file_len % ANVIL_SECTOR_BYTES != 0 {
             return Err(AnvilError::InvalidRegion(format!(
@@ -708,6 +917,11 @@ fn summarize_chunk(
     let root = nbt.root.as_compound().ok_or_else(|| {
         AnvilError::InvalidRegion(format!("chunk ({x}, {z}) root is not a compound"))
     })?;
+    if let Some(profile) =
+        profile_hint.filter(|profile| profile.family == minecraft_version::VersionFamily::Legacy)
+    {
+        return summarize_legacy_chunk(root, x, z, profile);
+    }
     // Chunks saved before 1.9 have no root DataVersion. The level.dat profile
     // supplies it when JavaWorld opened the region; a bare RegionFile cannot.
     let data_version = match root.get(DATA_VERSION) {
@@ -797,6 +1011,47 @@ fn summarize_chunk(
         sections,
         block_entities,
         entities,
+    })
+}
+
+fn summarize_legacy_chunk(
+    root: &BTreeMap<String, NbtValue>,
+    x: i32,
+    z: i32,
+    profile: &VersionProfile,
+) -> Result<RegionChunkSummary, AnvilError> {
+    let format = LegacyFormat::for_profile(profile)?;
+    if root.contains_key(DATA_VERSION) {
+        return Err(AnvilError::InvalidRegion(format!(
+            "legacy chunk ({x}, {z}) carries a DataVersion tag"
+        )));
+    }
+    let level = root
+        .get("Level")
+        .and_then(NbtValue::as_compound)
+        .ok_or_else(|| {
+            AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has no Level compound"))
+        })?;
+    let stored_x = int_field(level, "xPos", "chunk")?;
+    let stored_z = int_field(level, "zPos", "chunk")?;
+    if stored_x != x || stored_z != z {
+        return Err(AnvilError::InvalidRegion(format!(
+            "chunk table position ({x}, {z}) does not match NBT xPos/zPos ({stored_x}, {stored_z})"
+        )));
+    }
+    let status = super::legacy_chunk::legacy_status(level, x, z)?;
+    super::legacy_chunk::byte_array(level, "Blocks", format.blocks_len(), x, z)?;
+    super::legacy_chunk::byte_array(level, "Data", format.data_len(), x, z)?;
+    super::legacy_chunk::byte_array(level, "Biomes", 16 * 16, x, z)?;
+    Ok(RegionChunkSummary {
+        x,
+        z,
+        data_version: profile.data_version,
+        status,
+        y_pos: None,
+        sections: (format.height / world_domain::SECTION_SIZE) as usize,
+        block_entities: super::chunk::compound_list_len(level, "TileEntities", x, z)?,
+        entities: super::chunk::compound_list_len(level, "Entities", x, z)?,
     })
 }
 
@@ -1005,6 +1260,14 @@ fn discover_dimension(
     root: &Path,
     spec: &minecraft_version::DimensionProfile,
 ) -> Result<JavaWorldDimension, AnvilError> {
+    discover_dimension_with_extension(root, spec, ANVIL_REGION_EXTENSION)
+}
+
+fn discover_dimension_with_extension(
+    root: &Path,
+    spec: &minecraft_version::DimensionProfile,
+    extension: &str,
+) -> Result<JavaWorldDimension, AnvilError> {
     let region_folder = root.join(&spec.folder);
     let folder = region_folder
         .parent()
@@ -1021,16 +1284,23 @@ fn discover_dimension(
         min_y: spec.min_y,
         height: spec.height,
         folder,
-        region_files: count_region_files(&region_folder)?,
+        region_files: count_region_files_with_extension(&region_folder, extension)?,
         region_folder,
     })
 }
 
-fn count_region_files(folder: &Path) -> Result<usize, AnvilError> {
-    Ok(list_region_coordinates(folder)?.len())
+fn count_region_files_with_extension(folder: &Path, extension: &str) -> Result<usize, AnvilError> {
+    Ok(list_region_coordinates_with_extension(folder, extension)?.len())
 }
 
 fn list_region_coordinates(folder: &Path) -> Result<Vec<(i32, i32)>, AnvilError> {
+    list_region_coordinates_with_extension(folder, ANVIL_REGION_EXTENSION)
+}
+
+fn list_region_coordinates_with_extension(
+    folder: &Path,
+    extension: &str,
+) -> Result<Vec<(i32, i32)>, AnvilError> {
     let metadata = match fs::symlink_metadata(folder) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(Vec::new()),
@@ -1051,8 +1321,13 @@ fn list_region_coordinates(folder: &Path) -> Result<Vec<(i32, i32)>, AnvilError>
         let file_type = entry
             .file_type()
             .map_err(|error| io_error(&entry.path(), &error))?;
+        let matches_extension = entry
+            .path()
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case(extension));
         if file_type.is_symlink() {
-            if entry.file_name().to_string_lossy().ends_with(".mca") {
+            if matches_extension {
                 return Err(AnvilError::Symlink(entry.path().display().to_string()));
             }
             continue;
@@ -1060,9 +1335,12 @@ fn list_region_coordinates(folder: &Path) -> Result<Vec<(i32, i32)>, AnvilError>
         if !file_type.is_file() {
             continue;
         }
-        if entry.file_name().to_string_lossy().ends_with(".mca") {
-            coordinates.push(parse_region_file_name(&entry.path())?);
-            ensure_region_file_limit(coordinates.len())?;
+        if matches_extension {
+            coordinates.push(parse_region_file_name_with_extension(
+                &entry.path(),
+                extension,
+            )?);
+            ensure_region_file_limit(coordinates.len(), extension)?;
         }
     }
     coordinates.sort_unstable();
@@ -1070,12 +1348,20 @@ fn list_region_coordinates(folder: &Path) -> Result<Vec<(i32, i32)>, AnvilError>
 }
 
 pub(crate) fn parse_region_file_name(path: &Path) -> Result<(i32, i32), AnvilError> {
+    parse_region_file_name_with_extension(path, ANVIL_REGION_EXTENSION)
+}
+
+fn parse_region_file_name_with_extension(
+    path: &Path,
+    extension: &str,
+) -> Result<(i32, i32), AnvilError> {
     let name = path
         .file_name()
         .and_then(|value| value.to_str())
         .ok_or_else(|| AnvilError::InvalidRegionName(path.display().to_string()))?;
+    let suffix = format!(".{extension}");
     let stem = name
-        .strip_suffix(".mca")
+        .strip_suffix(&suffix)
         .ok_or_else(|| AnvilError::InvalidRegionName(name.to_owned()))?;
     let rest = stem
         .strip_prefix("r.")
@@ -1097,6 +1383,25 @@ pub(crate) fn parse_region_file_name(path: &Path) -> Result<(i32, i32), AnvilErr
         .parse::<i32>()
         .map_err(|_| AnvilError::InvalidRegionName(name.to_owned()))?;
     Ok((x, z))
+}
+
+fn reject_mixed_region_extensions(region: &Path, expected: &str) -> Result<(), AnvilError> {
+    let other = if expected == "mcr" { "mca" } else { "mcr" };
+    let has_expected = has_file_with_extension(region, expected);
+    let has_other = has_file_with_extension(region, other);
+    if has_expected && has_other {
+        return Err(AnvilError::UnsupportedLayout(format!(
+            "{} mixes .{expected} and .{other} containers",
+            region.display()
+        )));
+    }
+    if !has_expected && has_other {
+        return Err(AnvilError::UnsupportedLayout(format!(
+            "{} contains only .{other} files, but this profile expects .{expected}",
+            region.display()
+        )));
+    }
+    Ok(())
 }
 
 /// Returns `true` for a real directory, `false` when the path is absent.
@@ -1190,10 +1495,10 @@ pub(crate) fn read_file_bounded(path: &Path, limit: u64) -> Result<Vec<u8>, Anvi
     Ok(bytes)
 }
 
-fn ensure_region_file_limit(count: usize) -> Result<(), AnvilError> {
+fn ensure_region_file_limit(count: usize, extension: &str) -> Result<(), AnvilError> {
     if count > MAX_REGION_FILES {
         return Err(AnvilError::LimitExceeded(format!(
-            "region folder contains more than {MAX_REGION_FILES} .mca files"
+            "region folder contains more than {MAX_REGION_FILES} .{extension} files"
         )));
     }
     Ok(())
@@ -1213,9 +1518,9 @@ mod tests {
 
     #[test]
     fn region_file_count_is_bounded() {
-        assert!(ensure_region_file_limit(0).is_ok());
-        assert!(ensure_region_file_limit(MAX_REGION_FILES).is_ok());
-        let error = ensure_region_file_limit(MAX_REGION_FILES + 1).expect_err("limit");
+        assert!(ensure_region_file_limit(0, "mca").is_ok());
+        assert!(ensure_region_file_limit(MAX_REGION_FILES, "mca").is_ok());
+        let error = ensure_region_file_limit(MAX_REGION_FILES + 1, "mca").expect_err("limit");
         assert!(matches!(error, AnvilError::LimitExceeded(_)));
     }
 }

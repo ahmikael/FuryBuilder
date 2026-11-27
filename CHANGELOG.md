@@ -20,7 +20,13 @@ formats are not migrated.
   `1.8-1.12.2` records `DataVersion` 47 for 1.8.9, 169-1343 for 1.9-1.12.2, `-1` for
   1.8-1.8.8 and resource pack formats 1-3; pre-1.8 splits McRegion `1.0-1.1` (128-block
   height) from Anvil `1.2.1-1.7.10` (256-block height). These profiles are `unverified` and
-  cannot create projects; no pre-1.8 codec or generation is enabled.
+  cannot create projects; pre-1.8 import and generation are not enabled.
+- Read-only McRegion and early-Anvil reader for `1.0-1.7.10`. It validates `level.dat`
+  `Version` 19132/19133, binds an exact profile to the `.mcr`/`.mca` container and dimension
+  height, and decodes flat `Level.Blocks`/`Data`/`Biomes` chunks through the shared numeric
+  registry. `TerrainPopulated` maps to `full`/`partial`; unknown ids, malformed arrays, mixed
+  containers and `DataVersion` tags are rejected. Import, passthrough and writing remain
+  disabled.
 - Import, block/biome editing, project snapshots and same-version export for the 15 numeric
   classic releases `1.8.9-1.12.2`. The writer patches only `Level.Sections[].Blocks`/`Data`/
   `Add` and `Level.Biomes`; unknown tags and untouched sections stay byte-for-byte. Column

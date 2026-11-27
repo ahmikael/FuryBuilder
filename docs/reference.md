@@ -84,11 +84,11 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
   display capture.
 - Modded servers, data packs, other server versions, Bedrock worlds, snapshots, split 26.1+
   saves, pre-1.8 worlds and Minecraft versions outside 1.13–1.21.11 and 1.8.9–1.12.2. Exact
-  metadata-only profiles exist for 1.8–1.8.8 and 1.0–1.7.10, but no world adapter, import,
-  export or generation is enabled for them; `1.8–1.12.2` client JARs build numeric block/item
-  catalogs, while pre-1.8 catalogs are not built. Other official versions are listed but
-  cannot be created or edited. Java majors other than the profile's required major are not
-  validated in this beta.
+  metadata-only profiles exist for 1.8–1.8.8 and 1.0–1.7.10; a read-only pre-1.8 chunk reader
+  exists, but import, export, passthrough and generation are not enabled for those releases.
+  `1.8–1.12.2` client JARs build numeric block/item catalogs, while pre-1.8 catalogs are not
+  built. Other official versions are listed but cannot be created or edited. Java majors other
+  than the profile's required major are not validated in this beta.
 - Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
   are covered by `level-type`, Java major, data pack format and `server.properties` tests.
   Representatives of each flattened server series were inspected without launching them, so a
@@ -96,7 +96,8 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
   releases were checked through catalog and render asset loading, and every release passes the
   catalog-pinned project create/edit/save/reopen/export/re-import fixture. Numeric 1.8.9–1.12.2
   worlds are covered by synthetic import/edit/export/re-import fixtures; no real numeric save
-  or numeric generation run is recorded.
+  or numeric generation run is recorded. The read-only pre-1.8 reader is covered by synthetic
+  McRegion and early-Anvil fixtures; no real 1.0–1.7.10 save is recorded either.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -114,7 +115,7 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Numeric Java 1.8.9–1.12.2 supports the same import/edit/save/export subset without generation; `1.8–1.12.2` client JARs expose numeric block/item catalogs. Exact profiles for Java 1.8–1.8.8 and 1.0–1.7.10 are metadata-only and stop at the profile check. Split 26.x and special manifest ids likewise cannot be edited |
+| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Numeric Java 1.8.9–1.12.2 supports the same import/edit/save/export subset without generation; `1.8–1.12.2` client JARs expose numeric block/item catalogs. Exact profiles for Java 1.8–1.8.8 and 1.0–1.7.10 are metadata-only for project admission; a read-only pre-1.8 decoder exists but is not wired to import. Split 26.x and special manifest ids likewise cannot be edited |
 | KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and pre-1.8 import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |

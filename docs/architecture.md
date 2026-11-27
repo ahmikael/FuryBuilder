@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Numeric classic Anvil **1.8.9–1.12.2** supports the same import/edit/save/export subset without generation. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Exact metadata-only profiles cover Java 1.8–1.8.8 and 1.0–1.7.10, while split 26.x and pre-1.8 versions remain refused by the world adapters. |
+| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Numeric classic Anvil **1.8.9–1.12.2** supports the same import/edit/save/export subset without generation. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Exact metadata-only profiles cover Java 1.8–1.8.8 and 1.0–1.7.10; a read-only pre-1.8 reader decodes McRegion and early Anvil chunks, while split 26.x and pre-1.8 import remain refused by the project adapters. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -362,10 +362,13 @@ the fully generated `Status` spelling from exact release facts; the raw value is
 The same release facts supply the vanilla biome registry for import diagnostics, not as
 an allowlist for source biome palettes. Raw chunk decoding is separate from save
 admission: every modern classic and numeric 1.8.9–1.12.2 profile admits import, editing,
-snapshots, same-version export and (for modern classic) generation through its capabilities,
-while split profiles, 1.8–1.8.8 and pre-1.8 releases carry exact metadata but no codec and
-remain refused. The generation target is derived from the same profile, so `level-type`, Java
-major, data pack format and the required server JAR cannot be taken from another version.
+snapshots, same-version export and (for modern classic) generation through its capabilities.
+Split profiles and 1.8–1.8.8 remain refused. Pre-1.8 releases have a read-only `LegacyWorld`
+reader that validates `level.dat` `Version` 19132/19133, binds an exact built-in profile to the
+`.mcr`/`.mca` container and dimension height, and decodes the flat `Level.Blocks`/`Data`/`Biomes`
+arrays; they are still not admitted to projects, import or passthrough. The generation target
+is derived from the same profile, so `level-type`, Java major, data pack format and the required
+server JAR cannot be taken from another version.
 
 Flattened generation uses the same supervisor and approval flow. Server inspection recognizes
 the classic and direct entry points, the combined or split pack version formats, and the

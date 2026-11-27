@@ -32,10 +32,10 @@ pub use classic_anvil::{
 };
 
 pub use anvil::{
-    region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LevelDat,
-    RegionChunk, RegionChunkSummary, RegionEntry, RegionFile, ANVIL_HEADER_BYTES,
-    ANVIL_LOCATION_ENTRIES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_REGION_EXTENSION, ANVIL_SECTOR_BYTES,
-    MAX_LEVEL_DAT_BYTES, MAX_REGION_FILE_BYTES,
+    region_file_name, AnvilError, ChunkCompression, JavaWorld, JavaWorldDimension, LegacyLevelDat,
+    LegacyWorld, LevelDat, RegionChunk, RegionChunkSummary, RegionEntry, RegionFile,
+    ANVIL_HEADER_BYTES, ANVIL_LOCATION_ENTRIES, ANVIL_REGION_AXIS_CHUNKS, ANVIL_REGION_EXTENSION,
+    ANVIL_SECTOR_BYTES, MAX_LEVEL_DAT_BYTES, MAX_REGION_FILE_BYTES,
 };
 pub use derived::{
     analyze_java_world_derived, inspect_chunk_derived, ChunkDerivedData, ChunkFingerprints,

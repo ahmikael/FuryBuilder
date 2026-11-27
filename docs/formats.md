@@ -18,16 +18,17 @@ split 26.1+ releases have exact profiles but stop at the profile check.
 
 FuryBuilder has built-in metadata for all 46 Java releases from 1.13 through 1.21.11 and for
 all 52 releases from 1.0 through 1.12.2. The 15 numeric releases from 1.8.9 through 1.12.2 have
-a verified chunk adapter; 1.8–1.8.8 and 1.0–1.7.10 are metadata-only because they predate the
-`DataVersion` tag. A `1.8–1.12.2` client JAR builds a block/item catalog with numeric ids and
-metadata; pre-1.8 releases still have no catalog. The
+a verified chunk adapter; 1.8–1.8.8 and 1.0–1.7.10 are metadata-only for project admission
+because they predate the `DataVersion` tag. A read-only flat-chunk reader exists for 1.0–1.7.10,
+but it is not yet wired to import or passthrough. A `1.8–1.12.2` client JAR builds a block/item
+catalog with numeric ids and metadata; pre-1.8 releases still have no catalog. The
 Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
 the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
 client JAR, or from the exact built-in profile for 1.13.x, which has no internal file. Starting
 with 1.21.9, pack formats have both a major and a minor component (for example, 1.21.11 uses
 data pack format `94.1`). For these classic Anvil releases, the vanilla
 Overworld spans Y −64 through 319, and the Nether and End span Y 0 through 255. These facts
-alone do not create a split or legacy adapter. The dimension set, vertical bounds and region
+alone do not create a split adapter. The dimension set, vertical bounds and region
 folder are read from the exact profile's
 `dimensionProfiles`; the classic reader does not assume fixed `DIM-1`/`DIM1` names. Project
 snapshots encode the same set and reject a dimension whose bounds differ from the profile.
@@ -41,7 +42,7 @@ The exact facts come from the built-in profiles and are checked against each cli
 internal `version.json`; 1.13.x has no internal file and is identified by SHA-1-matched launcher
 metadata instead.
 
-## Pre-1.13 profiles: numeric Anvil and metadata-only legacy
+## Pre-1.13 profiles: numeric Anvil and read-only legacy
 
 The 24 releases from 1.8 through 1.12.2 use numeric block ids plus metadata in classic Anvil
 chunks, column biomes and Y 0–255. `DataVersion` is 47 for 1.8.9, 169–184 for 1.9–1.9.4,
@@ -64,6 +65,17 @@ The 28 releases from 1.0 through 1.7.10 also predate `DataVersion`. 1.0–1.1 us
 (`region/*.mcr`) with 128-block dimensions; 1.2.1–1.7.10 use classic Anvil with 256-block
 dimensions. Resource packs are absent before 1.6.1 and use format 1 from 1.6.1. Official server
 JARs exist from 1.2.5 onward, but generation remains disabled in this build.
+
+A read-only reader now validates these saves before decoding a single chunk. `Level.Version` in
+`level.dat` must be `19132` (McRegion) or `19133` (classic Anvil), and the caller supplies the
+exact built-in release profile because the file does not identify one release. The reader
+rejects a `DataVersion` tag, a profile/container mismatch, mixed `.mcr` and `.mca` region files,
+custom dimensions and unexpected region heights. Both layouts store one flat `Level.Blocks`
+array in XZY order and one metadata nibble per position in `Level.Data`; `Level.Biomes` holds
+256 columns. Blocks resolve through the shared numeric registry, `TerrainPopulated` maps to
+`full` or `partial`, and unknown block ids, biome ids or malformed arrays are rejected without
+substitution. This is a read-only decoder: it does not write, import, pass through or convert a
+pre-1.8 world yet.
 
 The metadata-only profiles are visible in the version picker with an `unverified` badge.
 Selecting one does not create a project: import, editing, export and generation are limited to
@@ -106,7 +118,9 @@ selected for a new project. The `1.18-1.21.11` row includes 1.21.4; the `1.13-1.
 covers all 19 flattened classic releases. Both support import, block/biome editing, project
 snapshots, same-version export and generation with the exact official server JAR. The
 `1.8.9-1.12.2` row supports the same import/edit/save/export subset but not generation.
-The `1.8-1.8.8` and `1.0-1.7.10` rows are metadata-only and cannot advance the wizard.
+The `1.8-1.8.8` and `1.0-1.7.10` rows are metadata-only for project admission and cannot
+advance the wizard. The pre-1.8 reader is available to backend analysis but import and
+passthrough stay disabled until the next legacy step.
 
 P1 verification covers all 27 modern releases with import and same-version export round-trips.
 The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
@@ -117,7 +131,10 @@ round-trip for every release. Client JARs for all 19 were also checked against r
 archives. P3-03 verification covers all 15 numeric releases from 1.8.9 through 1.12.2 with
 import, block/biome editing, same-version export, re-import, unknown-tag preservation and a
 byte-identical untouched neighbour chunk; the 1.8.9 path also covers chunks without a root
-`DataVersion`. Both modern and flattened families support same-version Java structure
+`DataVersion`. P3-04 adds synthetic McRegion and early-Anvil fixtures for 1.0, 1.1, 1.2.1, 1.6.4
+and 1.7.10: both container extensions, both heights, XZY block order, metadata nibbles, column
+biomes, `TerrainPopulated` status, unknown-id and malformed-array rejection. Pre-1.8 import is
+still not exposed. Both modern and flattened families support same-version Java structure
 interchange; `Full` remains limited to 1.21.4.
 
 ## Java 26.1–26.3 split saves: inspection only
@@ -404,7 +421,7 @@ Before import, export or copy, the selected path is classified:
 | Full save, other `DataVersion`                  | version blocker                               |
 | Full 26.1+ split save                           | layout blocker; regions inventoried read-only |
 | Classic `region/` plus split markers            | mixed-layout blocker                          |
-| `level.dat` plus only legacy `.mcr`             | legacy blocker                                |
+| `level.dat` plus only legacy `.mcr`             | legacy import blocker; a read-only parser exists |
 | `level.dat` without any region/dimension folder | incomplete-save blocker                       |
 | Single `r.<x>.<z>.mca`                          | "not a complete world save"                   |
 | Directory of `.mca` files, no `level.dat`       | "select its parent world folder"              |

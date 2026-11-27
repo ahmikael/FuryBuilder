@@ -437,6 +437,9 @@ pub(super) fn write_region(
             (DerivedDataPolicy::VanillaRebuild, ChunkLayoutFormat::Numeric(_)) => {
                 NUMERIC_INVALIDATED_FIELDS
             }
+            // Pre-1.8 profiles have no writer; this arm is unreachable through
+            // JavaWorld and is present only because the layout enum is shared.
+            (DerivedDataPolicy::VanillaRebuild, ChunkLayoutFormat::Legacy(_)) => &[],
         },
     })
 }
@@ -530,6 +533,9 @@ fn invalidate_derived_fields(
         ChunkLayoutFormat::Modern(format) => invalidate_modern_derived_fields(nbt, format),
         ChunkLayoutFormat::Flattened(format) => invalidate_flattened_derived_fields(nbt, format),
         ChunkLayoutFormat::Numeric(_) => invalidate_numeric_derived_fields(nbt),
+        ChunkLayoutFormat::Legacy(_) => Err(RegionWriteError::UnsupportedCombination(
+            "pre-1.8 worlds are read-only and have no region writer".to_owned(),
+        )),
     }
 }
 
@@ -731,7 +737,9 @@ fn verify_replacement(
     }
     let (x_pos, z_pos) = match format {
         ChunkLayoutFormat::Modern(format) => (root.get(format.x_pos), root.get(format.z_pos)),
-        ChunkLayoutFormat::Flattened(_) | ChunkLayoutFormat::Numeric(_) => {
+        ChunkLayoutFormat::Flattened(_)
+        | ChunkLayoutFormat::Numeric(_)
+        | ChunkLayoutFormat::Legacy(_) => {
             let level = root.get("Level").and_then(NbtValue::as_compound);
             (
                 level.and_then(|level| level.get("xPos")),
@@ -776,6 +784,11 @@ fn verify_preserved_fields(
         }
         ChunkLayoutFormat::Numeric(_) => {
             super::numeric_chunk::verify_numeric_preserved_fields(source, patched)?;
+        }
+        ChunkLayoutFormat::Legacy(_) => {
+            return Err(RegionWriteError::UnsupportedCombination(
+                "pre-1.8 worlds are read-only and have no region writer".to_owned(),
+            ))
         }
     }
     Ok(())
