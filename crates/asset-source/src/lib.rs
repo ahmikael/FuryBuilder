@@ -54,7 +54,7 @@ pub use catalog_diff::{
 pub use component_model::MAX_RESOURCE_PACKS;
 pub use discovery::{
     default_minecraft_roots, default_resource_pack_format, discover_assets, discover_root,
-    discover_roots, inspect_asset_path,
+    discover_roots, inspect_asset_path, inspect_asset_path_for,
 };
 pub use pack_store::{
     PackIssue, PackState, ProjectPackStatus, ResourcePackInput, ResourcePackStore,

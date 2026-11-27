@@ -34,7 +34,7 @@ use std::sync::{Arc, Mutex};
 
 use asset_source::{
     AssetPathReport, AssetSelectionKind, AssetSettingsError, AssetSettingsStore,
-    AssetSourceSetting, VersionReport, VersionStatus,
+    AssetSourceSetting, VersionStatus,
 };
 use component_model::ComponentError as StatusError;
 pub use component_model::{
@@ -472,24 +472,28 @@ impl ComponentManager {
         };
         // Verification is against the facts recorded for this cache entry, not against the
         // current project target: the same shared client JAR may serve several projects.
-        let report = asset_source::inspect_asset_path(Path::new(&client.jar_path));
-        let version = report.version.as_ref().or_else(|| {
-            report.installation.as_ref().and_then(|installation| {
-                installation
-                    .versions
-                    .iter()
-                    .find(|version| version.id == client.version)
-            })
-        });
+        let profile = client
+            .version
+            .parse()
+            .ok()
+            .and_then(|version| minecraft_version::profile_for_version(&version))
+            .ok_or_else(|| {
+                ComponentError::InvalidRequest(format!(
+                    "no built-in profile for the cached Minecraft {} client",
+                    client.version
+                ))
+            })?;
+        let report = asset_source::inspect_asset_path_for(&client.jar_path, &profile);
+        let version = report.version.as_ref();
         let actual = version.and_then(|version| version.actual_sha1.as_deref());
-        let reported_id = version.and_then(|version| version.internal_version_id.as_deref());
+        let reported_id = version.map(|version| version.id.as_str());
         let reported_data_version = version.and_then(|version| version.world_version);
         let id_matches = reported_id == Some(client.version.as_str());
         let data_matches = reported_data_version == Some(client.data_version);
         let size_matches = version.and_then(|version| version.jar_bytes) == Some(client.size);
         let checksum_matches =
             actual.is_some_and(|actual| actual.eq_ignore_ascii_case(&client.sha1));
-        let verified = id_matches && data_matches && size_matches && checksum_matches;
+        let verified = client.matches_inspection(&report);
         let mut notes = report.warnings.clone();
         if let Some(version) = version {
             notes.extend(version.notes.clone());
@@ -504,7 +508,7 @@ impl ComponentManager {
                         client.version
                     )
                 }
-                None => "the cached client JAR has no readable version.json".to_owned(),
+                None => first_reason(&report),
             })
         } else if !data_matches {
             Some(match reported_data_version {
@@ -521,11 +525,13 @@ impl ComponentManager {
             ))
         } else if actual.is_none() {
             Some("the cached client JAR has no SHA-1 to compare".to_owned())
-        } else {
+        } else if !checksum_matches {
             Some(format!(
                 "the cached client JAR for Minecraft {} does not match its SHA-1",
                 client.version
             ))
+        } else {
+            Some(first_reason(&report))
         };
         let state = if verified {
             ComponentState::Ready
@@ -627,7 +633,7 @@ impl ComponentManager {
         target: &ComponentTarget,
     ) -> Result<ClientJarReleaseInfo, ComponentError> {
         target.validate()?;
-        self.ensure_managed_target(target)?;
+        self.assets_profile(target)?;
         Ok(self.inner.client_jars.release(&target.minecraft_version)?)
     }
 
@@ -656,6 +662,34 @@ impl ComponentManager {
     /// Lists FuryBuilder-owned client JARs for the Settings inventory.
     pub fn assets_inventory(&self) -> Result<client_jar::ManagedClientJarReport, ComponentError> {
         Ok(self.inner.client_jars.managed_list()?)
+    }
+
+    /// Resolves a project's managed client independently of the wizard's current selection.
+    pub fn resolve_managed_assets(
+        &self,
+        target: &ComponentTarget,
+    ) -> Result<ResolvedComponent, ComponentError> {
+        let profile = self.assets_profile(target)?;
+        let client = self
+            .inner
+            .client_jars
+            .find(&target.minecraft_version)?
+            .ok_or_else(|| ComponentError::NotReady {
+                kind: ComponentKind::Assets.as_str(),
+                state: "missing",
+                detail: format!(
+                    "no managed Minecraft {} client JAR is installed",
+                    target.minecraft_version
+                ),
+            })?;
+        let report = asset_source::inspect_asset_path_for(&client.jar_path, &profile);
+        if !client.matches_inspection(&report) {
+            return Err(ComponentError::InvalidRequest(format!(
+                "the managed Minecraft {} client JAR no longer matches its cache manifest",
+                client.version
+            )));
+        }
+        resolved_from_status(asset_source_status(report, true))
     }
 
     /// Explicitly selects original placeholder textures. This is a deliberate choice, not a
@@ -754,9 +788,9 @@ impl ComponentManager {
                 Ok(self.java_status(target, true))
             }
             ComponentKind::Assets => {
-                self.ensure_managed_target(target)?;
-                let report = asset_source::inspect_asset_path(path);
-                if !report.valid || !report.target_match {
+                let profile = self.assets_profile(target)?;
+                let report = asset_source::inspect_asset_path_for(path, &profile);
+                if !report.valid || report.version.is_none() {
                     return Err(ComponentError::InvalidRequest(format!(
                         "{} is not a usable Minecraft {} client source: {}",
                         report.path,
@@ -836,15 +870,6 @@ impl ComponentManager {
             }
             ComponentKind::Assets => {
                 if let Some(version) = id.strip_prefix("assets-managed-") {
-                    let selected_managed = self
-                        .inner
-                        .assets
-                        .saved_source()
-                        .source
-                        .as_ref()
-                        .is_some_and(|source| {
-                            self.inner.client_jars.contains(Path::new(&source.path))
-                        });
                     let version =
                         version
                             .parse::<VersionId>()
@@ -852,10 +877,23 @@ impl ComponentManager {
                                 kind: ComponentKind::Assets.as_str(),
                                 id: id.to_owned(),
                             })?;
+                    let selected_managed =
+                        self.inner
+                            .assets
+                            .saved_source()
+                            .source
+                            .is_some_and(|source| {
+                                let selected = Path::new(&source.path);
+                                selected
+                                    .parent()
+                                    .and_then(Path::file_name)
+                                    .is_some_and(|name| name == version.as_str())
+                                    && self.inner.client_jars.contains(selected)
+                            });
                     if self.inner.client_jars.remove(&version)? {
                         removed_managed = true;
                     }
-                    if selected_managed {
+                    if removed_managed && selected_managed {
                         self.inner.assets.clear()?;
                         cleared_selection = true;
                     }
@@ -923,7 +961,7 @@ impl ComponentManager {
         }
         match request.kind {
             ComponentKind::Assets => {
-                self.ensure_managed_target(&request.target)?;
+                self.assets_profile(&request.target)?;
                 let expected_version = request
                     .expected_version
                     .as_deref()
@@ -1180,13 +1218,31 @@ impl ComponentManager {
         if !required {
             return ComponentStatus::not_required(ComponentKind::Assets);
         }
-        let saved = self.inner.assets.saved_source();
-        // An explicit placeholder choice wins over any cached source: the project asked for
-        // original FuryBuilder textures, not for Minecraft assets from another project.
-        if placeholder || saved.placeholder {
+        if placeholder {
             return finalize(placeholder_assets_status());
         }
-        let managed_fallback = if saved.source.is_none() {
+        let profile = match self.assets_profile(target) {
+            Ok(profile) => profile,
+            Err(error) => {
+                let mut status =
+                    ComponentStatus::new(ComponentKind::Assets, ComponentState::Incompatible);
+                status.error = Some(error.to_string());
+                return finalize(status);
+            }
+        };
+        let saved = self.inner.assets.saved_source_for(&profile);
+        // An explicit placeholder choice wins over any cached source: the project asked for
+        // original FuryBuilder textures, not for Minecraft assets from another project.
+        if saved.placeholder {
+            return finalize(placeholder_assets_status());
+        }
+        let selected_for_target = saved.report.as_ref().is_some_and(|report| {
+            report
+                .version
+                .as_ref()
+                .is_some_and(|version| version.id == target.minecraft_version.as_str())
+        });
+        let managed_fallback = if !selected_for_target {
             match self.inner.client_jars.find(&target.minecraft_version) {
                 Ok(found) => found,
                 Err(error) => {
@@ -1200,148 +1256,37 @@ impl ComponentManager {
         } else {
             None
         };
-        let (report, load_warning) = match saved.source {
-            Some(source) => {
-                let Some(report) = saved.report else {
-                    let mut status =
-                        ComponentStatus::new(ComponentKind::Assets, ComponentState::Error);
-                    status.mode = Some(ComponentMode::Manual);
-                    status.path = Some(source.path);
-                    status.error = Some("the selected asset source cannot be inspected".to_owned());
-                    return finalize(status);
-                };
-                (report, saved.load_warning)
-            }
-            None => match managed_fallback {
-                Some(client) => (
-                    asset_source::inspect_asset_path(&client.jar_path),
-                    saved.load_warning,
-                ),
-                None => {
-                    let mut status =
-                        ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
-                    status.notes.push(
-                        "no Minecraft client assets are selected; download the client JAR or choose a .minecraft root, version folder or client JAR"
-                            .to_owned(),
-                    );
-                    return finalize(status);
-                }
-            },
+        let report = match managed_fallback {
+            Some(client) => Some(asset_source::inspect_asset_path_for(
+                &client.jar_path,
+                &profile,
+            )),
+            None => saved.report,
         };
-
+        let Some(report) = report else {
+            let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
+            status.notes.push(
+                "no Minecraft client assets are selected; download the client JAR or choose a .minecraft root, version folder or client JAR"
+                    .to_owned(),
+            );
+            return finalize(status);
+        };
         let managed = self.inner.client_jars.contains(Path::new(&report.path));
-        let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Missing);
-        status.mode = Some(if managed {
-            ComponentMode::Managed
-        } else {
-            ComponentMode::Manual
-        });
-        status.path = Some(report.path.clone());
-        status.notes.extend(report.warnings.clone());
-        if let Some(warning) = load_warning {
-            status.notes.push(warning);
-        }
-        let Some(version) = version_for_target(&report, target) else {
+        let exact_cache_match = !managed
+            || self
+                .inner
+                .client_jars
+                .find(&target.minecraft_version)
+                .is_ok_and(|client| {
+                    client.is_some_and(|client| client.matches_inspection(&report))
+                });
+        let mut status = asset_source_status(report, managed);
+        if status.state.is_ready() && !exact_cache_match {
             status.state = ComponentState::Incompatible;
-            if let Some(version) = report.version.as_ref() {
-                status.id = Some(assets_id(managed, &version.id));
-                status.version = Some(version.id.clone());
-            }
-            status.error = Some(match report.kind {
-                AssetSelectionKind::ResourcePack => {
-                    "a resource pack is not a client JAR; select a Minecraft installation or client JAR"
-                        .to_owned()
-                }
-                _ => format!(
-                    "the selected asset source has no client JAR for Minecraft {}",
-                    target.minecraft_version
-                ),
-            });
-            return finalize(status);
-        };
-
-        status.id = Some(assets_id(managed, &version.id));
-        status.version = Some(version.id.clone());
-        status.path = Some(version.jar_path.clone());
-        status.bytes = version.jar_bytes;
-        status.notes.extend(version.notes.clone());
-        if !version.jar_present {
-            status.state = ComponentState::Missing;
-            status.error = Some(format!(
-                "the client JAR for Minecraft {} is missing from disk",
-                version.id
-            ));
-            return finalize(status);
+            status.error =
+                Some("the client JAR no longer matches its managed cache manifest".to_owned());
         }
-
-        let id_matches = version.id == target.minecraft_version.as_str()
-            || version.internal_version_id.as_deref() == Some(target.minecraft_version.as_str());
-        if !id_matches {
-            status.state = ComponentState::Incompatible;
-            status.error = Some(format!(
-                "the selected client JAR is Minecraft {}, not {}",
-                version.id, target.minecraft_version
-            ));
-            return finalize(status);
-        }
-        match version.world_version {
-            Some(data_version) if data_version != target.data_version => {
-                status.state = ComponentState::Incompatible;
-                status.error = Some(format!(
-                    "the client JAR declares DataVersion {data_version}, not {}",
-                    target.data_version
-                ));
-                return finalize(status);
-            }
-            None => {
-                status.state = ComponentState::Unverified;
-                status
-                    .notes
-                    .push("the client JAR did not declare a DataVersion".to_owned());
-            }
-            Some(_) => {}
-        }
-        match version.status {
-            VersionStatus::ChecksumMismatch => {
-                status.state = ComponentState::Incompatible;
-                status.error = Some("the client JAR checksum does not match".to_owned());
-                return finalize(status);
-            }
-            VersionStatus::InvalidClientJar
-            | VersionStatus::InvalidMetadata
-            | VersionStatus::MissingMetadata => {
-                status.state = ComponentState::Error;
-                status.error = Some(format!(
-                    "the selected client JAR metadata is invalid: {}",
-                    first_reason(&report)
-                ));
-                return finalize(status);
-            }
-            _ => {}
-        }
-        status.hash = version
-            .actual_sha1
-            .clone()
-            .or_else(|| version.expected_sha1.clone())
-            .map(ComponentHash::sha1);
-        if status.hash.is_none() {
-            status.state = ComponentState::Unverified;
-            status
-                .notes
-                .push("no SHA-1 is available for the client JAR".to_owned());
-        } else {
-            // A manual client JAR is a supported offline path. When its exact version and
-            // DataVersion are confirmed from `version.json`, the local file is usable even
-            // if no launcher metadata was available to compare the SHA-1 against. The
-            // warning stays in the report; a declared mismatch is still rejected above.
-            status.state = ComponentState::Ready;
-            if !version.checksum_verified {
-                status.notes.push(
-                    "the client JAR SHA-1 was not matched against launcher metadata; the local file is used as-is"
-                        .to_owned(),
-                );
-            }
-        }
+        status.notes.extend(saved.load_warning);
         finalize(status)
     }
 
@@ -1417,21 +1362,16 @@ impl ComponentManager {
         finalize(status)
     }
 
-    fn ensure_managed_target(&self, target: &ComponentTarget) -> Result<(), ComponentError> {
-        let managed_version = runtime_manager::target_minecraft_version();
-        let managed_data_version = runtime_manager::target_data_version();
-        if target.minecraft_version.as_str() != managed_version
-            || target.data_version != managed_data_version
-        {
-            return Err(ComponentError::UnsupportedTarget {
+    fn assets_profile(&self, target: &ComponentTarget) -> Result<VersionProfile, ComponentError> {
+        minecraft_version::profile_for_id(&target.profile_id)
+            .filter(|profile| {
+                ComponentTarget::from_profile(profile) == *target && profile.capabilities.assets
+            })
+            .ok_or_else(|| ComponentError::UnsupportedTarget {
                 minecraft_version: target.minecraft_version.to_string(),
                 data_version: target.data_version,
-                detail: format!(
-                    "component validation and downloads are implemented for Minecraft {managed_version} (DataVersion {managed_data_version}); this build cannot provision or validate components for the requested target yet"
-                ),
-            });
-        }
-        Ok(())
+                detail: "client assets require an exact supported profile".to_owned(),
+            })
     }
 
     fn ensure_java_major(&self, target: &ComponentTarget) -> Result<(), ComponentError> {
@@ -1543,23 +1483,49 @@ fn placeholder_assets_status() -> ComponentStatus {
     status
 }
 
-fn version_for_target<'a>(
-    report: &'a AssetPathReport,
-    target: &ComponentTarget,
-) -> Option<&'a VersionReport> {
-    let wanted = target.minecraft_version.as_str();
-    report
-        .version
-        .iter()
-        .chain(
-            report
-                .installation
-                .iter()
-                .flat_map(|installation| installation.versions.iter()),
-        )
-        .find(|version| {
-            version.id == wanted || version.internal_version_id.as_deref() == Some(wanted)
-        })
+fn asset_source_status(report: AssetPathReport, managed: bool) -> ComponentStatus {
+    let mut status = ComponentStatus::new(ComponentKind::Assets, ComponentState::Incompatible);
+    status.mode = Some(if managed {
+        ComponentMode::Managed
+    } else {
+        ComponentMode::Manual
+    });
+    status.path = Some(report.path.clone());
+    status.notes.extend(report.warnings.iter().cloned());
+    let Some(version) = report.version.as_ref() else {
+        status.error = Some(match report.kind {
+            AssetSelectionKind::ResourcePack => {
+                "a resource pack is not a client JAR; select a Minecraft installation or client JAR"
+                    .to_owned()
+            }
+            _ => first_reason(&report),
+        });
+        return finalize(status);
+    };
+    status.id = Some(assets_id(managed, &version.id));
+    status.version = Some(version.id.clone());
+    status.path = Some(version.jar_path.clone());
+    status.bytes = version.jar_bytes;
+    status.notes.extend(version.notes.iter().cloned());
+    if !report.valid {
+        status.state = match version.status {
+            VersionStatus::InvalidClientJar
+            | VersionStatus::InvalidMetadata
+            | VersionStatus::MissingMetadata => ComponentState::Error,
+            VersionStatus::MissingClientJar => ComponentState::Missing,
+            _ => ComponentState::Incompatible,
+        };
+        status.error = Some(first_reason(&report));
+        return finalize(status);
+    }
+    status.hash = version.actual_sha1.clone().map(ComponentHash::sha1);
+    status.state = ComponentState::Ready;
+    if !version.checksum_verified {
+        status.notes.push(
+            "the client JAR SHA-1 was not matched against launcher metadata; the local file is used as-is".to_owned(),
+        );
+    }
+    finalize(status)
 }
 
 fn first_reason(report: &AssetPathReport) -> String {
@@ -2315,15 +2281,15 @@ mod tests {
         let file = root.path.join("client.jar");
         fs::write(&file, "not a client JAR").expect("write fixture");
         let other_target = ComponentTarget {
-            profile_id: "java-classic-1.20.6".to_owned(),
-            minecraft_version: "1.20.6".parse().expect("version"),
-            data_version: 3839,
-            java_major: 21,
+            profile_id: "java-classic-1.13.2".to_owned(),
+            minecraft_version: "1.13.2".parse().expect("version"),
+            data_version: 1519,
+            java_major: 8,
         };
         match manager.relink(ComponentKind::Assets, &file, &other_target) {
             Err(ComponentError::UnsupportedTarget {
                 minecraft_version, ..
-            }) => assert_eq!(minecraft_version, "1.20.6"),
+            }) => assert_eq!(minecraft_version, "1.13.2"),
             other => panic!("expected an unsupported target, got {other:?}"),
         }
         assert!(manager.inner.assets.saved_source().source.is_none());
@@ -2485,6 +2451,74 @@ mod tests {
     }
 
     #[test]
+    fn flattened_client_without_internal_version_is_verified_and_resolved_from_the_cache() {
+        let root = TempDir::new("flattened-assets");
+        let manager = manager(&root);
+        let profile = minecraft_version::profile_for_id("java-classic-1.13.2").unwrap();
+        let version = &profile.minecraft_version;
+        let target = ComponentTarget::from_profile(&profile);
+        let (release, document, jar) =
+            client_jar::test_fixture(version.as_str(), profile.data_version);
+        let installed = manager
+            .inner
+            .client_jars
+            .install_reader(
+                version,
+                &release,
+                &document,
+                Cursor::new(&jar),
+                Some(profile.data_version),
+                &AtomicBool::new(false),
+                &|_| {},
+            )
+            .unwrap();
+        assert_eq!(installed.data_version, profile.data_version);
+        assert_eq!(installed.resource_pack_format, Some(4));
+        assert_eq!(installed.datapack_format, Some(4));
+        let verified = manager
+            .verify_inventory(ComponentKind::Assets, &installed.id)
+            .unwrap();
+        assert!(verified.verified, "{verified:?}");
+
+        manager.use_placeholder_assets(&target).unwrap();
+        let resolved = manager.resolve_managed_assets(&target).unwrap();
+        assert_eq!(resolved.hash.value, installed.sha1);
+
+        let directory = root
+            .path
+            .join("launcher")
+            .join("versions")
+            .join(version.as_str());
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join(format!("{version}.jar")), &jar).unwrap();
+        fs::write(directory.join(format!("{version}.json")), &document).unwrap();
+        let status = manager
+            .relink(ComponentKind::Assets, &root.path.join("launcher"), &target)
+            .unwrap();
+        assert_eq!(status.mode, Some(ComponentMode::Manual));
+        assert_eq!(status.state, ComponentState::Ready);
+        assert_eq!(status.hash.unwrap().value, installed.sha1);
+
+        fs::remove_file(Path::new(&installed.jar_path).with_extension("json")).unwrap();
+        assert!(manager.resolve_managed_assets(&target).is_err());
+        let repaired = manager
+            .inner
+            .client_jars
+            .install_reader(
+                version,
+                &release,
+                &document,
+                Cursor::new(&jar),
+                Some(profile.data_version),
+                &AtomicBool::new(false),
+                &|_| {},
+            )
+            .unwrap();
+        assert_eq!(repaired.sha1, installed.sha1);
+        assert!(manager.resolve_managed_assets(&target).is_ok());
+    }
+
+    #[test]
     fn inventory_verification_checks_managed_assets_and_server_facts() {
         let root = TempDir::new("inventory-verify");
         let manager = manager(&root);
@@ -2588,17 +2622,12 @@ mod tests {
     fn assets_release_refuses_a_target_the_managed_cache_does_not_support() {
         let root = TempDir::new("assets-release-target");
         let manager = manager(&root);
-        let profile = minecraft_version::default_profile();
-        let target = ComponentTarget {
-            profile_id: "java-classic-1.20.6".to_owned(),
-            minecraft_version: "1.20.6".parse().expect("version"),
-            data_version: 3839,
-            ..ComponentTarget::from_profile(&profile)
-        };
+        let profile = minecraft_version::profile_for_id("java-split-26.1").unwrap();
+        let target = ComponentTarget::from_profile(&profile);
         match manager.assets_release(&target) {
             Err(ComponentError::UnsupportedTarget {
                 minecraft_version, ..
-            }) => assert_eq!(minecraft_version, "1.20.6"),
+            }) => assert_eq!(minecraft_version, "26.1"),
             other => panic!("expected an unsupported target, got {other:?}"),
         }
     }

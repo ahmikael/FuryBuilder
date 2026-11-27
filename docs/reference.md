@@ -1,23 +1,18 @@
 # Reference (Windows beta 0.2.0)
 
 Target: Minecraft Java **1.13–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
-the full baseline. Last reviewed: 2026-11-26.
+the full baseline. Last reviewed: 2026-11-27.
 
 The version picker reads the full official Mojang manifest. All 27 classic Anvil releases from
 1.18 through 1.21.11 have a profile that verifies import, block/biome editing, project
 snapshots and same-version export, and enables generation with that release's exact official
-server JAR. The 19 flattened releases from 1.13 through 1.17.1 verify the same import, editing,
-project snapshot and same-version export path, but generation and managed assets remain
-disabled for them until their own stages. Snapshots, split 26.1+ releases and legacy/special
-ids are visible and are refused at project creation rather than guessed.
+server JAR. The 19 flattened releases from 1.13 through 1.17.1 support the same world operations,
+exact-version generation, managed or manual client JARs and resource pack formats 4–7.
+Snapshots, split 26.1+ releases and legacy/special ids are visible and refused at project creation.
 
-The modern subset uses the `read + write subset` support level; **1.21.4** remains the only
-`full` profile. The difference is deliberate: structure `.nbt` interchange and the remaining
-full-only surfaces are verified only for 1.21.4, while every modern classic release supports
-block/biome editing, project snapshots, same-version export and generation with its exact
-server JAR. Flattened profiles are also `read + write subset`: their direct
-`Level.Sections[].Palette`/`BlockStates` and `Level.Biomes` are verified, while generation and
-assets are still unavailable.
+**1.21.4** remains the only `full` profile. The other classic profiles use
+`read + write subset` and support same-version Java structure `.nbt` interchange. The managed
+client cache and catalog cannot yet store major/minor pack formats (1.21.9–1.21.11).
 
 This page combines the supported baseline, the tested reference machine, feature
 dependencies and the maintained limitation list. Format details are in
@@ -89,7 +84,7 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
 - Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
   are covered by `level-type`, Java major, data pack format and `server.properties` tests.
   Representatives of each flattened server series were inspected without launching them.
-  Flattened projects use explicit placeholder textures.
+  Client JARs for all 19 flattened releases were checked through catalog and render asset loading.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.

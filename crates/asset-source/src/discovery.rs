@@ -145,7 +145,7 @@ pub fn discover_roots(roots: Vec<(PathBuf, InstallationSource)>) -> AssetDiscove
                 absolute.display()
             )),
             Ok(metadata) if metadata.is_dir() => {
-                installations.push(scan_root(&absolute, source));
+                installations.push(scan_root(&absolute, source, crate::target_profile()));
             }
             Ok(_) => problems.push(format!(
                 "the Minecraft root is not a directory: {}",
@@ -171,12 +171,24 @@ pub fn discover_roots(roots: Vec<(PathBuf, InstallationSource)>) -> AssetDiscove
 
 /// Scans one explicit root. Used by manual selection and by `discover_roots`.
 pub fn discover_root(root: impl AsRef<Path>) -> InstallationReport {
-    scan_root(root.as_ref(), InstallationSource::Manual)
+    scan_root(
+        root.as_ref(),
+        InstallationSource::Manual,
+        crate::target_profile(),
+    )
 }
 
 /// Classifies and validates an explicitly selected file or folder without writing it.
 pub fn inspect_asset_path(path: impl AsRef<Path>) -> AssetPathReport {
-    let target_version = target_minecraft_version();
+    inspect_asset_path_for(path, crate::target_profile())
+}
+
+/// Inspects a source against the exact project profile.
+pub fn inspect_asset_path_for(
+    path: impl AsRef<Path>,
+    profile: &minecraft_version::VersionProfile,
+) -> AssetPathReport {
+    let target_version = profile.minecraft_version.as_str();
     let path = path.as_ref();
     let display = path.display().to_string();
     let mut report = AssetPathReport {
@@ -217,8 +229,8 @@ pub fn inspect_asset_path(path: impl AsRef<Path>) -> AssetPathReport {
     }
     if metadata.is_file() {
         match extension(path).as_str() {
-            "jar" => inspect_client_jar_selection(path, &mut report),
-            "zip" => inspect_pack_selection(path, &mut report),
+            "jar" => inspect_client_jar_selection(path, profile, &mut report),
+            "zip" => inspect_pack_selection(path, profile, &mut report),
             _ => report.errors.push(
                 "the selected file is neither a client JAR nor a resource pack .zip".to_owned(),
             ),
@@ -232,7 +244,7 @@ pub fn inspect_asset_path(path: impl AsRef<Path>) -> AssetPathReport {
         return report;
     }
     if is_file_no_follow(&path.join("pack.mcmeta")) {
-        inspect_pack_selection(path, &mut report);
+        inspect_pack_selection(path, profile, &mut report);
         return report;
     }
     if is_real_directory(&path.join("versions"))
@@ -242,7 +254,7 @@ pub fn inspect_asset_path(path: impl AsRef<Path>) -> AssetPathReport {
         || is_file_no_follow(&path.join("launcher_profiles_microsoft_store.json"))
     {
         report.kind = AssetSelectionKind::MinecraftRoot;
-        let installation = scan_root(path, InstallationSource::Manual);
+        let installation = scan_root(path, InstallationSource::Manual, profile);
         report.target_match = !installation.compatible_versions.is_empty();
         report.valid = report.target_match;
         if let Some(version) = installation
@@ -270,16 +282,17 @@ pub fn inspect_asset_path(path: impl AsRef<Path>) -> AssetPathReport {
         return report;
     }
     if is_real_directory(&path.join("assets")) {
-        inspect_pack_selection(path, &mut report);
+        inspect_pack_selection(path, profile, &mut report);
         return report;
     }
     if looks_like_version_directory(path) {
         report.kind = AssetSelectionKind::VersionDirectory;
         let root = version_root(path);
-        let version = scan_version(path, root.as_deref());
+        let version = scan_version(path, root.as_deref(), profile);
         report.target_match = is_compatible(version.status);
         report.valid = report.target_match;
         if !report.target_match {
+            report.errors.extend(version.notes.iter().cloned());
             report.errors.push(format!(
                 "this version is not a compatible Minecraft {target_version} client"
             ));
@@ -294,10 +307,30 @@ pub fn inspect_asset_path(path: impl AsRef<Path>) -> AssetPathReport {
     report
 }
 
-fn inspect_client_jar_selection(path: &Path, report: &mut AssetPathReport) {
-    let target_version = target_minecraft_version();
+fn inspect_client_jar_selection(
+    path: &Path,
+    profile: &minecraft_version::VersionProfile,
+    report: &mut AssetPathReport,
+) {
+    let target_version = profile.minecraft_version.as_str();
     report.kind = AssetSelectionKind::ClientJar;
-    let expected = expected_client_for_jar(path);
+    let metadata = match read_version_metadata(&path.with_extension("json")) {
+        Ok(metadata) => metadata,
+        Err(error) => {
+            report.errors.push(error);
+            return;
+        }
+    };
+    if metadata
+        .as_ref()
+        .is_some_and(|metadata| metadata.inherits_from.is_some())
+    {
+        report
+            .errors
+            .push("the selected client JAR belongs to a modded profile".to_owned());
+        return;
+    }
+    let expected = expected_client_from_metadata(metadata.as_ref());
     let inspection = inspect_client_jar(path, &expected);
     for error in &inspection.errors {
         report.errors.push(error.clone());
@@ -305,7 +338,8 @@ fn inspect_client_jar_selection(path: &Path, report: &mut AssetPathReport) {
     for warning in &inspection.warnings {
         report.warnings.push(warning.clone());
     }
-    let version = version_report_from_jar(path, &inspection, &expected, None);
+    let version =
+        version_report_from_jar(path, &inspection, &expected, metadata.is_some(), profile);
     report.target_match = is_compatible(version.status);
     report.valid = report.target_match && report.errors.is_empty();
     if !report.target_match && report.errors.is_empty() {
@@ -316,11 +350,13 @@ fn inspect_client_jar_selection(path: &Path, report: &mut AssetPathReport) {
     report.version = Some(version);
 }
 
-fn inspect_pack_selection(path: &Path, report: &mut AssetPathReport) {
-    let target_version = target_minecraft_version();
-    let target_format = target_resource_pack_format();
+fn inspect_pack_selection(
+    path: &Path,
+    profile: &minecraft_version::VersionProfile,
+    report: &mut AssetPathReport,
+) {
     report.kind = AssetSelectionKind::ResourcePack;
-    let pack = inspect_resource_pack(path, crate::target_profile());
+    let pack = inspect_resource_pack(path, profile);
     report.target_match = pack.compatible;
     report.valid = pack.compatible && pack.errors.is_empty();
     for error in &pack.errors {
@@ -331,14 +367,19 @@ fn inspect_pack_selection(path: &Path, report: &mut AssetPathReport) {
     }
     if !pack.compatible {
         report.errors.push(format!(
-            "the resource pack does not declare support for resource pack format {target_format} (Minecraft {target_version})"
+            "the resource pack does not declare support for Minecraft {}",
+            profile.minecraft_version
         ));
     }
     report.resource_pack = Some(pack);
 }
 
-fn scan_root(root: &Path, source: InstallationSource) -> InstallationReport {
-    let target_version = target_minecraft_version();
+fn scan_root(
+    root: &Path,
+    source: InstallationSource,
+    profile: &minecraft_version::VersionProfile,
+) -> InstallationReport {
+    let target_version = profile.minecraft_version.as_str();
     let versions_dir = root.join("versions");
     let assets_dir = root.join("assets");
     let versions_dir_present = is_real_directory(&versions_dir);
@@ -373,7 +414,7 @@ fn scan_root(root: &Path, source: InstallationSource) -> InstallationReport {
                     if !entry_metadata.is_dir() {
                         continue;
                     }
-                    versions.push(scan_version(&entry_path, Some(root)));
+                    versions.push(scan_version(&entry_path, Some(root), profile));
                 }
             }
             Err(error) => warnings.push(format!("cannot read {}: {error}", versions_dir.display())),
@@ -394,7 +435,7 @@ fn scan_root(root: &Path, source: InstallationSource) -> InstallationReport {
             "Minecraft {target_version} was not found with a verified client JAR in this root"
         ));
     }
-    let resource_packs = scan_resource_packs(&root.join("resourcepacks"), &mut warnings);
+    let resource_packs = scan_resource_packs(&root.join("resourcepacks"), profile, &mut warnings);
     InstallationReport {
         root: root.display().to_string(),
         source,
@@ -408,8 +449,12 @@ fn scan_root(root: &Path, source: InstallationSource) -> InstallationReport {
     }
 }
 
-fn scan_version(version_dir: &Path, root: Option<&Path>) -> VersionReport {
-    let target_version = target_minecraft_version();
+fn scan_version(
+    version_dir: &Path,
+    root: Option<&Path>,
+    profile: &minecraft_version::VersionProfile,
+) -> VersionReport {
+    let target_version = profile.minecraft_version.as_str();
     let id = version_dir
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
@@ -470,8 +515,8 @@ fn scan_version(version_dir: &Path, root: Option<&Path>) -> VersionReport {
     } else {
         VersionStatus::CompatibleUnverified
     };
-    if jar_present && !modded && target_candidate && status != VersionStatus::Modded {
-        status = status_from_jar(&inspection, &expected);
+    if jar_present && !modded && target_candidate && metadata_error.is_none() {
+        status = status_from_jar(&inspection, &expected, profile);
     }
     if metadata.is_none() && jar_present && !modded {
         notes
@@ -534,7 +579,9 @@ fn scan_version(version_dir: &Path, root: Option<&Path>) -> VersionReport {
         checksum_verified: inspection.checksum_verified,
         internal_version_id: inspection.internal_id.clone(),
         world_version: inspection.world_version,
-        resource_pack_format: inspection.resource_pack_format,
+        resource_pack_format: inspection
+            .pack_formats
+            .and_then(|packs| packs.resource.try_into().ok()),
         java_version_from_jar: inspection.java_version,
         asset_index,
         asset_index_present,
@@ -548,21 +595,26 @@ fn version_report_from_jar(
     path: &Path,
     inspection: &ClientJarInspection,
     expected: &ExpectedClient,
-    metadata_present: Option<bool>,
+    metadata_present: bool,
+    profile: &minecraft_version::VersionProfile,
 ) -> VersionReport {
-    let status = status_from_jar(inspection, expected);
+    let status = status_from_jar(inspection, expected, profile);
     VersionReport {
-        id: inspection.internal_id.clone().unwrap_or_else(|| {
-            path.file_stem()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.display().to_string())
-        }),
+        id: inspection
+            .id
+            .clone()
+            .or_else(|| expected.id.clone())
+            .unwrap_or_else(|| {
+                path.file_stem()
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.display().to_string())
+            }),
         version_type: None,
         release_time: None,
         java_major: inspection.java_version,
         inherits_from: None,
         metadata_path: path.display().to_string(),
-        metadata_present: metadata_present.unwrap_or(false),
+        metadata_present,
         jar_path: path.display().to_string(),
         jar_present: true,
         jar_bytes: (inspection.bytes > 0).then_some(inspection.bytes),
@@ -571,7 +623,9 @@ fn version_report_from_jar(
         checksum_verified: inspection.checksum_verified,
         internal_version_id: inspection.internal_id.clone(),
         world_version: inspection.world_version,
-        resource_pack_format: inspection.resource_pack_format,
+        resource_pack_format: inspection
+            .pack_formats
+            .and_then(|packs| packs.resource.try_into().ok()),
         java_version_from_jar: inspection.java_version,
         asset_index: None,
         asset_index_present: false,
@@ -586,58 +640,39 @@ fn version_report_from_jar(
     }
 }
 
-fn status_from_jar(inspection: &ClientJarInspection, expected: &ExpectedClient) -> VersionStatus {
-    let target_version = target_minecraft_version();
-    let target_data_version = target_data_version();
-    if inspection.sha1.is_none() || inspection.internal_id.is_none() {
-        return VersionStatus::InvalidClientJar;
-    }
-    let has_expectation = expected.sha1.is_some() || expected.size.is_some();
-    if has_expectation && !inspection.errors.is_empty() {
+fn status_from_jar(
+    inspection: &ClientJarInspection,
+    expected: &ExpectedClient,
+    profile: &minecraft_version::VersionProfile,
+) -> VersionStatus {
+    if expected.sha1.is_some() && !inspection.checksum_verified
+        || expected.size.is_some_and(|size| size != inspection.bytes)
+    {
         return VersionStatus::ChecksumMismatch;
     }
-    if let Some(world_version) = inspection.world_version {
-        if world_version != target_data_version {
-            return VersionStatus::WorldVersionMismatch;
-        }
+    if inspection.sha1.is_none() || !inspection.errors.is_empty() {
+        return VersionStatus::InvalidClientJar;
     }
-    if let Some(id) = &inspection.internal_id {
-        if id != target_version {
-            return VersionStatus::WrongVersion;
-        }
+    if inspection.id.as_deref() != Some(profile.minecraft_version.as_str()) {
+        return VersionStatus::WrongVersion;
     }
-    if inspection.internal_id.as_deref() == Some(target_version)
-        && inspection.world_version == Some(target_data_version)
+    if inspection.world_version != Some(profile.data_version) {
+        return VersionStatus::WorldVersionMismatch;
+    }
+    if profile.family == minecraft_version::VersionFamily::Flattened
+        && !inspection.pack_formats.is_some_and(|formats| {
+            Some(formats.resource) == profile.resource_pack_format
+                && Some(formats.data) == profile.datapack_format
+                && formats.minors == profile.pack_format_minors
+        })
     {
-        if inspection.checksum_verified {
-            return VersionStatus::Compatible;
-        }
-        if has_expectation {
-            return VersionStatus::ChecksumMismatch;
-        }
-        return VersionStatus::CompatibleUnverified;
+        return VersionStatus::InvalidClientJar;
     }
-    VersionStatus::InvalidClientJar
-}
-
-pub(crate) fn expected_client_for_jar(path: &Path) -> ExpectedClient {
-    let candidates = [
-        path.with_extension("json"),
-        path.parent()
-            .map(|parent| {
-                parent.join(format!(
-                    "{}.json",
-                    path.file_stem().unwrap_or_default().to_string_lossy()
-                ))
-            })
-            .unwrap_or_default(),
-    ];
-    candidates
-        .iter()
-        .find(|candidate| is_file_no_follow(candidate))
-        .and_then(|candidate| read_version_metadata(candidate).ok().flatten())
-        .map(|metadata| expected_client_from_metadata(Some(&metadata)))
-        .unwrap_or_default()
+    if inspection.checksum_verified {
+        VersionStatus::Compatible
+    } else {
+        VersionStatus::CompatibleUnverified
+    }
 }
 
 fn expected_client_from_metadata(metadata: Option<&VersionMetadata>) -> ExpectedClient {
@@ -645,6 +680,7 @@ fn expected_client_from_metadata(metadata: Option<&VersionMetadata>) -> Expected
         .and_then(|metadata| metadata.downloads.as_ref())
         .and_then(|downloads| downloads.client.as_ref());
     ExpectedClient {
+        id: metadata.and_then(|metadata| metadata.id.clone()),
         sha1: client.and_then(|client| client.sha1.clone()),
         size: client.and_then(|client| client.size),
     }
@@ -720,7 +756,11 @@ pub(crate) fn read_version_metadata(path: &Path) -> Result<Option<VersionMetadat
         .map_err(|error| format!("{} is not valid JSON: {error}", path.display()))
 }
 
-fn scan_resource_packs(folder: &Path, warnings: &mut Vec<String>) -> Vec<ResourcePackReport> {
+fn scan_resource_packs(
+    folder: &Path,
+    profile: &minecraft_version::VersionProfile,
+    warnings: &mut Vec<String>,
+) -> Vec<ResourcePackReport> {
     if !is_real_directory(folder) {
         return Vec::new();
     }
@@ -753,7 +793,7 @@ fn scan_resource_packs(folder: &Path, warnings: &mut Vec<String>) -> Vec<Resourc
         }
         let extension = extension(&path);
         if metadata.is_dir() || (metadata.is_file() && extension == "zip") {
-            packs.push(inspect_resource_pack(&path, crate::target_profile()));
+            packs.push(inspect_resource_pack(&path, profile));
         }
     }
     packs.sort_by(|left, right| left.name.cmp(&right.name));

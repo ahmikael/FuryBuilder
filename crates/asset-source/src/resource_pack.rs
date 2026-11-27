@@ -270,12 +270,14 @@ fn inspect_metadata(
         report.status = ResourcePackStatus::IncompatibleFormat;
         return;
     };
+    let uses_supported_formats = profile.family != minecraft_version::VersionFamily::Flattened
+        && pack.get("supported_formats").is_some();
     let (range, target) = if let Some(minors) = profile.pack_format_minors {
         let range = format_bound(pack.get("min_format"), 0)
             .zip(format_bound(pack.get("max_format"), u32::MAX));
         (range, (major, minors.resource))
     } else {
-        let range = if pack.get("supported_formats").is_some() {
+        let range = if uses_supported_formats {
             parse_format_range(pack.get("supported_formats"))
                 .and_then(|(min, max)| Some(((min.try_into().ok()?, 0), (max.try_into().ok()?, 0))))
         } else {
@@ -300,7 +302,7 @@ fn inspect_metadata(
             format!("{}.{}", max.0, max.1)
         };
         report.supported_formats = Some(format!("{}.{}-{upper}", min.0, min.1));
-    } else if pack.get("supported_formats").is_some() {
+    } else if uses_supported_formats {
         report.supported_formats = Some(format!("{}-{}", min.0, max.0));
     }
     let compatible = (min..=max).contains(&target);
@@ -481,5 +483,28 @@ mod tests {
             ),
             ResourcePackStatus::InvalidMetadata,
         );
+    }
+
+    #[test]
+    fn flattened_packs_use_the_profiles_integer_format_even_with_a_modern_range() {
+        for (version, format) in [("1.13.2", 4), ("1.15.2", 5), ("1.16.5", 6), ("1.17.1", 7)] {
+            let profile =
+                minecraft_version::profile_for_version(&version.parse().unwrap()).unwrap();
+            let check = |pack_format: Option<i32>| {
+                let mut report = empty_report(Path::new("test.zip"), ResourcePackKind::Zip);
+                let bytes = serde_json::to_vec(&serde_json::json!({
+                    "pack": { "pack_format": pack_format, "supported_formats": [4, 7] },
+                }))
+                .unwrap();
+                inspect_metadata(&mut report, Some(bytes), &profile);
+                report.status
+            };
+            assert_eq!(check(Some(format)), ResourcePackStatus::Compatible);
+            assert_eq!(
+                check(Some(format + 1)),
+                ResourcePackStatus::IncompatibleFormat
+            );
+            assert_eq!(check(None), ResourcePackStatus::InvalidMetadata);
+        }
     }
 }

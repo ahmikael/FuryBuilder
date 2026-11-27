@@ -845,32 +845,21 @@ fn resolve_project_catalog(
         .client_jar_sha1
         .as_deref()
         .ok_or_else(|| AppError::internal("installed assets have no client JAR SHA-1"))?;
-    let report = manager
-        .status(
-            &component_target_for(target),
-            &ComponentRequirements::EDITOR,
-        )
-        .map_err(component_error)?;
-    let status = report
-        .status(ComponentKind::Assets)
-        .ok_or_else(|| AppError::internal("missing assets status"))?;
-    if !status.state.is_ready() {
-        return Err(AppError::new(
-            ErrorCode::Conflict,
-            status.error.clone().unwrap_or_else(|| {
-                "the project client assets are not available; relink the original client JAR"
-                    .to_owned()
-            }),
-        ));
-    }
-    let path = status
-        .path
-        .as_deref()
-        .ok_or_else(|| AppError::internal("ready client assets have no resolved JAR"))?;
+    let component_target = component_target_for(target);
+    let managed = manager.resolve_managed_assets(&component_target).ok();
+    let resolved = match managed.filter(|client| client.hash.matches(HashAlgorithm::Sha1, expected_sha1)) {
+        Some(client) => client,
+        None => manager
+            .resolve(ComponentKind::Assets, &component_target, &ComponentRequirements::EDITOR)
+            .map_err(|error| AppError::new(
+                ErrorCode::Conflict,
+                format!("the project client assets are not available; relink the original client JAR: {error}"),
+            ))?,
+    };
     let snapshot = catalog
         .catalog(&AssetSourceSetting {
             kind: AssetSelectionKind::ClientJar.as_str().to_owned(),
-            path: path.to_owned(),
+            path: resolved.path,
         })
         .map_err(asset_catalog_error)?;
     if snapshot.catalog_id != expected_id

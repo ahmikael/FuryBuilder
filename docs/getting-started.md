@@ -90,7 +90,9 @@ cargo test --workspace
    required for Vanilla World; the server is requested only for Vanilla. Each card offers a
    managed download, an already-installed component, or a manual file that is validated in
    place. Nothing is downloaded until you press a download button; the card shows the version,
-   size, source host, checksum and status, and the download streams progress with Cancel.
+    size, source host, checksum and status, and the download streams progress with Cancel.
+    For 1.13.x, keep the matching launcher JSON beside a manually selected JAR; the archive
+    itself does not identify its Minecraft release.
    `Placeholder` is an explicit choice: it lets you edit with clearly marked placeholder
    textures, but it never claims a client JAR, checksum or block/item catalog. When a verified
    client JAR is ready, the step shows the catalog's block and item counts (1,097 blocks and

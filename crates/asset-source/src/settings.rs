@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::discovery::inspect_asset_path;
+use crate::discovery::inspect_asset_path_for;
 use crate::types::AssetPathReport;
 
 /// Version of the small settings file that records the selected client asset source.
@@ -95,6 +95,13 @@ impl AssetSettingsStore {
     }
 
     pub fn saved_source(&self) -> SavedAssetSource {
+        self.saved_source_for(crate::target_profile())
+    }
+
+    pub fn saved_source_for(
+        &self,
+        profile: &minecraft_version::VersionProfile,
+    ) -> SavedAssetSource {
         let (source, placeholder) = self
             .state
             .lock()
@@ -102,7 +109,7 @@ impl AssetSettingsStore {
             .unwrap_or_default();
         let report = source
             .as_ref()
-            .map(|source| inspect_asset_path(&source.path));
+            .map(|source| inspect_asset_path_for(&source.path, profile));
         SavedAssetSource {
             source,
             report,

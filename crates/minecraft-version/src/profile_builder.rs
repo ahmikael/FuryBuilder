@@ -93,7 +93,7 @@ pub fn build_profile_from_version_json(
     capabilities: WorldCapabilities,
     notes: Vec<String>,
 ) -> Result<VersionProfile, ProfileBuildError> {
-    if jar.id != version_json.id.as_str() {
+    if jar.minecraft_version()? != version_json.id {
         return Err(ProfileBuildError::IdMismatch {
             expected: version_json.id.to_string(),
             actual: jar.id.clone(),
@@ -130,6 +130,22 @@ pub struct JarVersionJson {
 }
 
 impl JarVersionJson {
+    /// The first 1.14 releases append a build identifier to the release id.
+    pub fn minecraft_version(&self) -> Result<VersionId, ProfileBuildError> {
+        let id = match self.id.split_once(" / ") {
+            Some((release, build))
+                if matches!(release, "1.14" | "1.14.1" | "1.14.2")
+                    && build.len() == 32
+                    && build.bytes().all(|byte| byte.is_ascii_hexdigit()) =>
+            {
+                release
+            }
+            _ => &self.id,
+        };
+        id.parse()
+            .map_err(|_| ProfileBuildError::InvalidVersionId(self.id.clone()))
+    }
+
     /// Returns the exact pack versions without dropping the minor components.
     pub fn pack_formats(&self) -> Result<Option<JarPackFormats>, ProfileBuildError> {
         let (resource, data, minors) = match self.pack_version {
@@ -230,10 +246,7 @@ pub fn read_client_jar_version_json(
     let json = std::str::from_utf8(&bytes)?;
     let version: JarVersionJson = serde_json::from_str(json)?;
 
-    let actual = version
-        .id
-        .parse::<VersionId>()
-        .map_err(|_| ProfileBuildError::InvalidVersionId(version.id.clone()))?;
+    let actual = version.minecraft_version()?;
     if actual != *expected {
         return Err(ProfileBuildError::IdMismatch {
             expected: expected.to_string(),
@@ -529,6 +542,30 @@ mod tests {
 
     use super::*;
     use crate::SupportLevel;
+
+    #[test]
+    fn parses_the_build_id_form_only_for_the_first_1_14_releases() {
+        let build = "5dac5567e13e46bdb0c1d90aa8d8b3f7";
+        let jar = |id: String| JarVersionJson {
+            id,
+            world_version: 1952,
+            pack_version: Some(JarPackVersion::Combined(4)),
+            stable: Some(false),
+        };
+        for release in ["1.14", "1.14.1", "1.14.2"] {
+            assert_eq!(
+                jar(format!("{release} / {build}"))
+                    .minecraft_version()
+                    .unwrap()
+                    .as_str(),
+                release
+            );
+        }
+        assert!(jar(format!("1.14.3 / {build}"))
+            .minecraft_version()
+            .is_err());
+        assert!(jar("1.14 / wrong".to_owned()).minecraft_version().is_err());
+    }
 
     const JAR_VERSION_JSON: &str = r#"{
       "id": "1.21.4",

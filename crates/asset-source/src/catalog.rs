@@ -18,7 +18,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::UNIX_EPOCH;
 
-use minecraft_version::{profile_for_version, JarVersionJson, VersionId};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
@@ -27,8 +26,8 @@ use thiserror::Error;
 use crate::archive::Archive;
 use crate::bundle::normalize_id;
 use crate::catalog_flags::classify_flags;
-use crate::discovery::{inspect_asset_path, read_version_metadata, VersionMetadata};
-use crate::jar::file_sha1;
+use crate::discovery::{inspect_asset_path, read_version_metadata};
+use crate::jar::{client_jar_version, file_sha1};
 use crate::settings::AssetSourceSetting;
 
 /// Version of the catalog DTO written by this builder.
@@ -495,7 +494,8 @@ fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, Cat
         )));
     }
     let mut warnings = Vec::new();
-    let sidecar = adjacent_launcher_metadata(&jar_path)?;
+    let sidecar_path = jar_path.with_extension("json");
+    let sidecar = read_version_metadata(&sidecar_path).map_err(CatalogError::InvalidSource)?;
     let sha1 = file_sha1(&jar_path).map_err(|error| {
         CatalogError::Io(format!(
             "cannot hash the client JAR {}: {error}",
@@ -505,7 +505,7 @@ fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, Cat
     let bytes = metadata.len();
     let declared = sidecar
         .as_ref()
-        .and_then(|sidecar| sidecar.metadata.downloads.as_ref())
+        .and_then(|sidecar| sidecar.downloads.as_ref())
         .and_then(|downloads| downloads.client.as_ref());
     let checksum_verified = if let Some(client) = declared {
         if let Some(expected) = &client.sha1 {
@@ -527,131 +527,35 @@ fn resolve_direct_client_jar(jar_path: PathBuf) -> Result<ResolvedClientJar, Cat
         false
     };
 
-    let internal = read_internal_version(&jar_path)?;
-    let (version, data_version, resource_pack_format, datapack_format) = match internal {
-        Some(version_json) => {
-            if let Some(sidecar_id) = sidecar
-                .as_ref()
-                .and_then(|sidecar| sidecar.metadata.id.as_deref())
-            {
-                if sidecar_id != version_json.id.as_str() {
-                    return Err(CatalogError::VersionJson(format!(
-                        "version.json declares `{}`, not the launcher metadata id `{sidecar_id}`",
-                        version_json.id
-                    )));
-                }
-            }
-            let (resource, data) = version_json
-                .integer_pack_formats()
-                .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
-            (version_json.id, version_json.world_version, resource, data)
-        }
-        None => {
-            let sidecar = sidecar.ok_or_else(|| {
-                CatalogError::Unsupported(format!(
-                    "{} has no internal version.json and no adjacent launcher metadata; select its version folder or a client.jar with client.json",
-                    jar_path.display()
-                ))
-            })?;
-            let id = sidecar.metadata.id.ok_or_else(|| {
-                CatalogError::Unsupported(format!(
-                    "{} has no Minecraft version id",
-                    sidecar.path.display()
-                ))
-            })?;
-            let version_id = id.parse::<VersionId>().map_err(|error| {
-                CatalogError::Unsupported(format!(
-                    "{} declares an invalid Minecraft version id `{id}`: {error}",
-                    sidecar.path.display()
-                ))
-            })?;
-            let profile = profile_for_version(&version_id).ok_or_else(|| {
-                CatalogError::Unsupported(format!(
-                    "Minecraft {id} has no exact built-in profile; a client JAR without version.json cannot be catalogued without one"
-                ))
-            })?;
-            warnings.push(format!(
-                "the client JAR has no internal version.json; exact version, DataVersion and pack formats were resolved from {} and the built-in {} profile",
-                sidecar.path.display(),
-                profile.id
-            ));
-            (
-                profile.minecraft_version.as_str().to_owned(),
-                profile.data_version,
-                profile.resource_pack_format,
-                profile.datapack_format,
-            )
-        }
-    };
+    let launcher_id = sidecar.as_ref().and_then(|metadata| metadata.id.as_deref());
+    let version = client_jar_version(&jar_path, launcher_id, checksum_verified)
+        .map_err(CatalogError::VersionJson)?;
+    if version
+        .pack_formats
+        .is_some_and(|formats| formats.minors.is_some())
+    {
+        return Err(CatalogError::VersionJson(
+            minecraft_version::ProfileBuildError::VersionedPackFormatsUnsupported.to_string(),
+        ));
+    }
+    if version.internal_id.is_none() {
+        warnings.push(format!(
+            "the client JAR has no internal version.json; exact version, DataVersion and pack formats were resolved from {} and the built-in Minecraft {} profile",
+            sidecar_path.display(), version.id
+        ));
+    }
 
     Ok(ResolvedClientJar {
         display_path: jar_path.display().to_string(),
-        version,
-        data_version,
-        resource_pack_format,
-        datapack_format,
+        version: version.id,
+        data_version: version.world_version,
+        resource_pack_format: version.pack_formats.map(|formats| formats.resource),
+        datapack_format: version.pack_formats.map(|formats| formats.data),
         sha1: Some(sha1),
         checksum_verified,
         warnings,
         jar_path,
     })
-}
-
-struct LauncherMetadata {
-    path: PathBuf,
-    metadata: VersionMetadata,
-}
-
-/// Finds launcher metadata next to a client JAR. `client.json` is the managed cache layout;
-/// `<stem>.json` is the launcher's `versions/<id>/<id>.json` layout.
-fn adjacent_launcher_metadata(jar_path: &Path) -> Result<Option<LauncherMetadata>, CatalogError> {
-    let mut candidates = Vec::new();
-    if let Some(stem) = jar_path.file_stem() {
-        candidates.push(jar_path.with_file_name(format!("{}.json", stem.to_string_lossy())));
-    }
-    if jar_path.file_name().and_then(|name| name.to_str()) == Some("client.jar") {
-        candidates.push(jar_path.with_file_name("client.json"));
-    }
-    candidates.dedup();
-    for candidate in candidates {
-        if !is_regular_file(&candidate) {
-            continue;
-        }
-        let metadata = read_version_metadata(&candidate).map_err(|error| {
-            CatalogError::InvalidSource(format!(
-                "adjacent launcher metadata {} is invalid: {error}",
-                candidate.display()
-            ))
-        })?;
-        if let Some(metadata) = metadata {
-            return Ok(Some(LauncherMetadata {
-                path: candidate,
-                metadata,
-            }));
-        }
-    }
-    Ok(None)
-}
-
-fn read_internal_version(jar_path: &Path) -> Result<Option<JarVersionJson>, CatalogError> {
-    let mut archive = Archive::open(jar_path).map_err(|error| {
-        CatalogError::InvalidSource(format!(
-            "cannot read the client JAR {}: {error}",
-            jar_path.display()
-        ))
-    })?;
-    let bytes = match archive.read_entry("version.json", MAX_CATALOG_JSON_BYTES) {
-        Ok(bytes) => bytes,
-        Err(crate::archive::ArchiveError::Missing(_)) => return Ok(None),
-        Err(error) => {
-            return Err(CatalogError::InvalidSource(format!(
-                "cannot read version.json from the client JAR: {error}"
-            )))
-        }
-    };
-    let version = serde_json::from_slice(&bytes)
-        .map_err(|error| CatalogError::VersionJson(error.to_string()))?;
-    Ok(Some(version))
 }
 
 /// A cache hit may come from a different path or verification state of the same JAR. Keep

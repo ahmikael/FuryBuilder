@@ -188,7 +188,7 @@ sections.
 The region reader, import, overlay editing, region writer and same-version export all accept
 these releases. The writer patches only `Level.Sections[].Palette`/`BlockStates` and
 `Level.Biomes`; every other root/`Level`/section tag is compared with the source and must stay
-unchanged. Generated projects on these releases use placeholder textures.
+unchanged.
 
 ## Flattened biome conversion (1.13–1.17)
 
@@ -223,21 +223,23 @@ The flattened releases use the older asset layout: singular
 `data/minecraft/tags/blocks`/`tags/items` folders. The catalog extractor reads this layout as
 well as the modern one.
 
-Client JARs for 1.13.2 through 1.16.5 have no root `version.json`. A directly selected JAR is
-accepted only when adjacent launcher metadata (`<stem>.json`, or `client.json` beside
-`client.jar`) names the exact release and that release has a built-in profile; the profile
-supplies `DataVersion` and the resource/data pack formats, and the catalog records a warning.
-Missing metadata, an invalid id, or an id without an exact profile is refused. When both the
-internal `version.json` and launcher metadata exist, their version ids must agree. A declared
-client SHA-1 or size mismatch is refused for every layout; matching metadata marks the checksum
-verified. A `versions/<id>` folder or managed cache folder resolves its JAR directly, while a
-`.minecraft` root still follows target discovery.
+Official 1.13.x client JARs have no root `version.json`. For those JARs, adjacent launcher
+metadata (`<stem>.json`, or `client.json` beside `client.jar`) must name the exact release and
+match its SHA-1. The built-in profile supplies `DataVersion` and both pack formats.
+Official 1.14–1.14.2 JARs use an internal ID of the form `release / build-hash`; inspection and
+provisioning use the release part and still check `DataVersion`. When both launcher and internal
+metadata exist, the release IDs must agree. A declared size or checksum mismatch is refused.
+Manual `.minecraft` roots and version folders are resolved against the project's exact profile.
+
+Resource packs for flattened releases use a single integer `pack_format`: 4 for 1.13–1.14.4,
+5 for 1.15–1.16.1, 6 for 1.16.2–1.16.5 and 7 for 1.17–1.17.1. Later `supported_formats`
+ranges do not override it. ZIP and folder packs use the same validation and project priority.
 
 Entity render blockstates (`item_frame`, `glow_item_frame`) do not create blocks, empty item
 models and model templates do not create items, and wall-fan variants never gain an item form
 from their base fan. A special item model with only a `particle` texture keeps a `null` icon.
-These rules apply to catalog construction. The flattened catalog is built and pinned as a
-project component only when the P2 asset-pipeline stage enables assets for these releases.
+The exact client JAR is pinned with the project catalog. The viewport and palette atlas load
+textures from that JAR with the project's resource-pack stack applied.
 
 ## Structure `.nbt`
 

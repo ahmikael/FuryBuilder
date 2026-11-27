@@ -27,8 +27,10 @@ formats are not migrated.
 - Vanilla World generation for all 19 flattened classic releases `1.13–1.17.1`, with
   release-specific presets, properties and Java 8 or 16. The 1.13.x server JARs without
   `version.json` are identified by official SHA-1. Minecraft 1.13 uses its natural spawn
-  area; 1.13.1 and later also support `/forceload`. Flattened projects use placeholder
-  textures while managed assets are unavailable.
+  area; 1.13.1 and later also support `/forceload`.
+- Official client JAR downloads and manual relinking for Minecraft 1.13–1.17.1. The verified
+  JAR supplies the project catalog, palette atlas and viewport textures. Resource packs must
+  declare the project's exact integer `pack_format` (4–7).
 - Java structure `.nbt` interchange for all 19 flattened classic releases. A new project
   uses the file's exact `DataVersion`, insertion requires a matching project, and the
   default placement Y uses the selected dimension's build bounds.

@@ -75,9 +75,10 @@ impl ReleaseFacts {
                     self.version
                 ),
                 format!(
-                    "Vanilla generation uses the official Minecraft {} server JAR and Java {}. Choose placeholder textures for the generated project.",
+                    "Vanilla generation uses the official Minecraft {} server JAR and Java {}.",
                     self.version, self.java_major
                 ),
+                "The exact client JAR supplies the block and item catalog and textures.".to_owned(),
             ];
             if self.version == "1.13" {
                 notes.push(
@@ -102,7 +103,7 @@ impl ReleaseFacts {
                 generate: true,
                 assets: true,
             }
-        } else if modern_classic {
+        } else if modern_classic || flattened_classic {
             WorldCapabilities {
                 support_level: SupportLevel::ReadWriteSubset,
                 read: true,
@@ -111,16 +112,6 @@ impl ReleaseFacts {
                 export: true,
                 generate: true,
                 assets: true,
-            }
-        } else if flattened_classic {
-            WorldCapabilities {
-                support_level: SupportLevel::ReadWriteSubset,
-                read: true,
-                edit: true,
-                write: true,
-                export: true,
-                generate: true,
-                assets: false,
             }
         } else {
             WorldCapabilities {
@@ -692,7 +683,7 @@ mod tests {
             assert!(profile.capabilities.write, "{id}");
             assert!(profile.capabilities.export, "{id}");
             assert!(profile.capabilities.generate, "{id}");
-            assert!(!profile.capabilities.assets, "{id}");
+            assert!(profile.capabilities.assets, "{id}");
             assert!(profile.structure_formats.java_nbt.import, "{id}");
             assert!(profile.structure_formats.java_nbt.export, "{id}");
             assert!(profile.capabilities.validate().is_ok(), "{id}");

@@ -105,7 +105,8 @@ keep a `null` icon instead of borrowing a `particle` placeholder.
 - `catalogId` and `catalogHash`;
 - exact Minecraft version, `DataVersion`, client JAR SHA-1 and pack formats. The pack formats
   come from the internal `version.json`; when it is absent they come from the exact built-in
-  profile named by adjacent launcher metadata, and the snapshot carries an explicit warning;
+  flattened profile named by SHA-1-matched adjacent launcher metadata, and the snapshot carries
+  an explicit warning;
 - one sorted `entries` list and atlas definitions;
 - one `CatalogEntry` per id, merging its block and item forms. An entry with block states
   has `states`; an entry with an item form has `itemForm`; a normal block with an item has
@@ -132,8 +133,8 @@ keep a `null` icon instead of borrowing a `particle` placeholder.
 `catalogHash` is SHA-256 over the canonical entries/atlases, the version, the
 `DataVersion` and the client JAR SHA-1. `catalogId` is
 `java-<version>-<first 16 hex of catalogHash>`. `CatalogBuilder` resolves the client JAR and
-reads its embedded `version.json`; the service cache is process-local and keyed exactly by
-exact version, client JAR SHA-1 and catalog schema. Path, size and modification time are not
+resolves its version identity; the service cache is process-local and keyed by exact version,
+client JAR SHA-1 and catalog schema. Path, size and modification time are not
 identity, so moving or copying a byte-identical JAR reuses the same snapshot and updates only
 the reported display path. A JAR without a readable SHA-1 falls back to its path, size and
 modification time. A project pins `catalogId` and `catalogHash` in its schema-2 manifest.

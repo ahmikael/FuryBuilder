@@ -8,12 +8,11 @@ use sha2::{Digest, Sha256};
 
 use crate::archive::Archive;
 use crate::bundle::BundleError;
-use crate::discovery::{expected_client_for_jar, inspect_asset_path};
-use crate::jar::inspect_client_jar;
+use crate::discovery::inspect_asset_path_for;
 use crate::pack_store::{require_compatible, PackIssue, ResourcePackInput};
 use crate::resource_pack::{inspect_resource_pack, is_link};
 use crate::settings::AssetSourceSetting;
-use crate::{VersionStatus, MAX_RESOURCE_PACKS};
+use crate::MAX_RESOURCE_PACKS;
 
 const MAX_JSON_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_TEXTURE_BYTES: u64 = 4 * 1024 * 1024;
@@ -83,75 +82,25 @@ impl ResourceStack {
         let mut source_pack = None;
         if let Some(source) = source {
             match source.kind.as_str() {
-                "minecraft_root" | "version_directory" => {
-                    let report = inspect_asset_path(&source.path);
-                    let label = if source.kind == "version_directory" {
-                        "version folder"
-                    } else {
-                        "Minecraft root"
-                    };
-                    if !report.valid {
+                "minecraft_root" | "version_directory" | "client_jar" => {
+                    let report = inspect_asset_path_for(&source.path, profile);
+                    if !report.valid || report.kind.as_str() != source.kind {
                         return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected {label} is not usable: {}",
-                            report.errors.first().cloned().unwrap_or_else(|| {
-                                format!(
-                                    "no verified {} client",
-                                    crate::target::target_minecraft_version()
-                                )
-                            })
-                        )));
-                    }
-                    let version = report.version.as_ref().ok_or_else(|| {
-                        BundleError::UnsupportedFormat(format!(
-                            "the selected {label} has no verified {} client JAR",
-                            crate::target::target_minecraft_version()
-                        ))
-                    })?;
-                    if version.internal_version_id.as_deref()
-                        != Some(profile.minecraft_version.as_str())
-                        || version.world_version != Some(profile.data_version)
-                    {
-                        return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected {label} does not contain the requested Minecraft {} client",
-                            profile.minecraft_version
-                        )));
-                    }
-                    if !matches!(
-                        version.status,
-                        VersionStatus::Compatible | VersionStatus::CompatibleUnverified
-                    ) {
-                        return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected {label}'s client JAR status is {}",
-                            version.status.as_str()
-                        )));
-                    }
-                    if version.status == VersionStatus::CompatibleUnverified {
-                        stack.warnings.push(format!(
-                            "client JAR {} is internally consistent but its SHA-1 was not verified",
-                            version.jar_path
-                        ));
-                    }
-                    stack.base_jar_path = Some(PathBuf::from(&version.jar_path));
-                    stack.base_jar_sha1 = version.actual_sha1.clone();
-                }
-                "client_jar" => {
-                    let path = Path::new(&source.path);
-                    let version = inspect_client_jar(path, &expected_client_for_jar(path));
-                    if !version.errors.is_empty()
-                        || version.internal_id.as_deref()
-                            != Some(profile.minecraft_version.as_str())
-                        || version.world_version != Some(profile.data_version)
-                    {
-                        return Err(BundleError::UnsupportedFormat(format!(
-                            "the selected client JAR is not usable: {}",
-                            version.errors.first().cloned().unwrap_or_else(|| format!(
+                            "the selected client source is not usable: {}",
+                            report.errors.first().cloned().unwrap_or_else(|| format!(
                                 "expected Minecraft {}",
                                 profile.minecraft_version
                             ))
                         )));
                     }
-                    stack.base_jar_path = Some(path.to_path_buf());
-                    stack.base_jar_sha1 = version.sha1;
+                    let version = report.version.as_ref().ok_or_else(|| {
+                        BundleError::UnsupportedFormat(
+                            "the selected source has no client JAR".to_owned(),
+                        )
+                    })?;
+                    stack.base_jar_path = Some(PathBuf::from(&version.jar_path));
+                    stack.base_jar_sha1 = version.actual_sha1.clone();
+                    stack.warnings.extend(version.notes.iter().cloned());
                     if !version.checksum_verified {
                         stack.warnings.push(
                             "client JAR SHA-1 was not verified against launcher metadata"

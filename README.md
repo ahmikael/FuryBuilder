@@ -99,8 +99,9 @@ The supported baseline, tested machine and maintained limitation list are in
 - Windows-first beta; browser `pnpm dev` is preview only and cannot edit, save or serve MCP.
 - Classic Anvil Java 1.13–1.21.11 is supported for import, block/biome editing, project
   snapshots, same-version export and generation with the exact official server JAR.
-  Generated 1.13–1.17.1 projects use explicit placeholder textures. Minecraft 1.13
-  generates only around the natural spawn without a player.
+  Java 1.13–1.17.1 projects can use verified client JARs for catalogs and textures,
+  with optional resource packs in formats 4–7. Minecraft 1.13 generates only around the
+  natural spawn without a player.
   Snapshots, split 26.1+, legacy worlds, Bedrock and custom dimensions are refused; a bare
   `.mca`/`region/` is not a complete world.
 - Imported-world edits cover block states and 4x4x4 biomes. Derived data and block entities are

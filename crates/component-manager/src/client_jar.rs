@@ -29,9 +29,9 @@ use download_pipeline::{
     PipelineError,
 };
 use minecraft_version::{
-    fetch_version_json_document_with, read_client_jar_version_json, CatalogError, ManifestEntry,
-    ManifestVersionType, ProfileBuildError, VersionCatalog, VersionId, VersionJson,
-    VersionJsonError, DEFAULT_MANIFEST_TTL,
+    fetch_version_json_document_with, profile_for_version, read_client_jar_version_json,
+    CatalogError, ManifestEntry, ManifestVersionType, ProfileBuildError, VersionCatalog,
+    VersionFamily, VersionId, VersionJson, VersionJsonError, DEFAULT_MANIFEST_TTL,
 };
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
@@ -87,6 +87,17 @@ impl ManagedClientJar {
     /// Logical component id used by the facade and project manifest.
     pub fn component_id(&self) -> String {
         format!("assets-managed-{}", self.version)
+    }
+
+    pub(crate) fn matches_inspection(&self, report: &asset_source::AssetPathReport) -> bool {
+        report.valid
+            && report.version.as_ref().is_some_and(|facts| {
+                facts.checksum_verified
+                    && facts.id == self.version
+                    && facts.actual_sha1.as_deref() == Some(self.sha1.as_str())
+                    && facts.jar_bytes == Some(self.size)
+                    && facts.world_version == Some(self.data_version)
+            })
     }
 }
 
@@ -267,14 +278,10 @@ impl ClientJarManager {
 
         if let Some(existing) = self.find(version)? {
             accept_existing(&existing, expected_sha1, expected_data_version)?;
-            if sha1_file(Path::new(&existing.jar_path))
-                .is_ok_and(|actual| actual.eq_ignore_ascii_case(&existing.sha1))
-            {
+            if cached_client_matches(&existing, version) {
                 return Ok(existing);
             }
-            // The cache no longer matches its own verified manifest. Remove it and
-            // download a fresh copy rather than publishing corrupt bytes.
-            let _ = self.cache.remove(version);
+            // Keep the old entry until its replacement has been downloaded and verified.
         }
 
         let resolved = self.resolve(version)?;
@@ -336,6 +343,12 @@ impl ClientJarManager {
     }
 
     fn resolve(&self, version: &VersionId) -> Result<ResolvedClientJarRelease, ClientJarError> {
+        if profile_for_version(version).is_some_and(|profile| profile.pack_format_minors.is_some())
+        {
+            return Err(ClientJarError::Unavailable(format!(
+                "the managed client cache cannot store Minecraft {version}'s major/minor pack formats"
+            )));
+        }
         let catalog = VersionCatalog::load_with_client(
             &self.manifest_cache,
             DEFAULT_MANIFEST_TTL,
@@ -400,33 +413,76 @@ impl ClientJarManager {
         if cancel.load(Ordering::Relaxed) {
             return Err(ClientJarError::Cancelled);
         }
-        let internal = read_client_jar_version_json(staged.jar_path(), version)?;
+        let jar_path = staged.jar_path();
+        let profile = profile_for_version(version);
+        fs::write(staged.directory().join(VERSION_METADATA_NAME), version_json).map_err(
+            |error| ClientJarError::Io(format!("cannot write the verified version JSON: {error}")),
+        )?;
+        let (data_version, resource_pack_format, datapack_format) =
+            match read_client_jar_version_json(&jar_path, version) {
+                Ok(internal) => {
+                    let (resources, data) = internal.integer_pack_formats()?;
+                    (internal.world_version, resources, data)
+                }
+                Err(ProfileBuildError::MissingVersionJson) => {
+                    let profile = profile
+                        .as_ref()
+                        .filter(|profile| profile.family == VersionFamily::Flattened)
+                        .ok_or(ProfileBuildError::MissingVersionJson)?;
+                    let report = asset_source::inspect_asset_path_for(&jar_path, profile);
+                    if !report.valid
+                        || !report.version.as_ref().is_some_and(|facts| {
+                            facts.checksum_verified
+                                && facts.actual_sha1.as_deref() == Some(release.sha1.as_str())
+                        })
+                    {
+                        return Err(ClientJarError::Invalid(format!(
+                            "cannot verify the version of the downloaded Minecraft {version} client JAR: {}",
+                            report.errors.join("; ")
+                        )));
+                    }
+                    (
+                        profile.data_version,
+                        profile.resource_pack_format,
+                        profile.datapack_format,
+                    )
+                }
+                Err(error) => return Err(error.into()),
+            };
         if let Some(expected) = expected_data_version {
-            if internal.world_version != expected {
+            if data_version != expected {
                 return Err(ClientJarError::Invalid(format!(
-                    "the downloaded client JAR for Minecraft {version} declares DataVersion {}, not {expected}",
-                    internal.world_version
+                    "the downloaded client JAR for Minecraft {version} has DataVersion {data_version}, not {expected}"
                 )));
             }
         }
-        let (resource_pack_format, datapack_format) = internal.integer_pack_formats()?;
+        if let Some(profile) = profile.filter(|profile| profile.family == VersionFamily::Flattened)
+        {
+            if resource_pack_format != profile.resource_pack_format
+                || datapack_format != profile.datapack_format
+            {
+                return Err(ClientJarError::Invalid(format!(
+                    "the downloaded Minecraft {version} client JAR pack formats do not match its profile"
+                )));
+            }
+        }
         if cancel.load(Ordering::Relaxed) {
             return Err(ClientJarError::Cancelled);
         }
         self.cache.publish(
             staged,
+            version,
             ClientJarManifest {
                 version: version.as_str().to_owned(),
                 sha1: release.sha1.clone(),
                 size: release.size,
-                data_version: internal.world_version,
+                data_version,
                 resource_pack_format,
                 datapack_format,
                 source_url: release.download_url.clone(),
                 version_json_url: release.version_json_url.clone(),
                 version_json_sha1: release.version_json_sha1.clone(),
             },
-            version_json,
         )
     }
 }
@@ -520,6 +576,15 @@ fn accept_existing(
         }
     }
     Ok(())
+}
+
+fn cached_client_matches(client: &ManagedClientJar, version: &VersionId) -> bool {
+    if let Some(profile) = profile_for_version(version) {
+        let report = asset_source::inspect_asset_path_for(&client.jar_path, &profile);
+        return client.matches_inspection(&report);
+    }
+    sha1_file(Path::new(&client.jar_path))
+        .is_ok_and(|actual| actual.eq_ignore_ascii_case(&client.sha1))
 }
 
 /// Streams a cache file through SHA-1 without loading it into memory.
@@ -795,31 +860,11 @@ impl ManagedClientJarCache {
     fn publish(
         &self,
         staged: StagedClientJar,
+        version: &VersionId,
         manifest: ClientJarManifest,
-        version_json: &[u8],
     ) -> Result<ManagedClientJar, ClientJarError> {
         validate_version_name(&manifest.version)?;
-        let destination = self.root.join(&manifest.version);
-        if destination.exists() {
-            let existing = self
-                .list()?
-                .clients
-                .into_iter()
-                .find(|client| client.version == manifest.version);
-            return match existing {
-                Some(existing) if existing.sha1.eq_ignore_ascii_case(&manifest.sha1) => {
-                    Ok(existing)
-                }
-                Some(_) => Err(ClientJarError::Invalid(format!(
-                    "managed assets for Minecraft {} are already installed with a different checksum",
-                    manifest.version
-                ))),
-                None => Err(ClientJarError::Invalid(format!(
-                    "{} already exists and is not valid managed assets",
-                    destination.display()
-                ))),
-            };
-        }
+        let destination = self.root.join(version.as_str());
         let jar_path = staged.jar_path();
         let jar_size = fs::symlink_metadata(&jar_path)
             .map_err(|error| ClientJarError::Io(format!("{}: {error}", jar_path.display())))?
@@ -830,9 +875,6 @@ impl ManagedClientJarCache {
                 actual: jar_size,
             });
         }
-        fs::write(staged.directory().join(VERSION_METADATA_NAME), version_json).map_err(
-            |error| ClientJarError::Io(format!("cannot write the verified version JSON: {error}")),
-        )?;
         let stored = StoredClientJarManifest {
             schema_version: ASSET_MANIFEST_SCHEMA_VERSION,
             version: manifest.version.clone(),
@@ -851,6 +893,20 @@ impl ManagedClientJarCache {
         fs::write(staged.directory().join(MANIFEST_NAME), bytes).map_err(|error| {
             ClientJarError::Io(format!("cannot write the assets manifest: {error}"))
         })?;
+        if let Some(previous) = owned_manifest(&destination, version)? {
+            if !previous.sha1.eq_ignore_ascii_case(&manifest.sha1) {
+                return Err(ClientJarError::Checksum {
+                    expected: previous.sha1,
+                    actual: manifest.sha1,
+                });
+            }
+            if let Some(existing) = self.list()?.clients.into_iter().find(|client| {
+                client.version == version.as_str() && cached_client_matches(client, version)
+            }) {
+                return Ok(existing);
+            }
+            self.remove(version)?;
+        }
         download_pipeline::publish_directory(staged.directory(), &destination)
             .map_err(ClientJarError::from)?;
         Ok(ManagedClientJar {
@@ -871,23 +927,8 @@ impl ManagedClientJarCache {
     fn remove(&self, version: &VersionId) -> Result<bool, ClientJarError> {
         validate_version_name(version.as_str())?;
         let directory = self.root.join(version.as_str());
-        if !directory.exists() {
+        if owned_manifest(&directory, version)?.is_none() {
             return Ok(false);
-        }
-        let manifest_path = directory.join(MANIFEST_NAME);
-        if !manifest_path.is_file() {
-            return Err(ClientJarError::Invalid(format!(
-                "{} is not a FuryBuilder-managed assets directory",
-                directory.display()
-            )));
-        }
-        let manifest = read_manifest(&manifest_path).map_err(ClientJarError::Invalid)?;
-        if manifest.version != version.as_str() {
-            return Err(ClientJarError::Invalid(format!(
-                "{} declares Minecraft {}, not {version}",
-                manifest_path.display(),
-                manifest.version
-            )));
         }
         let root = fs::canonicalize(&self.root).map_err(|error| {
             ClientJarError::Io(format!("cannot resolve {}: {error}", self.root.display()))
@@ -953,6 +994,44 @@ impl ManagedClientJarCache {
     }
 }
 
+fn owned_manifest(
+    directory: &Path,
+    version: &VersionId,
+) -> Result<Option<StoredClientJarManifest>, ClientJarError> {
+    match fs::symlink_metadata(directory) {
+        Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+        Ok(_) => {
+            return Err(ClientJarError::Invalid(format!(
+                "{} is not a regular managed assets directory",
+                directory.display()
+            )));
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(ClientJarError::Io(format!(
+                "cannot inspect {}: {error}",
+                directory.display()
+            )));
+        }
+    }
+    let manifest_path = directory.join(MANIFEST_NAME);
+    if !fs::symlink_metadata(&manifest_path).is_ok_and(|metadata| metadata.is_file()) {
+        return Err(ClientJarError::Invalid(format!(
+            "{} is not a FuryBuilder-managed assets directory",
+            directory.display()
+        )));
+    }
+    let manifest = read_manifest(&manifest_path).map_err(ClientJarError::Invalid)?;
+    if manifest.version != version.as_str() {
+        return Err(ClientJarError::Invalid(format!(
+            "{} declares Minecraft {}, not {version}",
+            manifest_path.display(),
+            manifest.version
+        )));
+    }
+    Ok(Some(manifest))
+}
+
 fn read_manifest(path: &Path) -> Result<StoredClientJarManifest, String> {
     let bytes =
         fs::read(path).map_err(|error| format!("cannot read {}: {error}", path.display()))?;
@@ -1016,12 +1095,14 @@ pub(crate) fn test_fixture(
         let mut zip = zip::ZipWriter::new(&mut buffer);
         let options =
             SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-        zip.start_file("version.json", options)
-            .expect("start version.json");
-        let json = format!(
-            r#"{{"id":"{version}","world_version":{data_version},"pack_version":{{"resource":46,"data":61}},"stable":true}}"#
-        );
-        zip.write_all(json.as_bytes()).expect("write version.json");
+        if version != "1.13.2" {
+            zip.start_file("version.json", options)
+                .expect("start version.json");
+            let json = format!(
+                r#"{{"id":"{version}","world_version":{data_version},"pack_version":{{"resource":46,"data":61}},"stable":true}}"#
+            );
+            zip.write_all(json.as_bytes()).expect("write version.json");
+        }
         zip.start_file("assets/minecraft/blockstates/stone.json", options)
             .expect("start blockstate");
         zip.write_all(br#"{"variants":{"":{"model":"minecraft:block/stone"}}}"#)

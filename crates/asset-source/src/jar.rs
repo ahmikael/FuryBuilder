@@ -2,7 +2,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use serde_json::Value;
+use minecraft_version::{profile_for_version, JarPackFormats, JarVersionJson, VersionFamily};
+use serde::Deserialize;
 use sha1::{Digest, Sha1};
 
 use crate::archive::Archive;
@@ -12,6 +13,7 @@ const HASH_BUFFER_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub(crate) struct ExpectedClient {
+    pub id: Option<String>,
     pub sha1: Option<String>,
     pub size: Option<u64>,
 }
@@ -21,12 +23,91 @@ pub(crate) struct ClientJarInspection {
     pub bytes: u64,
     pub sha1: Option<String>,
     pub checksum_verified: bool,
+    pub id: Option<String>,
     pub internal_id: Option<String>,
     pub world_version: Option<i32>,
-    pub resource_pack_format: Option<i32>,
+    pub pack_formats: Option<JarPackFormats>,
     pub java_version: Option<u32>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
+}
+
+pub(crate) struct ClientJarVersion {
+    pub id: String,
+    pub world_version: i32,
+    pub pack_formats: Option<JarPackFormats>,
+    pub java_version: Option<u32>,
+    pub internal_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct InternalVersion {
+    #[serde(flatten)]
+    version: JarVersionJson,
+    java_version: Option<u32>,
+}
+
+pub(crate) fn client_jar_version(
+    path: &Path,
+    launcher_id: Option<&str>,
+    checksum_verified: bool,
+) -> Result<ClientJarVersion, String> {
+    let mut archive =
+        Archive::open(path).map_err(|error| format!("cannot read the client JAR: {error}"))?;
+    let bytes = match archive.read_entry("version.json", MAX_VERSION_JSON_BYTES) {
+        Ok(bytes) => bytes,
+        Err(crate::archive::ArchiveError::Missing(_)) => {
+            let id = launcher_id.ok_or("the client JAR has no internal version.json and no adjacent launcher metadata naming the version")?;
+            let profile = id.parse().ok().and_then(|version| profile_for_version(&version))
+                .filter(|profile| profile.family == VersionFamily::Flattened)
+                .ok_or_else(|| format!("Minecraft {id} has no exact built-in profile that supports a client JAR without version.json"))?;
+            if !checksum_verified {
+                return Err("a client JAR without version.json must match the adjacent launcher metadata SHA-1".to_owned());
+            }
+            return Ok(ClientJarVersion {
+                id: profile.minecraft_version.to_string(),
+                world_version: profile.data_version,
+                pack_formats: profile
+                    .resource_pack_format
+                    .zip(profile.datapack_format)
+                    .map(|(resource, data)| JarPackFormats {
+                        resource,
+                        data,
+                        minors: profile.pack_format_minors,
+                    }),
+                java_version: None,
+                internal_id: None,
+            });
+        }
+        Err(error) => return Err(format!("cannot read the client JAR version.json: {error}")),
+    };
+    let InternalVersion {
+        version,
+        java_version,
+    } = serde_json::from_slice(&bytes)
+        .map_err(|error| format!("client JAR version.json is invalid: {error}"))?;
+    let id = version
+        .minecraft_version()
+        .map_err(|error| error.to_string())?;
+    if let Some(launcher_id) = launcher_id {
+        if launcher_id != id.as_str() {
+            return Err(format!(
+                "version.json declares `{}`, not the launcher metadata id `{launcher_id}`",
+                version.id
+            ));
+        }
+    }
+    if version.world_version <= 0 {
+        return Err("client JAR version.json has no positive world_version".to_owned());
+    }
+    let pack_formats = version.pack_formats().map_err(|error| error.to_string())?;
+    Ok(ClientJarVersion {
+        id: id.to_string(),
+        world_version: version.world_version,
+        pack_formats,
+        java_version,
+        internal_id: Some(version.id),
+    })
 }
 
 /// Hashes a file with SHA-1, streaming and without loading it into memory.
@@ -110,67 +191,21 @@ pub(crate) fn inspect_client_jar(path: &Path, expected: &ExpectedClient) -> Clie
             .push("launcher metadata does not declare a client JAR SHA-1".to_owned());
     }
 
-    match Archive::open(path) {
-        Ok(mut archive) => {
-            if let Some(entry) = archive
-                .entries()
-                .iter()
-                .find(|entry| entry.name == "version.json")
-            {
-                if entry.uncompressed_size > MAX_VERSION_JSON_BYTES {
-                    report
-                        .errors
-                        .push("the client JAR version.json is too large".to_owned());
-                } else {
-                    match archive.read_entry("version.json", MAX_VERSION_JSON_BYTES) {
-                        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
-                            Ok(value) => {
-                                report.internal_id = value
-                                    .get("id")
-                                    .and_then(Value::as_str)
-                                    .map(ToOwned::to_owned);
-                                report.world_version = value
-                                    .get("world_version")
-                                    .and_then(Value::as_i64)
-                                    .and_then(|value| i32::try_from(value).ok());
-                                report.resource_pack_format = value
-                                    .get("pack_version")
-                                    .and_then(|pack| pack.get("resource"))
-                                    .and_then(Value::as_i64)
-                                    .and_then(|value| i32::try_from(value).ok());
-                                report.java_version = value
-                                    .get("java_version")
-                                    .and_then(Value::as_i64)
-                                    .and_then(|value| u32::try_from(value).ok());
-                                if report.internal_id.is_none() {
-                                    report
-                                        .warnings
-                                        .push("client JAR version.json has no id".to_owned());
-                                }
-                                if report.world_version.is_none() {
-                                    report.warnings.push(
-                                        "client JAR version.json has no world_version".to_owned(),
-                                    );
-                                }
-                            }
-                            Err(error) => report.errors.push(format!(
-                                "client JAR version.json is not valid JSON: {error}"
-                            )),
-                        },
-                        Err(error) => report.errors.push(format!(
-                            "client JAR version.json cannot be decompressed: {error}"
-                        )),
-                    }
-                }
-            } else {
-                report.errors.push(
-                    "the JAR has no root version.json; it is not a Minecraft client JAR".to_owned(),
-                );
+    match client_jar_version(path, expected.id.as_deref(), report.checksum_verified) {
+        Ok(version) => {
+            report.id = Some(version.id.clone());
+            report.world_version = Some(version.world_version);
+            report.pack_formats = version.pack_formats;
+            report.java_version = version.java_version;
+            if version.internal_id.is_none() {
+                report.warnings.push(format!(
+                    "the client JAR has no internal version.json; using the exact Minecraft {} profile and matching launcher checksum",
+                    version.id
+                ));
             }
+            report.internal_id = version.internal_id;
         }
-        Err(error) => report
-            .errors
-            .push(format!("the JAR is not a readable zip archive: {error}")),
+        Err(error) => report.errors.push(error),
     }
     report
 }

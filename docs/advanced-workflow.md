@@ -252,15 +252,11 @@ the Temurin archive — goes through `crates/download-pipeline`:
 ### Minecraft assets
 
 The project wizard's **Components** step discovers conventional launcher roots and launcher
-profiles, or accepts a manual `.minecraft` folder, a `versions/<id>` folder, a `client.jar` or
-a resource pack. A client JAR is accepted after its exact Minecraft version and `DataVersion`
-agree with the selected profile. When launcher metadata is present, the declared SHA-1 and size
-are checked too; a declared mismatch is refused, while a correct JAR without metadata is used
-with a warning. Catalog construction additionally resolves flattened 1.13.2–1.16.5 JARs, which
-have no root `version.json`, from adjacent launcher metadata and the exact built-in profile;
-`DataVersion` and pack formats come from that profile and the catalog records a warning. This
-backend path does not enable project creation for those releases until their world adapter is
-verified.
+profiles, or accepts a manual `.minecraft` folder, a `versions/<id>` folder or a `client.jar`.
+The exact Minecraft version and `DataVersion` must agree with the selected profile, and a
+declared SHA-1 or size mismatch is refused. For 1.13.x JARs without internal version metadata,
+the adjacent launcher JSON must name the release and match the JAR's SHA-1. The project pins
+the JAR hash and catalog so another project's selected client cannot replace them.
 
 Configured resource packs are applied in a saved priority order (up to 16). Blockstates,
 parent models and PNG textures are resolved into a cached atlas. A missing asset shows a
