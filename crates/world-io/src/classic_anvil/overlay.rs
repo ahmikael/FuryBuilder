@@ -881,6 +881,17 @@ impl WorldOverlay {
             )
             .map(Some);
         }
+        if self.world.profile.family == VersionFamily::Numeric {
+            return super::numeric_chunk::encode_chunk(
+                &source.nbt,
+                dimension,
+                &self.world.profile,
+                &source_decoded,
+                &edits.sections,
+                &edits.biomes,
+            )
+            .map(Some);
+        }
         let format = ClassicChunkFormat::for_profile(&self.world.profile)?;
         let mut patched = source.nbt.clone();
 

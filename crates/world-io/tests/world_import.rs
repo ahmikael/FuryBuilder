@@ -376,6 +376,118 @@ fn flattened_chunk_nbt(
     )
 }
 
+fn set_nibble(bytes: &mut [u8], index: usize, value: u8) {
+    let byte = &mut bytes[index >> 1];
+    if index & 1 == 0 {
+        *byte = (*byte & 0xf0) | (value & 0x0f);
+    } else {
+        *byte = (*byte & 0x0f) | ((value & 0x0f) << 4);
+    }
+}
+
+fn numeric_section(y: i8, blocks: &[(usize, u16, u8)]) -> NbtValue {
+    let mut block_ids = vec![0u8; 4096];
+    let mut data = vec![0u8; 2048];
+    for (index, id, metadata) in blocks {
+        block_ids[*index] = (*id & 0xff) as u8;
+        set_nibble(&mut data, *index, *metadata);
+    }
+    NbtValue::compound([
+        ("Y", NbtValue::Byte(y)),
+        ("Blocks", NbtValue::ByteArray(block_ids)),
+        ("Data", NbtValue::ByteArray(data)),
+        ("SkyLight", NbtValue::ByteArray(vec![0xff; 2048])),
+        ("BlockLight", NbtValue::ByteArray(vec![0; 2048])),
+        ("UnknownSectionTag", NbtValue::String("preserve".to_owned())),
+    ])
+}
+
+fn numeric_chunk_nbt(profile: &VersionProfile, x: i32, z: i32, sections: Vec<NbtValue>) -> NbtFile {
+    NbtFile::new(
+        "",
+        NbtValue::compound([
+            ("DataVersion", NbtValue::Int(profile.data_version)),
+            (
+                "Level",
+                NbtValue::compound([
+                    ("xPos", NbtValue::Int(x)),
+                    ("zPos", NbtValue::Int(z)),
+                    ("TerrainPopulated", NbtValue::Byte(1)),
+                    ("LightPopulated", NbtValue::Byte(1)),
+                    ("LastUpdate", NbtValue::Long(1234)),
+                    ("Biomes", NbtValue::ByteArray(vec![1; 256])),
+                    ("HeightMap", NbtValue::IntArray(vec![0; 256])),
+                    (
+                        "Sections",
+                        NbtValue::List {
+                            kind: TAG_COMPOUND,
+                            items: sections,
+                        },
+                    ),
+                    (
+                        "TileEntities",
+                        NbtValue::List {
+                            kind: TAG_COMPOUND,
+                            items: vec![NbtValue::compound([(
+                                "id",
+                                NbtValue::String("minecraft:chest".to_owned()),
+                            )])],
+                        },
+                    ),
+                    (
+                        "Entities",
+                        NbtValue::List {
+                            kind: TAG_COMPOUND,
+                            items: vec![NbtValue::compound([(
+                                "id",
+                                NbtValue::String("minecraft:item".to_owned()),
+                            )])],
+                        },
+                    ),
+                    ("UnknownLevelTag", NbtValue::String("preserve".to_owned())),
+                ]),
+            ),
+            ("UnknownRootTag", NbtValue::String("preserve".to_owned())),
+        ]),
+    )
+}
+
+fn write_numeric_world_for_profile(root: &Path, profile: &VersionProfile) {
+    fs::create_dir_all(root.join("region")).expect("create region");
+    fs::write(
+        root.join("level.dat"),
+        level_dat_bytes_for(profile.data_version, profile.minecraft_version.as_str()),
+    )
+    .expect("write level.dat");
+    fs::write(root.join("session.lock"), b"1234567890123456").expect("write session lock");
+
+    let mut first = numeric_chunk_nbt(
+        profile,
+        0,
+        0,
+        vec![
+            numeric_section(0, &[(0, 1, 0), (1, 3, 0), (2, 35, 14), (3, 41, 0)]),
+            numeric_section(1, &[(0, 1, 0)]),
+        ],
+    );
+    let mut second = numeric_chunk_nbt(profile, 1, 0, vec![numeric_section(0, &[(0, 1, 0)])]);
+    // 1.8.9 chunks predate the chunk-level DataVersion tag; the exact profile
+    // comes from level.dat.
+    if profile.data_version == 47 {
+        for chunk in [&mut first, &mut second] {
+            if let NbtValue::Compound(root) = &mut chunk.root {
+                root.remove("DataVersion");
+            }
+        }
+    }
+    fs::write(
+        root.join("region").join("r.0.0.mca"),
+        region_bytes(&[(0, 0, first), (1, 0, second)]),
+    )
+    .expect("write region");
+    fs::write(root.join("custom-unknown.dat"), b"keep me").expect("write unknown file");
+}
+
 fn write_flattened_world_for_profile(root: &Path, profile: &VersionProfile) {
     fs::create_dir_all(root.join("region")).expect("create region");
     fs::write(
@@ -1243,6 +1355,223 @@ fn exports_every_flattened_classic_release_same_version_and_verifies() {
 }
 
 #[test]
+fn imports_every_numeric_classic_release_end_to_end() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == VersionFamily::Numeric && profile.capabilities.read)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("numeric-import-{label}"));
+        let root = dir.path().join("world");
+        write_numeric_world_for_profile(&root, profile);
+        let before = snapshot(&root);
+
+        let analysis = analyze_java_world(&root);
+        assert!(analysis.supported, "{label}: {:?}", analysis.blockers);
+        assert_eq!(analysis.data_version, Some(profile.data_version), "{label}");
+        assert_eq!(analysis.version_name.as_deref(), Some(label), "{label}");
+        assert_eq!(analysis.block_entities, Some(2), "{label}");
+        assert_eq!(analysis.entities, Some(2), "{label}");
+
+        let (world, report) =
+            load_java_world(&root).unwrap_or_else(|error| panic!("{label}: {error}"));
+        assert_eq!(
+            world.version().data_version(),
+            profile.data_version,
+            "{label}"
+        );
+        assert_eq!(
+            world.version().minecraft_version(),
+            label,
+            "{label} version identity"
+        );
+        let dimension = world.dimension(OVERWORLD).expect("overworld");
+        assert_eq!((dimension.min_y(), dimension.height()), (0, 256), "{label}");
+        assert_eq!(report.chunks, 2, "{label}");
+        assert_eq!(report.non_full_chunks, 0, "{label}");
+        assert_eq!(report.sections, 3, "{label}");
+        assert_eq!(report.biome_sections, 3, "{label}");
+        assert_eq!(report.block_entities, 2, "{label}");
+        assert_eq!(report.entities, 2, "{label}");
+
+        for (pos, expected) in [
+            (BlockPos::new(0, 0, 0), "minecraft:stone"),
+            (BlockPos::new(1, 0, 0), "minecraft:dirt"),
+            (BlockPos::new(2, 0, 0), "minecraft:red_wool"),
+            (BlockPos::new(3, 0, 0), "minecraft:gold_block"),
+            (BlockPos::new(0, 16, 0), "minecraft:stone"),
+        ] {
+            assert_eq!(
+                world
+                    .get_block(OVERWORLD, pos)
+                    .unwrap_or_else(|error| panic!("{label}: block at {pos:?}: {error}"))
+                    .to_string(),
+                expected,
+                "{label}"
+            );
+        }
+        for y in [0, 16] {
+            assert_eq!(
+                world
+                    .get_biome(OVERWORLD, BlockPos::new(0, y, 0))
+                    .unwrap_or_else(|error| panic!("{label}: biome: {error}"))
+                    .expect("biome data")
+                    .as_str(),
+                "minecraft:plains",
+                "{label}"
+            );
+        }
+
+        assert_eq!(
+            snapshot(&root),
+            before,
+            "{label}: import must not write the source"
+        );
+        tested += 1;
+    }
+    assert_eq!(tested, 15, "every admitted numeric release must be covered");
+}
+
+#[test]
+fn exports_every_numeric_classic_release_same_version_and_verifies() {
+    let mut tested = 0;
+    for profile in builtin_profiles()
+        .iter()
+        .filter(|profile| profile.family == VersionFamily::Numeric && profile.capabilities.read)
+    {
+        let label = profile.minecraft_version.as_str();
+        let dir = TempDir::new(&format!("numeric-export-{label}"));
+        let root = dir.path().join("world");
+        write_numeric_world_for_profile(&root, profile);
+        let before = snapshot(&root);
+
+        let mut overlay = WorldOverlay::open(&root)
+            .unwrap_or_else(|error| panic!("{label}: open overlay: {error}"));
+        overlay
+            .set_block(OVERWORLD, 0, 0, 0, &"minecraft:gold_block".parse().unwrap())
+            .unwrap_or_else(|error| panic!("{label}: edit block: {error}"));
+        overlay
+            .set_biome(OVERWORLD, 0, 0, 0, &"minecraft:desert".parse().unwrap())
+            .unwrap_or_else(|error| panic!("{label}: edit biome: {error}"));
+        let destination = dir.path().join("exported");
+        let report = export_java_world(&overlay, &destination)
+            .unwrap_or_else(|error| panic!("{label}: export: {error}"));
+
+        assert!(report.source_unchanged, "{label}: source changed");
+        assert!(report.source_tree_verified, "{label}: source not hashed");
+        assert!(
+            report.copied_files_match_source,
+            "{label}: copied files differ"
+        );
+        assert!(report.output_revalidated, "{label}: output not revalidated");
+        assert_eq!(report.replaced_chunks, 1, "{label}");
+        assert_eq!(report.skipped_files, ["session.lock"], "{label}");
+        assert_eq!(report.files, before.len() - 1, "{label}");
+        assert_eq!(snapshot(&root), before, "{label}: export wrote the source");
+
+        let written_world = world_io::JavaWorld::open(&destination)
+            .unwrap_or_else(|error| panic!("{label}: open written world: {error}"));
+        let written = written_world
+            .read_region(OVERWORLD, 0, 0)
+            .unwrap_or_else(|error| panic!("{label}: open written region: {error}"));
+        let chunk = written
+            .read_chunk(0, 0)
+            .unwrap_or_else(|error| panic!("{label}: read written chunk: {error}"));
+        let root_nbt = chunk.nbt.root.as_compound().expect("chunk root compound");
+        assert_eq!(
+            root_nbt.get("UnknownRootTag").and_then(NbtValue::as_string),
+            Some("preserve"),
+            "{label}: unknown root tag"
+        );
+        let level = root_nbt
+            .get("Level")
+            .and_then(NbtValue::as_compound)
+            .expect("Level compound");
+        assert_eq!(
+            level.get("UnknownLevelTag").and_then(NbtValue::as_string),
+            Some("preserve"),
+            "{label}: unknown Level tag"
+        );
+        assert_eq!(
+            level.get("TerrainPopulated").and_then(|value| match value {
+                NbtValue::Byte(value) => Some(*value),
+                _ => None,
+            }),
+            Some(1),
+            "{label}: TerrainPopulated"
+        );
+        let sections = level
+            .get("Sections")
+            .and_then(NbtValue::as_list)
+            .expect("Sections list")
+            .1;
+        let section = sections[0].as_compound().expect("section compound");
+        assert_eq!(
+            section
+                .get("UnknownSectionTag")
+                .and_then(NbtValue::as_string),
+            Some("preserve"),
+            "{label}: unknown section tag"
+        );
+
+        let (exported, exported_report) = load_java_world(&destination)
+            .unwrap_or_else(|error| panic!("{label}: reopen export: {error}"));
+        assert_eq!(
+            exported.version().data_version(),
+            profile.data_version,
+            "{label}"
+        );
+        assert_eq!(exported_report.block_entities, 2, "{label}");
+        assert_eq!(exported_report.entities, 2, "{label}");
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(0, 0, 0))
+                .expect("edited block")
+                .to_string(),
+            "minecraft:gold_block",
+            "{label}"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(1, 0, 0))
+                .expect("untouched block in the edited chunk")
+                .to_string(),
+            "minecraft:dirt",
+            "{label}"
+        );
+        assert_eq!(
+            exported
+                .get_block(OVERWORLD, BlockPos::new(16, 0, 0))
+                .expect("untouched neighbour")
+                .to_string(),
+            "minecraft:stone",
+            "{label}: untouched chunk must survive byte-for-byte"
+        );
+        assert_eq!(
+            exported
+                .get_biome(OVERWORLD, BlockPos::new(0, 0, 0))
+                .expect("edited biome")
+                .expect("biome data")
+                .as_str(),
+            "minecraft:desert",
+            "{label}"
+        );
+        assert_eq!(
+            exported
+                .get_biome(OVERWORLD, BlockPos::new(0, 16, 0))
+                .expect("upper biome")
+                .expect("biome data")
+                .as_str(),
+            "minecraft:desert",
+            "{label}: column edits propagate through all sections"
+        );
+        tested += 1;
+    }
+    assert_eq!(tested, 15, "every admitted numeric release must be covered");
+}
+
+#[test]
 fn flattened_catalog_projects_create_edit_save_reopen_export_and_verify() {
     let mut tested = 0;
     for profile in builtin_profiles()
@@ -1943,15 +2272,15 @@ fn chunk_limit_is_enforced_before_partial_import_is_returned() {
 fn unsupported_data_version_is_blocked_before_import() {
     let dir = TempDir::new("version");
     let root = dir.path().join("world");
-    write_world(&root, 1343);
+    write_world(&root, 9999);
 
     let analysis = analyze_java_world(&root);
     assert!(!analysis.supported);
-    assert_eq!(analysis.data_version, Some(1343));
+    assert_eq!(analysis.data_version, Some(9999));
     assert!(analysis
         .blockers
         .iter()
-        .any(|blocker| blocker.contains("DataVersion 1343")));
+        .any(|blocker| blocker.contains("DataVersion 9999")));
     let error = load_java_world(&root).expect_err("unsupported version");
     assert_eq!(error.code(), "unsupported_version");
 }

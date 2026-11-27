@@ -69,6 +69,7 @@ impl ReleaseFacts {
         let modern_classic = version_id.family() == VersionFamily::Modern;
         let flattened_classic = version_id.family() == VersionFamily::Flattened;
         let numeric_classic = version_id.family() == VersionFamily::Numeric;
+        let numeric_admitted = numeric_classic && self.data_version > 0;
         let legacy_classic = version_id.family() == VersionFamily::Legacy;
         let notes = if full {
             vec![
@@ -107,22 +108,28 @@ impl ReleaseFacts {
                 );
             }
             notes
-        } else if numeric_classic {
-            let mut notes = vec![
+        } else if numeric_admitted {
+            vec![
                 format!(
-                    "Minecraft {} stores numeric block ids plus metadata in classic Anvil chunks.",
+                    "Numeric classic Anvil import, block/biome editing, project snapshots and same-version export are verified for Minecraft {}.",
                     self.version
                 ),
-                "The exact profile is recorded, but this build has no verified numeric world adapter yet."
+                "Block ids plus metadata and column biomes are decoded through the shared 1.12.2 numeric registry; the exact client JAR supplies the block and item catalog."
                     .to_owned(),
-            ];
-            if self.data_version == UNKNOWN_DATA_VERSION {
-                notes.push(
-                    "This release predates the DataVersion tag; -1 is recorded instead of inventing a value."
-                        .to_owned(),
-                );
-            }
-            notes
+                "Vanilla generation is not enabled for this numeric release yet."
+                    .to_owned(),
+            ]
+        } else if numeric_classic {
+            vec![
+                format!(
+                    "Minecraft {} predates the DataVersion tag and stores numeric block ids plus metadata.",
+                    self.version
+                ),
+                "This release is metadata-only; the numeric world adapter requires an exact DataVersion."
+                    .to_owned(),
+                "The exact profile is recorded, but this release is not admitted to projects yet."
+                    .to_owned(),
+            ]
         } else if legacy_classic {
             let anvil = version_id >= "1.2.1".parse().expect("the first Anvil release must parse");
             vec![
@@ -158,6 +165,16 @@ impl ReleaseFacts {
                 write: true,
                 export: true,
                 generate: true,
+                assets: true,
+            }
+        } else if numeric_admitted {
+            WorldCapabilities {
+                support_level: SupportLevel::ReadWriteSubset,
+                read: true,
+                edit: true,
+                write: true,
+                export: true,
+                generate: false,
                 assets: true,
             }
         } else {
@@ -998,18 +1015,32 @@ mod tests {
                 ],
                 "{id}"
             );
-            assert_eq!(
-                profile.capabilities.support_level,
-                SupportLevel::Unverified,
-                "{id}"
-            );
             assert!(profile.capabilities.validate().is_ok(), "{id}");
-            assert!(!profile.capabilities.read, "{id}");
-            assert!(!profile.capabilities.edit, "{id}");
-            assert!(!profile.capabilities.write, "{id}");
-            assert!(!profile.capabilities.export, "{id}");
-            assert!(!profile.capabilities.generate, "{id}");
-            assert!(!profile.capabilities.assets, "{id}");
+            if facts.data_version > 0 {
+                assert_eq!(
+                    profile.capabilities.support_level,
+                    SupportLevel::ReadWriteSubset,
+                    "{id}"
+                );
+                assert!(profile.capabilities.read, "{id}");
+                assert!(profile.capabilities.edit, "{id}");
+                assert!(profile.capabilities.write, "{id}");
+                assert!(profile.capabilities.export, "{id}");
+                assert!(!profile.capabilities.generate, "{id}");
+                assert!(profile.capabilities.assets, "{id}");
+            } else {
+                assert_eq!(
+                    profile.capabilities.support_level,
+                    SupportLevel::Unverified,
+                    "{id}"
+                );
+                assert!(!profile.capabilities.read, "{id}");
+                assert!(!profile.capabilities.edit, "{id}");
+                assert!(!profile.capabilities.write, "{id}");
+                assert!(!profile.capabilities.export, "{id}");
+                assert!(!profile.capabilities.generate, "{id}");
+                assert!(!profile.capabilities.assets, "{id}");
+            }
             assert!(!profile.structure_formats.java_nbt.import, "{id}");
             assert!(!profile.structure_formats.java_nbt.export, "{id}");
             if facts.data_version > 0 {

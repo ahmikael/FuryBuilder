@@ -319,10 +319,11 @@ impl JavaWorld {
         let dimension = self
             .dimension(dimension_id)
             .ok_or_else(|| AnvilError::UnknownDimension(dimension_id.to_owned()))?;
-        RegionFile::open(
+        RegionFile::open_for_profile(
             dimension
                 .region_folder
                 .join(region_file_name(region_x, region_z)),
+            Some(self.profile.clone()),
         )
     }
 
@@ -424,10 +425,20 @@ pub struct RegionFile {
     region_z: i32,
     file_len: u64,
     entries: Vec<RegionEntry>,
+    /// Exact world profile when the caller has one. Numeric 1.8 chunks have no
+    /// root `DataVersion`, so their summaries need the level.dat profile.
+    profile: Option<VersionProfile>,
 }
 
 impl RegionFile {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, AnvilError> {
+        Self::open_for_profile(path, None)
+    }
+
+    pub(crate) fn open_for_profile(
+        path: impl AsRef<Path>,
+        profile: Option<VersionProfile>,
+    ) -> Result<Self, AnvilError> {
         let path = path.as_ref();
         let (region_x, region_z) = parse_region_file_name(path)?;
         let file_len = file_len_checked(path, MAX_REGION_FILE_BYTES)?;
@@ -520,6 +531,7 @@ impl RegionFile {
             region_z,
             file_len,
             entries,
+            profile,
         })
     }
 
@@ -541,7 +553,7 @@ impl RegionFile {
 
     pub fn read_chunk(&self, x: i32, z: i32) -> Result<RegionChunk, AnvilError> {
         let record = self.read_record(x, z)?;
-        let summary = summarize_chunk(&record.nbt, x, z)?;
+        let summary = summarize_chunk(&record.nbt, x, z, self.profile.as_ref())?;
         Ok(RegionChunk {
             x,
             z,
@@ -687,19 +699,46 @@ fn decompress_chunk(
     }
 }
 
-fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, AnvilError> {
+fn summarize_chunk(
+    nbt: &NbtFile,
+    x: i32,
+    z: i32,
+    profile_hint: Option<&VersionProfile>,
+) -> Result<RegionChunkSummary, AnvilError> {
     let root = nbt.root.as_compound().ok_or_else(|| {
         AnvilError::InvalidRegion(format!("chunk ({x}, {z}) root is not a compound"))
     })?;
-    let data_version = int_field(root, DATA_VERSION, "chunk")?;
-    let profile = version_support::read_profile(data_version).ok_or_else(|| {
-        AnvilError::UnsupportedDataVersion {
+    // Chunks saved before 1.9 have no root DataVersion. The level.dat profile
+    // supplies it when JavaWorld opened the region; a bare RegionFile cannot.
+    let data_version = match root.get(DATA_VERSION) {
+        Some(NbtValue::Int(value)) => *value,
+        Some(_) => {
+            return Err(AnvilError::InvalidRegion(format!(
+                "chunk ({x}, {z}) DataVersion is not an int"
+            )))
+        }
+        None => profile_hint
+            .filter(|profile| profile.family == minecraft_version::VersionFamily::Numeric)
+            .map(|profile| profile.data_version)
+            .ok_or_else(|| {
+                AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has no DataVersion"))
+            })?,
+    };
+    let profile = profile_hint
+        .filter(|profile| profile.data_version == data_version)
+        .or_else(|| version_support::read_profile(data_version))
+        .ok_or_else(|| AnvilError::UnsupportedDataVersion {
             found: data_version,
             supported: version_support::supported_data_versions(),
+        })?;
+    match profile.family {
+        minecraft_version::VersionFamily::Flattened => {
+            return summarize_flattened_chunk(root, x, z, data_version);
         }
-    })?;
-    if profile.family == minecraft_version::VersionFamily::Flattened {
-        return summarize_flattened_chunk(root, x, z, data_version);
+        minecraft_version::VersionFamily::Numeric => {
+            return summarize_numeric_chunk(root, x, z, data_version);
+        }
+        _ => {}
     }
     let format = ClassicChunkFormat::for_profile(profile)?;
     let stored_x = int_field(root, format.x_pos, "chunk")?;
@@ -755,6 +794,78 @@ fn summarize_chunk(nbt: &NbtFile, x: i32, z: i32) -> Result<RegionChunkSummary, 
         data_version,
         status,
         y_pos,
+        sections,
+        block_entities,
+        entities,
+    })
+}
+
+fn summarize_numeric_chunk(
+    root: &BTreeMap<String, NbtValue>,
+    x: i32,
+    z: i32,
+    data_version: i32,
+) -> Result<RegionChunkSummary, AnvilError> {
+    let level = root
+        .get("Level")
+        .and_then(NbtValue::as_compound)
+        .ok_or_else(|| {
+            AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has no Level compound"))
+        })?;
+    let stored_x = int_field(level, "xPos", "chunk")?;
+    let stored_z = int_field(level, "zPos", "chunk")?;
+    if stored_x != x || stored_z != z {
+        return Err(AnvilError::InvalidRegion(format!(
+            "chunk table position ({x}, {z}) does not match NBT xPos/zPos ({stored_x}, {stored_z})"
+        )));
+    }
+    let status = match level.get("TerrainPopulated") {
+        Some(NbtValue::Byte(value)) => Some(if *value != 0 {
+            "full".to_owned()
+        } else {
+            "partial".to_owned()
+        }),
+        Some(_) => {
+            return Err(AnvilError::InvalidRegion(format!(
+                "chunk ({x}, {z}) TerrainPopulated is not a byte"
+            )))
+        }
+        None => None,
+    };
+    let sections = compound_list_len(level, "Sections", "chunk", true)?;
+    let block_entities = compound_list_len(level, "TileEntities", "chunk", false)?;
+    let entities = compound_list_len(level, "Entities", "chunk", false)?;
+    if let Some(NbtValue::List { kind, items }) = level.get("Sections") {
+        if *kind != TAG_COMPOUND && !items.is_empty() {
+            return Err(AnvilError::InvalidRegion(format!(
+                "chunk ({x}, {z}) Sections is not a list of compounds"
+            )));
+        }
+        for section in items {
+            let section = section.as_compound().ok_or_else(|| {
+                AnvilError::InvalidRegion(format!("chunk ({x}, {z}) has a non-compound section"))
+            })?;
+            match section.get("Y") {
+                Some(NbtValue::Byte(_)) => {}
+                Some(_) => {
+                    return Err(AnvilError::InvalidRegion(format!(
+                        "chunk ({x}, {z}) section Y is not a byte"
+                    )))
+                }
+                None => {
+                    return Err(AnvilError::InvalidRegion(format!(
+                        "chunk ({x}, {z}) section has no Y"
+                    )))
+                }
+            }
+        }
+    }
+    Ok(RegionChunkSummary {
+        x,
+        z,
+        data_version,
+        status,
+        y_pos: None,
         sections,
         block_entities,
         entities,

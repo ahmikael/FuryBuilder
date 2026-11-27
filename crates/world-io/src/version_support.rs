@@ -67,7 +67,10 @@ mod tests {
         assert!(versions.contains(&4671));
         assert!(versions.contains(&1631), "1.13.2 is importable");
         assert!(versions.contains(&2730), "1.17.1 is importable");
-        assert_eq!(versions.len(), 46);
+        assert!(versions.contains(&47), "1.8.9 is importable");
+        assert!(versions.contains(&1343), "1.12.2 is importable");
+        assert_eq!(versions.len(), 61);
+        assert!(!versions.contains(&-1), "1.8-1.8.8 are not addressable");
         assert!(!versions.contains(&4786), "split profiles are not classic");
     }
 
@@ -78,6 +81,23 @@ mod tests {
 
         assert_eq!(version.minecraft_version(), "1.21.4");
         assert_eq!(version.data_version(), 4189);
+    }
+
+    #[test]
+    fn numeric_profiles_are_addressable_only_when_they_carry_a_data_version() {
+        let one_eight = profile_for(47).expect("1.8.9 profile");
+        assert_eq!(one_eight.minecraft_version.as_str(), "1.8.9");
+        assert!(one_eight.capabilities.read);
+
+        let one_twelve = profile_for(1343).expect("1.12.2 profile");
+        assert_eq!(one_twelve.minecraft_version.as_str(), "1.12.2");
+        assert!(one_twelve.capabilities.read);
+        assert!(!one_twelve.capabilities.generate);
+
+        assert!(builtin_profiles()
+            .iter()
+            .filter(|profile| profile.minecraft_version.as_str() == "1.8")
+            .all(|profile| !profile.capabilities.read && profile.data_version == -1));
     }
 
     #[test]

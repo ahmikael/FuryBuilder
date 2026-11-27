@@ -1,7 +1,7 @@
 # Reference (Windows beta 0.2.0)
 
-Target: Minecraft Java **1.13–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
-the full baseline. Last reviewed: 2026-11-27.
+Target: Minecraft Java **1.13–1.21.11** classic Anvil and numeric **1.8.9–1.12.2**, with **1.21.4**
+/ `DataVersion` 4189 as the full baseline. Last reviewed: 2026-11-27.
 
 The version picker reads the full official Mojang manifest. All 27 classic Anvil releases from
 1.18 through 1.21.11 have a profile that verifies import, block/biome editing, project
@@ -9,12 +9,13 @@ snapshots and same-version export, and enables generation with that release's ex
 server JAR. The 19 flattened releases from 1.13 through 1.17.1 support the same world operations,
 exact-version generation, managed or manual client JARs with exact block/item catalogs, and
 resource pack formats 4–7. Every flattened release passes the catalog-pinned project round-trip.
-Exact metadata-only profiles also cover all 52 releases from 1.0 through 1.12.2, but they are
-`unverified` and stop at the profile check. Their `1.8–1.12.2` client JARs build block/item
-catalogs with numeric ids and metadata, though no pre-1.13 world can be opened. Snapshots,
+The 15 numeric releases from 1.8.9 through 1.12.2 add import, block/biome editing, snapshots and
+same-version export, but not generation; their client JARs build block/item catalogs with
+numeric ids and metadata. Exact metadata-only profiles remain for 1.8–1.8.8 and the 28 releases
+from 1.0 through 1.7.10, which are `unverified` and stop at the profile check. Snapshots,
 split 26.1+ releases and special manifest ids are visible and refused at project creation.
 
-**1.21.4** remains the only `full` profile. The other classic profiles use
+**1.21.4** remains the only `full` profile. The other classic and numeric profiles use
 `read + write subset` and support same-version Java structure `.nbt` interchange. The managed
 client cache and catalog cannot yet store major/minor pack formats (1.21.9–1.21.11).
 
@@ -43,7 +44,7 @@ architecture and security boundaries are in [architecture.md](architecture.md).
 | Feature                           | Minecraft install | Client JAR                    | Java                                | Official `server.jar` | Network                                           |
 | --------------------------------- | ----------------- | ----------------------------- | ----------------------------------- | --------------------- | ------------------------------------------------- |
 | `Empty Project` / `Flat base`     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
-| `Import World` (1.13–1.21.11)     | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
+| `Import World` (1.13–1.21.11, 1.8.9–1.12.2) | No                | Optional; `Placeholder` works | No                                  | No                    | Only for managed downloads                        |
 | Structure `.nbt` import/export    | No                | No                            | No                                  | No                    | No                                                |
 | Real textures / exact catalog     | No                | Yes                           | No                                  | No                    | First download only; cached afterwards            |
 | `Vanilla World` generation        | No                | Optional; `Placeholder` works | Yes, profile major (8/16/17/21)     | Yes                   | Downloads; generation can run offline after cache |
@@ -82,17 +83,20 @@ results are a reference point, not a cross-vendor or minimum-hardware guarantee.
 - Integrated/discrete switching, multi-GPU laptops, other GPU vendors and remote-desktop
   display capture.
 - Modded servers, data packs, other server versions, Bedrock worlds, snapshots, split 26.1+
-  saves, pre-1.13 worlds and Minecraft versions outside 1.13–1.21.11. Exact metadata-only
-  profiles exist for 1.0–1.12.2, but no pre-1.13 world adapter, import, export or generation is
-  enabled; `1.8–1.12.2` client JARs build numeric block/item catalogs, while pre-1.8 catalogs
-  are not built. Other official versions are listed but cannot be created or edited. Java
-  majors other than the profile's required major are not validated in this beta.
+  saves, pre-1.8 worlds and Minecraft versions outside 1.13–1.21.11 and 1.8.9–1.12.2. Exact
+  metadata-only profiles exist for 1.8–1.8.8 and 1.0–1.7.10, but no world adapter, import,
+  export or generation is enabled for them; `1.8–1.12.2` client JARs build numeric block/item
+  catalogs, while pre-1.8 catalogs are not built. Other official versions are listed but
+  cannot be created or edited. Java majors other than the profile's required major are not
+  validated in this beta.
 - Generation was exercised end to end on the 1.21.4 reference machine. All 46 classic profiles
   are covered by `level-type`, Java major, data pack format and `server.properties` tests.
   Representatives of each flattened server series were inspected without launching them, so a
   real flattened-server generation run is not yet recorded. Client JARs for all 19 flattened
   releases were checked through catalog and render asset loading, and every release passes the
-  catalog-pinned project create/edit/save/reopen/export/re-import fixture.
+  catalog-pinned project create/edit/save/reopen/export/re-import fixture. Numeric 1.8.9–1.12.2
+  worlds are covered by synthetic import/edit/export/re-import fixtures; no real numeric save
+  or numeric generation run is recorded.
 - Code-signed installers and a stable (non-beta) update channel. Authenticode signing is
   still pending; the updater itself uses signed Tauri packages.
 - Streamable HTTP or remote MCP; the bridge is local Windows stdio only.
@@ -110,12 +114,12 @@ checkpoint and keep the original world untouched.
 | KL-02 | Platform         | Browser preview cannot edit, save, export or serve MCP                                 |
 | KL-03 | Platform         | Single-user, single-instance desktop; no collaboration or cloud                        |
 | KL-04 | Distribution     | Beta installers are not Authenticode-signed; signed GitHub auto-updates are configured |
-| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Exact profiles for Java 1.0–1.12.2 are metadata-only and stop at the profile check; `1.8–1.12.2` client JARs expose numeric block/item catalogs but cannot open or save a world. Split 26.x and special manifest ids likewise cannot be edited |
-| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and pre-1.13 import is refused |
+| KL-05 | Version support  | Classic Java 1.13–1.21.11 supports import, editing, snapshots, same-version export and generation with the exact official server JAR. Numeric Java 1.8.9–1.12.2 supports the same import/edit/save/export subset without generation; `1.8–1.12.2` client JARs expose numeric block/item catalogs. Exact profiles for Java 1.8–1.8.8 and 1.0–1.7.10 are metadata-only and stop at the profile check. Split 26.x and special manifest ids likewise cannot be edited |
+| KL-06 | Import           | A bare `.mca` or `region/` is not a complete world; split saves get layout and header inspection only, and pre-1.8 import is refused |
 | KL-07 | Import           | Only block states and 4x4x4 biomes are editable; other data is raw                     |
 | KL-08 | Derived data     | Default preserve keeps stale heightmaps/light; rebuild is not a UI toggle              |
 | KL-09 | Block entities   | Chests/signs/barrels are not semantically created, moved or updated                    |
-| KL-10 | World export     | Complete world-folder export is verified for all modern and flattened classic releases and has no one-click UI action |
+| KL-10 | World export     | Complete world-folder export is verified for all modern, flattened and numeric classic releases and has no one-click UI action |
 | KL-11 | Structures       | Interchange is Java structure `.nbt` only; entities are refused                        |
 | KL-12 | Structures       | `.nbt` is not a full world and cannot carry FuryBuilder metadata                       |
 | KL-13 | Vanilla World    | Requires the profile's Java major (8 for 1.13–1.16.5, 16 for 1.17–1.17.1, 17 for 1.18–1.20.4, 21 for 1.20.5–1.21.11), the exact official server JAR and EULA acceptance |

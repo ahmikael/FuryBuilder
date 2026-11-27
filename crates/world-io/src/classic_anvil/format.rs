@@ -207,20 +207,51 @@ impl FlattenedFormat {
     }
 }
 
+/// On-disk layout of the pre-flattening numeric classic Anvil releases
+/// (1.8.9–1.12.2). Sections store raw block-id and metadata nibble arrays under
+/// `Level`; biomes are one byte per column in `Level.Biomes`.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NumericFormat;
+
+impl NumericFormat {
+    pub(crate) fn for_profile(profile: &VersionProfile) -> Result<Self, AnvilError> {
+        if profile.family != VersionFamily::Numeric
+            || profile.world_layout != minecraft_version::WorldLayout::ClassicAnvil
+            || profile.chunk_family != minecraft_version::ChunkFamily::NumericIds
+            || profile.biome_format != minecraft_version::BiomeFormat::Column
+        {
+            return Err(AnvilError::UnsupportedLayout(format!(
+                "profile `{}` is not a numeric classic Anvil chunk profile",
+                profile.id
+            )));
+        }
+        Ok(Self)
+    }
+
+    pub(crate) fn is_full(self, status: Option<&str>) -> bool {
+        status == Some(self.full_status())
+    }
+
+    pub(crate) fn full_status(self) -> &'static str {
+        "full"
+    }
+}
+
 /// The on-disk chunk layout selected for a profile, independent of whether the
 /// release is admitted to projects.
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum ChunkLayoutFormat {
     Modern(&'static ClassicChunkFormat),
     Flattened(FlattenedFormat),
+    Numeric(NumericFormat),
 }
 
 impl ChunkLayoutFormat {
     pub(crate) fn for_profile(profile: &VersionProfile) -> Result<Self, AnvilError> {
-        if profile.family == VersionFamily::Flattened {
-            Ok(Self::Flattened(FlattenedFormat::for_profile(profile)?))
-        } else {
-            Ok(Self::Modern(ClassicChunkFormat::for_profile(profile)?))
+        match profile.family {
+            VersionFamily::Flattened => Ok(Self::Flattened(FlattenedFormat::for_profile(profile)?)),
+            VersionFamily::Numeric => Ok(Self::Numeric(NumericFormat::for_profile(profile)?)),
+            _ => Ok(Self::Modern(ClassicChunkFormat::for_profile(profile)?)),
         }
     }
 
@@ -228,6 +259,7 @@ impl ChunkLayoutFormat {
         match self {
             Self::Modern(format) => format.is_full(status),
             Self::Flattened(format) => status == Some(format.full_status),
+            Self::Numeric(format) => format.is_full(status),
         }
     }
 
@@ -235,6 +267,7 @@ impl ChunkLayoutFormat {
         match self {
             Self::Modern(format) => format.full_status,
             Self::Flattened(format) => format.full_status,
+            Self::Numeric(format) => format.full_status(),
         }
     }
 }

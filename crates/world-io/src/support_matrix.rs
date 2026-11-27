@@ -157,15 +157,15 @@ fn versions() -> Vec<VersionSupport> {
         },
         VersionSupport {
             id: "java-classic-1.8-1.12-numeric".to_owned(),
-            minecraft_versions: "1.8-1.12.2".to_owned(),
-            data_versions: "47, 169-1343; 1.8-1.8.8 predate DataVersion".to_owned(),
+            minecraft_versions: "1.8.9-1.12.2".to_owned(),
+            data_versions: "47, 169-1343".to_owned(),
             layout: "classic_anvil".to_owned(),
-            status: "detected_unsupported".to_owned(),
-            read: "metadata_only".to_owned(),
-            edit: "none".to_owned(),
-            write: "none".to_owned(),
-            passthrough: "none".to_owned(),
-            note: "Exact profiles for all 24 releases are built in, including numeric block ids plus metadata and column biomes. No numeric chunk codec, import, export or generation is enabled yet.".to_owned(),
+            status: "supported_subset".to_owned(),
+            read: "supported_subset".to_owned(),
+            edit: "block_states_and_biomes".to_owned(),
+            write: "verified_block_states_and_biomes".to_owned(),
+            passthrough: "byte_for_byte".to_owned(),
+            note: "Numeric classic Anvil import, block/biome editing, project snapshots and same-version export are enabled for all 15 releases from 1.8.9 through 1.12.2. Block ids plus metadata and column biomes use the shared numeric registry; exact client JAR catalogs supply numeric block/item ids. Minecraft 1.8-1.8.8 predate DataVersion and remain metadata-only. Vanilla generation is not enabled for this group.".to_owned(),
         },
         VersionSupport {
             id: "pre-1.13-legacy".to_owned(),
@@ -422,25 +422,34 @@ mod tests {
     }
 
     #[test]
-    fn numeric_and_legacy_profiles_are_metadata_only() {
+    fn numeric_classic_releases_admit_block_writes_and_export_as_a_subset() {
         let matrix = support_matrix();
         let numeric = matrix
             .versions
             .iter()
             .find(|version| version.id == "java-classic-1.8-1.12-numeric")
             .expect("numeric classic row");
-        assert_eq!(numeric.status, "detected_unsupported");
-        assert_eq!(numeric.read, "metadata_only");
-        assert_eq!(numeric.edit, "none");
-        assert_eq!(numeric.write, "none");
-        assert_eq!(numeric.passthrough, "none");
-        assert!(numeric.note.contains("all 24 releases"), "{}", numeric.note);
+        assert_eq!(numeric.status, "supported_subset");
+        assert_eq!(numeric.read, "supported_subset");
+        assert_eq!(numeric.edit, "block_states_and_biomes");
+        assert_eq!(numeric.write, "verified_block_states_and_biomes");
+        assert_eq!(numeric.passthrough, "byte_for_byte");
+        assert!(numeric.note.contains("all 15 releases"), "{}", numeric.note);
         assert!(
-            numeric.note.contains("No numeric chunk codec"),
+            numeric.note.contains("1.8-1.8.8 predate DataVersion"),
             "{}",
             numeric.note
         );
+        assert!(
+            numeric.note.contains("same-version export"),
+            "{}",
+            numeric.note
+        );
+    }
 
+    #[test]
+    fn legacy_profiles_are_metadata_only() {
+        let matrix = support_matrix();
         let legacy = matrix
             .versions
             .iter()

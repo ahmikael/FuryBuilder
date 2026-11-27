@@ -1,25 +1,26 @@
 # Formats and world support
 
-Target: Minecraft Java **1.13–1.21.11** classic Anvil, with **1.21.4** / `DataVersion` 4189 as
-the full baseline. Every one of the 46 exact releases in that range can be imported, edited,
+Target: Minecraft Java **1.13–1.21.11** classic Anvil and numeric **1.8.9–1.12.2**, with **1.21.4**
+/ `DataVersion` 4189 as the full baseline. Every one of the 46 classic releases in that range
+can be imported, edited,
 saved through project snapshots, exported same-version and generated with that release's exact
-official server JAR. Modern classic releases can also be upgraded to a newer same-family
-release through a verified copy. Exact client-JAR block/item catalogs cover all 19 flattened
-releases and the modern releases with single-integer pack formats; 1.21.9–1.21.11 keep the
-explicit placeholder workflow until major/minor pack formats are supported.
+official server JAR. The 15 numeric classic releases from **1.8.9–1.12.2** add import,
+block/biome editing, project snapshots and same-version export, without generation. Modern
+classic releases can also be upgraded to a newer same-family release through a verified copy.
+Exact client-JAR block/item catalogs cover all 19 flattened releases, the numeric releases and
+the modern releases with single-integer pack formats; 1.21.9–1.21.11 keep the explicit
+placeholder workflow until major/minor pack formats are supported.
 
 The version picker lists releases and snapshots from the official Mojang manifest. Project
-creation requires a profile with verified write support, so the modern and flattened classic
-releases can advance the wizard. All pre-1.13 releases have exact profiles but are unverified
-and stop at the profile check; snapshots and split 26.1+ releases are listed but likewise
-cannot advance.
+creation requires a profile with verified write support, so the modern, flattened and numeric
+classic releases can advance the wizard. The 1.8–1.8.8 releases, all pre-1.8 releases and
+split 26.1+ releases have exact profiles but stop at the profile check.
 
 FuryBuilder has built-in metadata for all 46 Java releases from 1.13 through 1.21.11 and for
-all 52 releases from 1.0 through 1.12.2. The older profiles are metadata-only: they record the
-exact release, `DataVersion` where one exists, pack formats, layout and dimensions, but no
-pre-1.13 chunk adapter, import, export or generation is enabled yet. A `1.8–1.12.2` client JAR
-does build a block/item catalog with numeric ids and metadata; pre-1.8 releases still have no
-catalog. The
+all 52 releases from 1.0 through 1.12.2. The 15 numeric releases from 1.8.9 through 1.12.2 have
+a verified chunk adapter; 1.8–1.8.8 and 1.0–1.7.10 are metadata-only because they predate the
+`DataVersion` tag. A `1.8–1.12.2` client JAR builds a block/item catalog with numeric ids and
+metadata; pre-1.8 releases still have no catalog. The
 Java major comes from [Mojang's launcher metadata](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json);
 the `DataVersion` and resource/data pack formats come from `version.json` inside each matching
 client JAR, or from the exact built-in profile for 1.13.x, which has no internal file. Starting
@@ -40,7 +41,7 @@ The exact facts come from the built-in profiles and are checked against each cli
 internal `version.json`; 1.13.x has no internal file and is identified by SHA-1-matched launcher
 metadata instead.
 
-## Pre-1.13 profiles: metadata only
+## Pre-1.13 profiles: numeric Anvil and metadata-only legacy
 
 The 24 releases from 1.8 through 1.12.2 use numeric block ids plus metadata in classic Anvil
 chunks, column biomes and Y 0–255. `DataVersion` is 47 for 1.8.9, 169–184 for 1.9–1.9.4,
@@ -49,16 +50,25 @@ releases predate the `DataVersion` tag and are recorded with `-1`; they share th
 format. Resource pack formats are 1 for 1.8, 2 for 1.9–1.10.2 and 3 for 1.11–1.12.2; there is
 no data pack format.
 
+The numeric chunk reader and writer are enabled for the 15 releases from **1.8.9 through
+1.12.2**. Each section's `Blocks` byte array, `Data` metadata nibbles and optional `Add` high
+bits are decoded through the shared 1.12.2 numeric registry, while `Level.Biomes` is projected
+from 256 columns to the editor's 4×4×4 cells by sampling the center column of each footprint.
+Edits re-encode only changed sections and rebuild the 256-byte column array; every other tag,
+including unknown section and Level tags, is preserved. A 1.8.9 chunk without a root
+`DataVersion` inherits the exact level.dat profile. Unknown ids are rejected, never replaced.
+Vanilla generation stays disabled. The 1.8–1.8.8 releases have no exact `DataVersion`, so they
+remain metadata-only.
+
 The 28 releases from 1.0 through 1.7.10 also predate `DataVersion`. 1.0–1.1 use McRegion
 (`region/*.mcr`) with 128-block dimensions; 1.2.1–1.7.10 use classic Anvil with 256-block
 dimensions. Resource packs are absent before 1.6.1 and use format 1 from 1.6.1. Official server
 JARs exist from 1.2.5 onward, but generation remains disabled in this build.
 
-These profiles are visible in the version picker with an `unverified` badge. Selecting one does
-not create a project: import, editing, export and generation are still limited to the classic
-1.13–1.21.11 releases above. The client-JAR catalog supports `1.8–1.12.2` with numeric block
-ids, per-variant metadata and item ids, but that catalog does not yet admit those worlds to
-the editor.
+The metadata-only profiles are visible in the version picker with an `unverified` badge.
+Selecting one does not create a project: import, editing, export and generation are limited to
+the classic 1.13–1.21.11 and numeric 1.8.9–1.12.2 releases above. The client-JAR catalog still
+supports all of `1.8–1.12.2` with numeric block ids, per-variant metadata and item ids.
 
 ## Differences within modern classic Anvil
 
@@ -83,7 +93,8 @@ affected sections. No fallback biome is substituted.
 | Java 1.21.4         | 4189        | classic Anvil                     | **supported**          | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 1.18-1.21.11   | 2860-4671   | classic Anvil                     | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
 | Java 1.13-1.17.1    | 1519-2730   | classic Anvil (flattened)         | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
-| Java 1.8-1.12.2     | 47, 169-1343 | classic Anvil (numeric ids)      | `detected_unsupported` | `metadata_only`             | `none`                    | `none`                             | `none`          |
+| Java 1.8.9-1.12.2   | 47, 169-1343 | classic Anvil (numeric ids)      | `supported_subset`     | `supported_subset`          | `block_states_and_biomes` | `verified_block_states_and_biomes` | `byte_for_byte` |
+| Java 1.8-1.8.8      | predates DataVersion | classic Anvil (numeric ids) | `detected_unsupported` | `metadata_only`         | `none`                    | `none`                             | `none`          |
 | Java 1.0-1.7.10     | predates DataVersion | McRegion (1.0-1.1), classic Anvil (1.2.1-1.7.10) | `detected_unsupported` | `metadata_only` | `none`             | `none`                             | `none`          |
 | Java 26.1-26.3      | 4786-5023   | split (`dimensions/`, `players/`) | `detected_unsupported` | `layout_and_region_headers` | `none`                    | `none`                             | `none`          |
 | Java 26.4 snapshots | 5119+       | split                             | `out_of_scope`         | `none`                      | `none`                    | `none`                             | `none`          |
@@ -94,7 +105,8 @@ describes analysis and import boundaries. Only a version with a verified profile
 selected for a new project. The `1.18-1.21.11` row includes 1.21.4; the `1.13-1.17.1` row
 covers all 19 flattened classic releases. Both support import, block/biome editing, project
 snapshots, same-version export and generation with the exact official server JAR. The
-`1.8-1.12.2` and `1.0-1.7.10` rows are metadata-only and cannot advance the wizard.
+`1.8.9-1.12.2` row supports the same import/edit/save/export subset but not generation.
+The `1.8-1.8.8` and `1.0-1.7.10` rows are metadata-only and cannot advance the wizard.
 
 P1 verification covers all 27 modern releases with import and same-version export round-trips.
 The catalog-pinned create → edit → save → reopen → export → re-import path is covered once per
@@ -102,8 +114,11 @@ modern family (`1.18.2`, `1.19.4`, `1.20.6`, `1.21.4`), rebuilding the exact cat
 same client JAR after reopen. P2 verification covers all 19 flattened releases with import,
 edit, project save/reopen and same-version export, and runs the same catalog-pinned project
 round-trip for every release. Client JARs for all 19 were also checked against real official
-archives. Both families support same-version Java structure interchange; `Full` remains limited
-to 1.21.4.
+archives. P3-03 verification covers all 15 numeric releases from 1.8.9 through 1.12.2 with
+import, block/biome editing, same-version export, re-import, unknown-tag preservation and a
+byte-identical untouched neighbour chunk; the 1.8.9 path also covers chunks without a root
+`DataVersion`. Both modern and flattened families support same-version Java structure
+interchange; `Full` remains limited to 1.21.4.
 
 ## Java 26.1–26.3 split saves: inspection only
 

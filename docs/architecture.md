@@ -20,7 +20,7 @@ application API over an authenticated local endpoint and never opens world files
 
 | ID      | Decision                                                                                                                                  |
 | ------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Exact metadata-only profiles cover Java 1.0–1.12.2, while split 26.x and all pre-1.13 versions remain refused by the world adapters. |
+| ADR-001 | Classic Anvil **1.13–1.21.11** supports import, block/biome editing, project snapshots, same-version export and generation with the exact official server JAR. Numeric classic Anvil **1.8.9–1.12.2** supports the same import/edit/save/export subset without generation. Copy-only upgrade applies to 1.18–1.21.11; **1.21.4**, `DataVersion` 4189, is the full-support baseline. Exact metadata-only profiles cover Java 1.8–1.8.8 and 1.0–1.7.10, while split 26.x and pre-1.8 versions remain refused by the world adapters. |
 | ADR-002 | A project is a folder `*.furybuilder/` with `project.json`, `source/`, `data/`, `changes/`, `cache/`; atomic saves and exact schema versions. |
 | ADR-003 | Meshing runs in the TypeScript renderer; Rust produces compact section snapshots and dirty-chunk events.                                  |
 | ADR-004 | Assets resolve from launcher discovery, manual selection or built-in placeholders; resource packs form an ordered validated stack.        |
@@ -361,11 +361,11 @@ The 1.18–1.21.x profiles share the modern classic section layout. The adapter 
 the fully generated `Status` spelling from exact release facts; the raw value is kept.
 The same release facts supply the vanilla biome registry for import diagnostics, not as
 an allowlist for source biome palettes. Raw chunk decoding is separate from save
-admission: every modern classic profile admits import, editing, snapshots, same-version export
-and generation through its `capabilities`, while split and pre-1.13 profiles carry exact
-metadata but no codec and remain refused. The generation target is derived from the same
-profile, so `level-type`, Java major, data pack format and the required server JAR cannot be
-taken from another version.
+admission: every modern classic and numeric 1.8.9–1.12.2 profile admits import, editing,
+snapshots, same-version export and (for modern classic) generation through its capabilities,
+while split profiles, 1.8–1.8.8 and pre-1.8 releases carry exact metadata but no codec and
+remain refused. The generation target is derived from the same profile, so `level-type`, Java
+major, data pack format and the required server JAR cannot be taken from another version.
 
 Flattened generation uses the same supervisor and approval flow. Server inspection recognizes
 the classic and direct entry points, the combined or split pack version formats, and the
@@ -391,6 +391,17 @@ Export golden tests compare the full file tree against pre-extraction output for
 both derived-data policies, masking only the edited chunk's write timestamp.
 Light-only records one section below or above the terrain remain in raw NBT;
 they never enter the editable block or biome model.
+
+The numeric 1.8.9–1.12.2 codec in `classic_anvil/numeric_chunk.rs` keeps the same
+`Level.Sections` wrapper but reads each section's 4096-byte `Blocks` array, 2048-byte `Data`
+nibbles and optional `Add` high bits through the shared numeric registry. It rejects unknown
+ids and malformed array lengths instead of treating them as air. `Level.Biomes` is one byte per
+column; decoding samples the center column of each 4×4 footprint into the normalized 4×4×4
+section model, and writing a changed cell replaces the whole column footprint. A 1.8.9 chunk
+without a root `DataVersion` uses the level.dat profile, while a present tag must still match.
+The overlay patches only changed `Blocks`/`Data`/`Add` arrays and `Level.Biomes`, verifies every
+untouched tag and section, re-decodes the result, and the region writer preserves untouched
+records byte-for-byte. Numeric profiles do not enable generation.
 
 The editable domain is built from the profile's `dimensionProfiles`: `World::for_profile`
 creates exactly those dimension IDs with their `minY`/`height`, and snapshot encoding rejects
@@ -423,9 +434,9 @@ the admitted 1.13–1.17 profiles.
 
 Imported files and MCP clients are untrusted input. The desktop process is authoritative.
 
-- World import accepts classic Anvil 1.13–1.21.11 only: bounded `level.dat`, region files and
-  chunk counts; external `.mcc`, LZ4 and custom compression are refused; offsets and
-  sector lengths are validated.
+- World import accepts classic Anvil 1.13–1.21.11 and numeric classic 1.8.9–1.12.2 only:
+  bounded `level.dat`, region files and chunk counts; external `.mcc`, LZ4 and custom
+  compression are refused; offsets and sector lengths are validated.
 - World `.zip` archives are extracted into a unique temporary staging folder and removed
   after analysis or import. Entry counts and uncompressed sizes are bounded; traversal,
   absolute paths, NUL/control characters, Windows reserved names, symlinks, special files

@@ -6,6 +6,7 @@ pub mod chunk;
 pub(super) mod flattened_biomes;
 pub(super) mod flattened_chunk;
 pub(crate) mod format;
+pub(super) mod numeric_chunk;
 pub mod overlay;
 pub mod reader;
 pub mod region_write;
@@ -55,10 +56,14 @@ impl WorldCodec for ClassicAnvilCodec {
         dimension: &JavaWorldDimension,
         profile: &VersionProfile,
     ) -> Result<DecodedChunk, AnvilError> {
-        if profile.family == VersionFamily::Flattened {
-            flattened_chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
-        } else {
-            chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
+        match profile.family {
+            VersionFamily::Flattened => {
+                flattened_chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
+            }
+            VersionFamily::Numeric => {
+                numeric_chunk::decode_chunk(nbt, position.x, position.z, dimension, profile)
+            }
+            _ => chunk::decode_chunk(nbt, position.x, position.z, dimension, profile),
         }
     }
 

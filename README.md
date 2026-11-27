@@ -9,12 +9,14 @@ Application API over MCP.
 - **Target game versions:** Minecraft Java classic Anvil **1.13-1.21.11** (import, block/biome
   editing, project snapshots, same-version export and generation with the exact official server
   JAR; exact per-version block/item catalogs are derived from client JARs). All 19 flattened
-  releases 1.13–1.17.1 pass the catalog-pinned project round-trip. Exact metadata-only profiles
-  also cover Java 1.0–1.12.2; they are visible as `unverified` and cannot create projects.
-  Client JARs for `1.8–1.12.2` build block/item catalogs with numeric ids and metadata.
-- **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.13–1.21.11)
-  and `Vanilla World` (official local generator for the project's exact version after
-  explicit dependency setup) are available.
+  releases 1.13–1.17.1 pass the catalog-pinned project round-trip. Numeric classic **1.8.9-1.12.2**
+  adds the same import/edit/snapshot/same-version export subset without generation, and its
+  client JARs build block/item catalogs with numeric ids and metadata. Exact metadata-only
+  profiles remain for Java 1.8-1.8.8 and 1.0-1.7.10; they are visible as `unverified` and cannot
+  create projects.
+- **Project modes:** `Empty Project`, `Flat base`, `Import World` (classic Java 1.13–1.21.11 and
+  1.8.9–1.12.2) and `Vanilla World` (official local generator for the project's exact version
+  after explicit dependency setup) are available.
 - **License:** Apache-2.0 for FuryBuilder code; see `LICENSE` and `NOTICE`. Minecraft game
   assets are **not** distributed with this repository; see `docs/legal/third-party-notices.md`.
 

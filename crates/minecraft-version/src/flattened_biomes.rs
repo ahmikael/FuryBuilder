@@ -12,6 +12,10 @@ pub struct FlattenedBiomeRegistry {
 }
 
 impl FlattenedBiomeRegistry {
+    pub(crate) fn from_series(series: u32) -> Self {
+        Self { series }
+    }
+
     pub fn for_release(version: &VersionId) -> Option<Self> {
         let VersionKind::Release { numbers } = &version.kind else {
             return None;

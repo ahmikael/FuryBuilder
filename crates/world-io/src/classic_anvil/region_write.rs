@@ -60,6 +60,14 @@ pub const FLATTENED_WRITE_FIELDS: &[&str] = &[
     "Level.Sections[].BlockStates",
     "Level.Biomes",
 ];
+/// The numeric 1.8.9–1.12.2 writer edits raw id/metadata arrays and the
+/// chunk-wide column biome array.
+pub const NUMERIC_WRITE_FIELDS: &[&str] = &[
+    "Level.Sections[].Blocks",
+    "Level.Sections[].Data",
+    "Level.Sections[].Add",
+    "Level.Biomes",
+];
 /// Fields the flattened rebuild policy removes or zeroes when they are present.
 /// 1.13 stores `HeightMap`; 1.14+ stores `Heightmaps` and `isLightOn`.
 pub const FLATTENED_INVALIDATED_FIELDS: &[&str] = &[
@@ -69,6 +77,13 @@ pub const FLATTENED_INVALIDATED_FIELDS: &[&str] = &[
     "PostProcessing",
     "Sections[].SkyLight",
     "Sections[].BlockLight",
+];
+/// Fields the numeric rebuild policy removes when they are present. Numeric
+/// chunks have no `isLightOn` or post-processing queue.
+pub const NUMERIC_INVALIDATED_FIELDS: &[&str] = &[
+    "Level.HeightMap",
+    "Level.Sections[].SkyLight",
+    "Level.Sections[].BlockLight",
 ];
 
 /// What to do with derived fields that a block/biome write cannot recalculate.
@@ -125,10 +140,10 @@ impl VerifiedWriteSupport {
             minecraft_version: profile.minecraft_version.to_string(),
             data_version: profile.data_version,
             layout: VERIFIED_WRITE_LAYOUT.to_owned(),
-            fields: if profile.family == VersionFamily::Flattened {
-                FLATTENED_WRITE_FIELDS
-            } else {
-                VERIFIED_WRITE_FIELDS
+            fields: match profile.family {
+                VersionFamily::Flattened => FLATTENED_WRITE_FIELDS,
+                VersionFamily::Numeric => NUMERIC_WRITE_FIELDS,
+                _ => VERIFIED_WRITE_FIELDS,
             },
             derived_data_policies: &["preserve", "vanillaRebuild"],
             recomputes_derived_metadata: false,
@@ -419,6 +434,9 @@ pub(super) fn write_region(
             (DerivedDataPolicy::VanillaRebuild, ChunkLayoutFormat::Flattened(_)) => {
                 FLATTENED_INVALIDATED_FIELDS
             }
+            (DerivedDataPolicy::VanillaRebuild, ChunkLayoutFormat::Numeric(_)) => {
+                NUMERIC_INVALIDATED_FIELDS
+            }
         },
     })
 }
@@ -511,7 +529,59 @@ fn invalidate_derived_fields(
     match format {
         ChunkLayoutFormat::Modern(format) => invalidate_modern_derived_fields(nbt, format),
         ChunkLayoutFormat::Flattened(format) => invalidate_flattened_derived_fields(nbt, format),
+        ChunkLayoutFormat::Numeric(_) => invalidate_numeric_derived_fields(nbt),
     }
+}
+
+/// Invalidates derived fields for numeric 1.8.9–1.12.2 chunks.
+fn invalidate_numeric_derived_fields(nbt: &mut NbtFile) -> Result<(), RegionWriteError> {
+    let root = match &mut nbt.root {
+        NbtValue::Compound(root) => root,
+        _ => {
+            return Err(RegionWriteError::VerificationFailed(
+                "chunk root is not a compound".to_owned(),
+            ))
+        }
+    };
+    let level = root
+        .get_mut("Level")
+        .and_then(NbtValue::as_compound_mut)
+        .ok_or_else(|| {
+            RegionWriteError::VerificationFailed("chunk has no Level compound".to_owned())
+        })?;
+    level.remove("HeightMap");
+    if let Some(light_populated) = level.get_mut("LightPopulated") {
+        *light_populated = NbtValue::Byte(0);
+    }
+    let sections = level.get_mut("Sections").ok_or_else(|| {
+        RegionWriteError::VerificationFailed("chunk has no Sections list".to_owned())
+    })?;
+    let (kind, items) = match sections {
+        NbtValue::List { kind, items } => (*kind, items),
+        _ => {
+            return Err(RegionWriteError::VerificationFailed(
+                "chunk Sections is not a list".to_owned(),
+            ))
+        }
+    };
+    if kind != crate::nbt::TAG_COMPOUND && !items.is_empty() {
+        return Err(RegionWriteError::VerificationFailed(
+            "chunk Sections is not a list of compounds".to_owned(),
+        ));
+    }
+    for item in items {
+        let section = match item {
+            NbtValue::Compound(section) => section,
+            _ => {
+                return Err(RegionWriteError::VerificationFailed(
+                    "chunk has a non-compound section".to_owned(),
+                ))
+            }
+        };
+        section.remove("SkyLight");
+        section.remove("BlockLight");
+    }
+    Ok(())
 }
 
 /// Invalidates derived fields for modern section-palette chunks.
@@ -643,6 +713,9 @@ fn verify_replacement(
     })?;
     let data_version = match root.get(DATA_VERSION) {
         Some(NbtValue::Int(value)) => *value,
+        // 1.8 chunks predate the chunk-level DataVersion tag; the level.dat
+        // profile is authoritative and must still be a numeric layout.
+        None if matches!(format, ChunkLayoutFormat::Numeric(_)) => world.profile.data_version,
         _ => {
             return Err(RegionWriteError::VerificationFailed(format!(
                 "chunk ({}, {}) replacement has no int DataVersion",
@@ -658,7 +731,7 @@ fn verify_replacement(
     }
     let (x_pos, z_pos) = match format {
         ChunkLayoutFormat::Modern(format) => (root.get(format.x_pos), root.get(format.z_pos)),
-        ChunkLayoutFormat::Flattened(_) => {
+        ChunkLayoutFormat::Flattened(_) | ChunkLayoutFormat::Numeric(_) => {
             let level = root.get("Level").and_then(NbtValue::as_compound);
             (
                 level.and_then(|level| level.get("xPos")),
@@ -700,6 +773,9 @@ fn verify_preserved_fields(
         }
         ChunkLayoutFormat::Flattened(_) => {
             super::flattened_chunk::verify_flattened_preserved_fields(source, patched)?;
+        }
+        ChunkLayoutFormat::Numeric(_) => {
+            super::numeric_chunk::verify_numeric_preserved_fields(source, patched)?;
         }
     }
     Ok(())
@@ -931,7 +1007,7 @@ fn verify_written_region(
     policy: DerivedDataPolicy,
 ) -> Result<(), RegionWriteError> {
     let format = ChunkLayoutFormat::for_profile(&world.profile)?;
-    let written = RegionFile::open(written_path)?;
+    let written = RegionFile::open_for_profile(written_path, Some(world.profile.clone()))?;
     if written.region_coordinates() != source.region_coordinates() {
         return Err(RegionWriteError::VerificationFailed(
             "written region coordinates changed".to_owned(),

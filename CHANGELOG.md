@@ -16,12 +16,18 @@ formats are not migrated.
   A version needs a verified profile to advance; classic Anvil `1.18–1.21.11` is verified for
   import, editing, project snapshots and same-version export, and can generate with its exact
   official server JAR; `1.21.4` remains the full-support baseline.
-- Exact metadata-only profiles for all 52 Java releases from `1.0` through `1.12.2`. Numeric
-  `1.8–1.12.2` records `DataVersion` 47 for 1.8.9, 169–1343 for 1.9–1.12.2, `-1` for
-  1.8–1.8.8 and resource pack formats 1–3; pre-1.8 splits McRegion `1.0–1.1` (128-block
-  height) from Anvil `1.2.1–1.7.10` (256-block height). The profiles are `unverified` and cannot
-  create projects; no pre-1.13 codec or generation is enabled.
-- Exact built-in metadata for Java `1.13–1.17.1`: `DataVersion`, Java 8/16, resource and data
+- Exact metadata-only profiles for Java `1.8-1.8.8` and `1.0-1.7.10`. Numeric
+  `1.8-1.12.2` records `DataVersion` 47 for 1.8.9, 169-1343 for 1.9-1.12.2, `-1` for
+  1.8-1.8.8 and resource pack formats 1-3; pre-1.8 splits McRegion `1.0-1.1` (128-block
+  height) from Anvil `1.2.1-1.7.10` (256-block height). These profiles are `unverified` and
+  cannot create projects; no pre-1.8 codec or generation is enabled.
+- Import, block/biome editing, project snapshots and same-version export for the 15 numeric
+  classic releases `1.8.9-1.12.2`. The writer patches only `Level.Sections[].Blocks`/`Data`/
+  `Add` and `Level.Biomes`; unknown tags and untouched sections stay byte-for-byte. Column
+  biomes are sampled at each 4x4 center on read and applied to the whole footprint on write.
+  Unknown numeric block or biome ids are rejected instead of substituted, and 1.8.9 chunks
+  without a root `DataVersion` use the exact level.dat profile.
+- Exact built-in metadata for Java `1.13-1.17.1`: `DataVersion`, Java 8/16, resource and data
   pack formats 4–7, dimension folders and the 0–256 Overworld height (the extended height starts
   with 1.18), plus the column/section biome boundary.
 - Import, block/biome editing, project snapshots and same-version export for all 19 flattened
