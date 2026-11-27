@@ -1412,9 +1412,9 @@ UI:
 >
 > Чеклист покрывает весь объём, включая все семейства версий. Если какое-то решение из §20 изменится, соответствующие пункты корректируются, а не молча вычёркиваются.
 
-**Текущий фокус:** `P2-11` — коммит P2. Статус: следующий шаг, не начат.
+**Текущий фокус:** `P3-01` — профили 1.8–1.12 и pre-1.8. Статус: следующий шаг, не начат.
 
-**Следующий шаг после закрытия текущего фокуса:** `P3-01` — профили 1.8–1.12 и pre-1.8.
+**Следующий шаг после закрытия текущего фокуса:** `P3-02` — Numeric ID + metadata модель, item IDs и mapping в общий каталог.
 
 ### 21.0. Правила ведения
 
@@ -1595,7 +1595,7 @@ UI:
 - [x] `P2-08` Asset pipeline для старых pack format.
 - [x] `P2-09` Фикстуры + E2E + проверка каталога блоков/предметов для 1.13–1.17.
 - [x] `P2-10` Обновить матрицу/docs.
-- [ ] `P2-11` Коммит P2.
+- [x] `P2-11` Коммит P2.
 
 ### 21.5. P3 — legacy и форматы
 
@@ -1695,6 +1695,7 @@ UI:
 
 | Дата | Блок | Что сделано | Коммит | Проверки |
 | --- | --- | --- | --- | --- |
+| 2026-11-27 | Закрытие P2 | P2-10 зафиксировал матрицу и документацию, P2-11 закрывает этап. Все 19 flattened-релизов `1.13–1.17.1` проверены E2E по каталогу, импорту/правке/экспорту, генерации и структурам; managed/manual client JAR и resource packs 4–7 работают, `1.21.4` остаётся единственным `full`. Real-server прогон flattened не заявлен. Фокус переведён на P3-01. shadcn: UI не менялся. | см. `git log` | docs-only closure; 818 Rust tests (74 suites), 439 TS tests + 1 skipped; clippy `--all-targets -D warnings`, fmt, typecheck, lint, format:check, `git diff --check`. |
 | 2026-11-27 | Матрица и docs 1.13–1.17.1 | Матрица §4.3 приведена к фактическому уровню: 19 flattened-релизов — `read + write subset` с импортом, правкой, snapshots, same-version export, точной генерацией, managed/manual client JAR, точным каталогом блоков/предметов и resource packs 4–7; `1.21.4` остаётся единственным `full`. `docs/formats`, `docs/reference`, `docs/getting-started`, `docs/advanced-workflow`, `docs/catalog`, `README`, `CHANGELOG` и machine-readable support matrix синхронизированы: 46 classic-релизов, flattened-метаданные, каталог/E2E по всем 19 релизам и отсутствие real-server прогона для flattened. shadcn: UI не менялся. | см. `git log` | 818 Rust tests (74 suites), 439 TS tests + 1 skipped; clippy `--all-targets -D warnings`, fmt, typecheck, lint, format:check, `git diff --check`; docs/matrix без изменения поведения. |
 | 2026-11-27 | Фикстуры и E2E каталога 1.13–1.17.1 | Все 19 flattened-релизов проходят единый E2E: синтетический client JAR повторяет реальную форму идентичности (1.13.x — launcher metadata без `version.json`; 1.14–1.14.2 — build-suffix; 1.14–1.16 — числовой `pack_version`; 1.17+ — split resource/data), собирает точный каталог блоков/предметов, закрепляется в проекте, затем create→edit→save→reopen→rebuild из того же JAR→export→reimport. Проверены counts, сортировка/уникальность, block/item/state/tag-факты, complete 80-вариантный `oak_stairs`, block-only `water`, item-only `diamond_sword`/`item_frame`, пустая модель `air`, entity blockstate warning и версии появления beehive/netherite/copper. `docs/catalog` исправлен: только 1.13.x без root `version.json`. shadcn: UI не менялся. | см. `git log` | 818 Rust tests (74 suites), 439 TS tests + 1 skipped; clippy `--all-targets -D warnings`, fmt, typecheck, lint, format:check. 19/19 flattened E2E с catalog pin и повторной сборкой; 4 modern family E2E без регрессий; `git diff --check`. |
 | 2026-11-27 | Ассеты 1.13–1.17.1 | Для всех 19 профилей работают managed client JAR, ручной путь и текстуры. Проверки discovery, каталога и рендера используют точный профиль: 1.13.x без `version.json` требует совпадающий launcher SHA-1, 1.14–1.14.2 допускает форму `release / build-hash`, ресурсные паки проверяют целый `pack_format` 4–7. Открытие проекта находит закреплённый JAR в кэше независимо от выбора в мастере; повторная установка заменяет повреждённый кэш только после проверки новой копии. shadcn: UI-компоненты не менялись. | см. `git log` | 818 Rust tests (74 suites), 439 TS tests + 1 skipped; clippy `--all-targets -D warnings`, fmt, typecheck, lint, format:check. На 19 официальных client JAR сверены SHA-1, профиль, форматы, каталог, иконка и модель `stone`. Через менеджер установлены и верифицированы 1.13.2, 1.14.1 и 1.17.1; выбор 1.17.1 сохранил доступ к закреплённому JAR 1.13.2. Повторная установка 1.13.2 восстановила отсутствующий `client.json` и подтвердила исходный SHA-1. |
